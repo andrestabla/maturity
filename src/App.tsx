@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
+import { SystemDialogProvider } from './components/SystemDialogProvider.js';
 import { ThemeToggle } from './components/ThemeToggle.js';
 import { defaultBranding } from './data/mockData.js';
 import { useAppData } from './hooks/useAppData.js';
@@ -175,74 +176,68 @@ export default function App() {
     return <div className="access-screen__mark">{branding.shortMark}</div>;
   }
 
-  if (status === 'loading') {
-    return (
-      <main className="access-screen">
-        <div className="control-grid" aria-hidden />
-        <div className="access-screen__glow access-screen__glow--left" aria-hidden />
-        <div className="access-screen__glow access-screen__glow--right" aria-hidden />
-        <section className="access-screen__panel access-screen__panel--loading">
-          <div className="access-screen__panel-head">
-            <div className="access-screen__brand">
-              {renderBrandMark()}
-              <div>
-                <span>{branding.logoText}</span>
-                <strong>Control Center</strong>
+  return (
+    <SystemDialogProvider>
+      {status === 'loading' ? (
+        <main className="access-screen">
+          <div className="control-grid" aria-hidden />
+          <div className="access-screen__glow access-screen__glow--left" aria-hidden />
+          <div className="access-screen__glow access-screen__glow--right" aria-hidden />
+          <section className="access-screen__panel access-screen__panel--loading">
+            <div className="access-screen__panel-head">
+              <div className="access-screen__brand">
+                {renderBrandMark()}
+                <div>
+                  <span>{branding.logoText}</span>
+                  <strong>Control Center</strong>
+                </div>
+              </div>
+
+              <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-switch--panel" />
+            </div>
+
+            <div className="access-screen__copy">
+              <span className="access-screen__kicker">{branding.loaderLabel}</span>
+              <h1>Sincronizando tu espacio de trabajo.</h1>
+              <p>{branding.loaderMessage}</p>
+            </div>
+
+            <div className="access-screen__loading">
+              <div className="skeleton-line skeleton-line--title" />
+              <div className="skeleton-line skeleton-line--wide" />
+              <div className="skeleton-line skeleton-line--medium" />
+              <div className="access-screen__loading-cards">
+                <div className="skeleton-card" />
+                <div className="skeleton-card" />
               </div>
             </div>
-
-            <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-switch--panel" />
-          </div>
-
-          <div className="access-screen__copy">
-            <span className="access-screen__kicker">{branding.loaderLabel}</span>
-            <h1>Sincronizando tu espacio de trabajo.</h1>
-            <p>{branding.loaderMessage}</p>
-          </div>
-
-          <div className="access-screen__loading">
-            <div className="skeleton-line skeleton-line--title" />
-            <div className="skeleton-line skeleton-line--wide" />
-            <div className="skeleton-line skeleton-line--medium" />
-            <div className="access-screen__loading-cards">
-              <div className="skeleton-card" />
-              <div className="skeleton-card" />
-            </div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (!session.authenticated || !session.user) {
-    return (
-      <LoginPage
-        isLoading={false}
-        onLogin={login}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        branding={branding}
-      />
-    );
-  }
-
-  return (
-    <AppShell
-      user={session.user}
-      role={activeRole}
-      availableRoles={availableRoles}
-      onRoleChange={setRole}
-      onLogout={logout}
-      dataSource={source}
-      isLoading={isLoading}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-      branding={branding}
-      appData={appData}
-    >
-      <AmbientCursor />
-      <Suspense fallback={<RouteSkeleton />}>
-        <Routes>
+          </section>
+        </main>
+      ) : !session.authenticated || !session.user ? (
+        <LoginPage
+          isLoading={false}
+          onLogin={login}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          branding={branding}
+        />
+      ) : (
+        <AppShell
+          user={session.user}
+          role={activeRole}
+          availableRoles={availableRoles}
+          onRoleChange={setRole}
+          onLogout={logout}
+          dataSource={source}
+          isLoading={isLoading}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          branding={branding}
+          appData={appData}
+        >
+          <AmbientCursor />
+          <Suspense fallback={<RouteSkeleton />}>
+            <Routes>
           <Route
             path="/"
             element={
@@ -313,8 +308,10 @@ export default function App() {
           <Route path="/team" element={<LegacyAdminRedirect />} />
           <Route path="/team/:section" element={<LegacyAdminRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </AppShell>
+            </Routes>
+          </Suspense>
+        </AppShell>
+      )}
+    </SystemDialogProvider>
   );
 }

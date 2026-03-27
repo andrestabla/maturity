@@ -19,6 +19,8 @@ import {
   Waypoints,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { ModalFrame } from '../components/ModalFrame.js';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type {
   AdminCenterData,
@@ -205,6 +207,7 @@ export function TeamPage({
   refreshSession,
 }: TeamPageProps) {
   const isAdmin = canManageUsers(user.role);
+  const { showAlert, showConfirm } = useSystemDialog();
   const location = useLocation();
   const navigate = useNavigate();
   const activeTab = useMemo(() => getAdminTabFromPath(location.pathname), [location.pathname]);
@@ -331,6 +334,81 @@ export function TeamPage({
       adminData.integrations.find((item) => item.id === selectedIntegrationId) ?? null;
     setIntegrationDraft(createIntegrationDraft(integration));
   }, [adminData, selectedIntegrationId]);
+
+  useEffect(() => {
+    const nextMessage = adminError
+      ? {
+          title: 'No fue posible cargar Gobierno',
+          message: adminError,
+          tone: 'error' as const,
+          clear: () => setAdminError(null),
+        }
+      : userError
+        ? {
+            title: 'No fue posible completar la operación sobre el usuario',
+            message: userError,
+            tone: 'error' as const,
+            clear: () => setUserError(null),
+          }
+        : settingsError
+          ? {
+              title: 'No fue posible guardar la configuración',
+              message: settingsError,
+              tone: 'error' as const,
+              clear: () => setSettingsError(null),
+            }
+          : integrationError
+            ? {
+                title: 'No fue posible actualizar la integración',
+                message: integrationError,
+                tone: 'error' as const,
+                clear: () => setIntegrationError(null),
+              }
+            : passwordError
+              ? {
+                  title: 'No fue posible actualizar la contraseña',
+                  message: passwordError,
+                  tone: 'error' as const,
+                  clear: () => setPasswordError(null),
+                }
+              : passwordSuccess
+                ? {
+                    title: 'Contraseña actualizada',
+                    message: passwordSuccess,
+                    tone: 'success' as const,
+                    clear: () => setPasswordSuccess(null),
+                  }
+                : null;
+
+    if (!nextMessage) {
+      return;
+    }
+
+    let active = true;
+
+    void showAlert({
+      title: nextMessage.title,
+      message: nextMessage.message,
+      tone: nextMessage.tone,
+      confirmLabel: 'Entendido',
+    }).then(() => {
+      if (active) {
+        nextMessage.clear();
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    adminError,
+    integrationError,
+    passwordError,
+    passwordSuccess,
+    settingsError,
+    showAlert,
+    userError,
+  ]);
 
   const activeUsers = adminData?.users.filter((item) => item.status === 'Activo').length ?? 0;
   const suspendedUsers = adminData?.users.filter((item) => item.status === 'Suspendido').length ?? 0;
@@ -555,7 +633,13 @@ export function TeamPage({
   }
 
   async function handleDeleteUser(id: string, name: string) {
-    const confirmed = window.confirm(`Eliminarás a ${name} del directorio activo. ¿Continuar?`);
+    const confirmed = await showConfirm({
+      title: `Eliminar a ${name}`,
+      message: 'Eliminarás a este usuario del directorio activo. Esta acción no se puede deshacer.',
+      tone: 'warning',
+      confirmLabel: 'Eliminar usuario',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -1086,15 +1170,13 @@ export function TeamPage({
         </article>
 
         {showCreateUserAssistant ? (
-          <article className="surface section-card admin-pane">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Acciones</span>
-                <h3>Crear nuevo usuario</h3>
-              </div>
-              <ShieldCheck size={18} />
-            </div>
-
+          <ModalFrame
+            eyebrow="Acciones"
+            title="Crear nuevo usuario"
+            description="Registra los datos del usuario, define su acceso y deja lista su vinculación institucional."
+            width="xl"
+            onClose={closeUserAssistant}
+          >
             <form className="editor-card" onSubmit={handleCreateUser}>
               <fieldset className="form-section">
                 <legend>Datos personales</legend>
@@ -1351,17 +1433,15 @@ export function TeamPage({
                 </button>
               </div>
             </form>
-          </article>
+          </ModalFrame>
         ) : editingDraft && selectedUser ? (
-          <article className="surface section-card admin-pane">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Acciones</span>
-                <h3>{selectedUser.name}</h3>
-              </div>
-              <ShieldCheck size={18} />
-            </div>
-
+          <ModalFrame
+            eyebrow="Acciones"
+            title={selectedUser.name}
+            description="Edita la cuenta, el rol, el alcance y el estado del usuario desde este panel de gobierno."
+            width="xl"
+            onClose={closeUserAssistant}
+          >
             <div className="editor-card">
               <div className="admin-assistant-intro">
                 <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
@@ -1646,7 +1726,7 @@ export function TeamPage({
                 ) : null}
               </div>
             </div>
-          </article>
+          </ModalFrame>
         ) : null}
 
         {renderAccountSecurity()}

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
 import type {
@@ -568,6 +569,7 @@ export function CourseWorkspacePage({
   refreshAppData,
 }: CourseWorkspacePageProps) {
   const { slug = '' } = useParams();
+  const { showAlert, showConfirm } = useSystemDialog();
   const location = useLocation();
   const navigate = useNavigate();
   const course = getCourseBySlug(appData, slug);
@@ -894,6 +896,117 @@ export function CourseWorkspacePage({
       { replace: true },
     );
   }, [activeSection, location.pathname, navigate]);
+
+  useEffect(() => {
+    const nextError = courseError
+      ? {
+          title: 'No fue posible actualizar el curso',
+          message: courseError,
+          clear: () => setCourseError(null),
+        }
+      : metadataError
+        ? {
+            title: 'No fue posible guardar la ficha operativa',
+            message: metadataError,
+            clear: () => setMetadataError(null),
+          }
+        : taskError
+          ? {
+              title: 'No fue posible completar la operación sobre la tarea',
+              message: taskError,
+              clear: () => setTaskError(null),
+            }
+          : teamError
+            ? {
+                title: 'No fue posible completar la operación sobre el equipo',
+                message: teamError,
+                clear: () => setTeamError(null),
+              }
+            : moduleError
+              ? {
+                  title: 'No fue posible completar la operación sobre el módulo',
+                  message: moduleError,
+                  clear: () => setModuleError(null),
+                }
+              : productError
+                ? {
+                    title: 'No fue posible completar la operación sobre el producto',
+                    message: productError,
+                    clear: () => setProductError(null),
+                  }
+                : stageNoteError
+                  ? {
+                      title: 'No fue posible guardar la bitácora de etapa',
+                      message: stageNoteError,
+                      clear: () => setStageNoteError(null),
+                    }
+                  : timelineError
+                    ? {
+                        title: 'No fue posible completar la operación sobre el cronograma',
+                        message: timelineError,
+                        clear: () => setTimelineError(null),
+                      }
+                    : deliverableError
+                      ? {
+                          title: 'No fue posible completar la operación sobre el entregable',
+                          message: deliverableError,
+                          clear: () => setDeliverableError(null),
+                        }
+                      : observationError
+                        ? {
+                            title: 'No fue posible completar la operación sobre la observación',
+                            message: observationError,
+                            clear: () => setObservationError(null),
+                          }
+                        : checkpointError
+                          ? {
+                              title: 'No fue posible actualizar el checkpoint',
+                              message: checkpointError,
+                              clear: () => setCheckpointError(null),
+                            }
+                          : handoffError
+                            ? {
+                                title: 'No fue posible transferir el curso',
+                                message: handoffError,
+                                clear: () => setHandoffError(null),
+                              }
+                            : null;
+
+    if (!nextError) {
+      return;
+    }
+
+    let active = true;
+
+    void showAlert({
+      title: nextError.title,
+      message: nextError.message,
+      tone: 'error',
+      confirmLabel: 'Entendido',
+    }).then(() => {
+      if (active) {
+        nextError.clear();
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    checkpointError,
+    courseError,
+    deliverableError,
+    handoffError,
+    metadataError,
+    moduleError,
+    observationError,
+    productError,
+    showAlert,
+    stageNoteError,
+    taskError,
+    teamError,
+    timelineError,
+  ]);
 
   if (!course) {
     return (
@@ -2036,9 +2149,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleCourseDelete() {
-    const confirmed = window.confirm(
-      `Vas a eliminar el curso "${currentCourse.title}" y sus tareas asociadas. Esta acción no se puede deshacer.`,
-    );
+    const confirmed = await showConfirm({
+      title: `Eliminar ${currentCourse.title}`,
+      message: `Vas a eliminar el curso "${currentCourse.title}" y sus tareas asociadas. Esta acción no se puede deshacer.`,
+      tone: 'warning',
+      confirmLabel: 'Eliminar curso',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2128,7 +2245,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleTaskDelete(taskId: string) {
-    const confirmed = window.confirm('La tarea será eliminada permanentemente. ¿Quieres continuar?');
+    const confirmed = await showConfirm({
+      title: 'Eliminar tarea',
+      message: 'La tarea será eliminada permanentemente. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Eliminar tarea',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2242,9 +2365,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleTimelineDelete(timelineItemId: string) {
-    const confirmed = window.confirm(
-      'El hito será retirado del cronograma visible del curso. ¿Quieres continuar?',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar hito',
+      message: 'El hito será retirado del cronograma visible del curso. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Eliminar hito',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2371,9 +2498,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleTeamMemberDelete(memberId: string) {
-    const confirmed = window.confirm(
-      'Este responsable será retirado del equipo visible del curso. ¿Quieres continuar?',
-    );
+    const confirmed = await showConfirm({
+      title: 'Retirar responsable',
+      message: 'Este responsable será retirado del equipo visible del curso. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Retirar responsable',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2498,9 +2629,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleModuleDelete(moduleId: string) {
-    const confirmed = window.confirm(
-      'El módulo será retirado de la arquitectura del curso. ¿Quieres continuar?',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar módulo',
+      message: 'El módulo será retirado de la arquitectura del curso. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Eliminar módulo',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2627,9 +2762,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleProductDelete(productId: string) {
-    const confirmed = window.confirm(
-      'Este producto será retirado del expediente editable del curso. ¿Quieres continuar?',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar producto',
+      message: 'Este producto será retirado del expediente editable del curso. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Eliminar producto',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2881,9 +3020,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleDeliverableDelete(deliverableId: string) {
-    const confirmed = window.confirm(
-      'El entregable será eliminado del curso. Esta acción no se puede deshacer.',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar entregable',
+      message: 'El entregable será eliminado del curso. Esta acción no se puede deshacer.',
+      tone: 'warning',
+      confirmLabel: 'Eliminar entregable',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -2994,9 +3137,13 @@ export function CourseWorkspacePage({
   }
 
   async function handleObservationDelete(observationId: string) {
-    const confirmed = window.confirm(
-      'La observación será eliminada del seguimiento del curso. ¿Quieres continuar?',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar observación',
+      message: 'La observación será eliminada del seguimiento del curso. ¿Quieres continuar?',
+      tone: 'warning',
+      confirmLabel: 'Eliminar observación',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;

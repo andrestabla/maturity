@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, LockKeyhole, Mail } from 'lucide-react';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ThemeToggle } from '../components/ThemeToggle.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type { BrandingSettings } from '../types.js';
@@ -21,23 +22,26 @@ export function LoginPage({
 }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { showAlert } = useSystemDialog();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
-      setError(null);
       await onLogin({
         email,
         password,
       });
     } catch (loginError) {
-      setError(
+      await showAlert({
+        title: 'No fue posible iniciar sesión',
+        message:
         loginError instanceof Error
           ? loginError.message
           : 'No fue posible iniciar sesión.',
-      );
+        tone: 'error',
+        confirmLabel: 'Reintentar',
+      });
     }
   }
 
@@ -115,8 +119,6 @@ export function LoginPage({
               />
             </div>
           </label>
-
-          {error ? <p className="form-error">{error}</p> : null}
 
           <button type="submit" className="access-screen__button" disabled={isLoading}>
             <span>{isLoading ? 'Conectando sesión…' : `Entrar a ${branding.platformName}`}</span>

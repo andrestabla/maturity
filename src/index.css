@@ -6782,6 +6782,105 @@ body::after {
   flex-wrap: wrap;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  background: rgba(4, 10, 20, 0.36);
+  backdrop-filter: blur(14px);
+}
+
+.modal-panel {
+  display: grid;
+  gap: var(--space-2);
+  width: min(920px, 100%);
+  max-height: min(88vh, 920px);
+  padding: var(--space-3);
+  overflow: auto;
+  box-shadow: var(--elevation-2);
+}
+
+.modal-panel--sm {
+  width: min(480px, 100%);
+}
+
+.modal-panel--md {
+  width: min(640px, 100%);
+}
+
+.modal-panel--lg {
+  width: min(920px, 100%);
+}
+
+.modal-panel--xl {
+  width: min(1120px, 100%);
+}
+
+.modal-panel__head,
+.modal-panel__foot,
+.system-dialog__actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.modal-panel__head h3 {
+  margin: 8px 0 0;
+}
+
+.modal-panel__head p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.modal-panel__body {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.system-dialog {
+  display: flex;
+  justify-content: center;
+}
+
+.system-dialog__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--surface-soft);
+  color: var(--text-strong);
+}
+
+.system-dialog--success .system-dialog__icon {
+  background: rgba(127, 213, 168, 0.16);
+  color: #2d7a4f;
+}
+
+.system-dialog--warning .system-dialog__icon {
+  background: rgba(249, 196, 94, 0.16);
+  color: #8b6400;
+}
+
+.system-dialog--error .system-dialog__icon {
+  background: rgba(219, 83, 71, 0.14);
+  color: #ad3e35;
+}
+
+.system-dialog__actions {
+  justify-content: flex-end;
+  align-items: center;
+}
+
 .form-section {
   display: grid;
   gap: var(--space-2);
@@ -6870,6 +6969,24 @@ body::after {
     min-height: 100svh;
     border-radius: 0;
     padding: 20px 16px;
+  }
+
+  .modal-backdrop {
+    place-items: end stretch;
+    padding: 0;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-height: min(92vh, 100%);
+    border-radius: 24px 24px 0 0;
+    padding: 20px 16px;
+  }
+
+  .modal-panel__head,
+  .modal-panel__foot,
+  .system-dialog__actions {
+    flex-direction: column;
   }
 
   .command-trigger {

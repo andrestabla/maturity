@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LibraryBig, NotebookTabs, PackageCheck, Plus, Save, Trash2 } from 'lucide-react';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
   LibraryResource,
@@ -65,10 +66,10 @@ function inputToTags(value: string) {
 }
 
 export function LibraryPage({ role, userRole, appData, refreshAppData }: LibraryPageProps) {
+  const { showAlert, showConfirm } = useSystemDialog();
   const [filter, setFilter] = useState<ResourceFilter>('Todos');
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [resourceError, setResourceError] = useState<string | null>(null);
   const resources = getVisibleResources(appData, role);
   const visibleCourses = getVisibleCourses(appData, role);
   const defaultCourseSlug = visibleCourses[0]?.slug ?? appData.courses[0]?.slug ?? '';
@@ -110,7 +111,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
   async function handleCreateResource(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
-    setResourceError(null);
 
     try {
       const response = await fetch('/api/resources', {
@@ -133,7 +133,12 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
       setNewTagInput('');
       setIsComposerOpen(false);
     } catch (error) {
-      setResourceError(error instanceof Error ? error.message : 'No fue posible crear el recurso.');
+      await showAlert({
+        title: 'No fue posible crear el recurso',
+        message: error instanceof Error ? error.message : 'No fue posible crear el recurso.',
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -145,8 +150,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
     if (!draft) {
       return;
     }
-
-    setResourceError(null);
 
     const response = await fetch('/api/resources', {
       method: 'PATCH',
@@ -163,7 +166,12 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setResourceError(payload.error ?? 'No fue posible guardar el recurso.');
+      await showAlert({
+        title: 'No fue posible guardar el recurso',
+        message: payload.error ?? 'No fue posible guardar el recurso.',
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
       return;
     }
 
@@ -171,9 +179,14 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
   }
 
   async function handleDeleteResource(resourceId: string) {
-    const confirmed = window.confirm(
-      'El recurso será eliminado del repositorio operativo. Esta acción no se puede deshacer.',
-    );
+    const confirmed = await showConfirm({
+      title: 'Eliminar recurso',
+      message:
+        'El recurso será eliminado del repositorio operativo. Esta acción no se puede deshacer.',
+      tone: 'warning',
+      confirmLabel: 'Eliminar recurso',
+      cancelLabel: 'Cancelar',
+    });
 
     if (!confirmed) {
       return;
@@ -193,7 +206,12 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setResourceError(payload.error ?? 'No fue posible eliminar el recurso.');
+      await showAlert({
+        title: 'No fue posible eliminar el recurso',
+        message: payload.error ?? 'No fue posible eliminar el recurso.',
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
       return;
     }
 
@@ -429,8 +447,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
             </div>
           </form>
         ) : null}
-
-        {resourceError ? <p className="form-error">{resourceError}</p> : null}
       </section>
 
       <section className="insight-grid">

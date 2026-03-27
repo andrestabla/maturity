@@ -8,6 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { Link } from 'react-router-dom';
@@ -89,7 +90,7 @@ export function DashboardPage({
   isLoading = false,
   refreshAppData,
 }: DashboardPageProps) {
-  const [alertError, setAlertError] = useState<string | null>(null);
+  const { showAlert } = useSystemDialog();
   const [dismissingAlertId, setDismissingAlertId] = useState<string | null>(null);
 
   if (isLoading) {
@@ -143,7 +144,6 @@ export function DashboardPage({
   ];
 
   async function handleDismissAlert(alertId: string) {
-    setAlertError(null);
     setDismissingAlertId(alertId);
 
     try {
@@ -166,7 +166,12 @@ export function DashboardPage({
 
       refreshAppData();
     } catch (error) {
-      setAlertError(error instanceof Error ? error.message : 'No fue posible resolver la alerta.');
+      await showAlert({
+        title: 'No fue posible resolver la alerta',
+        message: error instanceof Error ? error.message : 'No fue posible resolver la alerta.',
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
     } finally {
       setDismissingAlertId(null);
     }
@@ -300,8 +305,6 @@ export function DashboardPage({
               </div>
               <CircleAlert size={16} />
             </div>
-
-            {alertError ? <p className="form-error">{alertError}</p> : null}
 
             <div className="sync-feed">
               {visibleAlerts.length === 0 ? (

@@ -8,6 +8,7 @@ import {
   Search,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
 import { getStageMeta, getVisibleCourses } from '../utils/domain.js';
@@ -102,6 +103,7 @@ export function CoursesPage({
   userRole,
   refreshAppData,
 }: CoursesPageProps) {
+  const { showAlert } = useSystemDialog();
   const [view, setView] = useState<ExplorerView>('cards');
   const [filter, setFilter] = useState<FilterMode>('Todos');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
@@ -109,7 +111,6 @@ export function CoursesPage({
   const [selectedNode, setSelectedNode] = useState('institution');
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
     createInitialCourseForm(appData),
   );
@@ -145,7 +146,6 @@ export function CoursesPage({
   async function handleCreateCourse(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
-    setFormError(null);
 
     try {
       const response = await fetch('/api/courses', {
@@ -167,7 +167,12 @@ export function CoursesPage({
       setCourseForm(createInitialCourseForm(appData));
       setIsComposerOpen(false);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'No fue posible crear el curso.');
+      await showAlert({
+        title: 'No fue posible crear el curso',
+        message: error instanceof Error ? error.message : 'No fue posible crear el curso.',
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -459,8 +464,6 @@ export function CoursesPage({
                 </div>
               </label>
             </div>
-
-            {formError ? <p className="form-error">{formError}</p> : null}
 
             <div className="action-row">
               <button type="submit" className="cta-button" disabled={isSaving}>
