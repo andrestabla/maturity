@@ -2,10 +2,10 @@ import {
   Bot,
   CircleAlert,
   Compass,
-  PencilLine,
   Flag,
   Layers3,
   MoveRight,
+  PencilLine,
   Plus,
   Save,
   Trash2,
@@ -15,12 +15,29 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
-import type { AppData, CourseMutationInput, Role, TaskMutationInput } from '../types.js';
+import type {
+  AppData,
+  Course,
+  CourseMutationInput,
+  Deliverable,
+  DeliverableMutationInput,
+  Observation,
+  ObservationMutationInput,
+  Role,
+  Task,
+  TaskMutationInput,
+} from '../types.js';
 import { formatDate, formatLongDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
+  canCreateDeliverables,
+  canCreateObservations,
   canCreateTasks,
+  canDeleteDeliverables,
+  canDeleteObservations,
   canDeleteTasks,
+  canEditDeliverable,
+  canEditObservation,
   canEditTask,
   canManageCourses,
 } from '../utils/permissions.js';
@@ -36,11 +53,14 @@ function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
     case 'En ritmo':
+    case 'Resuelta':
       return 'badge badge--sage';
     case 'En revisión':
+    case 'En ajuste':
       return 'badge badge--gold';
     case 'Pendiente':
     case 'Riesgo':
+    case 'En curso':
       return 'badge badge--ocean';
     case 'Bloqueado':
       return 'badge badge--coral';
@@ -49,7 +69,7 @@ function badgeClass(status: string) {
   }
 }
 
-function makeCourseForm(course: NonNullable<ReturnType<typeof getCourseBySlug>>): CourseMutationInput {
+function makeCourseForm(course: Course): CourseMutationInput {
   return {
     title: course.title,
     code: course.code,
@@ -61,6 +81,21 @@ function makeCourseForm(course: NonNullable<ReturnType<typeof getCourseBySlug>>)
     status: course.status,
     summary: course.summary,
     nextMilestone: course.nextMilestone,
+  };
+}
+
+function buildEmptyCourseForm(stageId: string): CourseMutationInput {
+  return {
+    title: '',
+    code: '',
+    faculty: '',
+    program: '',
+    modality: '',
+    credits: 1,
+    stageId,
+    status: 'En ritmo',
+    summary: '',
+    nextMilestone: '',
   };
 }
 
@@ -77,6 +112,74 @@ function makeTaskForm(courseSlug: string, stageId: string): TaskMutationInput {
   };
 }
 
+function makeTaskDrafts(tasks: Task[]) {
+  return Object.fromEntries(
+    tasks.map((task) => [
+      task.id,
+      {
+        title: task.title,
+        courseSlug: task.courseSlug,
+        role: task.role,
+        stageId: task.stageId,
+        dueDate: task.dueDate,
+        priority: task.priority,
+        status: task.status,
+        summary: task.summary,
+      },
+    ]),
+  ) as Record<string, TaskMutationInput>;
+}
+
+function makeDeliverableForm(owner: Role): DeliverableMutationInput {
+  return {
+    title: '',
+    owner,
+    status: 'En curso',
+    dueDate: new Date().toISOString().slice(0, 10),
+    note: '',
+  };
+}
+
+function makeDeliverableDrafts(deliverables: Deliverable[]) {
+  return Object.fromEntries(
+    deliverables.map((deliverable) => [
+      deliverable.id,
+      {
+        title: deliverable.title,
+        owner: deliverable.owner,
+        status: deliverable.status,
+        dueDate: deliverable.dueDate,
+        note: deliverable.note,
+      },
+    ]),
+  ) as Record<string, DeliverableMutationInput>;
+}
+
+function makeObservationForm(role: Role): ObservationMutationInput {
+  return {
+    title: '',
+    role,
+    severity: 'Media',
+    status: 'Pendiente',
+    detail: '',
+  };
+}
+
+function makeObservationDrafts(observations: Observation[]) {
+  return Object.fromEntries(
+    observations.map((observation) => [
+      observation.id,
+      {
+        title: observation.title,
+        role: observation.role,
+        severity: observation.severity,
+        status: observation.status,
+        detail: observation.detail,
+      },
+    ]),
+  ) as Record<string, ObservationMutationInput>;
+}
+
 export function CourseWorkspacePage({
   role,
   userRole,
@@ -85,12 +188,82 @@ export function CourseWorkspacePage({
 }: CourseWorkspacePageProps) {
   const { slug = '' } = useParams();
   const course = getCourseBySlug(appData, slug);
+  const fallbackStageId = appData.stages[0]?.id ?? 'configuracion';
+  const currentStageId = course?.stageId ?? fallbackStageId;
+  const currentCourseSlug = course?.slug ?? slug;
+  const stage = course ? getStageMeta(appData, course.stageId) : undefined;
+  const relatedTasks = course
+    ? appData.tasks.filter((task) => task.courseSlug === course.slug)
+    : [];
+  const myTasks =
+    role === 'Administrador' || role === 'Auditor'
+      ? relatedTasks
+      : relatedTasks.filter((task) => task.role === role);
+  const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
+  const defaultDeliverableOwner = stage?.owner ?? role;
+  const defaultObservationRole = role;
+
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
+  const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
+  const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
   const [courseError, setCourseError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [deliverableError, setDeliverableError] = useState<string | null>(null);
+  const [observationError, setObservationError] = useState<string | null>(null);
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
+  const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
+  const [isObservationSaving, setIsObservationSaving] = useState(false);
+  const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
+    course ? makeCourseForm(course) : buildEmptyCourseForm(currentStageId),
+  );
+  const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
+    makeTaskForm(currentCourseSlug, currentStageId),
+  );
+  const [newDeliverableForm, setNewDeliverableForm] = useState<DeliverableMutationInput>(() =>
+    makeDeliverableForm(defaultDeliverableOwner),
+  );
+  const [newObservationForm, setNewObservationForm] = useState<ObservationMutationInput>(() =>
+    makeObservationForm(defaultObservationRole),
+  );
+  const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
+    makeTaskDrafts(relatedTasks),
+  );
+  const [deliverableDrafts, setDeliverableDrafts] = useState<
+    Record<string, DeliverableMutationInput>
+  >(() => makeDeliverableDrafts(course?.deliverables ?? []));
+  const [observationDrafts, setObservationDrafts] = useState<
+    Record<string, ObservationMutationInput>
+  >(() => makeObservationDrafts(course?.observations ?? []));
+
+  useEffect(() => {
+    if (!course) {
+      setCourseForm(buildEmptyCourseForm(currentStageId));
+      setNewTaskForm(makeTaskForm(currentCourseSlug, currentStageId));
+      setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
+      setNewObservationForm(makeObservationForm(defaultObservationRole));
+      setTaskDrafts({});
+      setDeliverableDrafts({});
+      setObservationDrafts({});
+      return;
+    }
+
+    setCourseForm(makeCourseForm(course));
+    setNewTaskForm(makeTaskForm(course.slug, course.stageId));
+    setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
+    setNewObservationForm(makeObservationForm(defaultObservationRole));
+    setTaskDrafts(makeTaskDrafts(relatedTasks));
+    setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
+    setObservationDrafts(makeObservationDrafts(course.observations));
+  }, [
+    appData.tasks,
+    course,
+    currentCourseSlug,
+    currentStageId,
+    defaultDeliverableOwner,
+    defaultObservationRole,
+  ]);
 
   if (!course) {
     return (
@@ -106,58 +279,6 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
-  const stage = getStageMeta(appData, course.stageId);
-  const relatedTasks = appData.tasks.filter((task) => task.courseSlug === currentCourse.slug);
-  const myTasks =
-    role === 'Administrador' || role === 'Auditor'
-      ? relatedTasks
-      : relatedTasks.filter((task) => task.role === role);
-  const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
-  const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
-    makeCourseForm(currentCourse),
-  );
-  const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
-    makeTaskForm(currentCourse.slug, currentCourse.stageId),
-  );
-  const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
-    Object.fromEntries(
-      relatedTasks.map((task) => [
-        task.id,
-        {
-          title: task.title,
-          courseSlug: task.courseSlug,
-          role: task.role,
-          stageId: task.stageId,
-          dueDate: task.dueDate,
-          priority: task.priority,
-          status: task.status,
-          summary: task.summary,
-        },
-      ]),
-    ),
-  );
-
-  useEffect(() => {
-    setCourseForm(makeCourseForm(currentCourse));
-    setNewTaskForm(makeTaskForm(currentCourse.slug, currentCourse.stageId));
-    setTaskDrafts(
-      Object.fromEntries(
-        relatedTasks.map((task) => [
-          task.id,
-          {
-            title: task.title,
-            courseSlug: task.courseSlug,
-            role: task.role,
-            stageId: task.stageId,
-            dueDate: task.dueDate,
-            priority: task.priority,
-            status: task.status,
-            summary: task.summary,
-          },
-        ]),
-      ),
-    );
-  }, [currentCourse, currentCourse.slug, currentCourse.stageId, relatedTasks]);
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -251,6 +372,12 @@ export function CourseWorkspacePage({
   }
 
   async function handleTaskSave(taskId: string) {
+    const draft = taskDrafts[taskId];
+
+    if (!draft) {
+      return;
+    }
+
     setTaskError(null);
 
     const response = await fetch('/api/tasks', {
@@ -261,7 +388,7 @@ export function CourseWorkspacePage({
       },
       body: JSON.stringify({
         id: taskId,
-        ...taskDrafts[taskId],
+        ...draft,
       }),
     });
 
@@ -303,12 +430,242 @@ export function CourseWorkspacePage({
     refreshAppData();
   }
 
-  function updateTaskDraft(taskId: string, key: keyof TaskMutationInput, value: string) {
+  function updateTaskDraft<Key extends keyof TaskMutationInput>(
+    taskId: string,
+    key: Key,
+    value: TaskMutationInput[Key],
+  ) {
     setTaskDrafts((current) => ({
       ...current,
       [taskId]: {
         ...current[taskId],
-        [key]: value as TaskMutationInput[typeof key],
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleDeliverableCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsDeliverableSaving(true);
+    setDeliverableError(null);
+
+    try {
+      const response = await fetch('/api/deliverables', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newDeliverableForm,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible crear el entregable.');
+      }
+
+      refreshAppData();
+      setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
+      setIsDeliverableComposerOpen(false);
+    } catch (error) {
+      setDeliverableError(
+        error instanceof Error ? error.message : 'No fue posible crear el entregable.',
+      );
+    } finally {
+      setIsDeliverableSaving(false);
+    }
+  }
+
+  async function handleDeliverableSave(deliverableId: string) {
+    const draft = deliverableDrafts[deliverableId];
+
+    if (!draft) {
+      return;
+    }
+
+    setDeliverableError(null);
+
+    const response = await fetch('/api/deliverables', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        courseSlug: currentCourse.slug,
+        id: deliverableId,
+        ...draft,
+      }),
+    });
+
+    const payload = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setDeliverableError(payload.error ?? 'No fue posible guardar el entregable.');
+      return;
+    }
+
+    refreshAppData();
+  }
+
+  async function handleDeliverableDelete(deliverableId: string) {
+    const confirmed = window.confirm(
+      'El entregable será eliminado del curso. Esta acción no se puede deshacer.',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch('/api/deliverables', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        courseSlug: currentCourse.slug,
+        id: deliverableId,
+      }),
+    });
+
+    const payload = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setDeliverableError(payload.error ?? 'No fue posible eliminar el entregable.');
+      return;
+    }
+
+    refreshAppData();
+  }
+
+  function updateDeliverableDraft<Key extends keyof DeliverableMutationInput>(
+    deliverableId: string,
+    key: Key,
+    value: DeliverableMutationInput[Key],
+  ) {
+    setDeliverableDrafts((current) => ({
+      ...current,
+      [deliverableId]: {
+        ...current[deliverableId],
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleObservationCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsObservationSaving(true);
+    setObservationError(null);
+
+    try {
+      const response = await fetch('/api/observations', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newObservationForm,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible registrar la observación.');
+      }
+
+      refreshAppData();
+      setNewObservationForm(makeObservationForm(defaultObservationRole));
+      setIsObservationComposerOpen(false);
+    } catch (error) {
+      setObservationError(
+        error instanceof Error ? error.message : 'No fue posible registrar la observación.',
+      );
+    } finally {
+      setIsObservationSaving(false);
+    }
+  }
+
+  async function handleObservationSave(observationId: string) {
+    const draft = observationDrafts[observationId];
+
+    if (!draft) {
+      return;
+    }
+
+    setObservationError(null);
+
+    const response = await fetch('/api/observations', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        courseSlug: currentCourse.slug,
+        id: observationId,
+        ...draft,
+      }),
+    });
+
+    const payload = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setObservationError(payload.error ?? 'No fue posible guardar la observación.');
+      return;
+    }
+
+    refreshAppData();
+  }
+
+  async function handleObservationDelete(observationId: string) {
+    const confirmed = window.confirm(
+      'La observación será eliminada del seguimiento del curso. ¿Quieres continuar?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch('/api/observations', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        courseSlug: currentCourse.slug,
+        id: observationId,
+      }),
+    });
+
+    const payload = (await response.json()) as { error?: string };
+
+    if (!response.ok) {
+      setObservationError(payload.error ?? 'No fue posible eliminar la observación.');
+      return;
+    }
+
+    refreshAppData();
+  }
+
+  function updateObservationDraft<Key extends keyof ObservationMutationInput>(
+    observationId: string,
+    key: Key,
+    value: ObservationMutationInput[Key],
+  ) {
+    setObservationDrafts((current) => ({
+      ...current,
+      [observationId]: {
+        ...current[observationId],
+        [key]: value,
       },
     }));
   }
@@ -578,20 +935,281 @@ export function CourseWorkspacePage({
             <Flag size={18} />
           </div>
 
-          <div className="list-stack">
-            {course.deliverables.map((deliverable) => (
-              <div key={deliverable.id} className="list-item">
-                <div>
-                  <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
-                  <strong>{deliverable.title}</strong>
-                  <p>{deliverable.note}</p>
-                </div>
-                <div className="list-item__meta">
-                  <span>{deliverable.owner}</span>
-                  <span>Vence {formatDate(deliverable.dueDate)}</span>
-                </div>
+          {canCreateDeliverables(userRole) ? (
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={
+                  isDeliverableComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
+                }
+                onClick={() => setIsDeliverableComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isDeliverableComposerOpen ? 'Cerrar formulario' : 'Nuevo entregable'}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {isDeliverableComposerOpen ? (
+            <form className="editor-card editor-card--task" onSubmit={handleDeliverableCreate}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Título</span>
+                  <div className="field__control">
+                    <input
+                      value={newDeliverableForm.title}
+                      onChange={(event) =>
+                        setNewDeliverableForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Responsable</span>
+                  <div className="field__control">
+                    <select
+                      value={newDeliverableForm.owner}
+                      onChange={(event) =>
+                        setNewDeliverableForm((current) => ({
+                          ...current,
+                          owner: event.target.value as Role,
+                        }))
+                      }
+                    >
+                      {appData.roles.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={newDeliverableForm.status}
+                      onChange={(event) =>
+                        setNewDeliverableForm((current) => ({
+                          ...current,
+                          status: event.target.value as DeliverableMutationInput['status'],
+                        }))
+                      }
+                    >
+                      {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Vence</span>
+                  <div className="field__control">
+                    <input
+                      type="date"
+                      value={newDeliverableForm.dueDate}
+                      onChange={(event) =>
+                        setNewDeliverableForm((current) => ({
+                          ...current,
+                          dueDate: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Nota operativa</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={3}
+                      value={newDeliverableForm.note}
+                      onChange={(event) =>
+                        setNewDeliverableForm((current) => ({
+                          ...current,
+                          note: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
               </div>
-            ))}
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isDeliverableSaving}>
+                  <span>{isDeliverableSaving ? 'Creando…' : 'Crear entregable'}</span>
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {deliverableError ? <p className="form-error">{deliverableError}</p> : null}
+
+          <div className="list-stack">
+            {course.deliverables.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin entregables registrados</strong>
+                <p>Cuando el curso tenga piezas activas, aparecerán aquí con responsable y fecha.</p>
+              </div>
+            ) : (
+              course.deliverables.map((deliverable) => {
+                const draft = deliverableDrafts[deliverable.id];
+                const isEditable = canEditDeliverable(userRole, deliverable.owner);
+
+                if (!isEditable || !draft) {
+                  return (
+                    <div key={deliverable.id} className="list-item">
+                      <div>
+                        <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
+                        <strong>{deliverable.title}</strong>
+                        <p>{deliverable.note}</p>
+                      </div>
+                      <div className="list-item__meta">
+                        <span>{deliverable.owner}</span>
+                        <span>Vence {formatDate(deliverable.dueDate)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={deliverable.id} className="task-editor">
+                    <div>
+                      <div className="task-editor__header">
+                        <span className={badgeClass(draft.status)}>{draft.status}</span>
+                        <strong>{deliverable.title}</strong>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Título</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.title}
+                              onChange={(event) =>
+                                updateDeliverableDraft(deliverable.id, 'title', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Responsable</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.owner}
+                              onChange={(event) =>
+                                updateDeliverableDraft(
+                                  deliverable.id,
+                                  'owner',
+                                  event.target.value as Role,
+                                )
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateDeliverableDraft(
+                                  deliverable.id,
+                                  'status',
+                                  event.target.value as DeliverableMutationInput['status'],
+                                )
+                              }
+                            >
+                              {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Vence</span>
+                          <div className="field__control">
+                            <input
+                              type="date"
+                              value={draft.dueDate}
+                              onChange={(event) =>
+                                updateDeliverableDraft(
+                                  deliverable.id,
+                                  'dueDate',
+                                  event.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Nota operativa</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={3}
+                              value={draft.note}
+                              onChange={(event) =>
+                                updateDeliverableDraft(deliverable.id, 'note', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      <div className="task-item__meta">
+                        <span>{draft.owner}</span>
+                        <span>Vence {formatDate(draft.dueDate)}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void handleDeliverableSave(deliverable.id)}
+                      >
+                        <Save size={16} />
+                        <span>Guardar</span>
+                      </button>
+
+                      {canDeleteDeliverables(userRole) ? (
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          onClick={() => void handleDeliverableDelete(deliverable.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </article>
 
@@ -656,20 +1274,294 @@ export function CourseWorkspacePage({
             <CircleAlert size={18} />
           </div>
 
-          <div className="list-stack">
-            {course.observations.map((observation) => (
-              <div key={observation.id} className="list-item">
-                <div>
-                  <span className={badgeClass(observation.status)}>{observation.status}</span>
-                  <strong>{observation.title}</strong>
-                  <p>{observation.detail}</p>
-                </div>
-                <div className="list-item__meta">
-                  <span>{observation.role}</span>
-                  <span>{observation.severity}</span>
-                </div>
+          {canCreateObservations(userRole) ? (
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={
+                  isObservationComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
+                }
+                onClick={() => setIsObservationComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isObservationComposerOpen ? 'Cerrar formulario' : 'Nueva observación'}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {isObservationComposerOpen ? (
+            <form className="editor-card editor-card--task" onSubmit={handleObservationCreate}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Título</span>
+                  <div className="field__control">
+                    <input
+                      value={newObservationForm.title}
+                      onChange={(event) =>
+                        setNewObservationForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Rol emisor</span>
+                  <div className="field__control">
+                    <select
+                      value={newObservationForm.role}
+                      onChange={(event) =>
+                        setNewObservationForm((current) => ({
+                          ...current,
+                          role: event.target.value as Role,
+                        }))
+                      }
+                    >
+                      {appData.roles.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Severidad</span>
+                  <div className="field__control">
+                    <select
+                      value={newObservationForm.severity}
+                      onChange={(event) =>
+                        setNewObservationForm((current) => ({
+                          ...current,
+                          severity: event.target.value as ObservationMutationInput['severity'],
+                        }))
+                      }
+                    >
+                      {['Alta', 'Media', 'Baja'].map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={newObservationForm.status}
+                      onChange={(event) =>
+                        setNewObservationForm((current) => ({
+                          ...current,
+                          status: event.target.value as ObservationMutationInput['status'],
+                        }))
+                      }
+                    >
+                      {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Detalle</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={3}
+                      value={newObservationForm.detail}
+                      onChange={(event) =>
+                        setNewObservationForm((current) => ({
+                          ...current,
+                          detail: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
               </div>
-            ))}
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isObservationSaving}>
+                  <span>{isObservationSaving ? 'Registrando…' : 'Registrar observación'}</span>
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {observationError ? <p className="form-error">{observationError}</p> : null}
+
+          <div className="list-stack">
+            {course.observations.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin observaciones abiertas</strong>
+                <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
+              </div>
+            ) : (
+              course.observations.map((observation) => {
+                const draft = observationDrafts[observation.id];
+                const isEditable = canEditObservation(userRole, observation.role);
+
+                if (!isEditable || !draft) {
+                  return (
+                    <div key={observation.id} className="list-item">
+                      <div>
+                        <span className={badgeClass(observation.status)}>{observation.status}</span>
+                        <strong>{observation.title}</strong>
+                        <p>{observation.detail}</p>
+                      </div>
+                      <div className="list-item__meta">
+                        <span>{observation.role}</span>
+                        <span>{observation.severity}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={observation.id} className="task-editor">
+                    <div>
+                      <div className="task-editor__header">
+                        <span className={badgeClass(draft.status)}>{draft.status}</span>
+                        <strong>{observation.title}</strong>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Título</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.title}
+                              onChange={(event) =>
+                                updateObservationDraft(observation.id, 'title', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Rol emisor</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.role}
+                              onChange={(event) =>
+                                updateObservationDraft(
+                                  observation.id,
+                                  'role',
+                                  event.target.value as Role,
+                                )
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Severidad</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.severity}
+                              onChange={(event) =>
+                                updateObservationDraft(
+                                  observation.id,
+                                  'severity',
+                                  event.target.value as ObservationMutationInput['severity'],
+                                )
+                              }
+                            >
+                              {['Alta', 'Media', 'Baja'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateObservationDraft(
+                                  observation.id,
+                                  'status',
+                                  event.target.value as ObservationMutationInput['status'],
+                                )
+                              }
+                            >
+                              {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Detalle</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={3}
+                              value={draft.detail}
+                              onChange={(event) =>
+                                updateObservationDraft(
+                                  observation.id,
+                                  'detail',
+                                  event.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      <div className="task-item__meta">
+                        <span>{draft.role}</span>
+                        <span>{draft.severity}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void handleObservationSave(observation.id)}
+                      >
+                        <Save size={16} />
+                        <span>Guardar</span>
+                      </button>
+
+                      {canDeleteObservations(userRole) ? (
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          onClick={() => void handleObservationDelete(observation.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </article>
 
@@ -880,190 +1772,213 @@ export function CourseWorkspacePage({
               <p>Cuando el flujo avance o se registren nuevas asignaciones aparecerán aquí.</p>
             </div>
           ) : (
-            visibleTasks.map((task) => (
-              <div key={task.id} className="task-editor">
-                <div>
-                  <div className="task-editor__header">
-                    <span className={badgeClass(task.status)}>{task.status}</span>
-                    <strong>{task.title}</strong>
+            visibleTasks.map((task) => {
+              const draft = taskDrafts[task.id];
+              const isEditable = canEditTask(userRole, task.role);
+
+              if (!draft) {
+                return null;
+              }
+
+              return (
+                <div key={task.id} className="task-editor">
+                  <div>
+                    <div className="task-editor__header">
+                      <span className={badgeClass(draft.status)}>{draft.status}</span>
+                      <strong>{task.title}</strong>
+                    </div>
+
+                    {canCreateTasks(userRole) ? (
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Título</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.title}
+                              onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Rol</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.role}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'role', event.target.value as Role)
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Etapa</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.stageId}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'stageId', event.target.value)
+                              }
+                            >
+                              {appData.stages.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Vence</span>
+                          <div className="field__control">
+                            <input
+                              type="date"
+                              value={draft.dueDate}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'dueDate', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Prioridad</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.priority}
+                              onChange={(event) =>
+                                updateTaskDraft(
+                                  task.id,
+                                  'priority',
+                                  event.target.value as TaskMutationInput['priority'],
+                                )
+                              }
+                            >
+                              {['Alta', 'Media', 'Baja'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateTaskDraft(
+                                  task.id,
+                                  'status',
+                                  event.target.value as TaskMutationInput['status'],
+                                )
+                              }
+                            >
+                              {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Resumen</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={3}
+                              value={draft.summary}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'summary', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateTaskDraft(
+                                  task.id,
+                                  'status',
+                                  event.target.value as TaskMutationInput['status'],
+                                )
+                              }
+                              disabled={!isEditable}
+                            >
+                              {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Resumen</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={3}
+                              value={draft.summary}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'summary', event.target.value)
+                              }
+                              disabled={!isEditable}
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    )}
                   </div>
 
-                  {canCreateTasks(userRole) ? (
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Título</span>
-                        <div className="field__control">
-                          <input
-                            value={taskDrafts[task.id]?.title ?? task.title}
-                            onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Rol</span>
-                        <div className="field__control">
-                          <select
-                            value={taskDrafts[task.id]?.role ?? task.role}
-                            onChange={(event) => updateTaskDraft(task.id, 'role', event.target.value)}
-                          >
-                            {appData.roles.map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Etapa</span>
-                        <div className="field__control">
-                          <select
-                            value={taskDrafts[task.id]?.stageId ?? task.stageId}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'stageId', event.target.value)
-                            }
-                          >
-                            {appData.stages.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Vence</span>
-                        <div className="field__control">
-                          <input
-                            type="date"
-                            value={taskDrafts[task.id]?.dueDate ?? task.dueDate}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'dueDate', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Prioridad</span>
-                        <div className="field__control">
-                          <select
-                            value={taskDrafts[task.id]?.priority ?? task.priority}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'priority', event.target.value)
-                            }
-                          >
-                            {['Alta', 'Media', 'Baja'].map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Estado</span>
-                        <div className="field__control">
-                          <select
-                            value={taskDrafts[task.id]?.status ?? task.status}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'status', event.target.value)
-                            }
-                          >
-                            {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field field--full">
-                        <span>Resumen</span>
-                        <div className="field__control field__control--textarea">
-                          <textarea
-                            rows={3}
-                            value={taskDrafts[task.id]?.summary ?? task.summary}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'summary', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
+                  <div className="task-editor__sidebar">
+                    <div className="task-item__meta">
+                      <span>{task.role}</span>
+                      <span>Vence {formatDate(task.dueDate)}</span>
                     </div>
-                  ) : (
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Estado</span>
-                        <div className="field__control">
-                          <select
-                            value={taskDrafts[task.id]?.status ?? task.status}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'status', event.target.value)
-                            }
-                            disabled={!canEditTask(userRole, task.role)}
-                          >
-                            {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
 
-                      <label className="field field--full">
-                        <span>Resumen</span>
-                        <div className="field__control field__control--textarea">
-                          <textarea
-                            rows={3}
-                            value={taskDrafts[task.id]?.summary ?? task.summary}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, 'summary', event.target.value)
-                            }
-                            disabled={!canEditTask(userRole, task.role)}
-                          />
-                        </div>
-                      </label>
-                    </div>
-                  )}
-                </div>
+                    {isEditable ? (
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void handleTaskSave(task.id)}
+                      >
+                        <Save size={16} />
+                        <span>Guardar</span>
+                      </button>
+                    ) : null}
 
-                <div className="task-editor__sidebar">
-                  <div className="task-item__meta">
-                    <span>{task.role}</span>
-                    <span>Vence {formatDate(task.dueDate)}</span>
+                    {canDeleteTasks(userRole) ? (
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        onClick={() => void handleTaskDelete(task.id)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    ) : null}
                   </div>
-
-                  {canEditTask(userRole, task.role) ? (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => void handleTaskSave(task.id)}
-                    >
-                      <Save size={16} />
-                      <span>Guardar</span>
-                    </button>
-                  ) : null}
-
-                  {canDeleteTasks(userRole) ? (
-                    <button
-                      type="button"
-                      className="danger-button danger-button--ghost"
-                      onClick={() => void handleTaskDelete(task.id)}
-                    >
-                      <Trash2 size={16} />
-                      <span>Eliminar</span>
-                    </button>
-                  ) : null}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>

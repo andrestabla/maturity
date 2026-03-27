@@ -124,7 +124,17 @@ export default function App() {
             />
           }
         />
-        <Route path="/library" element={<LibraryPage role={activeRole} appData={appData} />} />
+        <Route
+          path="/library"
+          element={
+            <LibraryPage
+              role={activeRole}
+              userRole={session.user.role}
+              appData={appData}
+              refreshAppData={refreshAppData}
+            />
+          }
+        />
         <Route
           path="/team"
           element={

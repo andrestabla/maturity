@@ -4,6 +4,12 @@ import type {
   AuthUser,
   Course,
   CourseMutationInput,
+  Deliverable,
+  DeliverableMutationInput,
+  LibraryResource,
+  LibraryResourceMutationInput,
+  Observation,
+  ObservationMutationInput,
   PasswordChangeInput,
   Role,
   RoleProfile,
@@ -146,6 +152,42 @@ function makeTaskRecord(input: TaskMutationInput): Task {
     dueDate: input.dueDate,
     priority: input.priority,
     status: input.status,
+    summary: input.summary,
+  };
+}
+
+function makeDeliverableRecord(input: DeliverableMutationInput): Deliverable {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    owner: input.owner,
+    status: input.status,
+    dueDate: input.dueDate,
+    note: input.note,
+  };
+}
+
+function makeObservationRecord(input: ObservationMutationInput): Observation {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    role: input.role,
+    severity: input.severity,
+    status: input.status,
+    detail: input.detail,
+  };
+}
+
+function makeLibraryResourceRecord(input: LibraryResourceMutationInput): LibraryResource {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    kind: input.kind,
+    courseSlug: input.courseSlug,
+    unit: input.unit,
+    source: input.source,
+    status: input.status,
+    tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
     summary: input.summary,
   };
 }
@@ -449,6 +491,79 @@ async function persistTask(task: Task) {
       status = EXCLUDED.status,
       summary = EXCLUDED.summary
   `;
+}
+
+async function persistLibraryResource(resource: LibraryResource) {
+  const sql = getSql();
+
+  await sql`
+    INSERT INTO maturity_library_resources (
+      id,
+      title,
+      kind,
+      course_slug,
+      unit,
+      source,
+      status,
+      tags,
+      summary
+    )
+    VALUES (
+      ${resource.id},
+      ${resource.title},
+      ${resource.kind},
+      ${resource.courseSlug},
+      ${resource.unit},
+      ${resource.source},
+      ${resource.status},
+      ${JSON.stringify(resource.tags)}::jsonb,
+      ${resource.summary}
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      title = EXCLUDED.title,
+      kind = EXCLUDED.kind,
+      course_slug = EXCLUDED.course_slug,
+      unit = EXCLUDED.unit,
+      source = EXCLUDED.source,
+      status = EXCLUDED.status,
+      tags = EXCLUDED.tags,
+      summary = EXCLUDED.summary
+  `;
+}
+
+async function readCourseBySlug(slug: string) {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      slug,
+      title,
+      code,
+      faculty,
+      program,
+      modality,
+      credits,
+      stage_id AS "stageId",
+      status,
+      progress,
+      summary,
+      next_milestone AS "nextMilestone",
+      updated_at AS "updatedAt",
+      pulse,
+      team,
+      deliverables,
+      modules,
+      observations,
+      schedule,
+      stage_checklist AS "stageChecklist",
+      assistants
+    FROM maturity_courses
+    WHERE slug = ${slug}
+    LIMIT 1
+  `) as CourseRow[];
+
+  return rows[0] ? serializeCourseRow(rows[0]) : null;
 }
 
 async function ensureSeedData() {
@@ -1006,6 +1121,277 @@ export async function findTaskById(id: string) {
   `) as Task[];
 
   return rows[0] ?? null;
+}
+
+export async function createDeliverableRecord(courseSlug: string, input: DeliverableMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    deliverables: [...course.deliverables, makeDeliverableRecord(input)],
+  };
+
+  await persistCourse(nextCourse);
+  return nextCourse.deliverables.at(-1) ?? null;
+}
+
+export async function updateDeliverableRecord(
+  courseSlug: string,
+  deliverableId: string,
+  input: Partial<DeliverableMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedDeliverable: Deliverable | null = null;
+  const nextDeliverables = course.deliverables.map((deliverable) => {
+    if (deliverable.id !== deliverableId) {
+      return deliverable;
+    }
+
+    updatedDeliverable = {
+      ...deliverable,
+      ...input,
+    };
+
+    return updatedDeliverable;
+  });
+
+  if (!updatedDeliverable) {
+    return null;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    deliverables: nextDeliverables,
+  };
+
+  await persistCourse(nextCourse);
+  return updatedDeliverable;
+}
+
+export async function deleteDeliverableRecord(courseSlug: string, deliverableId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const nextDeliverables = course.deliverables.filter((deliverable) => deliverable.id !== deliverableId);
+
+  if (nextDeliverables.length === course.deliverables.length) {
+    return false;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    deliverables: nextDeliverables,
+  };
+
+  await persistCourse(nextCourse);
+  return true;
+}
+
+export async function findDeliverableById(courseSlug: string, deliverableId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+  const course = await readCourseBySlug(courseSlug);
+
+  return course?.deliverables.find((deliverable) => deliverable.id === deliverableId) ?? null;
+}
+
+export async function createObservationRecord(courseSlug: string, input: ObservationMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    observations: [...course.observations, makeObservationRecord(input)],
+  };
+
+  await persistCourse(nextCourse);
+  return nextCourse.observations.at(-1) ?? null;
+}
+
+export async function updateObservationRecord(
+  courseSlug: string,
+  observationId: string,
+  input: Partial<ObservationMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedObservation: Observation | null = null;
+  const nextObservations = course.observations.map((observation) => {
+    if (observation.id !== observationId) {
+      return observation;
+    }
+
+    updatedObservation = {
+      ...observation,
+      ...input,
+    };
+
+    return updatedObservation;
+  });
+
+  if (!updatedObservation) {
+    return null;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    observations: nextObservations,
+  };
+
+  await persistCourse(nextCourse);
+  return updatedObservation;
+}
+
+export async function deleteObservationRecord(courseSlug: string, observationId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const nextObservations = course.observations.filter((observation) => observation.id !== observationId);
+
+  if (nextObservations.length === course.observations.length) {
+    return false;
+  }
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    observations: nextObservations,
+  };
+
+  await persistCourse(nextCourse);
+  return true;
+}
+
+export async function findObservationById(courseSlug: string, observationId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+  const course = await readCourseBySlug(courseSlug);
+
+  return course?.observations.find((observation) => observation.id === observationId) ?? null;
+}
+
+export async function createLibraryResourceRecord(input: LibraryResourceMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const resource = makeLibraryResourceRecord(input);
+  await persistLibraryResource(resource);
+  return resource;
+}
+
+export async function findLibraryResourceById(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      kind,
+      course_slug AS "courseSlug",
+      unit,
+      source,
+      status,
+      tags,
+      summary
+    FROM maturity_library_resources
+    WHERE id = ${id}
+    LIMIT 1
+  `) as Array<
+    Omit<LibraryResource, 'tags'> & {
+      tags: JsonValue;
+    }
+  >;
+
+  const row = rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    tags: parseJson<LibraryResource['tags']>(row.tags),
+  };
+}
+
+export async function updateLibraryResourceRecord(
+  id: string,
+  input: Partial<LibraryResourceMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const current = await findLibraryResourceById(id);
+
+  if (!current) {
+    return null;
+  }
+
+  const resource: LibraryResource = {
+    ...current,
+    ...input,
+    tags: input.tags ? input.tags.map((tag) => tag.trim()).filter(Boolean) : current.tags,
+  };
+
+  await persistLibraryResource(resource);
+  return resource;
+}
+
+export async function deleteLibraryResourceRecord(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    DELETE FROM maturity_library_resources
+    WHERE id = ${id}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return rows.length > 0;
 }
 
 export async function getUserDirectory() {

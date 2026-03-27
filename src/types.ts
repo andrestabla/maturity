@@ -205,6 +205,33 @@ export interface PasswordChangeInput {
   nextPassword: string;
 }
 
+export interface DeliverableMutationInput {
+  title: string;
+  owner: Role;
+  status: DeliverableStatus;
+  dueDate: string;
+  note: string;
+}
+
+export interface ObservationMutationInput {
+  title: string;
+  role: Role;
+  severity: Priority;
+  status: ObservationStatus;
+  detail: string;
+}
+
+export interface LibraryResourceMutationInput {
+  title: string;
+  kind: LibraryResource['kind'];
+  courseSlug: string;
+  unit: string;
+  source: string;
+  status: LibraryResource['status'];
+  tags: string[];
+  summary: string;
+}
+
 export interface CourseMutationInput {
   title: string;
   code: string;
