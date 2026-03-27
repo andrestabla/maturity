@@ -1,0 +1,17 @@
+{
+  "name": "Maturity",
+  "short_name": "Maturity",
+  "description": "Gestión integral para la producción de cursos universitarios.",
+  "display": "standalone",
+  "background_color": "#f3ede3",
+  "theme_color": "#132126",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/maturity-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
