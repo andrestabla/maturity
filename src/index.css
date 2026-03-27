@@ -5653,9 +5653,151 @@ body::after {
   justify-content: space-between;
 }
 
+.segmented-control--wide {
+  flex-wrap: wrap;
+}
+
+.course-sections {
+  overflow: visible;
+}
+
+.module-grid--summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field--search {
+  min-width: min(100%, 360px);
+}
+
+.field--search .field__control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.courses-page--explorer {
+  gap: 18px;
+}
+
+.courses-explorer {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.explorer-tree,
+.explorer-content {
+  padding: 18px;
+}
+
+.explorer-tree__list,
+.explorer-branch,
+.explorer-branch__children {
+  display: grid;
+  gap: 8px;
+}
+
+.explorer-branch__children {
+  padding-left: 14px;
+}
+
+.explorer-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--ink);
+  text-align: left;
+}
+
+.explorer-node span,
+.breadcrumb-row__item span,
+.course-card__signals span {
+  color: var(--muted);
+}
+
+.explorer-node strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.explorer-node--active {
+  border-color: var(--line-strong);
+  background: rgba(34, 185, 210, 0.08);
+}
+
+.explorer-node--child {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.explorer-node--leaf {
+  padding-left: 18px;
+}
+
+.explorer-content {
+  display: grid;
+  gap: 18px;
+}
+
+.explorer-content__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.breadcrumb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-row__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.courses-grid--explorer {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.explorer-result {
+  border-radius: 14px;
+  text-decoration: none;
+}
+
+.course-card__signals {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.courses-toolbar__sort {
+  min-width: 180px;
+}
+
 @media (max-width: 980px) {
   .handoff-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .courses-explorer,
+  .module-grid--summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .explorer-content__head {
+    flex-direction: column;
   }
 }
 
@@ -5682,5 +5824,9 @@ body::after {
   .ghost-button--icon {
     width: 34px;
     justify-content: center;
+  }
+
+  .courses-grid--explorer {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -52,6 +52,15 @@ interface CourseWorkspacePageProps {
   refreshAppData: () => void;
 }
 
+type CourseSection =
+  | 'summary'
+  | 'general'
+  | 'planning'
+  | 'production'
+  | 'resources'
+  | 'qa'
+  | 'history';
+
 function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
@@ -239,6 +248,7 @@ export function CourseWorkspacePage({
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<CourseSection>('summary');
   const [courseError, setCourseError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
@@ -329,6 +339,10 @@ export function CourseWorkspacePage({
   const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
   const currentCheckpoint = currentCourse.stageChecklist[currentStageIndex];
   const nextStage = currentStageIndex >= 0 ? appData.stages[currentStageIndex + 1] : undefined;
+  const relatedResources = appData.libraryResources.filter(
+    (resource) => resource.courseSlug === currentCourse.slug,
+  );
+  const courseRouteLabel = `Repositorio institucional / ${currentCourse.faculty} / ${currentCourse.program} / ${currentCourse.title}`;
   const blockingCheckpoints = currentCourse.stageChecklist.filter(
     (checkpoint, index) => index <= currentStageIndex && checkpoint.status === 'blocked',
   );
@@ -870,7 +884,41 @@ export function CourseWorkspacePage({
         </div>
       </section>
 
-      {isCourseEditorOpen ? (
+      <section className="surface section-card section-card--compact course-sections">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Expediente</span>
+            <h3>Secciones funcionales del curso</h3>
+          </div>
+        </div>
+
+        <div className="segmented-control segmented-control--wide">
+          {[
+            ['summary', 'Resumen'],
+            ['general', 'Información general'],
+            ['planning', 'Planeación'],
+            ['production', 'Producción'],
+            ['resources', 'Recursos'],
+            ['qa', 'QA y validación'],
+            ['history', 'Historial'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={
+                activeSection === value
+                  ? 'segmented-control__button is-active'
+                  : 'segmented-control__button'
+              }
+              onClick={() => setActiveSection(value as CourseSection)}
+            >
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {activeSection === 'general' && isCourseEditorOpen ? (
         <section className="surface section-card">
           <form className="editor-card" onSubmit={handleCourseSave}>
             <div className="editor-card__header">
@@ -1051,6 +1099,94 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
+      {activeSection === 'summary' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Resumen</span>
+              <h3>Lectura ejecutiva del expediente</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.code}</strong>
+                <span>ID operativo</span>
+              </div>
+              <p>{courseRouteLabel}</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{relatedAlerts.length}</strong>
+                <span>alertas abiertas</span>
+              </div>
+              <p>Las alertas activas acompañan el curso y orientan la siguiente intervención del equipo.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{relatedTasks.length}</strong>
+                <span>tareas asociadas</span>
+              </div>
+              <p>La cola operativa del curso se mantiene trazada por etapa, responsable y fecha objetivo.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.team.length}</strong>
+                <span>roles vinculados</span>
+              </div>
+              <p>El expediente del curso conserva responsables, handoffs y continuidad del proceso.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'general' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Información general</span>
+              <h3>Ficha académica y documental</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.title}</strong>
+                <span>{currentCourse.code}</span>
+              </div>
+              <p>{currentCourse.summary}</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.faculty}</strong>
+                <span>Facultad</span>
+              </div>
+              <p>{currentCourse.program}</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.modality}</strong>
+                <span>Modalidad</span>
+              </div>
+              <p>{currentCourse.credits} créditos y expediente activo dentro de la ruta institucional.</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.nextMilestone}</strong>
+                <span>Próximo hito</span>
+              </div>
+              <p>{courseRouteLabel}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {(activeSection === 'summary' || activeSection === 'qa' || activeSection === 'history') ? (
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>
@@ -1214,8 +1350,11 @@ export function CourseWorkspacePage({
 
         {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
       </section>
+      ) : null}
 
+      {['planning', 'production', 'resources', 'qa'].includes(activeSection) ? (
       <section className="workspace-grid">
+        {activeSection === 'production' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1502,7 +1641,9 @@ export function CourseWorkspacePage({
             )}
           </div>
         </article>
+        ) : null}
 
+        {activeSection === 'planning' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1524,7 +1665,9 @@ export function CourseWorkspacePage({
             ))}
           </div>
         </article>
+        ) : null}
 
+        {activeSection === 'production' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1554,7 +1697,9 @@ export function CourseWorkspacePage({
             ))}
           </div>
         </article>
+        ) : null}
 
+        {activeSection === 'qa' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1854,7 +1999,9 @@ export function CourseWorkspacePage({
             )}
           </div>
         </article>
+        ) : null}
 
+        {activeSection === 'planning' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1877,7 +2024,52 @@ export function CourseWorkspacePage({
             ))}
           </div>
         </article>
+        ) : null}
 
+        {activeSection === 'resources' ? (
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Recursos</span>
+              <h3>Curación y biblioteca asociada</h3>
+            </div>
+            <Layers3 size={18} />
+          </div>
+
+          <div className="list-stack">
+            {relatedResources.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin recursos asociados todavía</strong>
+                <p>La curación y los recursos propios vinculados al curso aparecerán aquí.</p>
+              </div>
+            ) : (
+              relatedResources.map((resource) => (
+                <div key={resource.id} className="list-item">
+                  <div>
+                    <span className={resource.kind === 'Curado' ? 'badge badge--ocean' : 'badge badge--sage'}>
+                      {resource.kind}
+                    </span>
+                    <strong>{resource.title}</strong>
+                    <p>{resource.summary}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{resource.unit}</span>
+                    <span>{resource.status}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="action-row">
+            <Link to="/library" className="ghost-button">
+              <span>Ir a biblioteca</span>
+            </Link>
+          </div>
+        </article>
+        ) : null}
+
+        {activeSection === 'resources' ? (
         <article className="surface section-card">
           <div className="section-heading">
             <div>
@@ -1896,8 +2088,11 @@ export function CourseWorkspacePage({
             ))}
           </div>
         </article>
+        ) : null}
       </section>
+      ) : null}
 
+      {activeSection === 'planning' ? (
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>
@@ -2272,6 +2467,56 @@ export function CourseWorkspacePage({
           )}
         </div>
       </section>
+      ) : null}
+
+      {activeSection === 'history' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Historial y cierre</span>
+              <h3>Trazabilidad del expediente</h3>
+            </div>
+          </div>
+
+          <div className="list-stack">
+            <div className="list-item">
+              <div>
+                <strong>Ruta institucional</strong>
+                <p>{courseRouteLabel}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>Versión vigente del expediente</span>
+                <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Último hito registrado</strong>
+                <p>{currentCourse.nextMilestone}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>{currentCourse.status}</span>
+                <span>{stage?.name ?? currentCourse.stageId}</span>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Bitácora visible del curso</strong>
+                <p>
+                  Entregables, observaciones, checkpoints y handoffs quedan asociados al curso como
+                  expediente persistente.
+                </p>
+              </div>
+              <div className="list-item__meta">
+                <span>{currentCourse.deliverables.length} entregables</span>
+                <span>{currentCourse.observations.length} observaciones</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

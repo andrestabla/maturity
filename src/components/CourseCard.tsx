@@ -6,6 +6,10 @@ import { formatDate } from '../utils/format.js';
 interface CourseCardProps {
   course: Course;
   stageName: string;
+  routeLabel?: string;
+  ownerLabel?: string;
+  alertCount?: number;
+  pendingObservations?: number;
 }
 
 function statusClass(status: Course['status']) {
@@ -25,7 +29,14 @@ function statusClass(status: Course['status']) {
   }
 }
 
-export function CourseCard({ course, stageName }: CourseCardProps) {
+export function CourseCard({
+  course,
+  stageName,
+  routeLabel,
+  ownerLabel,
+  alertCount = 0,
+  pendingObservations = 0,
+}: CourseCardProps) {
   return (
     <Link to={`/courses/${course.slug}`} className="course-card surface">
       <div className="course-card__top">
@@ -49,6 +60,16 @@ export function CourseCard({ course, stageName }: CourseCardProps) {
         <span className={statusClass(course.status)}>{course.status}</span>
         <span className="badge badge--outline">{stageName}</span>
       </div>
+
+      {routeLabel || ownerLabel || alertCount > 0 || pendingObservations > 0 ? (
+        <div className="course-card__signals">
+          {routeLabel ? <span>{routeLabel}</span> : null}
+          {ownerLabel ? <span>Responsable actual: {ownerLabel}</span> : null}
+          <span>
+            {alertCount} alertas · {pendingObservations} observaciones
+          </span>
+        </div>
+      ) : null}
 
       <div className="course-card__progress">
         <div className="progress-copy">
