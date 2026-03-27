@@ -24,36 +24,41 @@ export default function App() {
 
   if (status === 'loading') {
     return (
-      <>
-        <AmbientCursor />
-        <main className="auth-layout">
-          <section className="auth-panel surface auth-panel--loading">
-            <div className="loading-shell">
-              <span className="hero-badge">Preparando la sesión</span>
-              <div className="loading-shell__copy">
-                <div className="skeleton-line skeleton-line--title" />
-                <div className="skeleton-line skeleton-line--wide" />
-                <div className="skeleton-line skeleton-line--medium" />
-              </div>
-              <div className="loading-shell__cards">
-                <div className="skeleton-card" />
-                <div className="skeleton-card" />
-                <div className="skeleton-card skeleton-card--soft" />
-              </div>
+      <main className="access-screen">
+        <div className="control-grid" aria-hidden />
+        <div className="access-screen__glow access-screen__glow--left" aria-hidden />
+        <div className="access-screen__glow access-screen__glow--right" aria-hidden />
+        <section className="access-screen__panel access-screen__panel--loading">
+          <div className="access-screen__brand">
+            <div className="access-screen__mark">M</div>
+            <div>
+              <span>Maturity</span>
+              <strong>Control Center</strong>
             </div>
-          </section>
-        </main>
-      </>
+          </div>
+
+          <div className="access-screen__copy">
+            <span className="access-screen__kicker">Preparando la sesión</span>
+            <h1>Sincronizando tu espacio de trabajo.</h1>
+            <p>Estamos validando acceso y preparando la capa operativa.</p>
+          </div>
+
+          <div className="access-screen__loading">
+            <div className="skeleton-line skeleton-line--title" />
+            <div className="skeleton-line skeleton-line--wide" />
+            <div className="skeleton-line skeleton-line--medium" />
+            <div className="access-screen__loading-cards">
+              <div className="skeleton-card" />
+              <div className="skeleton-card" />
+            </div>
+          </div>
+        </section>
+      </main>
     );
   }
 
   if (!session.authenticated || !session.user) {
-    return (
-      <>
-        <AmbientCursor />
-        <LoginPage isLoading={false} onLogin={login} />
-      </>
-    );
+    return <LoginPage isLoading={false} onLogin={login} />;
   }
 
   const availableRoles = session.user.role === 'Administrador' ? appData.roles : [session.user.role];
