@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
@@ -7,13 +7,26 @@ import { defaultBranding } from './data/mockData.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
-import { CourseWorkspacePage } from './pages/CourseWorkspacePage.js';
-import { CoursesPage } from './pages/CoursesPage.js';
-import { DashboardPage } from './pages/DashboardPage.js';
-import { LibraryPage } from './pages/LibraryPage.js';
 import { LoginPage } from './pages/LoginPage.js';
-import { TeamPage } from './pages/TeamPage.js';
 import type { Role } from './types.js';
+
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage.js').then((module) => ({ default: module.DashboardPage })),
+);
+const CoursesPage = lazy(() =>
+  import('./pages/CoursesPage.js').then((module) => ({ default: module.CoursesPage })),
+);
+const CourseWorkspacePage = lazy(() =>
+  import('./pages/CourseWorkspacePage.js').then((module) => ({
+    default: module.CourseWorkspacePage,
+  })),
+);
+const LibraryPage = lazy(() =>
+  import('./pages/LibraryPage.js').then((module) => ({ default: module.LibraryPage })),
+);
+const TeamPage = lazy(() =>
+  import('./pages/TeamPage.js').then((module) => ({ default: module.TeamPage })),
+);
 
 function createMonogramFavicon(label: string, background: string, foreground: string) {
   const safeLabel = (label || 'M').slice(0, 2);
@@ -25,6 +38,30 @@ function createMonogramFavicon(label: string, background: string, foreground: st
   `;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function RouteSkeleton() {
+  return (
+    <div className="page-stack page-stack--loading">
+      <section className="surface section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Cargando módulo</span>
+            <h3>Preparando la siguiente vista</h3>
+          </div>
+        </div>
+        <div className="skeleton-line skeleton-line--title" />
+        <div className="skeleton-line skeleton-line--wide" />
+        <div className="skeleton-line skeleton-line--medium" />
+      </section>
+
+      <section className="metrics-grid metrics-grid--three">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <article key={index} className="surface section-card skeleton-panel skeleton-panel--medium" />
+        ))}
+      </section>
+    </div>
+  );
 }
 
 export default function App() {
@@ -196,65 +233,67 @@ export default function App() {
       appData={appData}
     >
       <AmbientCursor />
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <DashboardPage
-              role={activeRole}
-              userRole={session.user.role}
-              appData={appData}
-              isLoading={isLoading}
-              refreshAppData={refreshAppData}
-            />
-          }
-        />
-        <Route
-          path="/courses"
-          element={
-            <CoursesPage
-              role={activeRole}
-              appData={appData}
-              userRole={session.user.role}
-              refreshAppData={refreshAppData}
-            />
-          }
-        />
-        <Route
-          path="/courses/:slug"
-          element={
-            <CourseWorkspacePage
-              role={activeRole}
-              userRole={session.user.role}
-              appData={appData}
-              refreshAppData={refreshAppData}
-            />
-          }
-        />
-        <Route
-          path="/library"
-          element={
-            <LibraryPage
-              role={activeRole}
-              userRole={session.user.role}
-              appData={appData}
-              refreshAppData={refreshAppData}
-            />
-          }
-        />
-        <Route
-          path="/team"
-          element={
-            <TeamPage
-              user={session.user}
-              appData={appData}
-              refreshAppData={refreshAppData}
-              refreshSession={refreshSession}
-            />
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<RouteSkeleton />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DashboardPage
+                role={activeRole}
+                userRole={session.user.role}
+                appData={appData}
+                isLoading={isLoading}
+                refreshAppData={refreshAppData}
+              />
+            }
+          />
+          <Route
+            path="/courses"
+            element={
+              <CoursesPage
+                role={activeRole}
+                appData={appData}
+                userRole={session.user.role}
+                refreshAppData={refreshAppData}
+              />
+            }
+          />
+          <Route
+            path="/courses/:slug"
+            element={
+              <CourseWorkspacePage
+                role={activeRole}
+                userRole={session.user.role}
+                appData={appData}
+                refreshAppData={refreshAppData}
+              />
+            }
+          />
+          <Route
+            path="/library"
+            element={
+              <LibraryPage
+                role={activeRole}
+                userRole={session.user.role}
+                appData={appData}
+                refreshAppData={refreshAppData}
+              />
+            }
+          />
+          <Route
+            path="/team"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </AppShell>
   );
 }
