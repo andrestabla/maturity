@@ -1671,6 +1671,16 @@ html.has-ambient-cursor label {
   cursor: none;
 }
 
+html.has-ambient-cursor.has-modal-open body,
+html.has-ambient-cursor.has-modal-open a,
+html.has-ambient-cursor.has-modal-open button,
+html.has-ambient-cursor.has-modal-open input,
+html.has-ambient-cursor.has-modal-open select,
+html.has-ambient-cursor.has-modal-open textarea,
+html.has-ambient-cursor.has-modal-open label {
+  cursor: auto;
+}
+
 .ambient-cursor {
   position: fixed;
   top: 0;
@@ -1703,6 +1713,10 @@ html.has-ambient-cursor label {
   height: 56px;
   border-color: rgba(30, 37, 32, 0.18);
   background: radial-gradient(circle, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.06));
+}
+
+html.has-modal-open .ambient-cursor {
+  opacity: 0 !important;
 }
 
 .brand-card h1,
@@ -6794,6 +6808,22 @@ body::after {
     max(24px, env(safe-area-inset-left));
   background: rgba(4, 10, 20, 0.36);
   backdrop-filter: blur(14px);
+  cursor: default;
+}
+
+.modal-backdrop button,
+.modal-backdrop [role='button'],
+.modal-backdrop a {
+  cursor: pointer !important;
+}
+
+.modal-backdrop input,
+.modal-backdrop textarea {
+  cursor: text !important;
+}
+
+.modal-backdrop select {
+  cursor: default !important;
 }
 
 .modal-panel {

@@ -25,6 +25,12 @@ export function ModalFrame({
   const titleId = useId();
 
   useEffect(() => {
+    const root = document.documentElement;
+    const currentDepth = Number(root.dataset.modalDepth ?? '0');
+    const nextDepth = currentDepth + 1;
+    root.dataset.modalDepth = String(nextDepth);
+    root.classList.add('has-modal-open');
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         onClose();
@@ -32,7 +38,19 @@ export function ModalFrame({
     }
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+
+      const depth = Number(root.dataset.modalDepth ?? '1') - 1;
+
+      if (depth <= 0) {
+        delete root.dataset.modalDepth;
+        root.classList.remove('has-modal-open');
+        return;
+      }
+
+      root.dataset.modalDepth = String(depth);
+    };
   }, [onClose]);
 
   return (
