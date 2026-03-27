@@ -21,6 +21,25 @@ export default function App() {
     isLoading,
     refreshAppData,
   } = useAppData(status === 'authenticated');
+  const authenticatedUser = session.user;
+  const availableRoles =
+    authenticatedUser?.role === 'Administrador'
+      ? appData.roles
+      : authenticatedUser
+        ? [authenticatedUser.role]
+        : [];
+  const activeRole =
+    authenticatedUser && availableRoles.includes(role) ? role : authenticatedUser?.role ?? role;
+
+  useEffect(() => {
+    if (!authenticatedUser) {
+      return;
+    }
+
+    if (activeRole !== role) {
+      setRole(activeRole);
+    }
+  }, [activeRole, authenticatedUser, role]);
 
   if (status === 'loading') {
     return (
@@ -60,15 +79,6 @@ export default function App() {
   if (!session.authenticated || !session.user) {
     return <LoginPage isLoading={false} onLogin={login} />;
   }
-
-  const availableRoles = session.user.role === 'Administrador' ? appData.roles : [session.user.role];
-  const activeRole = availableRoles.includes(role) ? role : session.user.role;
-
-  useEffect(() => {
-    if (activeRole !== role) {
-      setRole(activeRole);
-    }
-  }, [activeRole, role]);
 
   return (
     <AppShell
