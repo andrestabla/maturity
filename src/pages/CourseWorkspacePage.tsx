@@ -353,6 +353,72 @@ export function CourseWorkspacePage({
     Boolean(currentCheckpoint && currentCheckpoint.status === 'done') &&
     blockingCheckpoints.length === 0 &&
     criticalObservations.length === 0;
+  const currentOwner = currentCheckpoint?.owner ?? stage?.owner ?? 'Coordinador';
+  const deliverablesReadyCount = currentCourse.deliverables.filter(
+    (deliverable) => deliverable.status === 'Listo',
+  ).length;
+  const deliverablesOpenCount = currentCourse.deliverables.filter(
+    (deliverable) => deliverable.status !== 'Listo',
+  ).length;
+  const pendingTasksCount = relatedTasks.filter((task) => task.status !== 'Lista').length;
+  const pendingObservationsCount = currentCourse.observations.filter(
+    (observation) => observation.status !== 'Resuelta',
+  ).length;
+  const resolvedObservationsCount = currentCourse.observations.length - pendingObservationsCount;
+  const curatedResources = relatedResources.filter((resource) => resource.kind === 'Curado');
+  const ownedResources = relatedResources.filter((resource) => resource.kind === 'Propio');
+  const upcomingMilestones = currentCourse.schedule
+    .slice()
+    .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
+    .slice(0, 4);
+  const priorityTasks = visibleTasks
+    .slice()
+    .sort((left, right) => {
+      const priorityWeight = { Alta: 0, Media: 1, Baja: 2 };
+      return (
+        priorityWeight[left.priority] - priorityWeight[right.priority] ||
+        left.dueDate.localeCompare(right.dueDate)
+      );
+    })
+    .slice(0, 4);
+  const teamCoverage = appData.roles
+    .map((roleName) => ({
+      role: roleName,
+      member: currentCourse.team.find((member) => member.role === roleName),
+    }))
+    .filter((item) => item.member);
+  const historyEvents = [
+    {
+      id: `course-${currentCourse.id}`,
+      title: 'Expediente actualizado',
+      detail: `El curso mantiene versión activa en ${stage?.name ?? currentCourse.stageId}.`,
+      date: currentCourse.updatedAt,
+      type: 'course',
+    },
+    ...currentCourse.schedule.map((item) => ({
+      id: item.id,
+      title: item.label,
+      detail: `Hito de cronograma marcado como ${item.status}.`,
+      date: item.dueDate,
+      type: 'milestone',
+    })),
+    ...currentCourse.deliverables.map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: `Entregable de ${item.owner} en estado ${item.status}.`,
+      date: item.dueDate,
+      type: 'deliverable',
+    })),
+    ...relatedTasks.map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: `Tarea de ${item.role} con prioridad ${item.priority}.`,
+      date: item.dueDate,
+      type: 'task',
+    })),
+  ]
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .slice(0, 8);
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1135,11 +1201,94 @@ export function CourseWorkspacePage({
 
             <div className="module-card">
               <div className="module-card__top">
-                <strong>{currentCourse.team.length}</strong>
-                <span>roles vinculados</span>
+                <strong>{currentOwner}</strong>
+                <span>responsable actual</span>
               </div>
               <p>El expediente del curso conserva responsables, handoffs y continuidad del proceso.</p>
             </div>
+          </div>
+
+          <div className="workspace-grid workspace-grid--summary">
+            <article className="surface section-card">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Pendientes clave</span>
+                  <h3>Qué requiere atención ahora</h3>
+                </div>
+              </div>
+
+              <div className="list-stack">
+                <div className="list-item">
+                  <div>
+                    <strong>{pendingTasksCount} tareas abiertas</strong>
+                    <p>La planeación y el seguimiento operativo del curso siguen activos.</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{deliverablesOpenCount} entregables en curso</span>
+                  </div>
+                </div>
+
+                <div className="list-item">
+                  <div>
+                    <strong>{pendingObservationsCount} observaciones pendientes</strong>
+                    <p>Las devoluciones y hallazgos todavía vigentes afectan el avance del expediente.</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{criticalObservations.length} críticas</span>
+                  </div>
+                </div>
+
+                <div className="list-item">
+                  <div>
+                    <strong>{upcomingMilestones[0]?.label ?? 'Sin hito inmediato'}</strong>
+                    <p>{upcomingMilestones[0] ? formatLongDate(upcomingMilestones[0].dueDate) : 'Configura un cronograma para el curso.'}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{stage?.name ?? currentCourse.stageId}</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className="surface section-card">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Acceso rápido</span>
+                  <h3>Ir directo a la siguiente operación</h3>
+                </div>
+              </div>
+
+              <div className="chip-row">
+                <button type="button" className="filter-chip" onClick={() => setActiveSection('planning')}>
+                  Planeación
+                </button>
+                <button type="button" className="filter-chip" onClick={() => setActiveSection('production')}>
+                  Producción
+                </button>
+                <button type="button" className="filter-chip" onClick={() => setActiveSection('resources')}>
+                  Recursos
+                </button>
+                <button type="button" className="filter-chip" onClick={() => setActiveSection('qa')}>
+                  QA y validación
+                </button>
+                <button type="button" className="filter-chip" onClick={() => setActiveSection('history')}>
+                  Historial
+                </button>
+              </div>
+
+              <div className="flow-glance flow-glance--compact">
+                <div className="flow-glance__item">
+                  <strong>{deliverablesReadyCount}/{currentCourse.deliverables.length || 1}</strong>
+                  <span>entregables listos</span>
+                  <p>La producción académica y multimedia ya deja rastro de avance dentro del curso.</p>
+                </div>
+                <div className="flow-glance__item">
+                  <strong>{ownedResources.length + curatedResources.length}</strong>
+                  <span>recursos vinculados</span>
+                  <p>Los recursos propios y curados acompañan el expediente y la arquitectura del curso.</p>
+                </div>
+              </div>
+            </article>
           </div>
         </section>
       ) : null}
@@ -1181,6 +1330,44 @@ export function CourseWorkspacePage({
                 <span>Próximo hito</span>
               </div>
               <p>{courseRouteLabel}</p>
+            </div>
+          </div>
+
+          <div className="list-stack">
+            <div className="list-item">
+              <div>
+                <strong>Ruta institucional y trazabilidad</strong>
+                <p>{courseRouteLabel}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>ID {currentCourse.code}</span>
+                <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Intención formativa</strong>
+                <p>{currentCourse.summary}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>{currentCourse.credits} créditos</span>
+                <span>{currentCourse.modality}</span>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Documentos base y versión vigente</strong>
+                <p>
+                  Este expediente ya concentra ficha general, arquitectura, entregables, observaciones,
+                  recursos y handoffs dentro de una misma ruta estable del curso.
+                </p>
+              </div>
+              <div className="list-item__meta">
+                <span>{stage?.name ?? currentCourse.stageId}</span>
+                <span>{currentCourse.status}</span>
+              </div>
             </div>
           </div>
         </section>
@@ -1350,6 +1537,211 @@ export function CourseWorkspacePage({
 
         {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
       </section>
+      ) : null}
+
+      {activeSection === 'planning' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Planeación</span>
+              <h3>Equipo, hitos y carga operativa</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{teamCoverage.length}</strong>
+                <span>roles cubiertos</span>
+              </div>
+              <p>El curso ya tiene cobertura operativa en los roles que participan activamente del flujo.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{pendingTasksCount}</strong>
+                <span>tareas abiertas</span>
+              </div>
+              <p>La coordinación puede leer la carga actual del curso por responsable y por etapa.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{upcomingMilestones.length}</strong>
+                <span>hitos visibles</span>
+              </div>
+              <p>El cronograma activo se mantiene conectado al expediente y a la transferencia de etapas.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentOwner}</strong>
+                <span>owner actual</span>
+              </div>
+              <p>El responsable vigente marca el ritmo de ejecución y el siguiente paso del curso.</p>
+            </div>
+          </div>
+
+          <div className="list-stack">
+            {priorityTasks.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin cola prioritaria</strong>
+                <p>Las próximas tareas críticas aparecerán aquí para lectura rápida de coordinación.</p>
+              </div>
+            ) : (
+              priorityTasks.map((task) => (
+                <div key={task.id} className="list-item">
+                  <div>
+                    <span className="badge badge--outline">{task.priority}</span>
+                    <strong>{task.title}</strong>
+                    <p>{task.summary}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{task.role}</span>
+                    <span>Vence {formatDate(task.dueDate)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'production' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Producción académica</span>
+              <h3>Autoría, módulos y entregables</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.modules.length}</strong>
+                <span>módulos activos</span>
+              </div>
+              <p>La arquitectura del curso ya aterriza objetivos, actividades y progreso por unidad.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{deliverablesOpenCount}</strong>
+                <span>entregables abiertos</span>
+              </div>
+              <p>Los entregables siguen el flujo de revisión, ajuste y cierre dentro del expediente.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>
+                  {currentCourse.modules.reduce((sum, module) => sum + module.activities, 0)}
+                </strong>
+                <span>actividades mapeadas</span>
+              </div>
+              <p>La producción académica ya integra actividades, materiales y recursos asociados al curso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{deliverablesReadyCount}</strong>
+                <span>entregables listos</span>
+              </div>
+              <p>La lectura de avance no se limita al porcentaje general; también expone evidencia concreta.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'resources' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Curación y multimedia</span>
+              <h3>Inventario y apoyo especializado</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{curatedResources.length}</strong>
+                <span>recursos curados</span>
+              </div>
+              <p>Fuentes externas y académicas listas para trazabilidad y uso dentro del curso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{ownedResources.length}</strong>
+                <span>recursos propios</span>
+              </div>
+              <p>Piezas internas, multimedia y activos que el curso ya tiene asociados.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.assistants.length}</strong>
+                <span>asistentes sugeridos</span>
+              </div>
+              <p>Apoyos especializados para acelerar curación, coherencia y decisiones de producción.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{relatedResources.length}</strong>
+                <span>recursos totales</span>
+              </div>
+              <p>La biblioteca se conecta al expediente y mantiene el contexto por unidad o necesidad.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === 'qa' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">QA y validación</span>
+              <h3>Control de calidad y devoluciones</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{pendingObservationsCount}</strong>
+                <span>observaciones pendientes</span>
+              </div>
+              <p>Las devoluciones visibles en el curso siguen asociadas a rol, severidad y estado.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{resolvedObservationsCount}</strong>
+                <span>resueltas</span>
+              </div>
+              <p>Las correcciones cerradas permanecen en el expediente como evidencia de validación.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{relatedAlerts.length}</strong>
+                <span>alertas activas</span>
+              </div>
+              <p>Las alertas del curso acompañan el control operativo y los riesgos del handoff.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{blockingCheckpoints.length}</strong>
+                <span>checkpoints bloqueados</span>
+              </div>
+              <p>La transición de etapa valida prerequisitos antes de habilitar el siguiente paso.</p>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {['planning', 'production', 'resources', 'qa'].includes(activeSection) ? (
@@ -1638,6 +2030,41 @@ export function CourseWorkspacePage({
                   </div>
                 );
               })
+            )}
+          </div>
+        </article>
+        ) : null}
+
+        {activeSection === 'qa' ? (
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Alertas</span>
+              <h3>Riesgos y bloqueos del curso</h3>
+            </div>
+            <CircleAlert size={18} />
+          </div>
+
+          <div className="list-stack">
+            {relatedAlerts.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin alertas activas</strong>
+                <p>Los riesgos operativos y llamados de atención aparecerán aquí cuando existan.</p>
+              </div>
+            ) : (
+              relatedAlerts.map((alert) => (
+                <div key={alert.id} className="list-item">
+                  <div>
+                    <span className={`badge badge--${alert.tone}`}>{alert.owner}</span>
+                    <strong>{alert.title}</strong>
+                    <p>{alert.detail}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{stage?.name ?? currentCourse.stageId}</span>
+                    <span>{currentCourse.status}</span>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </article>
@@ -2514,6 +2941,19 @@ export function CourseWorkspacePage({
                 <span>{currentCourse.observations.length} observaciones</span>
               </div>
             </div>
+          </div>
+
+          <div className="timeline-stack timeline-stack--history">
+            {historyEvents.map((event) => (
+              <div key={event.id} className="timeline-item timeline-item--active">
+                <span className="timeline-item__dot" />
+                <div>
+                  <strong>{event.title}</strong>
+                  <p>{event.detail}</p>
+                  <span className="timeline-item__meta">Fecha de referencia: {formatDate(event.date)}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       ) : null}

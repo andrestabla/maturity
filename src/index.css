@@ -5782,6 +5782,21 @@ body::after {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.workspace-grid--summary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.timeline-stack--history {
+  margin-top: 18px;
+}
+
+.timeline-item__meta {
+  display: inline-flex;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .courses-toolbar__sort {
   min-width: 180px;
 }
@@ -5792,7 +5807,8 @@ body::after {
   }
 
   .courses-explorer,
-  .module-grid--summary {
+  .module-grid--summary,
+  .workspace-grid--summary {
     grid-template-columns: minmax(0, 1fr);
   }
 
