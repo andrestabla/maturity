@@ -193,6 +193,7 @@ export default function App() {
       theme={theme}
       onToggleTheme={toggleTheme}
       branding={branding}
+      appData={appData}
     >
       <AmbientCursor />
       <Routes>

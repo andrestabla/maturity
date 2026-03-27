@@ -12,7 +12,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
 import type {
@@ -568,6 +568,8 @@ export function CourseWorkspacePage({
   refreshAppData,
 }: CourseWorkspacePageProps) {
   const { slug = '' } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const course = getCourseBySlug(appData, slug);
   const fallbackStageId = appData.stages[0]?.id ?? 'configuracion';
   const currentStageId = course?.stageId ?? fallbackStageId;
@@ -858,6 +860,40 @@ export function CourseWorkspacePage({
     defaultDeliverableOwner,
     defaultObservationRole,
   ]);
+
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+
+    if (!hash) {
+      return;
+    }
+
+    const validSections: CourseSection[] = [
+      'summary',
+      'general',
+      'architecture',
+      'planning',
+      'production',
+      'resources',
+      'lms',
+      'qa',
+      'history',
+    ];
+
+    if (validSections.includes(hash as CourseSection) && hash !== activeSection) {
+      setActiveSection(hash as CourseSection);
+    }
+  }, [activeSection, location.hash]);
+
+  useEffect(() => {
+    navigate(
+      {
+        pathname: location.pathname,
+        hash: activeSection,
+      },
+      { replace: true },
+    );
+  }, [activeSection, location.pathname, navigate]);
 
   if (!course) {
     return (

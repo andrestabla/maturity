@@ -216,7 +216,7 @@ export function DashboardPage({
 
             <div className="sync-feed">
               {syncFeed.length === 0 ? (
-                <div className="empty-state">
+                <div className="empty-state empty-state--positive">
                   <strong>Sin eventos recientes</strong>
                   <p>No hay nuevos movimientos para este rol en este corte.</p>
                 </div>
@@ -305,7 +305,7 @@ export function DashboardPage({
 
             <div className="sync-feed">
               {visibleAlerts.length === 0 ? (
-                <div className="empty-state">
+                <div className="empty-state empty-state--positive">
                   <strong>Sin alertas abiertas</strong>
                   <p>La operación visible para este rol no tiene bloqueos ni llamados pendientes.</p>
                 </div>
@@ -378,7 +378,7 @@ export function DashboardPage({
 
           <div className="list-stack">
             {visibleTasks.length === 0 ? (
-              <div className="empty-state">
+              <div className="empty-state empty-state--positive">
                 <strong>La cola está despejada</strong>
                 <p>No aparecen tareas urgentes para este rol en este momento.</p>
               </div>

@@ -574,9 +574,13 @@ export function CoursesPage({
 
           <div className="flow-glance flow-glance--compact">
             <div className="flow-glance__item">
-              <strong>{blockedCount}</strong>
-              <span>bloqueados en esta vista</span>
-              <p>Útil para priorizar intervención operativa y desbloqueo de handoffs.</p>
+              <strong>{blockedCount === 0 ? 'Sin bloqueos' : blockedCount}</strong>
+              <span>estado crítico de la vista</span>
+              <p>
+                {blockedCount === 0
+                  ? 'Esta ruta no presenta cursos bloqueados en este corte.'
+                  : 'Útil para priorizar intervención operativa y desbloqueo de handoffs.'}
+              </p>
             </div>
             <div className="flow-glance__item">
               <strong>{filter === 'Todos' ? 'Todos los estados' : filter}</strong>

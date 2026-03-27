@@ -18,6 +18,7 @@ import {
   Waypoints,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type {
   AdminCenterData,
   AdminIntegration,
@@ -168,6 +169,8 @@ export function TeamPage({
   refreshSession,
 }: TeamPageProps) {
   const isAdmin = canManageUsers(user.role);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AdminTab>('users');
   const [adminData, setAdminData] = useState<AdminCenterData | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -188,6 +191,7 @@ export function TeamPage({
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [showCreateUserAssistant, setShowCreateUserAssistant] = useState(false);
   const [focusRoleAssignment, setFocusRoleAssignment] = useState(false);
+  const [isRolePickerOpen, setIsRolePickerOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [userForm, setUserForm] = useState<UserMutationInput>(() => buildUserForm());
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
@@ -257,6 +261,47 @@ export function TeamPage({
   useEffect(() => {
     void loadAdminCenter();
   }, [isAdmin]);
+
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+
+    if (!hash) {
+      return;
+    }
+
+    if (adminTabs.some((tab) => tab.id === hash) && hash !== activeTab) {
+      setActiveTab(hash as AdminTab);
+    }
+  }, [activeTab, location.hash]);
+
+  useEffect(() => {
+    if (!adminData) {
+      return;
+    }
+
+    const userId = new URLSearchParams(location.search).get('user');
+
+    if (!userId) {
+      return;
+    }
+
+    const target = adminData.users.find((member) => member.id === userId);
+
+    if (target) {
+      startEditing(target);
+    }
+  }, [adminData, location.search]);
+
+  function handleTabChange(nextTab: AdminTab) {
+    setActiveTab(nextTab);
+    navigate(
+      {
+        pathname: location.pathname,
+        hash: nextTab,
+      },
+      { replace: true },
+    );
+  }
 
   useEffect(() => {
     if (!adminData || !selectedIntegrationId) {
@@ -394,6 +439,7 @@ export function TeamPage({
       refreshAppData();
       setUserForm(buildUserForm(institutionDraft ?? undefined));
       setShowCreateUserAssistant(false);
+      setIsRolePickerOpen(false);
     } catch (error) {
       setUserError(error instanceof Error ? error.message : 'No fue posible crear el usuario.');
     } finally {
@@ -404,6 +450,7 @@ export function TeamPage({
   function startEditing(target: AuthUser) {
     setShowCreateUserAssistant(false);
     setFocusRoleAssignment(false);
+    setIsRolePickerOpen(false);
     setEditingUserId(target.id);
     setEditingDraft({
       id: target.id,
@@ -450,6 +497,7 @@ export function TeamPage({
       setEditingDraft(null);
       setEditingUserId(null);
       setFocusRoleAssignment(false);
+      setIsRolePickerOpen(false);
 
       if (editingDraft.id === user.id) {
         await refreshSession();
@@ -874,6 +922,7 @@ export function TeamPage({
                   setEditingDraft(null);
                   setEditingUserId(null);
                   setFocusRoleAssignment(false);
+                  setIsRolePickerOpen(false);
                 }}
               >
                 <UserPlus size={16} />
@@ -889,6 +938,7 @@ export function TeamPage({
                   }
                   startEditing(selectedUser);
                   setFocusRoleAssignment(true);
+                  setIsRolePickerOpen(true);
                 }}
                 disabled={!selectedUser}
               >
@@ -966,195 +1016,235 @@ export function TeamPage({
 
             {showCreateUserAssistant ? (
               <form className="editor-card" onSubmit={handleCreateUser}>
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Nombre</span>
-                    <div className="field__control">
-                      <input
-                        value={userForm.name}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, name: event.target.value }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Correo</span>
-                    <div className="field__control">
-                      <input
-                        type="email"
-                        value={userForm.email}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, email: event.target.value }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Rol principal</span>
-                    <div className="field__control">
-                      <select
-                        value={userForm.role}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            role: event.target.value as Role,
-                            secondaryRoles: current.secondaryRoles.filter(
-                              (item) => item !== event.target.value,
-                            ),
-                          }))
-                        }
-                      >
-                        {appData.roles.map((item) => (
-                          <option key={item} value={item}>
-                            {item}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Estado</span>
-                    <div className="field__control">
-                      <select
-                        value={userForm.status}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            status: event.target.value as UserMutationInput['status'],
-                          }))
-                        }
-                      >
-                        {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-                </div>
-
-                <label className="field">
-                  <span>Roles asignados</span>
-                  <div className="role-pill-group">
-                    {appData.roles
-                      .filter((item) => item !== userForm.role)
-                      .map((item) => (
-                        <button
-                          key={`new-user-${item}`}
-                          type="button"
-                          className={
-                            userForm.secondaryRoles.includes(item)
-                              ? 'filter-chip filter-chip--active'
-                              : 'filter-chip'
+                <fieldset className="form-section">
+                  <legend>Datos personales</legend>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Nombre</span>
+                      <div className="field__control">
+                        <input
+                          value={userForm.name}
+                          onChange={(event) =>
+                            setUserForm((current) => ({ ...current, name: event.target.value }))
                           }
-                          onClick={() =>
-                            setUserForm((current) => toggleSecondaryRole(current, item))
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Correo</span>
+                      <div className="field__control">
+                        <input
+                          type="email"
+                          value={userForm.email}
+                          onChange={(event) =>
+                            setUserForm((current) => ({ ...current, email: event.target.value }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Contraseña temporal</span>
+                      <div className="field__control">
+                        <input
+                          type="password"
+                          minLength={10}
+                          value={userForm.password}
+                          onChange={(event) =>
+                            setUserForm((current) => ({ ...current, password: event.target.value }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset className="form-section">
+                  <legend>Rol y permisos</legend>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Rol principal</span>
+                      <div className="field__control">
+                        <select
+                          value={userForm.role}
+                          onChange={(event) =>
+                            setUserForm((current) => ({
+                              ...current,
+                              role: event.target.value as Role,
+                              secondaryRoles: current.secondaryRoles.filter(
+                                (item) => item !== event.target.value,
+                              ),
+                            }))
                           }
                         >
-                          <span>{item}</span>
-                        </button>
-                      ))}
-                  </div>
-                </label>
+                          {appData.roles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
 
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Institución</span>
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={userForm.status}
+                          onChange={(event) =>
+                            setUserForm((current) => ({
+                              ...current,
+                              status: event.target.value as UserMutationInput['status'],
+                            }))
+                          }
+                        >
+                          {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+
+                  <label className="field field--full">
+                    <span>Roles complementarios</span>
+                    <div className="tag-token-list">
+                      {userForm.secondaryRoles.length === 0 ? (
+                        <span className="tag-token tag-token--muted">Sin roles complementarios</span>
+                      ) : (
+                        userForm.secondaryRoles.map((item) => (
+                          <span key={`summary-role-${item}`} className="tag-token">
+                            {item}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <div className="action-row action-row--inline">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setIsRolePickerOpen((current) => !current)}
+                      >
+                        <span>
+                          {isRolePickerOpen ? 'Ocultar selector' : 'Seleccionar roles complementarios'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {isRolePickerOpen ? (
+                      <div className="role-picker-panel">
+                        {appData.roles
+                          .filter((item) => item !== userForm.role)
+                          .map((item) => (
+                            <button
+                              key={`new-user-${item}`}
+                              type="button"
+                              className={
+                                userForm.secondaryRoles.includes(item)
+                                  ? 'filter-chip filter-chip--active'
+                                  : 'filter-chip'
+                              }
+                              onClick={() =>
+                                setUserForm((current) => toggleSecondaryRole(current, item))
+                              }
+                            >
+                              <span>{item}</span>
+                            </button>
+                          ))}
+                      </div>
+                    ) : null}
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Motivo de estado</span>
                     <div className="field__control">
-                      <input
-                        list="institution-options"
-                        value={userForm.institution}
+                      <textarea
+                        rows={3}
+                        value={userForm.statusReason}
                         onChange={(event) =>
                           setUserForm((current) => ({
                             ...current,
-                            institution: event.target.value,
+                            statusReason: event.target.value,
                           }))
                         }
+                        placeholder="Úsalo si el usuario no inicia activo."
                       />
                     </div>
                   </label>
+                </fieldset>
 
-                  <label className="field">
-                    <span>Facultad</span>
-                    <div className="field__control">
-                      <input
-                        list="faculty-options"
-                        value={userForm.faculty}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            faculty: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </label>
+                <fieldset className="form-section">
+                  <legend>Organización</legend>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Institución</span>
+                      <div className="field__control">
+                        <input
+                          list="institution-options"
+                          value={userForm.institution}
+                          onChange={(event) =>
+                            setUserForm((current) => ({
+                              ...current,
+                              institution: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </label>
 
-                  <label className="field">
-                    <span>Programa</span>
-                    <div className="field__control">
-                      <input
-                        list="program-options"
-                        value={userForm.program}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, program: event.target.value }))
-                        }
-                      />
-                    </div>
-                  </label>
+                    <label className="field">
+                      <span>Facultad</span>
+                      <div className="field__control">
+                        <input
+                          list="faculty-options"
+                          value={userForm.faculty}
+                          onChange={(event) =>
+                            setUserForm((current) => ({
+                              ...current,
+                              faculty: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </label>
 
-                  <label className="field">
-                    <span>Alcance</span>
-                    <div className="field__control">
-                      <input
-                        value={userForm.scope}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, scope: event.target.value }))
-                        }
-                        placeholder="Global, facultad, cohorte..."
-                      />
-                    </div>
-                  </label>
+                    <label className="field">
+                      <span>Programa</span>
+                      <div className="field__control">
+                        <input
+                          list="program-options"
+                          value={userForm.program}
+                          onChange={(event) =>
+                            setUserForm((current) => ({ ...current, program: event.target.value }))
+                          }
+                        />
+                      </div>
+                    </label>
 
-                  <label className="field">
-                    <span>Contraseña temporal</span>
-                    <div className="field__control">
-                      <input
-                        type="password"
-                        minLength={10}
-                        value={userForm.password}
-                        onChange={(event) =>
-                          setUserForm((current) => ({ ...current, password: event.target.value }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-                </div>
-
-                <label className="field">
-                  <span>Motivo de estado</span>
-                  <div className="field__control">
-                    <textarea
-                      rows={3}
-                      value={userForm.statusReason}
-                      onChange={(event) =>
-                        setUserForm((current) => ({
-                          ...current,
-                          statusReason: event.target.value,
-                        }))
-                      }
-                      placeholder="Úsalo si el usuario no inicia activo."
-                    />
+                    <label className="field">
+                      <span>Alcance organizacional</span>
+                      <div className="field__control">
+                        <input
+                          value={userForm.scope}
+                          onChange={(event) =>
+                            setUserForm((current) => ({ ...current, scope: event.target.value }))
+                          }
+                          placeholder="Global, facultad, cohorte..."
+                        />
+                      </div>
+                      <small className="field-help">
+                        Define si el usuario verá datos de toda la institución o solo de una
+                        facultad, programa o cohorte.
+                      </small>
+                    </label>
                   </div>
-                </label>
+                </fieldset>
 
                 <datalist id="institution-options">
                   {(institutionDraft?.institutions ?? []).map((item) => (
@@ -1179,7 +1269,10 @@ export function TeamPage({
                   <button
                     type="button"
                     className="filter-chip"
-                    onClick={() => setShowCreateUserAssistant(false)}
+                    onClick={() => {
+                      setShowCreateUserAssistant(false);
+                      setIsRolePickerOpen(false);
+                    }}
                   >
                     <span>Cerrar</span>
                   </button>
@@ -1286,29 +1379,51 @@ export function TeamPage({
                 </div>
 
                 <label className="field">
-                  <span>Roles asignados</span>
-                  <div className="role-pill-group">
-                    {appData.roles
-                      .filter((item) => item !== editingDraft.role)
-                      .map((item) => (
-                        <button
-                          key={`${editingDraft.id}-${item}`}
-                          type="button"
-                          className={
-                            editingDraft.secondaryRoles.includes(item)
-                              ? 'filter-chip filter-chip--active'
-                              : 'filter-chip'
-                          }
-                          onClick={() =>
-                            setEditingDraft((current) =>
-                              current ? toggleSecondaryRole(current, item) : current,
-                            )
-                          }
-                        >
-                          <span>{item}</span>
-                        </button>
-                      ))}
+                  <span>Roles complementarios</span>
+                  <div className="tag-token-list">
+                    {editingDraft.secondaryRoles.length === 0 ? (
+                      <span className="tag-token tag-token--muted">Sin roles complementarios</span>
+                    ) : (
+                      editingDraft.secondaryRoles.map((item) => (
+                        <span key={`editing-role-${item}`} className="tag-token">
+                          {item}
+                        </span>
+                      ))
+                    )}
                   </div>
+                  <div className="action-row action-row--inline">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => setIsRolePickerOpen((current) => !current)}
+                    >
+                      <span>{isRolePickerOpen ? 'Ocultar selector' : 'Editar roles complementarios'}</span>
+                    </button>
+                  </div>
+                  {isRolePickerOpen ? (
+                    <div className="role-picker-panel">
+                      {appData.roles
+                        .filter((item) => item !== editingDraft.role)
+                        .map((item) => (
+                          <button
+                            key={`${editingDraft.id}-${item}`}
+                            type="button"
+                            className={
+                              editingDraft.secondaryRoles.includes(item)
+                                ? 'filter-chip filter-chip--active'
+                                : 'filter-chip'
+                            }
+                            onClick={() =>
+                              setEditingDraft((current) =>
+                                current ? toggleSecondaryRole(current, item) : current,
+                              )
+                            }
+                          >
+                            <span>{item}</span>
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
                 </label>
 
                 {!focusRoleAssignment ? (
@@ -1356,7 +1471,7 @@ export function TeamPage({
                     </label>
 
                     <label className="field">
-                      <span>Alcance</span>
+                      <span>Alcance organizacional</span>
                       <div className="field__control">
                         <input
                           value={editingDraft.scope}
@@ -1367,6 +1482,10 @@ export function TeamPage({
                           }
                         />
                       </div>
+                      <small className="field-help">
+                        Define si este usuario opera sobre toda la institución o sobre un ámbito
+                        acotado.
+                      </small>
                     </label>
 
                     <label className="field">
@@ -2897,8 +3016,12 @@ export function TeamPage({
           </div>
           <div className="admin-kpi">
             <span>Errores visibles</span>
-            <strong>{degradedIntegrations}</strong>
-            <p>Servicios degradados o con falla reciente.</p>
+            <strong>{degradedIntegrations === 0 ? 'Sin alertas' : degradedIntegrations}</strong>
+            <p>
+              {degradedIntegrations === 0
+                ? 'No hay servicios degradados en este momento.'
+                : 'Servicios degradados o con falla reciente.'}
+            </p>
           </div>
           <div className="admin-kpi">
             <span>Última actividad</span>
@@ -2919,7 +3042,7 @@ export function TeamPage({
               key={tab.id}
               type="button"
               className={activeTab === tab.id ? 'admin-tab admin-tab--active' : 'admin-tab'}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
             >
               <span>{tab.label}</span>
             </button>
