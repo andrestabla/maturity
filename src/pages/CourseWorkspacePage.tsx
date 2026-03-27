@@ -314,7 +314,7 @@ export function CourseWorkspacePage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack workspace-page">
       <section className="surface workspace-hero">
         <div className="workspace-hero__copy">
           <div className="workspace-hero__badges">

@@ -21,7 +21,7 @@ export function LibraryPage({ role, appData }: LibraryPageProps) {
   const readyCount = resources.filter((resource) => resource.status === 'Listo').length;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack library-page">
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>

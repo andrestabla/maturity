@@ -207,7 +207,7 @@ export function TeamPage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack team-page">
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>

@@ -4579,7 +4579,463 @@ body::after {
     min-height: 58px;
   }
 
-  .access-screen__loading-cards {
+    .access-screen__loading-cards {
+      grid-template-columns: 1fr;
+    }
+}
+
+/* Mobile app platform overrides */
+
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.page-stack {
+  width: 100%;
+}
+
+.chip-row,
+.tag-row,
+.course-card__badges,
+.workspace-hero__badges,
+.course-meta-strip {
+  scrollbar-width: none;
+}
+
+.chip-row::-webkit-scrollbar,
+.tag-row::-webkit-scrollbar,
+.course-card__badges::-webkit-scrollbar,
+.workspace-hero__badges::-webkit-scrollbar,
+.course-meta-strip::-webkit-scrollbar,
+.stage-rail::-webkit-scrollbar,
+.pipeline-grid::-webkit-scrollbar,
+.flow-glance::-webkit-scrollbar,
+.handoff-flow::-webkit-scrollbar,
+.coverage-list::-webkit-scrollbar,
+.resource-grid::-webkit-scrollbar,
+.assistant-grid::-webkit-scrollbar,
+.module-grid::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .main-panel {
+    border-left: 1px solid rgba(174, 190, 210, 0.1);
+  }
+
+  .topbar.surface {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    backdrop-filter: blur(18px);
+  }
+
+  .content-stage {
+    gap: 16px;
+    padding: 18px 16px 96px;
+  }
+
+  .section-card,
+  .section-card--compact,
+  .control-hero,
+  .workspace-hero,
+  .dashboard-sidecard,
+  .course-card,
+  .editor-card,
+  .task-editor,
+  .resource-card,
+  .assistant-card,
+  .role-card,
+  .user-card,
+  .module-card,
+  .list-item,
+  .task-item,
+  .timeline-item,
+  .checklist__item,
+  .stage-pill,
+  .stage-summary {
+    padding: 16px;
+  }
+
+  .section-heading {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .section-heading h3 {
+    font-size: 1rem;
+  }
+
+  .topbar-copy p {
+    max-width: none;
+    font-size: 0.88rem;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .chip-row,
+  .tag-row,
+  .course-card__badges,
+  .workspace-hero__badges,
+  .course-meta-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .toolbar {
+    gap: 12px;
+  }
+
+  .segmented-control {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .segmented-control__button {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    margin-right: -2px;
+  }
+
+  .filter-chip,
+  .cta-button,
+  .ghost-button,
+  .danger-button,
+  .control-button {
+    min-height: 46px;
+  }
+
+  .courses-grid,
+  .profile-grid,
+  .insight-grid,
+  .workspace-grid,
+  .dashboard-bottom,
+  .dashboard-workspace,
+  .dashboard-workspace__grid,
+  .dashboard-workspace__side,
+  .resource-grid,
+  .assistant-grid,
+  .module-grid,
+  .user-grid,
+  .metrics-grid,
+  .metrics-grid--three,
+  .stage-grid,
+  .stage-grid--compact {
     grid-template-columns: 1fr;
+  }
+
+  .pipeline-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(82vw, 1fr);
+    overflow-x: auto;
+    gap: 12px;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .pipeline-column {
+    scroll-snap-align: start;
+  }
+
+  .flow-glance,
+  .handoff-flow {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(76vw, 1fr);
+    overflow-x: auto;
+    gap: 12px;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .flow-glance__item,
+  .handoff-step {
+    scroll-snap-align: start;
+  }
+
+  .coverage-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .stage-rail {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(220px, 1fr);
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity;
+  }
+
+  .stage-pill {
+    scroll-snap-align: start;
+    min-height: 100%;
+  }
+
+  .timeline-stack,
+  .list-stack,
+  .team-list,
+  .coverage-list {
+    gap: 10px;
+  }
+
+  .list-item,
+  .task-item,
+  .team-list__item,
+  .coverage-list__item {
+    gap: 12px;
+  }
+
+  .list-item__meta,
+  .task-item__meta,
+  .resource-card__meta,
+  .module-card__meta,
+  .course-card__meta,
+  .course-card__footer,
+  .course-card__date,
+  .flow-glance__item span,
+  .course-meta-strip {
+    font-size: 0.82rem;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .field__control {
+    min-height: 50px;
+    border-radius: 14px;
+  }
+
+  .action-row,
+  .hero-actions,
+  .toolbar-header {
+    gap: 10px;
+  }
+
+  .workspace-page .hero-points {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .workspace-page .hero-points > div {
+    padding: 12px;
+  }
+
+  .workspace-page .hero-points strong {
+    font-size: 1rem;
+  }
+
+  .workspace-page .workspace-hero__summary {
+    gap: 14px;
+  }
+
+  .courses-page .flow-glance {
+    grid-auto-columns: minmax(80vw, 1fr);
+  }
+
+  .library-page .resource-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .team-page .profile-grid {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      calc(86px + max(12px, env(safe-area-inset-bottom)))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .control-header {
+    padding: 0 4px 12px;
+  }
+
+  .control-header__label {
+    display: none;
+  }
+
+  .main-panel {
+    border-radius: 16px;
+  }
+
+  .topbar.surface {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .topbar-copy {
+    width: 100%;
+  }
+
+  .topbar-copy p {
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .topbar-icon,
+  .date-chip {
+    display: none;
+  }
+
+  .status-chip,
+  .role-switch,
+  .ghost-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .user-chip {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .content-stage {
+    padding: 14px 12px 104px;
+  }
+
+  .page-stack {
+    gap: 14px;
+  }
+
+  .section-card,
+  .section-card--compact,
+  .control-hero,
+  .workspace-hero,
+  .dashboard-sidecard,
+  .course-card,
+  .editor-card,
+  .task-editor,
+  .resource-card,
+  .assistant-card,
+  .role-card,
+  .user-card,
+  .module-card,
+  .list-item,
+  .task-item,
+  .timeline-item,
+  .checklist__item,
+  .stage-pill,
+  .stage-summary {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .control-hero,
+  .workspace-hero,
+  .auth-panel {
+    gap: 14px;
+  }
+
+  .courses-page .section-lead,
+  .library-page .section-lead,
+  .team-page .section-lead,
+  .workspace-page .workspace-hero p,
+  .dashboard-page .section-lead {
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .workspace-page .hero-points {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-page .course-meta-strip,
+  .workspace-page .workspace-hero__badges,
+  .courses-page .chip-row,
+  .library-page .chip-row {
+    margin-inline: -2px;
+  }
+
+  .courses-page .pipeline-grid {
+    grid-auto-columns: minmax(88vw, 1fr);
+  }
+
+  .courses-page .courses-grid,
+  .dashboard-workspace__grid,
+  .library-page .resource-grid,
+  .assistant-grid,
+  .module-grid,
+  .user-grid {
+    gap: 10px;
+  }
+
+  .task-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .task-editor__sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-row > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .team-list__item {
+    align-items: flex-start;
+  }
+
+  .team-list__item > span:last-child {
+    max-width: none;
+    text-align: left;
+  }
+
+  .mobile-nav {
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    padding: 8px;
+    border-radius: 18px;
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-nav-link {
+    min-height: 58px;
+    gap: 6px;
+    padding: 8px 6px;
+    font-size: 0.68rem;
   }
 }

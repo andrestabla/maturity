@@ -97,7 +97,7 @@ export function CoursesPage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack courses-page">
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>
