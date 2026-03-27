@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
@@ -23,18 +24,36 @@ export default function App() {
 
   if (status === 'loading') {
     return (
-      <main className="auth-layout">
-        <section className="auth-panel surface auth-panel--loading">
-          <span className="hero-badge">Cargando</span>
-          <h1>Preparando tu espacio de trabajo en Maturity.</h1>
-          <p>Estamos validando la sesión y sincronizando la base operativa.</p>
-        </section>
-      </main>
+      <>
+        <AmbientCursor />
+        <main className="auth-layout">
+          <section className="auth-panel surface auth-panel--loading">
+            <div className="loading-shell">
+              <span className="hero-badge">Preparando la sesión</span>
+              <div className="loading-shell__copy">
+                <div className="skeleton-line skeleton-line--title" />
+                <div className="skeleton-line skeleton-line--wide" />
+                <div className="skeleton-line skeleton-line--medium" />
+              </div>
+              <div className="loading-shell__cards">
+                <div className="skeleton-card" />
+                <div className="skeleton-card" />
+                <div className="skeleton-card skeleton-card--soft" />
+              </div>
+            </div>
+          </section>
+        </main>
+      </>
     );
   }
 
   if (!session.authenticated || !session.user) {
-    return <LoginPage isLoading={false} onLogin={login} />;
+    return (
+      <>
+        <AmbientCursor />
+        <LoginPage isLoading={false} onLogin={login} />
+      </>
+    );
   }
 
   const availableRoles = session.user.role === 'Administrador' ? appData.roles : [session.user.role];
@@ -56,8 +75,9 @@ export default function App() {
       dataSource={source}
       isLoading={isLoading}
     >
+      <AmbientCursor />
       <Routes>
-        <Route path="/" element={<DashboardPage role={activeRole} appData={appData} />} />
+        <Route path="/" element={<DashboardPage role={activeRole} appData={appData} isLoading={isLoading} />} />
         <Route
           path="/courses"
           element={

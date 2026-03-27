@@ -21,6 +21,7 @@ import {
 interface DashboardPageProps {
   role: Role;
   appData: AppData;
+  isLoading?: boolean;
 }
 
 const roleMessage: Record<Role, string> = {
@@ -36,7 +37,47 @@ const roleMessage: Record<Role, string> = {
   Auditor: 'Trazabilidad de punta a punta para validar la consistencia del proceso y sus cierres.',
 };
 
-export function DashboardPage({ role, appData }: DashboardPageProps) {
+function DashboardSkeleton() {
+  return (
+    <div className="page-stack page-stack--loading">
+      <section className="hero-card hero-card--editorial surface hero-card--loading">
+        <div className="hero-card__copy">
+          <span className="hero-badge">Sincronizando</span>
+          <div className="skeleton-line skeleton-line--eyebrow" />
+          <div className="skeleton-line skeleton-line--title" />
+          <div className="skeleton-line skeleton-line--wide" />
+          <div className="hero-points">
+            <div className="skeleton-stat" />
+            <div className="skeleton-stat" />
+            <div className="skeleton-stat" />
+          </div>
+        </div>
+
+        <div className="hero-card__stats">
+          <div className="hero-orbit surface-muted skeleton-panel" />
+          <div className="hero-mini surface-muted skeleton-panel" />
+        </div>
+      </section>
+
+      <section className="metrics-grid metrics-grid--staggered">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <article key={index} className="metric-card metric-card--ink skeleton-panel" />
+        ))}
+      </section>
+
+      <section className="insight-grid insight-grid--offset">
+        <article className="surface section-card skeleton-panel skeleton-panel--tall" />
+        <article className="surface section-card skeleton-panel skeleton-panel--medium" />
+      </section>
+    </div>
+  );
+}
+
+export function DashboardPage({ role, appData, isLoading = false }: DashboardPageProps) {
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+
   const visibleCourses = getVisibleCourses(appData, role);
   const visibleTasks = getVisibleTasks(appData, role).sort((left, right) =>
     left.dueDate.localeCompare(right.dueDate),
@@ -56,86 +97,100 @@ export function DashboardPage({ role, appData }: DashboardPageProps) {
   }));
 
   const spotlightCourses = visibleCourses.slice().sort((left, right) => right.progress - left.progress).slice(0, 2);
+  const busiestStage = stageCounts.slice().sort((left, right) => right.count - left.count)[0];
 
   return (
-    <div className="page-stack">
-      <section className="hero-card surface">
+    <div className="page-stack dashboard-page">
+      <section className="hero-card hero-card--editorial surface">
         <div className="hero-card__copy">
           <span className="hero-badge">{role}</span>
-          <h3>Producción académica con ritmo, claridad y una lectura viva del proyecto.</h3>
-          <p>{roleMessage[role]}</p>
+          <span className="hero-kicker hero-kicker--warm">Tablero editorial de operación</span>
+          <h3>La producción académica se mueve mejor cuando el ritmo, la calidad y los bloqueos hablan claro.</h3>
+          <p className="hero-lead">{roleMessage[role]}</p>
 
           <div className="hero-points">
             <div>
               <strong>{visibleCourses.length}</strong>
-              <span>cursos visibles para este rol</span>
+              <span>cursos hoy en tu radar</span>
             </div>
             <div>
               <strong>{visibleTasks.length}</strong>
-              <span>tareas abiertas con trazabilidad</span>
+              <span>frentes abiertos con trazabilidad</span>
             </div>
             <div>
               <strong>{visibleAlerts.length}</strong>
-              <span>alertas activas que piden intervención</span>
+              <span>alertas que piden criterio</span>
             </div>
           </div>
         </div>
 
         <div className="hero-card__stats">
-          <ProgressRing
-            value={averageProgress(visibleCourses)}
-            label="Portafolio visible"
-            detail="Promedio de avance de los cursos a tu cargo."
-          />
+          <div className="hero-orbit surface-muted">
+            <span className="eyebrow">Momento del portafolio</span>
+            <strong>{busiestStage?.name ?? 'Sin etapa dominante'}</strong>
+            <p>
+              {busiestStage?.count
+                ? `${busiestStage.count} cursos se concentran aquí y están marcando el pulso operativo.`
+                : 'Todavía no hay masa crítica suficiente para destacar una etapa dominante.'}
+            </p>
+          </div>
 
-          <div className="hero-mini surface-muted">
-            <span className="eyebrow">Próximo movimiento</span>
-            <strong>
-              {visibleTasks[0]?.title ?? 'Sin tareas inmediatas'}
-            </strong>
-            <p>{visibleTasks[0]?.summary ?? 'El sistema no registra pendientes para este rol.'}</p>
-            {visibleTasks[0] ? <span>Vence {formatDate(visibleTasks[0].dueDate)}</span> : null}
+          <div className="hero-raft">
+            <div className="hero-progress-card surface-muted">
+              <ProgressRing
+                value={averageProgress(visibleCourses)}
+                label="Portafolio visible"
+                detail="Promedio de avance de los cursos que hoy están en tu campo de acción."
+              />
+            </div>
+
+            <div className="hero-mini surface-muted">
+              <span className="eyebrow">Siguiente gesto</span>
+              <strong>{visibleTasks[0]?.title ?? 'Sin tareas inmediatas'}</strong>
+              <p>{visibleTasks[0]?.summary ?? 'La plataforma no registra pendientes urgentes para este rol.'}</p>
+              {visibleTasks[0] ? <span>Vence {formatDate(visibleTasks[0].dueDate)}</span> : null}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="metrics-grid">
+      <section className="metrics-grid metrics-grid--staggered">
         <MetricCard
           label="Cursos activos"
           value={String(visibleCourses.length)}
-          detail="Portafolio que hoy requiere seguimiento operativo."
+          detail="Portafolio que hoy pide seguimiento real, no solo visibilidad."
           icon={BriefcaseBusiness}
           tone="coral"
         />
         <MetricCard
           label="Pendientes próximos"
           value={String(visibleTasks.filter((task) => task.status !== 'Lista').length)}
-          detail="Tareas visibles con vencimiento y responsable claro."
+          detail="Tareas próximas con responsable claro y fecha en juego."
           icon={FolderClock}
           tone="gold"
         />
         <MetricCard
           label="Bloqueos"
           value={String(visibleCourses.filter((course) => course.status === 'Bloqueado').length)}
-          detail="Cursos detenidos que impiden el siguiente cambio de etapa."
+          detail="Cursos detenidos que frenan el paso natural hacia la siguiente etapa."
           icon={AlertTriangle}
           tone="ocean"
         />
         <MetricCard
           label="Calidad promedio"
           value={`${averageQuality}%`}
-          detail="Lectura rápida del estándar actual del portafolio."
+          detail="Lectura rápida del estándar actual del portafolio visible."
           icon={CheckCheck}
           tone="sage"
         />
       </section>
 
-      <section className="insight-grid">
-        <article className="surface section-card">
+      <section className="insight-grid insight-grid--offset">
+        <article className="surface section-card section-card--raised">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Panorama</span>
-              <h3>Estado por etapas</h3>
+              <h3>Etapas donde se está jugando el avance</h3>
             </div>
             <Sparkles size={18} />
           </div>
@@ -151,11 +206,11 @@ export function DashboardPage({ role, appData }: DashboardPageProps) {
           </div>
         </article>
 
-        <article className="surface section-card">
+        <article className="surface section-card section-card--trail">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Radar</span>
-              <h3>Lo que pide atención</h3>
+              <h3>Lo que hoy pide intervención</h3>
             </div>
             <AlertTriangle size={18} />
           </div>
@@ -190,53 +245,67 @@ export function DashboardPage({ role, appData }: DashboardPageProps) {
         </article>
       </section>
 
-      <section className="insight-grid">
-        <article className="surface section-card">
+      <section className="insight-grid insight-grid--offset insight-grid--reverse">
+        <article className="surface section-card section-card--raised">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Worklist</span>
-              <h3>Tareas del día</h3>
+              <h3>Lo siguiente en la mesa</h3>
             </div>
             <FolderClock size={18} />
           </div>
 
           <div className="list-stack">
-            {visibleTasks.slice(0, 4).map((task) => {
-              const course = visibleCourses.find((item) => item.slug === task.courseSlug);
-              return (
-                <div key={task.id} className="task-item">
-                  <div>
-                    <span className="badge badge--outline">{task.priority}</span>
-                    <strong>{task.title}</strong>
-                    <p>{task.summary}</p>
+            {visibleTasks.length === 0 ? (
+              <div className="empty-state">
+                <strong>La mesa está despejada</strong>
+                <p>No aparecen tareas urgentes para este rol en el corte actual.</p>
+              </div>
+            ) : (
+              visibleTasks.slice(0, 4).map((task) => {
+                const course = visibleCourses.find((item) => item.slug === task.courseSlug);
+                return (
+                  <div key={task.id} className="task-item">
+                    <div>
+                      <span className="badge badge--outline">{task.priority}</span>
+                      <strong>{task.title}</strong>
+                      <p>{task.summary}</p>
+                    </div>
+                    <div className="task-item__meta">
+                      <span>{course?.title ?? 'Curso'}</span>
+                      <span>Vence {formatDate(task.dueDate)}</span>
+                    </div>
                   </div>
-                  <div className="task-item__meta">
-                    <span>{course?.title ?? 'Curso'}</span>
-                    <span>Vence {formatDate(task.dueDate)}</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </article>
 
-        <article className="surface section-card">
+        <article className="surface section-card section-card--trail">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Cursos</span>
-              <h3>Radar del portafolio</h3>
+              <h3>Piezas que hoy marcan el tono</h3>
             </div>
             <BriefcaseBusiness size={18} />
           </div>
 
           <div className="mini-course-grid">
-            {spotlightCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                stageName={getStageMeta(appData, course.stageId)?.name ?? course.stageId}
-              />
-            ))}
+            {spotlightCourses.length === 0 ? (
+              <div className="empty-state">
+                <strong>Aún no hay cursos destacados</strong>
+                <p>Cuando el rol tenga visibilidad sobre el portafolio, esta sección mostrará sus piezas más avanzadas.</p>
+              </div>
+            ) : (
+              spotlightCourses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  stageName={getStageMeta(appData, course.stageId)?.name ?? course.stageId}
+                />
+              ))
+            )}
           </div>
         </article>
       </section>

@@ -7,11 +7,11 @@ import {
   LogOut,
   MoveRight,
   ShieldCheck,
-  UserRound,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, Role } from '../types.js';
 import { formatPageDate } from '../utils/format.js';
+import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
 
 interface AppShellProps {
   user: AuthUser;
@@ -41,64 +41,85 @@ export function AppShell({
   isLoading,
   children,
 }: AppShellProps) {
+  useAmbientMotion();
+
+  const userInitials = user.name
+    .split(' ')
+    .map((segment) => segment[0])
+    .slice(0, 2)
+    .join('');
+
   return (
     <div className="app-shell">
+      <div className="ambient-orb ambient-orb--left" aria-hidden />
+      <div className="ambient-orb ambient-orb--right" aria-hidden />
+
       <aside className="sidebar">
         <NavLink to="/" className="brand-card">
           <div className="brand-mark">M</div>
           <div>
-            <p className="eyebrow">Maturity</p>
-            <h1>Academic production OS</h1>
+            <p className="eyebrow">Maturity 360</p>
+            <h1>Project management para producción académica.</h1>
           </div>
         </NavLink>
 
-        <p className="sidebar-copy">
-          Un solo entorno para organizar cursos, etapas, entregables, calidad y trazabilidad sin perder claridad.
-        </p>
-
-        <nav className="sidebar-nav" aria-label="Navegación principal">
-          {navigation.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                isActive ? 'nav-link nav-link--active' : 'nav-link'
-              }
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="sidebar-note">
-          <p className="eyebrow">Enfoque</p>
-          <strong>PM con ADN académico</strong>
-          <p>
-            El tablero prioriza ritmo, coherencia pedagógica y control por etapas desde el primer corte del producto.
+        <div className="sidebar-panel surface">
+          <p className="sidebar-copy">
+            Una mesa de operación más editorial que burocrática para mover cursos, equipos y decisiones con una sola lectura.
           </p>
+
+          <nav className="sidebar-nav" aria-label="Navegación principal">
+            {navigation.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  isActive ? 'nav-link nav-link--active' : 'nav-link'
+                }
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="sidebar-note">
+            <p className="eyebrow">Pulso del día</p>
+            <strong>Menos cajas, más continuidad visual.</strong>
+            <p>
+              La plataforma deja respirar la información, cruza capas y mantiene cerca lo importante sin saturar la vista.
+            </p>
+          </div>
         </div>
       </aside>
 
       <main className="main-panel">
-        <header className="topbar surface">
-          <div className="topbar-copy">
-            <span className="topbar-kicker">Project management platform para producción académica</span>
-            <h2>Cada curso funciona como un proyecto vivo con equipo, ritmo, riesgos y criterio de calidad.</h2>
+        <header className="topbar">
+          <div className="topbar-frame surface">
+            <div className="topbar-copy">
+              <span className="topbar-kicker">Sistema operativo para producción académica</span>
+              <h2>Una operación viva para cursos, equipos y decisiones que no caben en una grilla rígida.</h2>
+              <p>
+                Diseñada para coordinar criterio pedagógico, ritmo operativo y control de calidad con una lectura más humana del proceso.
+              </p>
+            </div>
+
+            <aside className="topbar-float surface-muted">
+              <div className="topbar-float__avatar">{userInitials}</div>
+              <span className="eyebrow">Sesión activa</span>
+              <strong>{user.name}</strong>
+              <p>{user.role}</p>
+              <div className="topbar-float__meta">
+                <span>{isLoading ? 'Sincronizando capa real' : dataSource === 'neon' ? 'Neon conectado' : 'Modo demo activo'}</span>
+                <span>{formatPageDate()}</span>
+              </div>
+            </aside>
           </div>
 
           <div className="topbar-actions">
-            <div className="user-chip">
-              <UserRound size={16} />
-              <div>
-                <strong>{user.name}</strong>
-                <span>{user.role}</span>
-              </div>
-            </div>
-
             <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
               <span className="status-chip__dot" />
-              <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Neon live' : 'Modo demo'}</span>
+              <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Datos en vivo' : 'Modo demo'}</span>
             </div>
 
             <div className="date-chip">
@@ -108,7 +129,7 @@ export function AppShell({
 
             {availableRoles.length > 1 ? (
               <label className="role-switch">
-                <span>Vista actual</span>
+                <span>Mirada actual</span>
                 <select
                   aria-label="Seleccionar rol"
                   value={role}
@@ -124,18 +145,18 @@ export function AppShell({
             ) : null}
 
             <NavLink to="/courses" className="cta-button">
-              <span>Ver portafolio</span>
+              <span>Abrir portafolio</span>
               <MoveRight size={16} />
             </NavLink>
 
             <button type="button" className="ghost-button" onClick={() => void onLogout()}>
               <LogOut size={16} />
-              <span>Salir</span>
+              <span>Cerrar sesión</span>
             </button>
           </div>
         </header>
 
-        {children}
+        <div className="content-stage">{children}</div>
       </main>
 
       <nav className="mobile-nav" aria-label="Navegación móvil">

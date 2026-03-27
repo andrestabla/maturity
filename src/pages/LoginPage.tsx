@@ -33,23 +33,24 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
     <main className="auth-layout">
       <section className="auth-panel surface">
         <div className="auth-copy">
-          <span className="hero-badge">Acceso seguro</span>
-          <h1>Maturity entra en su siguiente fase: operación real con sesiones y trazabilidad viva.</h1>
+          <span className="hero-badge">Acceso curado</span>
+          <span className="topbar-kicker">Maturity 360</span>
+          <h1>Un espacio de trabajo que se siente más editorial que burocrático.</h1>
           <p>
-            Accede con tu usuario institucional para administrar cursos, mover tareas y activar el flujo real sobre Neon.
+            Entra con tu cuenta institucional para coordinar cursos, mover entregables y sostener una operación real sobre Neon sin perder contexto.
           </p>
           <div className="auth-highlights">
             <div>
-              <strong>Producción</strong>
-              <span>La plataforma ya está publicada y conectada a Vercel.</span>
+              <strong>Lectura clara</strong>
+              <span>La interfaz prioriza foco, profundidad visual y pasos evidentes para cada rol.</span>
             </div>
             <div>
-              <strong>Persistencia</strong>
-              <span>Los datos operativos viajan desde Neon en la misma interfaz de producto.</span>
+              <strong>Persistencia viva</strong>
+              <span>Los datos operativos viajan desde Neon dentro de la misma experiencia de producto.</span>
             </div>
             <div>
-              <strong>Roles</strong>
-              <span>La sesión define el alcance real del usuario dentro del flujo.</span>
+              <strong>Alcance real</strong>
+              <span>La sesión define exactamente qué puede ver, mover y aprobar cada persona.</span>
             </div>
           </div>
         </div>
@@ -58,7 +59,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
           <div className="section-heading">
             <div>
               <span className="eyebrow">Ingreso</span>
-              <h3>Iniciar sesión</h3>
+              <h3>Abrir mi espacio</h3>
             </div>
           </div>
 
@@ -70,7 +71,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="tu-correo@institucion.edu"
+                placeholder="nombre@institucion.edu"
                 autoComplete="username"
                 required
               />
@@ -85,7 +86,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Tu contraseña"
+                placeholder="Tu clave actual"
                 autoComplete="current-password"
                 required
               />
@@ -95,7 +96,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
           {error ? <p className="form-error">{error}</p> : null}
 
           <button type="submit" className="cta-button auth-submit" disabled={isLoading}>
-            <span>{isLoading ? 'Entrando…' : 'Entrar a Maturity'}</span>
+            <span>{isLoading ? 'Abriendo tu espacio…' : 'Comenzar mi jornada'}</span>
             <ArrowRight size={16} />
           </button>
         </form>
