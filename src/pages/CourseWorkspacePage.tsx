@@ -950,6 +950,7 @@ export function CourseWorkspacePage({
       .replace(/^#+\s*/, '')
       .replace(/^\d+[\.\)]\s*/, '')
       .replace(/^[-*]\s*/, '')
+      .replace(/^\[[^\]]+\]\s*/, '')
       .trim();
   }
 
@@ -1366,6 +1367,572 @@ export function CourseWorkspacePage({
         ) : null}
       </div>
     );
+  }
+
+  function parseHeadingSections(body: string) {
+    const sections: Record<string, string[]> = {};
+    let currentHeading: string | null = null;
+
+    body.split('\n').forEach((rawLine) => {
+      const line = rawLine.trimEnd();
+
+      if (/^#\s+/.test(line)) {
+        currentHeading = cleanPreviewLine(line);
+        sections[currentHeading] = [];
+        return;
+      }
+
+      if (currentHeading) {
+        sections[currentHeading].push(line);
+      }
+    });
+
+    return sections;
+  }
+
+  function parseGeneralStructuredProduct(body: string) {
+    const sections = parseHeadingSections(body);
+    const parsedOutcomes = extractPreviewItems(sections['Resultados de aprendizaje']?.join('\n') ?? '');
+    const parsedTopics = extractPreviewItems(sections['Temas clave']?.join('\n') ?? '');
+    const parsedBibliography = extractPreviewItems(sections['Bibliografía base']?.join('\n') ?? '');
+
+    return {
+      outcomes: parsedOutcomes.length > 0 ? parsedOutcomes : currentCourse.metadata.learningOutcomes,
+      topics: parsedTopics.length > 0 ? parsedTopics : currentCourse.metadata.topics,
+      methodology:
+        sections['Metodología']?.join('\n').trim() || currentCourse.metadata.methodology,
+      evaluation:
+        sections['Evaluación']?.join('\n').trim() || currentCourse.metadata.evaluation,
+      bibliography:
+        parsedBibliography.length > 0 ? parsedBibliography : currentCourse.metadata.bibliography,
+    };
+  }
+
+  function buildGeneralStructuredBody(input: {
+    outcomes: string[];
+    topics: string[];
+    methodology: string;
+    evaluation: string;
+    bibliography: string[];
+  }) {
+    return [
+      '# Identificación del curso',
+      `Institución: ${currentCourse.metadata.institution}`,
+      `Programa: ${currentCourse.program}`,
+      `Curso: ${currentCourse.title}`,
+      `Código: ${currentCourse.code}`,
+      `Modalidad: ${currentCourse.modality}`,
+      `Créditos: ${currentCourse.credits}`,
+      '',
+      '# Resultados de aprendizaje',
+      ...input.outcomes.map((item) => `- ${item}`),
+      '',
+      '# Temas clave',
+      ...input.topics.map((item) => `- ${item}`),
+      '',
+      '# Metodología',
+      input.methodology,
+      '',
+      '# Evaluación',
+      input.evaluation,
+      '',
+      '# Bibliografía base',
+      ...input.bibliography.map((item) => `- ${item}`),
+    ].join('\n');
+  }
+
+  function parseProductionStructuredProduct(body: string) {
+    const blocks = body
+      .split(/\n(?=#\s+(?:Módulo|Unidad)\s+\d+:)/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+
+    return currentCourse.modules.map((module, index) => {
+      const block = blocks[index] ?? '';
+      const lines = splitLines(block);
+      const activitiesStart = lines.findIndex((line) => line.startsWith('Actividades:'));
+      const activities = lines
+        .slice(activitiesStart >= 0 ? activitiesStart + 1 : 0)
+        .filter((line) => /^[-*]\s+/.test(line))
+        .map((line) =>
+          cleanPreviewLine(line)
+            .replace(/^Actividad\s+\d+:\s*/i, '')
+            .trim(),
+        )
+        .filter(Boolean);
+
+      return {
+        moduleId: module.id,
+        title: module.title,
+        objective: module.learningGoal,
+        ownResources: module.ownResources,
+        curatedResources: module.curatedResources,
+        activities:
+          activities.length > 0
+            ? activities
+            : Array.from({ length: Math.max(module.activities, 1) }, (_, activityIndex) =>
+                `Actividad ${activityIndex + 1} por desarrollar`,
+              ),
+      };
+    });
+  }
+
+  function buildProductionStructuredBody(
+    modules: Array<{
+      title: string;
+      objective: string;
+      ownResources: number;
+      curatedResources: number;
+      activities: string[];
+    }>,
+  ) {
+    return modules
+      .map((module, index) =>
+        [
+          `# Módulo ${index + 1}: ${module.title}`,
+          `Objetivo: ${module.objective}`,
+          'Actividades:',
+          ...module.activities.map((activity) => `- ${activity}`),
+          `Recursos propios de apoyo: ${module.ownResources}`,
+          `Recursos curados de apoyo: ${module.curatedResources}`,
+        ].join('\n'),
+      )
+      .join('\n\n');
+  }
+
+  type QaCriterionStatus = 'Pendiente' | 'Ajuste' | 'Cumple';
+
+  function parseQaStructuredProduct(body: string) {
+    const criteria = splitLines(body)
+      .filter((line) => /^[-*]\s+/.test(line))
+      .map((line) => {
+        const cleaned = line.replace(/^[-*]\s*/, '').trim();
+        const match = cleaned.match(/^\[(Pendiente|Ajuste|Cumple)\|([0-4])\]\s+(.+)$/);
+
+        if (match) {
+          return {
+            status: match[1] as QaCriterionStatus,
+            score: Number.parseInt(match[2], 10),
+            label: match[3].trim(),
+          };
+        }
+
+        return {
+          status: 'Pendiente' as QaCriterionStatus,
+          score: 0,
+          label: cleaned,
+        };
+      })
+      .filter((criterion) => criterion.label);
+
+    return criteria.length > 0
+      ? criteria
+      : [
+          { status: 'Pendiente' as QaCriterionStatus, score: 0, label: 'Coherencia pedagógica' },
+          { status: 'Pendiente' as QaCriterionStatus, score: 0, label: 'Calidad de actividades y recursos' },
+          { status: 'Pendiente' as QaCriterionStatus, score: 0, label: 'Legibilidad y accesibilidad' },
+        ];
+  }
+
+  function buildQaStructuredBody(
+    criteria: Array<{
+      status: QaCriterionStatus;
+      score: number;
+      label: string;
+    }>,
+  ) {
+    return [
+      '# Rúbrica de validación',
+      ...criteria.map((criterion) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
+    ].join('\n');
+  }
+
+  function renderStructuredProductEditor(
+    product: CourseProductMutationInput,
+    onPatch: (patch: Partial<CourseProductMutationInput>) => void,
+  ) {
+    if (product.stage === 'general') {
+      const structured = parseGeneralStructuredProduct(product.body);
+
+      return (
+        <div className="surface-muted structured-editor">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Editor nativo</span>
+              <h3>Sílabus por secciones</h3>
+            </div>
+          </div>
+
+          <div className="list-stack">
+            <div className="list-item">
+              <div>
+                <strong>Identificación institucional</strong>
+                <p>
+                  {currentCourse.metadata.institution} · {currentCourse.program} · {currentCourse.code}
+                </p>
+              </div>
+              <div className="list-item__meta">
+                <span>{currentCourse.modality}</span>
+                <span>{currentCourse.credits} créditos</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <label className="field field--full">
+              <span>Resultados de aprendizaje</span>
+              <div className="field__control field__control--textarea">
+                <textarea
+                  rows={4}
+                  value={joinLines(structured.outcomes)}
+                  onChange={(event) =>
+                    onPatch({
+                      body: buildGeneralStructuredBody({
+                        ...structured,
+                        outcomes: splitLines(event.target.value),
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Temas clave</span>
+              <div className="field__control field__control--textarea">
+                <textarea
+                  rows={4}
+                  value={joinLines(structured.topics)}
+                  onChange={(event) =>
+                    onPatch({
+                      body: buildGeneralStructuredBody({
+                        ...structured,
+                        topics: splitLines(event.target.value),
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Metodología</span>
+              <div className="field__control field__control--textarea">
+                <textarea
+                  rows={4}
+                  value={structured.methodology}
+                  onChange={(event) =>
+                    onPatch({
+                      body: buildGeneralStructuredBody({
+                        ...structured,
+                        methodology: event.target.value,
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Evaluación</span>
+              <div className="field__control field__control--textarea">
+                <textarea
+                  rows={4}
+                  value={structured.evaluation}
+                  onChange={(event) =>
+                    onPatch({
+                      body: buildGeneralStructuredBody({
+                        ...structured,
+                        evaluation: event.target.value,
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Bibliografía base</span>
+              <div className="field__control field__control--textarea">
+                <textarea
+                  rows={4}
+                  value={joinLines(structured.bibliography)}
+                  onChange={(event) =>
+                    onPatch({
+                      body: buildGeneralStructuredBody({
+                        ...structured,
+                        bibliography: splitLines(event.target.value),
+                      }),
+                    })
+                  }
+                />
+              </div>
+            </label>
+          </div>
+        </div>
+      );
+    }
+
+    if (product.stage === 'production') {
+      const modules = parseProductionStructuredProduct(product.body);
+
+      return (
+        <div className="surface-muted structured-editor">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Editor nativo</span>
+              <h3>Actividades por módulo</h3>
+            </div>
+          </div>
+
+          <div className="structured-editor__stack">
+            {modules.map((module, moduleIndex) => (
+              <article key={module.moduleId} className="structured-module-card">
+                <div className="structured-module-card__head">
+                  <div>
+                    <strong>{module.title}</strong>
+                    <p>{module.objective}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{module.ownResources} propios</span>
+                    <span>{module.curatedResources} curados</span>
+                  </div>
+                </div>
+
+                <div className="structured-editor__stack">
+                  {module.activities.map((activity, activityIndex) => (
+                    <div key={`${module.moduleId}-${activityIndex}`} className="task-editor task-editor--timeline">
+                      <label className="field field--full">
+                        <span>Actividad {activityIndex + 1}</span>
+                        <div className="field__control field__control--textarea">
+                          <textarea
+                            rows={3}
+                            value={activity}
+                            onChange={(event) => {
+                              const nextModules = modules.map((currentModule, currentIndex) =>
+                                currentIndex === moduleIndex
+                                  ? {
+                                      ...currentModule,
+                                      activities: currentModule.activities.map((item, currentActivityIndex) =>
+                                        currentActivityIndex === activityIndex ? event.target.value : item,
+                                      ),
+                                    }
+                                  : currentModule,
+                              );
+
+                              onPatch({
+                                body: buildProductionStructuredBody(nextModules),
+                              });
+                            }}
+                          />
+                        </div>
+                      </label>
+
+                      <div className="task-editor__sidebar">
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          disabled={module.activities.length <= 1}
+                          onClick={() => {
+                            const nextModules = modules.map((currentModule, currentIndex) =>
+                              currentIndex === moduleIndex
+                                ? {
+                                    ...currentModule,
+                                    activities: currentModule.activities.filter(
+                                      (_, currentActivityIndex) => currentActivityIndex !== activityIndex,
+                                    ),
+                                  }
+                                : currentModule,
+                            );
+
+                            onPatch({
+                              body: buildProductionStructuredBody(nextModules),
+                            });
+                          }}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      const nextModules = modules.map((currentModule, currentIndex) =>
+                        currentIndex === moduleIndex
+                          ? {
+                              ...currentModule,
+                              activities: [
+                                ...currentModule.activities,
+                                `Nueva actividad ${currentModule.activities.length + 1}`,
+                              ],
+                            }
+                          : currentModule,
+                      );
+
+                      onPatch({
+                        body: buildProductionStructuredBody(nextModules),
+                      });
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Agregar actividad</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (product.stage === 'qa') {
+      const criteria = parseQaStructuredProduct(product.body);
+      const averageScore =
+        criteria.length > 0
+          ? (criteria.reduce((sum, criterion) => sum + criterion.score, 0) / criteria.length).toFixed(1)
+          : '0.0';
+
+      return (
+        <div className="surface-muted structured-editor">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Editor nativo</span>
+              <h3>Rúbrica por criterio</h3>
+            </div>
+            <span className="badge badge--outline">Promedio {averageScore}/4</span>
+          </div>
+
+          <div className="criteria-grid">
+            {criteria.map((criterion, index) => (
+              <article key={`criterion-${index}`} className="criteria-card">
+                <label className="field field--full">
+                  <span>Criterio {index + 1}</span>
+                  <div className="field__control">
+                    <input
+                      value={criterion.label}
+                      onChange={(event) => {
+                        const nextCriteria = criteria.map((item, currentIndex) =>
+                          currentIndex === index ? { ...item, label: event.target.value } : item,
+                        );
+
+                        onPatch({
+                          body: buildQaStructuredBody(nextCriteria),
+                        });
+                      }}
+                    />
+                  </div>
+                </label>
+
+                <div className="criteria-card__meta">
+                  <label className="field">
+                    <span>Estado</span>
+                    <div className="field__control">
+                      <select
+                        value={criterion.status}
+                        onChange={(event) => {
+                          const nextCriteria = criteria.map((item, currentIndex) =>
+                            currentIndex === index
+                              ? { ...item, status: event.target.value as QaCriterionStatus }
+                              : item,
+                          );
+
+                          onPatch({
+                            body: buildQaStructuredBody(nextCriteria),
+                          });
+                        }}
+                      >
+                        {['Pendiente', 'Ajuste', 'Cumple'].map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Puntaje</span>
+                    <div className="field__control">
+                      <select
+                        value={criterion.score}
+                        onChange={(event) => {
+                          const nextCriteria = criteria.map((item, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...item,
+                                  score: Number.parseInt(event.target.value, 10) || 0,
+                                }
+                              : item,
+                          );
+
+                          onPatch({
+                            body: buildQaStructuredBody(nextCriteria),
+                          });
+                        }}
+                      >
+                        {[0, 1, 2, 3, 4].map((score) => (
+                          <option key={score} value={score}>
+                            {score}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="danger-button danger-button--ghost"
+                    disabled={criteria.length <= 1}
+                    onClick={() => {
+                      const nextCriteria = criteria.filter((_, currentIndex) => currentIndex !== index);
+
+                      onPatch({
+                        body: buildQaStructuredBody(nextCriteria),
+                      });
+                    }}
+                  >
+                    <Trash2 size={16} />
+                    <span>Eliminar criterio</span>
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="action-row">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                onPatch({
+                  body: buildQaStructuredBody([
+                    ...criteria,
+                    {
+                      status: 'Pendiente',
+                      score: 0,
+                      label: `Nuevo criterio ${criteria.length + 1}`,
+                    },
+                  ]),
+                });
+              }}
+            >
+              <Plus size={16} />
+              <span>Agregar criterio</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   }
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
@@ -2649,6 +3216,13 @@ export function CourseWorkspacePage({
         {isComposerOpen ? (
           <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
             {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
+            {renderStructuredProductEditor(newProductForm, (patch) =>
+              setNewProductForm((current) => ({
+                ...current,
+                stage: productStage,
+                ...patch,
+              }))
+            )}
 
             <div className="form-grid">
               <label className="field">
@@ -2881,6 +3455,15 @@ export function CourseWorkspacePage({
                     </div>
 
                     {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
+                    {renderStructuredProductEditor(draft, (patch) =>
+                      setProductDrafts((current) => ({
+                        ...current,
+                        [product.id]: {
+                          ...current[product.id],
+                          ...patch,
+                        },
+                      }))
+                    )}
 
                     <div className="form-grid">
                       <label className="field">

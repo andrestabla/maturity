@@ -5802,6 +5802,46 @@ body::after {
   border-radius: 18px;
 }
 
+.structured-editor,
+.structured-editor__stack {
+  display: grid;
+  gap: 16px;
+}
+
+.structured-editor {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+}
+
+.structured-module-card,
+.criteria-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.structured-module-card__head,
+.criteria-card__meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.structured-module-card__head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.criteria-grid {
+  display: grid;
+  gap: 14px;
+}
+
 .task-editor--timeline {
   align-items: flex-start;
 }
@@ -5834,6 +5874,11 @@ body::after {
   }
 
   .explorer-content__head {
+    flex-direction: column;
+  }
+
+  .structured-module-card__head,
+  .criteria-card__meta {
     flex-direction: column;
   }
 }
