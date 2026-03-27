@@ -193,6 +193,8 @@ export function TeamPage({
   const [focusRoleAssignment, setFocusRoleAssignment] = useState(false);
   const [isRolePickerOpen, setIsRolePickerOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<string>('Todos');
+  const [userStatusFilter, setUserStatusFilter] = useState<string>('Todos');
   const [userForm, setUserForm] = useState<UserMutationInput>(() => buildUserForm());
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionSettings | null>(null);
@@ -338,11 +340,18 @@ export function TeamPage({
     const users = adminData?.users ?? [];
 
     return users.filter((member) => {
+      const roleMatch =
+        userRoleFilter === 'Todos' ||
+        member.role === userRoleFilter ||
+        (member.secondaryRoles ?? []).includes(userRoleFilter as Role);
+      const statusMatch =
+        userStatusFilter === 'Todos' || formatUserStateLabel(member.status) === userStatusFilter;
+
       if (!query) {
-        return true;
+        return roleMatch && statusMatch;
       }
 
-      return [
+      const queryMatch = [
         member.name,
         member.email,
         member.role,
@@ -356,8 +365,10 @@ export function TeamPage({
         .join(' ')
         .toLowerCase()
         .includes(query);
+
+      return roleMatch && statusMatch && queryMatch;
     });
-  }, [adminData?.users, userSearch]);
+  }, [adminData?.users, userRoleFilter, userSearch, userStatusFilter]);
 
   const filteredLogs = useMemo(() => {
     const query = logQuery.trim().toLowerCase();
@@ -855,145 +866,192 @@ export function TeamPage({
       null;
 
     return (
-      <div className="page-stack">
-        <section className="surface section-card section-card--compact">
+      <div className="page-stack page-stack--governance">
+        <section className="surface section-card section-card--compact admin-subhead">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Usuarios y roles</span>
-              <h3>Lista clara de acceso y asistente lateral de edición</h3>
+              <span className="eyebrow">Gestión de usuarios</span>
+              <h3>Directorio, roles y edición sin saturar la vista</h3>
             </div>
             <UsersRound size={18} />
           </div>
           <p className="section-lead">
-            Aquí solo ves usuarios creados, roles asignados y un asistente de edición. Sin ruido.
+            Consulta el listado, filtra por rol o estado y abre el asistente lateral solo cuando necesites editar.
           </p>
 
-          <div className="admin-kpi-grid">
-            <div className="admin-kpi">
-              <span>Usuarios</span>
-              <strong>{users.length}</strong>
-              <p>Directorio total.</p>
-            </div>
-            <div className="admin-kpi">
-              <span>Activos</span>
-              <strong>{activeUsers}</strong>
-              <p>Con ingreso habilitado.</p>
-            </div>
-            <div className="admin-kpi">
-              <span>Suspendidos</span>
-              <strong>{suspendedUsers}</strong>
-              <p>Con acceso bloqueado.</p>
-            </div>
-            <div className="admin-kpi">
-              <span>Accesos recientes</span>
-              <strong>{authenticationLogs.slice(0, 14).length}</strong>
-              <p>Eventos de autenticación.</p>
-            </div>
+          <div className="admin-inline-metrics">
+            <span><strong>{users.length}</strong> usuarios</span>
+            <span><strong>{activeUsers}</strong> activos</span>
+            <span><strong>{suspendedUsers}</strong> suspendidos</span>
+            <span><strong>{authenticationLogs.slice(0, 14).length}</strong> accesos recientes</span>
           </div>
         </section>
 
         <section className="admin-split admin-split--users">
           <article className="surface section-card admin-pane">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Directorio</span>
-                <h3>Usuarios creados</h3>
+            <div className="admin-directory-shell">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Directorio</span>
+                  <h3>Usuarios creados</h3>
+                </div>
+                <UserCog size={18} />
               </div>
-              <UserCog size={18} />
-            </div>
 
-            <div className="admin-filter-row">
-              <label className="field field--compact field--search">
-                <span>Buscar usuario</span>
-                <div className="field__control">
-                  <input
-                    value={userSearch}
-                    onChange={(event) => setUserSearch(event.target.value)}
-                    placeholder="Nombre, correo, rol..."
-                  />
+              <div className="admin-filter-row admin-filter-row--directory">
+                <label className="field field--search">
+                  <span>Buscar</span>
+                  <div className="field__control">
+                    <input
+                      value={userSearch}
+                      onChange={(event) => setUserSearch(event.target.value)}
+                      placeholder="Nombre o correo..."
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--compact">
+                  <span>Rol</span>
+                  <div className="field__control">
+                    <select
+                      value={userRoleFilter}
+                      onChange={(event) => setUserRoleFilter(event.target.value)}
+                    >
+                      <option value="Todos">Todos</option>
+                      {appData.roles.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field field--compact">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={userStatusFilter}
+                      onChange={(event) => setUserStatusFilter(event.target.value)}
+                    >
+                      {['Todos', 'Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <div className="admin-filter-actions">
+                  <button
+                    type="button"
+                    className="cta-button"
+                    onClick={() => {
+                      setShowCreateUserAssistant(true);
+                      setEditingDraft(null);
+                      setEditingUserId(null);
+                      setFocusRoleAssignment(false);
+                      setIsRolePickerOpen(false);
+                    }}
+                  >
+                    <UserPlus size={16} />
+                    <span>Nuevo usuario</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      if (!selectedUser) {
+                        return;
+                      }
+                      startEditing(selectedUser);
+                      setFocusRoleAssignment(true);
+                      setIsRolePickerOpen(true);
+                    }}
+                    disabled={!selectedUser}
+                  >
+                    <Waypoints size={16} />
+                    <span>Asignar rol</span>
+                  </button>
                 </div>
-              </label>
+              </div>
 
-              <button
-                type="button"
-                className="cta-button"
-                onClick={() => {
-                  setShowCreateUserAssistant(true);
-                  setEditingDraft(null);
-                  setEditingUserId(null);
-                  setFocusRoleAssignment(false);
-                  setIsRolePickerOpen(false);
-                }}
-              >
-                <UserPlus size={16} />
-                <span>Nuevo usuario</span>
-              </button>
+              <div className="admin-directory">
+                <div className="admin-directory__head">
+                  <span>Usuario</span>
+                  <span>Rol</span>
+                  <span>Estado</span>
+                  <span>Alcance</span>
+                  <span>Acción</span>
+                </div>
 
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  if (!selectedUser) {
-                    return;
-                  }
-                  startEditing(selectedUser);
-                  setFocusRoleAssignment(true);
-                  setIsRolePickerOpen(true);
-                }}
-                disabled={!selectedUser}
-              >
-                <Waypoints size={16} />
-                <span>Asignar rol</span>
-              </button>
-            </div>
-
-            <div className="admin-user-list">
-              {filteredUsers.map((member) => (
-                <button
-                  key={member.id}
-                  type="button"
-                  className={
-                    member.id === selectedUser?.id && !showCreateUserAssistant
-                      ? 'admin-user-list__item admin-user-list__item--active'
-                      : 'admin-user-list__item'
-                  }
-                  onClick={() => startEditing(member)}
-                >
-                  <div className="admin-user-list__identity">
-                    <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
-                    <div>
-                      <strong>{member.name}</strong>
-                      <p>{member.email}</p>
+                <div className="admin-directory__body">
+                  {filteredUsers.length === 0 ? (
+                    <div className="empty-state empty-state--positive">
+                      <strong>No hay usuarios para este filtro</strong>
+                      <p>Ajusta búsqueda, rol o estado para volver a poblar el directorio.</p>
                     </div>
-                  </div>
-                  <div className="admin-user-list__roles">
-                    <span className="badge badge--outline">{member.role}</span>
-                    {(member.secondaryRoles ?? []).map((role) => (
-                      <span key={`${member.id}-${role}`} className="badge badge--outline">
-                        {role}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="admin-user-list__meta">
-                    <span className={getBadgeClass(formatUserStateLabel(member.status))}>
-                      {formatUserStateLabel(member.status)}
-                    </span>
-                    <span>{member.scope || member.program || 'Sin alcance definido'}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  ) : (
+                    filteredUsers.map((member) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        className={
+                          member.id === selectedUser?.id && !showCreateUserAssistant
+                            ? 'admin-directory__row admin-directory__row--active'
+                            : 'admin-directory__row'
+                        }
+                        onClick={() => startEditing(member)}
+                      >
+                        <div className="admin-directory__user">
+                          <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
+                          <div>
+                            <strong>{member.name}</strong>
+                            <p>{member.email}</p>
+                          </div>
+                        </div>
 
-            <div className="coverage-list coverage-list--compact">
-              {roleCoverage.map(({ profile, count }) => (
-                <div key={profile.role} className="coverage-list__item">
-                  <div>
-                    <strong>{profile.role}</strong>
-                    <p>{profile.focus}</p>
-                  </div>
-                  <span>{count} cursos</span>
+                        <div className="admin-directory__role">
+                          <span className="badge badge--outline">{member.role}</span>
+                          {(member.secondaryRoles ?? []).slice(0, 2).map((secondaryRole) => (
+                            <span key={`${member.id}-${secondaryRole}`} className="badge badge--outline">
+                              {secondaryRole}
+                            </span>
+                          ))}
+                        </div>
+
+                        <div className="admin-directory__state">
+                          <span className={getBadgeClass(formatUserStateLabel(member.status))}>
+                            {formatUserStateLabel(member.status)}
+                          </span>
+                        </div>
+
+                        <div className="admin-directory__scope">
+                          <span>{member.scope || member.program || member.faculty || 'Sin alcance'}</span>
+                        </div>
+
+                        <div className="admin-directory__action">
+                          <span className="ghost-pill">Ver</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
                 </div>
-              ))}
+              </div>
+
+              <div className="coverage-list coverage-list--compact coverage-list--inline">
+                {roleCoverage.map(({ profile, count }) => (
+                  <div key={profile.role} className="coverage-list__item">
+                    <div>
+                      <strong>{profile.role}</strong>
+                      <p>{profile.focus}</p>
+                    </div>
+                    <span>{count} cursos</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {userError ? <p className="form-error">{userError}</p> : null}
@@ -1013,6 +1071,28 @@ export function TeamPage({
               </div>
               <ShieldCheck size={18} />
             </div>
+
+            {!showCreateUserAssistant && selectedUser ? (
+              <div className="admin-detail-hero">
+                <div className="admin-detail-hero__identity">
+                  <div className="avatar-pill avatar-pill--large">{deriveUserInitials(selectedUser.name)}</div>
+                  <div>
+                    <strong>{selectedUser.name}</strong>
+                    <p>{selectedUser.email}</p>
+                  </div>
+                </div>
+
+                <div className="admin-detail-hero__meta">
+                  <span className="badge badge--outline">{selectedUser.role}</span>
+                  <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
+                    {formatUserStateLabel(selectedUser.status)}
+                  </span>
+                  <span className="badge badge--outline">
+                    {selectedUser.scope || selectedUser.program || 'Sin alcance'}
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             {showCreateUserAssistant ? (
               <form className="editor-card" onSubmit={handleCreateUser}>
@@ -1800,15 +1880,28 @@ export function TeamPage({
     }
 
     return (
-      <div className="page-stack">
-        <section className="insight-grid">
-          <article className="surface section-card">
+      <div className="page-stack page-stack--governance">
+        <section className="surface section-card section-card--compact admin-subhead">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Branding y marca</span>
+              <h3>Identidad visual, login y comportamiento base</h3>
+            </div>
+            <Brush size={18} />
+          </div>
+          <p className="section-lead">
+            Ajusta nombre, color, tipografía, logo, favicon, loader y las tres variantes de acceso desde un flujo más limpio.
+          </p>
+        </section>
+
+        <div className="admin-brand-layout">
+          <aside className="surface section-card admin-brand-aside">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Branding</span>
-                <h3>Marca, login y lenguaje visual operativo</h3>
+                <span className="eyebrow">Vista previa</span>
+                <h3>Resumen de marca</h3>
               </div>
-              <Brush size={18} />
+              <BadgeCheck size={18} />
             </div>
 
             <div className="admin-brand-preview">
@@ -1831,16 +1924,23 @@ export function TeamPage({
               </div>
             </div>
 
-            <p className="section-lead">{brandingDraft.surfaceStyle}</p>
-          </article>
-
-          <article className="surface section-card">
-            <div className="section-heading">
+            <div className="admin-brand-stat-list">
               <div>
-                <span className="eyebrow">Previews</span>
-                <h3>Login, tipografía y loader</h3>
+                <span>Login activo</span>
+                <strong>{brandingDraft.loginVariant}</strong>
               </div>
-              <BadgeCheck size={18} />
+              <div>
+                <span>Preset tipográfico</span>
+                <strong>{brandingDraft.fontPreset}</strong>
+              </div>
+              <div>
+                <span>Color principal</span>
+                <strong>{brandingDraft.primaryColor}</strong>
+              </div>
+              <div>
+                <span>Loader</span>
+                <strong>{brandingDraft.loaderLabel}</strong>
+              </div>
             </div>
 
             <div className="login-preview-grid">
@@ -1864,503 +1964,482 @@ export function TeamPage({
                     {variant === 'Minimal'
                       ? 'Pantalla limpia'
                       : variant === 'Split'
-                        ? 'Copia + formulario'
+                        ? 'Imagen y formulario'
                         : 'Control center'}
                   </strong>
                   <p>
                     {variant === 'Minimal'
-                      ? 'Acceso directo con una sola columna.'
+                      ? 'Acceso directo con baja carga visual.'
                       : variant === 'Split'
-                        ? 'Presentación editorial con panel lateral.'
-                        : 'Estética técnica con sensación de consola.'}
+                        ? 'Presentación institucional con dos columnas.'
+                        : 'Acceso técnico con lenguaje más operativo.'}
                   </p>
                 </button>
               ))}
             </div>
+          </aside>
 
-            <div className="admin-font-preview">
-              <div>
-                <span>Tipografía de títulos</span>
-                <strong style={{ fontFamily: `"${brandingDraft.displayFontFamily}", sans-serif` }}>
-                  {brandingDraft.displayFontFamily}
-                </strong>
-              </div>
-              <div>
-                <span>Tipografía de interfaz</span>
-                <strong style={{ fontFamily: `"${brandingDraft.bodyFontFamily}", sans-serif` }}>
-                  {brandingDraft.bodyFontFamily}
-                </strong>
-              </div>
-              <div>
-                <span>Loader</span>
-                <strong>{brandingDraft.loaderLabel}</strong>
-                <p>{brandingDraft.loaderMessage}</p>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <form className="surface section-card" onSubmit={handleSaveBranding}>
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Identidad visual</span>
-              <h3>Configurar marca completa</h3>
-            </div>
-            <ShieldCheck size={18} />
-          </div>
-
-          <div className="form-grid">
-            <label className="field">
-              <span>Nombre de plataforma</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.platformName}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, platformName: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Nombre institucional</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.institutionName}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, institutionName: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Marca corta</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.shortMark}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, shortMark: event.target.value } : current,
-                    )
-                  }
-                  maxLength={4}
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Texto del logo</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.logoText}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, logoText: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Modo de logo</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.logoMode}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            logoMode: event.target.value as BrandingSettings['logoMode'],
-                          }
-                        : current,
-                    )
-                  }
-                >
-                  {['Monograma', 'Wordmark', 'Imagen'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field">
-              <span>URL del logo</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.logoUrl}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, logoUrl: event.target.value } : current,
-                    )
-                  }
-                  placeholder="https://..."
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Modo de favicon</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.faviconMode}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            faviconMode: event.target.value as BrandingSettings['faviconMode'],
-                          }
-                        : current,
-                    )
-                  }
-                >
-                  {['Monograma', 'Imagen'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Favicon</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.faviconLabel}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, faviconLabel: event.target.value } : current,
-                    )
-                  }
-                  maxLength={2}
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>URL del favicon</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.faviconUrl}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, faviconUrl: event.target.value } : current,
-                    )
-                  }
-                  placeholder="https://..."
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>URL de soporte</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.supportUrl}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, supportUrl: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-          </div>
-
-          <div className="form-grid">
-            <label className="field">
-              <span>Preset tipográfico</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.fontPreset}
-                  onChange={(event) =>
-                    setBrandingDraft((current) => {
-                      if (!current) {
-                        return current;
+          <form className="admin-brand-sections" onSubmit={handleSaveBranding}>
+            <fieldset className="form-section">
+              <legend>Identidad institucional</legend>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Nombre de plataforma</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.platformName}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, platformName: event.target.value } : current,
+                        )
                       }
+                    />
+                  </div>
+                </label>
 
-                      const preset = event.target.value as BrandingSettings['fontPreset'];
-
-                      if (preset === 'Editorial') {
-                        return {
-                          ...current,
-                          fontPreset: preset,
-                          bodyFontFamily: 'IBM Plex Sans',
-                          displayFontFamily: 'Fraunces',
-                          monoFontFamily: 'IBM Plex Mono',
-                        };
+                <label className="field">
+                  <span>Nombre institucional</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.institutionName}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, institutionName: event.target.value } : current,
+                        )
                       }
+                    />
+                  </div>
+                </label>
 
-                      if (preset === 'Institutional') {
-                        return {
-                          ...current,
-                          fontPreset: preset,
-                          bodyFontFamily: 'Manrope',
-                          displayFontFamily: 'Space Grotesk',
-                          monoFontFamily: 'IBM Plex Mono',
-                        };
+                <label className="field">
+                  <span>Marca corta</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.shortMark}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, shortMark: event.target.value } : current,
+                        )
                       }
+                      maxLength={4}
+                    />
+                  </div>
+                </label>
 
-                      return {
-                        ...current,
-                        fontPreset: preset,
-                        bodyFontFamily: 'IBM Plex Sans',
-                        displayFontFamily: 'Space Grotesk',
-                        monoFontFamily: 'IBM Plex Mono',
-                      };
-                    })
-                  }
-                >
-                  {['Control', 'Editorial', 'Institutional'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <label className="field">
+                  <span>Texto del logo</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.logoText}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, logoText: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Modo de logo</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.logoMode}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                logoMode: event.target.value as BrandingSettings['logoMode'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {['Monograma', 'Wordmark', 'Imagen'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>URL del logo</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.logoUrl}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, logoUrl: event.target.value } : current,
+                        )
+                      }
+                      placeholder="https://..."
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Modo de favicon</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.faviconMode}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                faviconMode: event.target.value as BrandingSettings['faviconMode'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {['Monograma', 'Imagen'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Favicon</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.faviconLabel}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, faviconLabel: event.target.value } : current,
+                        )
+                      }
+                      maxLength={2}
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>URL del favicon</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.faviconUrl}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, faviconUrl: event.target.value } : current,
+                        )
+                      }
+                      placeholder="https://..."
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>URL de soporte</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.supportUrl}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, supportUrl: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
               </div>
-            </label>
+            </fieldset>
 
-            <label className="field">
-              <span>Fuente de interfaz</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.bodyFontFamily}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, bodyFontFamily: event.target.value } : current,
-                    )
-                  }
-                >
-                  {['IBM Plex Sans', 'Manrope', 'Space Grotesk'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Fuente de títulos</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.displayFontFamily}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, displayFontFamily: event.target.value } : current,
-                    )
-                  }
-                >
-                  {['Space Grotesk', 'Fraunces', 'IBM Plex Sans'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Fuente mono</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.monoFontFamily}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, monoFontFamily: event.target.value } : current,
-                    )
-                  }
-                >
-                  {['IBM Plex Mono', 'Space Grotesk'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-          </div>
-
-          <div className="form-grid">
-            <label className="field">
-              <span>Color principal</span>
-              <div className="field__control field__control--color">
-                <input
-                  type="color"
-                  value={brandingDraft.primaryColor}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, primaryColor: event.target.value } : current,
-                    )
-                  }
-                />
-                <input
-                  value={brandingDraft.primaryColor}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, primaryColor: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Color acento</span>
-              <div className="field__control field__control--color">
-                <input
-                  type="color"
-                  value={brandingDraft.accentColor}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, accentColor: event.target.value } : current,
-                    )
-                  }
-                />
-                <input
-                  value={brandingDraft.accentColor}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, accentColor: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-          </div>
-
-          <div className="form-grid">
-            <label className="field">
-              <span>Variante de login</span>
-              <div className="field__control">
-                <select
-                  value={brandingDraft.loginVariant}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            loginVariant: event.target.value as BrandingSettings['loginVariant'],
+            <fieldset className="form-section">
+              <legend>Tipografía y color</legend>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Preset tipográfico</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.fontPreset}
+                      onChange={(event) =>
+                        setBrandingDraft((current) => {
+                          if (!current) {
+                            return current;
                           }
-                        : current,
-                    )
-                  }
-                >
-                  {['Minimal', 'Split', 'Command'].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
 
-            <label className="field">
-              <span>Etiqueta superior</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.loginEyebrow}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loginEyebrow: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+                          const preset = event.target.value as BrandingSettings['fontPreset'];
 
-            <label className="field">
-              <span>Título del login</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.loginHeadline}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loginHeadline: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+                          if (preset === 'Editorial') {
+                            return {
+                              ...current,
+                              fontPreset: preset,
+                              bodyFontFamily: 'IBM Plex Sans',
+                              displayFontFamily: 'Fraunces',
+                              monoFontFamily: 'IBM Plex Mono',
+                            };
+                          }
 
-            <label className="field">
-              <span>Mensaje del login</span>
-              <div className="field__control">
-                <textarea
-                  rows={3}
-                  value={brandingDraft.loginMessage}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loginMessage: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+                          if (preset === 'Institutional') {
+                            return {
+                              ...current,
+                              fontPreset: preset,
+                              bodyFontFamily: 'Manrope',
+                              displayFontFamily: 'Space Grotesk',
+                              monoFontFamily: 'IBM Plex Mono',
+                            };
+                          }
 
-            <label className="field">
-              <span>Etiqueta del loader</span>
-              <div className="field__control">
-                <input
-                  value={brandingDraft.loaderLabel}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loaderLabel: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+                          return {
+                            ...current,
+                            fontPreset: preset,
+                            bodyFontFamily: 'IBM Plex Sans',
+                            displayFontFamily: 'Space Grotesk',
+                            monoFontFamily: 'IBM Plex Mono',
+                          };
+                        })
+                      }
+                    >
+                      {['Control', 'Editorial', 'Institutional'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
 
-            <label className="field">
-              <span>Mensaje del loader</span>
-              <div className="field__control">
-                <textarea
-                  rows={3}
-                  value={brandingDraft.loaderMessage}
-                  onChange={(event) =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loaderMessage: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-          </div>
+                <label className="field">
+                  <span>Fuente de interfaz</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.bodyFontFamily}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, bodyFontFamily: event.target.value } : current,
+                        )
+                      }
+                    >
+                      {['IBM Plex Sans', 'Manrope', 'Space Grotesk'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
 
-          <label className="field">
-            <span>Dirección visual</span>
-            <div className="field__control">
-              <textarea
-                rows={4}
-                value={brandingDraft.surfaceStyle}
-                onChange={(event) =>
-                  setBrandingDraft((current) =>
-                    current ? { ...current, surfaceStyle: event.target.value } : current,
-                  )
-                }
-              />
+                <label className="field">
+                  <span>Fuente de títulos</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.displayFontFamily}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, displayFontFamily: event.target.value } : current,
+                        )
+                      }
+                    >
+                      {['Space Grotesk', 'Fraunces', 'IBM Plex Sans'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Fuente mono</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.monoFontFamily}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, monoFontFamily: event.target.value } : current,
+                        )
+                      }
+                    >
+                      {['IBM Plex Mono', 'Space Grotesk'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Color principal</span>
+                  <div className="field__control field__control--color">
+                    <input
+                      type="color"
+                      value={brandingDraft.primaryColor}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, primaryColor: event.target.value } : current,
+                        )
+                      }
+                    />
+                    <input
+                      value={brandingDraft.primaryColor}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, primaryColor: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Color acento</span>
+                  <div className="field__control field__control--color">
+                    <input
+                      type="color"
+                      value={brandingDraft.accentColor}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, accentColor: event.target.value } : current,
+                        )
+                      }
+                    />
+                    <input
+                      value={brandingDraft.accentColor}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, accentColor: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Dirección visual</span>
+                  <div className="field__control">
+                    <textarea
+                      rows={3}
+                      value={brandingDraft.surfaceStyle}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, surfaceStyle: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset className="form-section">
+              <legend>Login y loader</legend>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Variante de login</span>
+                  <div className="field__control">
+                    <select
+                      value={brandingDraft.loginVariant}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                loginVariant: event.target.value as BrandingSettings['loginVariant'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {['Minimal', 'Split', 'Command'].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Etiqueta superior</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.loginEyebrow}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, loginEyebrow: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Título del login</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.loginHeadline}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, loginHeadline: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Mensaje del login</span>
+                  <div className="field__control">
+                    <textarea
+                      rows={3}
+                      value={brandingDraft.loginMessage}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, loginMessage: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Etiqueta del loader</span>
+                  <div className="field__control">
+                    <input
+                      value={brandingDraft.loaderLabel}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, loaderLabel: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Mensaje del loader</span>
+                  <div className="field__control">
+                    <textarea
+                      rows={3}
+                      value={brandingDraft.loaderMessage}
+                      onChange={(event) =>
+                        setBrandingDraft((current) =>
+                          current ? { ...current, loaderMessage: event.target.value } : current,
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+              </div>
+            </fieldset>
+
+            {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+            <div className="action-row">
+              <button type="submit" className="cta-button" disabled={isSavingBranding}>
+                <span>{isSavingBranding ? 'Guardando…' : 'Guardar branding'}</span>
+              </button>
             </div>
-          </label>
-
-          {settingsError ? <p className="form-error">{settingsError}</p> : null}
-
-          <div className="action-row">
-            <button type="submit" className="cta-button" disabled={isSavingBranding}>
-              <span>{isSavingBranding ? 'Guardando…' : 'Guardar branding'}</span>
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     );
   }
@@ -2988,50 +3067,34 @@ export function TeamPage({
 
   return (
     <div className="page-stack team-page team-page--admin">
-      <section className="surface section-card section-card--compact">
+      <section className="surface section-card section-card--compact admin-hero">
         <div className="section-heading">
           <div>
             <span className="eyebrow">Módulo Administración</span>
-            <h3>Centro de gobierno técnico y funcional de la plataforma</h3>
+            <h3>Gobierno técnico y funcional</h3>
           </div>
           <ShieldCheck size={18} />
         </div>
 
         <p className="section-lead">
-          Desde aquí administras usuarios, estructuras institucionales, branding, integraciones,
-          servicios conectados, logs y auditoría, sin mezclar esta capa con la operación diaria de
-          producción de cursos.
+          Configura la plataforma sin mezclar esta capa con la operación de cursos. Todo está organizado por pestañas para reducir carga cognitiva.
         </p>
 
-        <div className="admin-kpi-grid">
-          <div className="admin-kpi">
-            <span>Usuarios activos</span>
-            <strong>{activeUsers}</strong>
-            <p>Con acceso vigente a la plataforma.</p>
-          </div>
-          <div className="admin-kpi">
-            <span>Integraciones activas</span>
-            <strong>{activeIntegrations}</strong>
-            <p>Conectores operando o listos para uso.</p>
-          </div>
-          <div className="admin-kpi">
-            <span>Errores visibles</span>
-            <strong>{degradedIntegrations === 0 ? 'Sin alertas' : degradedIntegrations}</strong>
-            <p>
-              {degradedIntegrations === 0
-                ? 'No hay servicios degradados en este momento.'
-                : 'Servicios degradados o con falla reciente.'}
-            </p>
-          </div>
-          <div className="admin-kpi">
-            <span>Última actividad</span>
+        <div className="admin-inline-metrics">
+          <span><strong>{activeUsers}</strong> usuarios activos</span>
+          <span><strong>{activeIntegrations}</strong> integraciones listas</span>
+          <span>
+            <strong>{degradedIntegrations === 0 ? '0' : degradedIntegrations}</strong>{' '}
+            alertas técnicas
+          </span>
+          <span>
             <strong>
               {adminData.audit[0]?.createdAt
                 ? formatLongDate(adminData.audit[0].createdAt.slice(0, 10))
                 : 'Sin registros'}
-            </strong>
-            <p>Último cambio crítico auditado.</p>
-          </div>
+            </strong>{' '}
+            última actividad
+          </span>
         </div>
       </section>
 
