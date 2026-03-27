@@ -24,6 +24,7 @@ export type DeliverableStatus =
 export type ObservationStatus = 'Pendiente' | 'En ajuste' | 'Resuelta';
 export type Priority = 'Alta' | 'Media' | 'Baja';
 export type Tone = 'coral' | 'sage' | 'ocean' | 'gold' | 'ink';
+export type StageCheckpointStatus = 'done' | 'active' | 'pending' | 'blocked';
 
 export interface StageDefinition {
   id: string;
@@ -37,7 +38,7 @@ export interface StageCheckpoint {
   id: string;
   label: string;
   owner: Role;
-  status: 'done' | 'active' | 'pending' | 'blocked';
+  status: StageCheckpointStatus;
 }
 
 export interface TeamMember {
@@ -203,6 +204,18 @@ export interface UserUpdateInput {
 export interface PasswordChangeInput {
   currentPassword: string;
   nextPassword: string;
+}
+
+export interface StageCheckpointMutationInput {
+  status: StageCheckpointStatus;
+}
+
+export interface AlertMutationInput {
+  title: string;
+  courseSlug: string;
+  tone: Tone;
+  owner: Role;
+  detail: string;
 }
 
 export interface DeliverableMutationInput {

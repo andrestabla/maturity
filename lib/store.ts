@@ -1,5 +1,7 @@
 import { mockAppData } from '../src/data/mockData.js';
 import type {
+  Alert,
+  AlertMutationInput,
   AppData,
   AuthUser,
   Course,
@@ -13,7 +15,9 @@ import type {
   PasswordChangeInput,
   Role,
   RoleProfile,
+  StageCheckpoint,
   StageDefinition,
+  StageCheckpointMutationInput,
   Task,
   TaskMutationInput,
   UserMutationInput,
@@ -74,6 +78,12 @@ interface SessionLookupRow {
 
 function getTodayLabel() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function slugify(value: string) {
@@ -190,6 +200,40 @@ function makeLibraryResourceRecord(input: LibraryResourceMutationInput): Library
     tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
     summary: input.summary,
   };
+}
+
+function makeAlertRecord(input: AlertMutationInput): Alert {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    courseSlug: input.courseSlug,
+    tone: input.tone,
+    owner: input.owner,
+    detail: input.detail,
+  };
+}
+
+function getStageIndex(stageId: string) {
+  return mockAppData.stages.findIndex((stage) => stage.id === stageId);
+}
+
+function deriveCourseStatusFromChecklist(
+  currentStatus: Course['status'],
+  stageChecklist: StageCheckpoint[],
+) {
+  if (stageChecklist.some((item) => item.status === 'blocked')) {
+    return 'Bloqueado';
+  }
+
+  if (stageChecklist.every((item) => item.status === 'done')) {
+    return 'Listo';
+  }
+
+  if (currentStatus === 'Bloqueado' || currentStatus === 'Listo') {
+    return 'En revisión';
+  }
+
+  return currentStatus;
 }
 
 function parseJson<T>(value: JsonValue): T {
@@ -490,6 +534,36 @@ async function persistTask(task: Task) {
       priority = EXCLUDED.priority,
       status = EXCLUDED.status,
       summary = EXCLUDED.summary
+  `;
+}
+
+async function persistAlert(alert: Alert) {
+  const sql = getSql();
+
+  await sql`
+    INSERT INTO maturity_alerts (
+      id,
+      title,
+      course_slug,
+      tone,
+      owner,
+      detail
+    )
+    VALUES (
+      ${alert.id},
+      ${alert.title},
+      ${alert.courseSlug},
+      ${alert.tone},
+      ${alert.owner},
+      ${alert.detail}
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      title = EXCLUDED.title,
+      course_slug = EXCLUDED.course_slug,
+      tone = EXCLUDED.tone,
+      owner = EXCLUDED.owner,
+      detail = EXCLUDED.detail
   `;
 }
 
@@ -881,6 +955,52 @@ export async function loadAppData(): Promise<AppData> {
   };
 }
 
+export async function findCourseRecordBySlug(slug: string) {
+  await ensureSchema();
+  await ensureSeedData();
+  return readCourseBySlug(slug);
+}
+
+export async function findAlertById(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      course_slug AS "courseSlug",
+      tone,
+      owner,
+      detail
+    FROM maturity_alerts
+    WHERE id = ${id}
+    LIMIT 1
+  `) as Alert[];
+
+  return rows[0] ?? null;
+}
+
+export async function createAlertRecord(input: AlertMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const alert = makeAlertRecord(input);
+  await persistAlert(alert);
+  return alert;
+}
+
+export async function deleteAlertRecord(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    DELETE FROM maturity_alerts
+    WHERE id = ${id}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return rows.length > 0;
+}
+
 export async function findUserByEmail(email: string) {
   await ensureSchema();
   await ensureAdminUserSeed();
@@ -1121,6 +1241,187 @@ export async function findTaskById(id: string) {
   `) as Task[];
 
   return rows[0] ?? null;
+}
+
+export async function updateStageCheckpointRecord(
+  courseSlug: string,
+  checkpointIndex: number,
+  input: StageCheckpointMutationInput,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const currentCheckpoint = course.stageChecklist[checkpointIndex];
+
+  if (!currentCheckpoint) {
+    return null;
+  }
+
+  const nextStageChecklist = course.stageChecklist.map((checkpoint, index) =>
+    index === checkpointIndex
+      ? {
+          ...checkpoint,
+          status: input.status,
+        }
+      : checkpoint,
+  );
+
+  const nextCourse: Course = {
+    ...course,
+    updatedAt: getTodayLabel(),
+    status: deriveCourseStatusFromChecklist(course.status, nextStageChecklist),
+    stageChecklist: nextStageChecklist,
+  };
+
+  await persistCourse(nextCourse);
+
+  let alert: Alert | null = null;
+
+  if (input.status === 'blocked') {
+    alert = await createAlertRecord({
+      title: `${course.title} tiene un bloqueo en ${currentCheckpoint.label}`,
+      courseSlug: course.slug,
+      tone: 'coral',
+      owner: currentCheckpoint.owner,
+      detail: `La etapa ${currentCheckpoint.label} quedó bloqueada y requiere intervención para continuar el flujo.`,
+    });
+  }
+
+  return {
+    course: nextCourse,
+    alert,
+  };
+}
+
+export async function advanceCourseStageRecord(courseSlug: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return {
+      error: 'Curso no encontrado.',
+    };
+  }
+
+  const currentStageIndex = getStageIndex(course.stageId);
+
+  if (currentStageIndex < 0) {
+    return {
+      error: 'La etapa actual del curso no es válida.',
+    };
+  }
+
+  const currentCheckpoint = course.stageChecklist[currentStageIndex];
+
+  if (!currentCheckpoint || currentCheckpoint.status !== 'done') {
+    return {
+      error: 'Marca la etapa actual como completada antes de transferir el curso.',
+    };
+  }
+
+  const hasBlockedCheckpoints = course.stageChecklist
+    .slice(0, currentStageIndex + 1)
+    .some((checkpoint) => checkpoint.status === 'blocked');
+  const hasCriticalObservations = course.observations.some(
+    (observation) => observation.status !== 'Resuelta' && observation.severity === 'Alta',
+  );
+
+  if (hasBlockedCheckpoints || hasCriticalObservations) {
+    return {
+      error:
+        'No es posible hacer el handoff mientras existan bloqueos o observaciones críticas pendientes.',
+    };
+  }
+
+  const isLastStage = currentStageIndex >= mockAppData.stages.length - 1;
+  const nextStage = isLastStage ? null : mockAppData.stages[currentStageIndex + 1];
+  const nextStageChecklist = course.stageChecklist.map((checkpoint, index) => {
+    if (index < currentStageIndex) {
+      return {
+        ...checkpoint,
+        status: 'done' as const,
+      };
+    }
+
+    if (index === currentStageIndex) {
+      return {
+        ...checkpoint,
+        status: 'done' as const,
+      };
+    }
+
+    if (!isLastStage && index === currentStageIndex + 1) {
+      return {
+        ...checkpoint,
+        status: 'active' as const,
+      };
+    }
+
+    return {
+      ...checkpoint,
+      status: checkpoint.status === 'done' ? checkpoint.status : ('pending' as const),
+    };
+  });
+
+  const nextCourse: Course = {
+    ...course,
+    stageId: nextStage?.id ?? course.stageId,
+    updatedAt: getTodayLabel(),
+    progress: isLastStage
+      ? 100
+      : Math.max(course.progress, Math.round(((currentStageIndex + 2) / mockAppData.stages.length) * 100)),
+    status: isLastStage ? 'Listo' : 'En revisión',
+    nextMilestone: isLastStage
+      ? `Curso listo para publicación · ${getTodayLabel()}`
+      : `Handoff hacia ${nextStage?.name ?? 'siguiente etapa'} · ${getTodayLabel()}`,
+    stageChecklist: nextStageChecklist,
+  };
+
+  await persistCourse(nextCourse);
+
+  const alert = await createAlertRecord({
+    title: isLastStage
+      ? `${course.title} quedó listo para publicación`
+      : `${course.title} pasó a ${nextStage?.name ?? 'la siguiente etapa'}`,
+    courseSlug: course.slug,
+    tone: isLastStage ? 'sage' : nextStage?.tone ?? 'ocean',
+    owner: isLastStage ? 'Coordinador' : nextStage?.owner ?? 'Coordinador',
+    detail: isLastStage
+      ? 'Todas las etapas quedaron completadas y el proyecto puede pasar a publicación o activación.'
+      : `Se liberó el handoff desde ${mockAppData.stages[currentStageIndex]?.name ?? 'la etapa anterior'} y el siguiente responsable ya puede iniciar trabajo.`,
+  });
+
+  let task: Task | null = null;
+
+  if (nextStage) {
+    task = makeTaskRecord({
+      title: `Tomar handoff de ${nextStage.name}`,
+      courseSlug: course.slug,
+      role: nextStage.owner,
+      stageId: nextStage.id,
+      dueDate: addDays(2),
+      priority: 'Alta',
+      status: 'Pendiente',
+      summary: `Revisar el curso transferido y activar las acciones iniciales de ${nextStage.name.toLowerCase()}.`,
+    });
+
+    await persistTask(task);
+  }
+
+  return {
+    course: nextCourse,
+    alert,
+    task,
+    error: null,
+  };
 }
 
 export async function createDeliverableRecord(courseSlug: string, input: DeliverableMutationInput) {

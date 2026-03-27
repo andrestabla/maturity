@@ -20,6 +20,18 @@ export function canManageUsers(role: Role) {
   return role === 'Administrador';
 }
 
+export function canOperateStageCheckpoint(role: Role, ownerRole: Role) {
+  return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
+}
+
+export function canManageHandoffs(role: Role) {
+  return role === 'Administrador' || role === 'Coordinador';
+}
+
+export function canManageAlerts(role: Role, ownerRole: Role) {
+  return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
+}
+
 export function canCreateDeliverables(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
 }

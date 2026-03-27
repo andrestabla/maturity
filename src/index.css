@@ -5581,6 +5581,84 @@ body::after {
   box-shadow: var(--surface-shadow);
 }
 
+.handoff-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.handoff-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.handoff-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.handoff-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.handoff-metric span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.handoff-metric strong {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.handoff-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.handoff-state {
+  width: 100%;
+}
+
+.checkpoint-stack {
+  align-content: start;
+}
+
+.checkpoint-editor p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.ghost-button--icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.sync-feed__item--alert {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+@media (max-width: 980px) {
+  .handoff-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 840px) {
   .access-screen__panel-head {
     flex-direction: column;
@@ -5599,5 +5677,10 @@ body::after {
 
   .theme-switch--panel {
     width: auto;
+  }
+
+  .ghost-button--icon {
+    width: 34px;
+    justify-content: center;
   }
 }

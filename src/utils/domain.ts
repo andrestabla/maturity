@@ -23,7 +23,7 @@ export function getVisibleTasks(appData: AppData, role: Role) {
 }
 
 export function getVisibleAlerts(appData: AppData, role: Role) {
-  if (role === 'Administrador' || role === 'Auditor') {
+  if (role === 'Administrador' || role === 'Auditor' || role === 'Coordinador') {
     return appData.alerts;
   }
 

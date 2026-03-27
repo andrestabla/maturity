@@ -24,6 +24,7 @@ import type {
   Observation,
   ObservationMutationInput,
   Role,
+  StageCheckpointStatus,
   Task,
   TaskMutationInput,
 } from '../types.js';
@@ -39,7 +40,9 @@ import {
   canEditDeliverable,
   canEditObservation,
   canEditTask,
+  canManageHandoffs,
   canManageCourses,
+  canOperateStageCheckpoint,
 } from '../utils/permissions.js';
 
 interface CourseWorkspacePageProps {
@@ -63,6 +66,32 @@ function badgeClass(status: string) {
     case 'En curso':
       return 'badge badge--ocean';
     case 'Bloqueado':
+      return 'badge badge--coral';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+function checkpointStatusLabel(status: StageCheckpointStatus) {
+  switch (status) {
+    case 'done':
+      return 'Completada';
+    case 'active':
+      return 'Activa';
+    case 'blocked':
+      return 'Bloqueada';
+    default:
+      return 'Pendiente';
+  }
+}
+
+function checkpointBadgeClass(status: StageCheckpointStatus) {
+  switch (status) {
+    case 'done':
+      return 'badge badge--sage';
+    case 'active':
+      return 'badge badge--gold';
+    case 'blocked':
       return 'badge badge--coral';
     default:
       return 'badge badge--outline';
@@ -202,6 +231,9 @@ export function CourseWorkspacePage({
   const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
   const defaultDeliverableOwner = stage?.owner ?? role;
   const defaultObservationRole = role;
+  const relatedAlerts = course
+    ? appData.alerts.filter((alert) => alert.courseSlug === course.slug)
+    : [];
 
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
@@ -211,10 +243,14 @@ export function CourseWorkspacePage({
   const [taskError, setTaskError] = useState<string | null>(null);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
   const [observationError, setObservationError] = useState<string | null>(null);
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
   const [isObservationSaving, setIsObservationSaving] = useState(false);
+  const [isCheckpointSaving, setIsCheckpointSaving] = useState<number | null>(null);
+  const [isHandoffSaving, setIsHandoffSaving] = useState(false);
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
     course ? makeCourseForm(course) : buildEmptyCourseForm(currentStageId),
   );
@@ -236,6 +272,11 @@ export function CourseWorkspacePage({
   const [observationDrafts, setObservationDrafts] = useState<
     Record<string, ObservationMutationInput>
   >(() => makeObservationDrafts(course?.observations ?? []));
+  const [checkpointDrafts, setCheckpointDrafts] = useState<Record<number, StageCheckpointStatus>>(() =>
+    Object.fromEntries(
+      (course?.stageChecklist ?? []).map((checkpoint, index) => [index, checkpoint.status]),
+    ) as Record<number, StageCheckpointStatus>,
+  );
 
   useEffect(() => {
     if (!course) {
@@ -246,6 +287,7 @@ export function CourseWorkspacePage({
       setTaskDrafts({});
       setDeliverableDrafts({});
       setObservationDrafts({});
+      setCheckpointDrafts({});
       return;
     }
 
@@ -256,6 +298,11 @@ export function CourseWorkspacePage({
     setTaskDrafts(makeTaskDrafts(relatedTasks));
     setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
     setObservationDrafts(makeObservationDrafts(course.observations));
+    setCheckpointDrafts(
+      Object.fromEntries(
+        course.stageChecklist.map((checkpoint, index) => [index, checkpoint.status]),
+      ) as Record<number, StageCheckpointStatus>,
+    );
   }, [
     appData.tasks,
     course,
@@ -279,6 +326,19 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
+  const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
+  const currentCheckpoint = currentCourse.stageChecklist[currentStageIndex];
+  const nextStage = currentStageIndex >= 0 ? appData.stages[currentStageIndex + 1] : undefined;
+  const blockingCheckpoints = currentCourse.stageChecklist.filter(
+    (checkpoint, index) => index <= currentStageIndex && checkpoint.status === 'blocked',
+  );
+  const criticalObservations = currentCourse.observations.filter(
+    (observation) => observation.status !== 'Resuelta' && observation.severity === 'Alta',
+  );
+  const isHandoffReady =
+    Boolean(currentCheckpoint && currentCheckpoint.status === 'done') &&
+    blockingCheckpoints.length === 0 &&
+    criticalObservations.length === 0;
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -441,6 +501,83 @@ export function CourseWorkspacePage({
         ...current[taskId],
         [key]: value,
       },
+    }));
+  }
+
+  async function handleCheckpointSave(checkpointIndex: number) {
+    const status = checkpointDrafts[checkpointIndex];
+
+    if (!status) {
+      return;
+    }
+
+    setCheckpointError(null);
+    setIsCheckpointSaving(checkpointIndex);
+
+    try {
+      const response = await fetch('/api/checkpoints', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          checkpointIndex,
+          status,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible actualizar el checkpoint.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setCheckpointError(
+        error instanceof Error ? error.message : 'No fue posible actualizar el checkpoint.',
+      );
+    } finally {
+      setIsCheckpointSaving(null);
+    }
+  }
+
+  async function handleHandoff() {
+    setHandoffError(null);
+    setIsHandoffSaving(true);
+
+    try {
+      const response = await fetch('/api/handoffs', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible transferir el curso.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setHandoffError(error instanceof Error ? error.message : 'No fue posible transferir el curso.');
+    } finally {
+      setIsHandoffSaving(false);
+    }
+  }
+
+  function updateCheckpointDraft(index: number, status: StageCheckpointStatus) {
+    setCheckpointDrafts((current) => ({
+      ...current,
+      [index]: status,
     }));
   }
 
@@ -922,7 +1059,160 @@ export function CourseWorkspacePage({
           </div>
           <Compass size={18} />
         </div>
-        <StageRail items={course.stageChecklist} />
+
+        <StageRail items={currentCourse.stageChecklist} />
+
+        <div className="handoff-grid">
+          <article className="surface-muted handoff-card">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">HANDOFF</span>
+                <h3>Transferencia entre etapas</h3>
+              </div>
+            </div>
+
+            <div className="handoff-metrics">
+              <div className="handoff-metric">
+                <span>Etapa actual</span>
+                <strong>{stage?.name ?? currentCourse.stageId}</strong>
+              </div>
+              <div className="handoff-metric">
+                <span>Siguiente responsable</span>
+                <strong>{nextStage?.owner ?? 'Cierre final'}</strong>
+              </div>
+              <div className="handoff-metric">
+                <span>Bloqueos</span>
+                <strong>{blockingCheckpoints.length + criticalObservations.length}</strong>
+              </div>
+              <div className="handoff-metric">
+                <span>Alertas del curso</span>
+                <strong>{relatedAlerts.length}</strong>
+              </div>
+            </div>
+
+            <p className="handoff-copy">
+              {nextStage
+                ? `Cuando la etapa actual quede completa, el curso puede transferirse a ${nextStage.name} y se notificará al siguiente responsable.`
+                : 'Este curso está en la última etapa. Al cerrar el handoff quedará listo para publicación o activación.'}
+            </p>
+
+            {blockingCheckpoints.length > 0 || criticalObservations.length > 0 ? (
+              <div className="empty-state handoff-state">
+                <strong>El handoff todavía no está listo</strong>
+                <p>
+                  {blockingCheckpoints.length > 0
+                    ? `Hay ${blockingCheckpoints.length} checkpoint(s) bloqueado(s) antes de avanzar.`
+                    : `Hay ${criticalObservations.length} observación(es) crítica(s) pendiente(s) por resolver.`}
+                </p>
+              </div>
+            ) : (
+              <div className="empty-state handoff-state">
+                <strong>Ruta despejada para la transferencia</strong>
+                <p>
+                  Marca la etapa activa como completada y luego transfiere el curso para generar la siguiente activación.
+                </p>
+              </div>
+            )}
+
+            {handoffError ? <p className="form-error">{handoffError}</p> : null}
+
+            {canManageHandoffs(userRole) ? (
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={!isHandoffReady || isHandoffSaving}
+                  onClick={() => void handleHandoff()}
+                >
+                  <span>
+                    {isHandoffSaving
+                      ? 'Transfiriendo…'
+                      : nextStage
+                        ? `Transferir a ${nextStage.name}`
+                        : 'Cerrar curso'}
+                  </span>
+                </button>
+              </div>
+            ) : null}
+          </article>
+
+          <div className="list-stack checkpoint-stack">
+            {currentCourse.stageChecklist.map((checkpoint, index) => {
+              const draftStatus = checkpointDrafts[index] ?? checkpoint.status;
+              const isEditable = canOperateStageCheckpoint(userRole, checkpoint.owner);
+              const stageMeta = appData.stages[index];
+
+              return (
+                <div key={checkpoint.id} className="task-editor checkpoint-editor">
+                  <div>
+                    <div className="task-editor__header">
+                      <span className={checkpointBadgeClass(draftStatus)}>
+                        {checkpointStatusLabel(draftStatus)}
+                      </span>
+                      <strong>{checkpoint.label}</strong>
+                    </div>
+
+                    <p>{stageMeta?.description ?? 'Punto de control de la etapa actual del curso.'}</p>
+
+                    <div className="list-item__meta">
+                      <span>{checkpoint.owner}</span>
+                      <span>Fase {index + 1}</span>
+                    </div>
+                  </div>
+
+                  <div className="task-editor__sidebar">
+                    {isEditable ? (
+                      <>
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draftStatus}
+                              onChange={(event) =>
+                                updateCheckpointDraft(
+                                  index,
+                                  event.target.value as StageCheckpointStatus,
+                                )
+                              }
+                            >
+                              {[
+                                ['pending', 'Pendiente'],
+                                ['active', 'Activa'],
+                                ['done', 'Completada'],
+                                ['blocked', 'Bloqueada'],
+                              ].map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isCheckpointSaving === index}
+                          onClick={() => void handleCheckpointSave(index)}
+                        >
+                          <Save size={16} />
+                          <span>{isCheckpointSaving === index ? 'Guardando…' : 'Guardar'}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="task-item__meta">
+                        <span>{checkpoint.owner}</span>
+                        <span>{checkpointStatusLabel(draftStatus)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
       </section>
 
       <section className="workspace-grid">

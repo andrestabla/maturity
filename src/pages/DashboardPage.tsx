@@ -1,10 +1,13 @@
 import {
   ArrowUpRight,
   BriefcaseBusiness,
+  CircleAlert,
   FolderClock,
   RadioTower,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react';
+import { useState } from 'react';
 import { CourseCard } from '../components/CourseCard.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { Link } from 'react-router-dom';
@@ -17,11 +20,14 @@ import {
   getVisibleCourses,
   getVisibleTasks,
 } from '../utils/domain.js';
+import { canManageAlerts } from '../utils/permissions.js';
 
 interface DashboardPageProps {
   role: Role;
+  userRole: Role;
   appData: AppData;
   isLoading?: boolean;
+  refreshAppData: () => void;
 }
 
 const roleMessage: Record<Role, string> = {
@@ -76,7 +82,16 @@ function DashboardSkeleton() {
   );
 }
 
-export function DashboardPage({ role, appData, isLoading = false }: DashboardPageProps) {
+export function DashboardPage({
+  role,
+  userRole,
+  appData,
+  isLoading = false,
+  refreshAppData,
+}: DashboardPageProps) {
+  const [alertError, setAlertError] = useState<string | null>(null);
+  const [dismissingAlertId, setDismissingAlertId] = useState<string | null>(null);
+
   if (isLoading) {
     return <DashboardSkeleton />;
   }
@@ -126,6 +141,36 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
     { label: 'Biblioteca', tone: 'gold', value: appData.libraryResources.length },
     { label: 'Alertas', tone: 'coral', value: visibleAlerts.length },
   ];
+
+  async function handleDismissAlert(alertId: string) {
+    setAlertError(null);
+    setDismissingAlertId(alertId);
+
+    try {
+      const response = await fetch('/api/alerts', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: alertId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible resolver la alerta.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setAlertError(error instanceof Error ? error.message : 'No fue posible resolver la alerta.');
+    } finally {
+      setDismissingAlertId(null);
+    }
+  }
 
   return (
     <div className="page-stack dashboard-page dashboard-page--reference">
@@ -245,6 +290,58 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
               label="Visible throughput"
               detail="Promedio de avance del portafolio visible para este rol."
             />
+          </article>
+
+          <article className="surface section-card dashboard-sidecard">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">ALERTAS</span>
+                <h3>Alertas activas</h3>
+              </div>
+              <CircleAlert size={16} />
+            </div>
+
+            {alertError ? <p className="form-error">{alertError}</p> : null}
+
+            <div className="sync-feed">
+              {visibleAlerts.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin alertas abiertas</strong>
+                  <p>La operación visible para este rol no tiene bloqueos ni llamados pendientes.</p>
+                </div>
+              ) : (
+                visibleAlerts.slice(0, 4).map((alert) => {
+                  const course = visibleCourses.find((item) => item.slug === alert.courseSlug);
+                  const canDismiss = canManageAlerts(userRole, alert.owner);
+
+                  return (
+                    <div key={alert.id} className="sync-feed__item sync-feed__item--alert">
+                      <span className={`status-dot status-dot--${alert.tone}`} />
+                      <div>
+                        <strong>{alert.title}</strong>
+                        <p>{alert.detail}</p>
+                        <div className="task-item__meta">
+                          <span>{course?.title ?? 'Curso'}</span>
+                          <span>{alert.owner}</span>
+                        </div>
+                      </div>
+
+                      {canDismiss ? (
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--icon"
+                          disabled={dismissingAlertId === alert.id}
+                          onClick={() => void handleDismissAlert(alert.id)}
+                          aria-label="Resolver alerta"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </article>
         </aside>
       </section>

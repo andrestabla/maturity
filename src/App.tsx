@@ -101,7 +101,18 @@ export default function App() {
     >
       <AmbientCursor />
       <Routes>
-        <Route path="/" element={<DashboardPage role={activeRole} appData={appData} isLoading={isLoading} />} />
+        <Route
+          path="/"
+          element={
+            <DashboardPage
+              role={activeRole}
+              userRole={session.user.role}
+              appData={appData}
+              isLoading={isLoading}
+              refreshAppData={refreshAppData}
+            />
+          }
+        />
         <Route
           path="/courses"
           element={
