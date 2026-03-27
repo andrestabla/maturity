@@ -26,6 +26,14 @@ export type Priority = 'Alta' | 'Media' | 'Baja';
 export type Tone = 'coral' | 'sage' | 'ocean' | 'gold' | 'ink';
 export type StageCheckpointStatus = 'done' | 'active' | 'pending' | 'blocked';
 export type RiskLevel = 'Bajo' | 'Medio' | 'Alto';
+export type StageNoteStatus = 'Pendiente' | 'En curso' | 'Listo';
+export type CourseStageNoteKey =
+  | 'architecture'
+  | 'production'
+  | 'curation'
+  | 'multimedia'
+  | 'lms'
+  | 'qa';
 
 export interface StageDefinition {
   id: string;
@@ -118,6 +126,25 @@ export interface CourseAuditEntry {
     | 'history';
 }
 
+export interface CourseStageNote {
+  owner: Role;
+  heading: string;
+  status: StageNoteStatus;
+  summary: string;
+  evidence: string[];
+  blockers: string[];
+  updatedAt: string;
+}
+
+export interface CourseStageNotes {
+  architecture: CourseStageNote;
+  production: CourseStageNote;
+  curation: CourseStageNote;
+  multimedia: CourseStageNote;
+  lms: CourseStageNote;
+  qa: CourseStageNote;
+}
+
 export interface AssistantCard {
   id: string;
   name: string;
@@ -154,6 +181,7 @@ export interface Course {
   assistants: AssistantCard[];
   metadata: CourseMetadata;
   auditLog: CourseAuditEntry[];
+  stageNotes: CourseStageNotes;
 }
 
 export interface Task {
@@ -275,6 +303,29 @@ export interface TimelineItemMutationInput {
   label: string;
   dueDate: string;
   status: TimelineItem['status'];
+}
+
+export interface TeamMemberMutationInput {
+  name: string;
+  role: Role;
+  focus: string;
+  initials: string;
+}
+
+export interface LearningModuleMutationInput {
+  title: string;
+  learningGoal: string;
+  activities: number;
+  ownResources: number;
+  curatedResources: number;
+  completion: number;
+}
+
+export interface CourseStageNoteMutationInput {
+  status: StageNoteStatus;
+  summary: string;
+  evidence: string[];
+  blockers: string[];
 }
 
 export interface DeliverableMutationInput {

@@ -9,8 +9,12 @@ import type {
   CourseMetadata,
   CourseMetadataMutationInput,
   CourseMutationInput,
+  CourseStageNoteMutationInput,
+  CourseStageNoteKey,
   Deliverable,
   DeliverableMutationInput,
+  LearningModule,
+  LearningModuleMutationInput,
   LibraryResource,
   LibraryResourceMutationInput,
   Observation,
@@ -23,6 +27,8 @@ import type {
   StageCheckpointMutationInput,
   Task,
   TaskMutationInput,
+  TeamMember,
+  TeamMemberMutationInput,
   TimelineItem,
   TimelineItemMutationInput,
   UserMutationInput,
@@ -58,6 +64,7 @@ interface CourseRow {
   assistants: JsonValue;
   metadata: JsonValue;
   auditLog: JsonValue;
+  stageNotes: JsonValue;
 }
 
 interface UserRow {
@@ -122,6 +129,39 @@ function buildStageChecklist(stageId: string): Course['stageChecklist'] {
 function buildCourseRoute(course: Pick<Course, 'faculty' | 'program' | 'title'>) {
   return `Repositorio institucional / ${course.faculty} / ${course.program} / ${course.title}`;
 }
+
+const stageNoteDefinitions: Record<
+  CourseStageNoteKey,
+  {
+    owner: Role;
+    heading: string;
+  }
+> = {
+  architecture: {
+    owner: 'Diseñador instruccional',
+    heading: 'Arquitectura de aprendizaje',
+  },
+  production: {
+    owner: 'Experto',
+    heading: 'Producción académica',
+  },
+  curation: {
+    owner: 'Experto',
+    heading: 'Curación de contenidos',
+  },
+  multimedia: {
+    owner: 'Diseñador multimedia',
+    heading: 'Multimedia',
+  },
+  lms: {
+    owner: 'Gestor LMS',
+    heading: 'Montaje LMS',
+  },
+  qa: {
+    owner: 'Analista QA',
+    heading: 'QA y validación',
+  },
+};
 
 function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
   if (status === 'Bloqueado' || status === 'Riesgo') {
@@ -229,12 +269,128 @@ function buildInitialAuditLog(course: Course): CourseAuditEntry[] {
   ];
 }
 
+function buildDefaultCourseStageNotes(
+  course: Pick<
+    Course,
+    | 'title'
+    | 'stageId'
+    | 'status'
+    | 'updatedAt'
+    | 'modules'
+    | 'deliverables'
+    | 'observations'
+    | 'team'
+    | 'stageChecklist'
+  >,
+): Course['stageNotes'] {
+  return {
+    architecture: {
+      owner: stageNoteDefinitions.architecture.owner,
+      heading: stageNoteDefinitions.architecture.heading,
+      status: course.stageId === 'arquitectura' ? 'En curso' : 'Listo',
+      summary: `La arquitectura del curso ${course.title} organiza módulos, actividades y secuencia de aprendizaje.`,
+      evidence: [
+        `${course.modules.length} módulo(s) estructurado(s)`,
+        `${course.modules.reduce((sum, module) => sum + module.activities, 0)} actividad(es) mapeada(s)`,
+      ],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    production: {
+      owner: stageNoteDefinitions.production.owner,
+      heading: stageNoteDefinitions.production.heading,
+      status:
+        course.stageId === 'produccion'
+          ? 'En curso'
+          : course.stageId === 'lms' || course.stageId === 'calidad'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: 'La producción académica reúne contenidos, instrucciones y entregables listos para revisión.',
+      evidence: course.deliverables.slice(0, 3).map((item) => item.title),
+      blockers: course.deliverables
+        .filter((item) => item.status === 'Bloqueado')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+    curation: {
+      owner: stageNoteDefinitions.curation.owner,
+      heading: stageNoteDefinitions.curation.heading,
+      status: course.stageId === 'arquitectura' || course.stageId === 'produccion' ? 'En curso' : 'Pendiente',
+      summary: 'La curación identifica y justifica fuentes externas, académicas y científicas por unidad.',
+      evidence: [
+        `${course.modules.reduce((sum, module) => sum + module.curatedResources, 0)} recurso(s) curado(s) asociados`,
+      ],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    multimedia: {
+      owner: stageNoteDefinitions.multimedia.owner,
+      heading: stageNoteDefinitions.multimedia.heading,
+      status: course.team.some((member) => member.role === 'Diseñador multimedia') ? 'En curso' : 'Pendiente',
+      summary: 'La capa multimedia gestiona piezas propias, observaciones y versiones listas para publicación.',
+      evidence: course.deliverables
+        .filter((item) => item.owner === 'Diseñador multimedia')
+        .map((item) => item.title),
+      blockers: course.observations
+        .filter((item) => item.role === 'Analista QA' && item.status !== 'Resuelta')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+    lms: {
+      owner: stageNoteDefinitions.lms.owner,
+      heading: stageNoteDefinitions.lms.heading,
+      status:
+        course.stageId === 'lms'
+          ? 'En curso'
+          : course.stageId === 'calidad'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: 'La implementación en LMS conserva evidencias de montaje, incidencias y checklist técnico.',
+      evidence: course.deliverables
+        .filter((item) => item.owner === 'Gestor LMS')
+        .map((item) => item.title),
+      blockers: course.stageChecklist
+        .filter((item) => item.owner === 'Gestor LMS' && item.status === 'blocked')
+        .map((item) => item.label),
+      updatedAt: course.updatedAt,
+    },
+    qa: {
+      owner: stageNoteDefinitions.qa.owner,
+      heading: stageNoteDefinitions.qa.heading,
+      status:
+        course.stageId === 'calidad'
+          ? 'En curso'
+          : course.status === 'Listo'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: 'La validación consolida hallazgos, devoluciones y aprobaciones del curso antes del cierre.',
+      evidence: course.observations.map((item) => item.title),
+      blockers: course.observations
+        .filter((item) => item.status !== 'Resuelta' && item.severity === 'Alta')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+  };
+}
+
 function normalizeCourse(course: Course): Course {
   const normalizedMetadata = {
     ...buildDefaultCourseMetadata(course),
     ...(course.metadata ?? {}),
     route: buildCourseRoute(course),
   };
+  const normalizedStageNotes = Object.entries(buildDefaultCourseStageNotes(course)).reduce(
+    (accumulator, [key, value]) => ({
+      ...accumulator,
+      [key]: {
+        ...value,
+        ...(course.stageNotes?.[key as CourseStageNoteKey] ?? {}),
+        owner: stageNoteDefinitions[key as CourseStageNoteKey].owner,
+        heading: stageNoteDefinitions[key as CourseStageNoteKey].heading,
+      },
+    }),
+    {} as Course['stageNotes'],
+  );
 
   const normalizedAuditLog =
     course.auditLog.length > 0
@@ -251,6 +407,7 @@ function normalizeCourse(course: Course): Course {
     ...course,
     metadata: normalizedMetadata,
     auditLog: normalizedAuditLog,
+    stageNotes: normalizedStageNotes,
   };
 }
 
@@ -330,6 +487,17 @@ function makeCourseRecord(input: CourseMutationInput): Course {
       modules: [],
     }),
     auditLog: [],
+    stageNotes: buildDefaultCourseStageNotes({
+      title: input.title,
+      stageId: input.stageId,
+      status: input.status,
+      updatedAt: getTodayLabel(),
+      modules: [],
+      deliverables: [],
+      observations: [],
+      team: [],
+      stageChecklist: buildStageChecklist(input.stageId),
+    }),
   });
 }
 
@@ -366,6 +534,37 @@ function makeObservationRecord(input: ObservationMutationInput): Observation {
     severity: input.severity,
     status: input.status,
     detail: input.detail,
+  };
+}
+
+function deriveInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((chunk) => chunk[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function makeTeamMemberRecord(input: TeamMemberMutationInput): TeamMember {
+  return {
+    id: crypto.randomUUID(),
+    name: input.name,
+    role: input.role,
+    focus: input.focus,
+    initials: input.initials.trim().toUpperCase() || deriveInitials(input.name),
+  };
+}
+
+function makeLearningModuleRecord(input: LearningModuleMutationInput): LearningModule {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    learningGoal: input.learningGoal,
+    activities: input.activities,
+    ownResources: input.ownResources,
+    curatedResources: input.curatedResources,
+    completion: input.completion,
   };
 }
 
@@ -472,7 +671,8 @@ async function ensureSchema() {
         stage_checklist JSONB NOT NULL,
         assistants JSONB NOT NULL,
         metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-        audit_log JSONB NOT NULL DEFAULT '[]'::jsonb
+        audit_log JSONB NOT NULL DEFAULT '[]'::jsonb,
+        stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb
       )
     `;
 
@@ -484,6 +684,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_courses
       ADD COLUMN IF NOT EXISTS audit_log JSONB NOT NULL DEFAULT '[]'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb
     `;
 
     await sql`
@@ -613,6 +818,7 @@ function serializeCourseRow(row: CourseRow): Course {
     assistants: parseJson<Course['assistants']>(row.assistants),
     metadata: parseJson<Course['metadata']>(row.metadata),
     auditLog: parseJson<Course['auditLog']>(row.auditLog),
+    stageNotes: parseJson<Course['stageNotes']>(row.stageNotes),
   });
 }
 
@@ -644,7 +850,8 @@ async function persistCourse(course: Course) {
       stage_checklist,
       assistants,
       metadata,
-      audit_log
+      audit_log,
+      stage_notes
     )
     VALUES (
       ${course.id},
@@ -670,7 +877,8 @@ async function persistCourse(course: Course) {
       ${JSON.stringify(course.stageChecklist)}::jsonb,
       ${JSON.stringify(course.assistants)}::jsonb,
       ${JSON.stringify(course.metadata)}::jsonb,
-      ${JSON.stringify(course.auditLog)}::jsonb
+      ${JSON.stringify(course.auditLog)}::jsonb,
+      ${JSON.stringify(course.stageNotes)}::jsonb
     )
     ON CONFLICT (id) DO UPDATE
     SET
@@ -696,7 +904,8 @@ async function persistCourse(course: Course) {
       stage_checklist = EXCLUDED.stage_checklist,
       assistants = EXCLUDED.assistants,
       metadata = EXCLUDED.metadata,
-      audit_log = EXCLUDED.audit_log
+      audit_log = EXCLUDED.audit_log,
+      stage_notes = EXCLUDED.stage_notes
   `;
 }
 
@@ -834,7 +1043,8 @@ async function readCourseBySlug(slug: string) {
       stage_checklist AS "stageChecklist",
       assistants,
       metadata,
-      audit_log AS "auditLog"
+      audit_log AS "auditLog",
+      stage_notes AS "stageNotes"
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
@@ -853,6 +1063,32 @@ function mergeCourseMetadata(
     ...metadata,
     route: buildCourseRoute(course),
   };
+}
+
+function mergeCourseStageNote(
+  course: Course,
+  key: CourseStageNoteKey,
+  input: Partial<CourseStageNoteMutationInput>,
+): Course['stageNotes'][CourseStageNoteKey] {
+  const base = buildDefaultCourseStageNotes(course)[key];
+  const current = course.stageNotes[key];
+
+  return {
+    ...base,
+    ...current,
+    ...input,
+    owner: stageNoteDefinitions[key].owner,
+    heading: stageNoteDefinitions[key].heading,
+    updatedAt: getTodayLabel(),
+  };
+}
+
+function findTeamMember(course: Course, memberId: string) {
+  return course.team.find((member) => member.id === memberId) ?? null;
+}
+
+function findLearningModule(course: Course, moduleId: string) {
+  return course.modules.find((module) => module.id === moduleId) ?? null;
 }
 
 function deriveNextMilestoneFromSchedule(schedule: TimelineItem[], fallback: string) {
@@ -1066,7 +1302,8 @@ async function readCourses() {
       stage_checklist AS "stageChecklist",
       assistants,
       metadata,
-      audit_log AS "auditLog"
+      audit_log AS "auditLog",
+      stage_notes AS "stageNotes"
     FROM maturity_courses
     ORDER BY title ASC
   `) as CourseRow[];
@@ -1353,7 +1590,8 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
       stage_checklist AS "stageChecklist",
       assistants,
       metadata,
-      audit_log AS "auditLog"
+      audit_log AS "auditLog",
+      stage_notes AS "stageNotes"
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
@@ -1550,6 +1788,278 @@ export async function deleteTimelineItemRecord(courseSlug: string, timelineItemI
 
   await persistCourse(nextCourse);
   return true;
+}
+
+export async function findTeamMemberById(courseSlug: string, memberId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+  return course ? findTeamMember(course, memberId) : null;
+}
+
+export async function createTeamMemberRecord(courseSlug: string, input: TeamMemberMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const member = makeTeamMemberRecord(input);
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      team: [...course.team, member],
+    },
+    'Responsable agregado',
+    `Se vinculó a ${member.name} como ${member.role} dentro del equipo del curso.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return member;
+}
+
+export async function updateTeamMemberRecord(
+  courseSlug: string,
+  memberId: string,
+  input: Partial<TeamMemberMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedMember: TeamMember | null = null;
+  const nextTeam = course.team.map((member) => {
+    if (member.id !== memberId) {
+      return member;
+    }
+
+    updatedMember = {
+      ...member,
+      ...input,
+      initials:
+        input.initials?.trim().toUpperCase() ??
+        member.initials ??
+        deriveInitials(input.name ?? member.name),
+    };
+
+    return updatedMember;
+  });
+
+  if (!updatedMember) {
+    return null;
+  }
+
+  const finalMember = updatedMember as TeamMember;
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      team: nextTeam,
+    },
+    'Responsable actualizado',
+    `Se actualizó la asignación de ${finalMember.name} dentro del equipo del curso.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return finalMember;
+}
+
+export async function deleteTeamMemberRecord(courseSlug: string, memberId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const deletedMember = findTeamMember(course, memberId);
+  const nextTeam = course.team.filter((member) => member.id !== memberId);
+
+  if (!deletedMember || nextTeam.length === course.team.length) {
+    return false;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      team: nextTeam,
+    },
+    'Responsable retirado',
+    `Se retiró a ${deletedMember.name} del equipo visible del curso.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return true;
+}
+
+export async function findLearningModuleById(courseSlug: string, moduleId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+  return course ? findLearningModule(course, moduleId) : null;
+}
+
+export async function createLearningModuleRecord(
+  courseSlug: string,
+  input: LearningModuleMutationInput,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const module = makeLearningModuleRecord(input);
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      modules: [...course.modules, module],
+      metadata: {
+        ...course.metadata,
+        topics: [...new Set([...course.metadata.topics, module.title])],
+      },
+    },
+    'Módulo agregado',
+    `Se creó el módulo "${module.title}" dentro de la arquitectura del curso.`,
+    'production',
+  );
+
+  await persistCourse(nextCourse);
+  return module;
+}
+
+export async function updateLearningModuleRecord(
+  courseSlug: string,
+  moduleId: string,
+  input: Partial<LearningModuleMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedModule: LearningModule | null = null;
+  const nextModules = course.modules.map((module) => {
+    if (module.id !== moduleId) {
+      return module;
+    }
+
+    updatedModule = {
+      ...module,
+      ...input,
+    };
+
+    return updatedModule;
+  });
+
+  if (!updatedModule) {
+    return null;
+  }
+
+  const finalModule = updatedModule as LearningModule;
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      modules: nextModules,
+      metadata: {
+        ...course.metadata,
+        topics: nextModules.map((module) => module.title),
+      },
+    },
+    'Módulo actualizado',
+    `Se actualizó el módulo "${finalModule.title}" y su avance quedó en ${finalModule.completion}%.`,
+    'production',
+  );
+
+  await persistCourse(nextCourse);
+  return finalModule;
+}
+
+export async function deleteLearningModuleRecord(courseSlug: string, moduleId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const deletedModule = findLearningModule(course, moduleId);
+  const nextModules = course.modules.filter((module) => module.id !== moduleId);
+
+  if (!deletedModule || nextModules.length === course.modules.length) {
+    return false;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      modules: nextModules,
+      metadata: {
+        ...course.metadata,
+        topics: nextModules.map((module) => module.title),
+      },
+    },
+    'Módulo retirado',
+    `Se retiró "${deletedModule.title}" de la arquitectura visible del curso.`,
+    'production',
+  );
+
+  await persistCourse(nextCourse);
+  return true;
+}
+
+export async function updateCourseStageNoteRecord(
+  courseSlug: string,
+  key: CourseStageNoteKey,
+  input: CourseStageNoteMutationInput,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      stageNotes: {
+        ...course.stageNotes,
+        [key]: mergeCourseStageNote(course, key, input),
+      },
+    },
+    `${stageNoteDefinitions[key].heading} actualizada`,
+    `Se actualizó la bitácora de ${stageNoteDefinitions[key].heading.toLowerCase()} con estado ${input.status}.`,
+    key === 'qa' ? 'qa' : key === 'production' ? 'production' : 'resource',
+  );
+
+  await persistCourse(nextCourse);
+  return nextCourse.stageNotes[key];
 }
 
 export async function deleteCourseRecord(slug: string) {

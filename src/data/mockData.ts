@@ -4,6 +4,7 @@ import type {
   Course,
   CourseAuditEntry,
   CourseMetadata,
+  CourseStageNotes,
   LibraryResource,
   Role,
   RoleProfile,
@@ -11,7 +12,7 @@ import type {
   Task,
 } from '../types.js';
 
-type BaseCourse = Omit<Course, 'metadata' | 'auditLog'>;
+type BaseCourse = Omit<Course, 'metadata' | 'auditLog' | 'stageNotes'>;
 
 const metadataOverrides: Partial<Record<string, Partial<CourseMetadata>>> = {
   'pensamiento-sistemico': {
@@ -187,6 +188,97 @@ function makeCourseAuditLog(course: BaseCourse): CourseAuditEntry[] {
       type: 'qa' as const,
     })),
   ];
+}
+
+function makeCourseStageNotes(course: BaseCourse): CourseStageNotes {
+  return {
+    architecture: {
+      owner: 'Diseñador instruccional',
+      heading: 'Arquitectura de aprendizaje',
+      status: course.stageId === 'arquitectura' ? 'En curso' : 'Listo',
+      summary: `La arquitectura del curso ${course.title} organiza módulos, actividades y progresión de aprendizaje sobre ${course.program}.`,
+      evidence: [
+        `${course.modules.length} módulo(s) mapeado(s)`,
+        `${course.modules.reduce((sum, module) => sum + module.activities, 0)} actividad(es) definidas`,
+      ],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    production: {
+      owner: 'Experto',
+      heading: 'Producción académica',
+      status:
+        course.stageId === 'produccion'
+          ? 'En curso'
+          : course.stageId === 'lms' || course.stageId === 'calidad'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: `La producción académica concentra autoría, instrucciones, contenidos y entregables clave del curso.`,
+      evidence: course.deliverables.slice(0, 3).map((item) => item.title),
+      blockers: course.deliverables
+        .filter((item) => item.status === 'Bloqueado')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+    curation: {
+      owner: 'Experto',
+      heading: 'Curación de contenidos',
+      status: course.stageId === 'arquitectura' || course.stageId === 'produccion' ? 'En curso' : 'Pendiente',
+      summary: 'La curación prioriza fuentes externas, referencias vigentes y criterios de pertinencia para cada unidad.',
+      evidence: [
+        `${course.modules.reduce((sum, module) => sum + module.curatedResources, 0)} recurso(s) curado(s) asociados`,
+      ],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    multimedia: {
+      owner: 'Diseñador multimedia',
+      heading: 'Multimedia',
+      status: course.team.some((member) => member.role === 'Diseñador multimedia') ? 'En curso' : 'Pendiente',
+      summary: 'La capa multimedia integra piezas propias, versiones y observaciones para una experiencia consistente en móvil y LMS.',
+      evidence: course.deliverables
+        .filter((item) => item.owner === 'Diseñador multimedia')
+        .map((item) => item.title),
+      blockers: course.observations
+        .filter((item) => item.role === 'Analista QA' && item.status !== 'Resuelta')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+    lms: {
+      owner: 'Gestor LMS',
+      heading: 'Montaje LMS',
+      status:
+        course.stageId === 'lms'
+          ? 'En curso'
+          : course.stageId === 'calidad'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: 'La implementación en LMS conserva evidencias de montaje, incidencias y checklist técnico del curso.',
+      evidence: course.deliverables
+        .filter((item) => item.owner === 'Gestor LMS')
+        .map((item) => item.title),
+      blockers: course.stageChecklist
+        .filter((item) => item.owner === 'Gestor LMS' && item.status === 'blocked')
+        .map((item) => item.label),
+      updatedAt: course.updatedAt,
+    },
+    qa: {
+      owner: 'Analista QA',
+      heading: 'QA y validación',
+      status:
+        course.stageId === 'calidad'
+          ? 'En curso'
+          : course.status === 'Listo'
+            ? 'Listo'
+            : 'Pendiente',
+      summary: 'La validación reúne revisión pedagógica, hallazgos, devoluciones y aprobación final antes del cierre.',
+      evidence: course.observations.map((item) => item.title),
+      blockers: course.observations
+        .filter((item) => item.status !== 'Resuelta' && item.severity === 'Alta')
+        .map((item) => item.title),
+      updatedAt: course.updatedAt,
+    },
+  };
 }
 
 export const roles: Role[] = [
@@ -725,6 +817,7 @@ export const courses: Course[] = courseCatalog.map((course) => ({
   ...course,
   metadata: makeCourseMetadata(course),
   auditLog: makeCourseAuditLog(course),
+  stageNotes: makeCourseStageNotes(course),
 }));
 
 export const tasks: Task[] = [

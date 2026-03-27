@@ -19,15 +19,21 @@ import type {
   AppData,
   Course,
   CourseMetadataMutationInput,
+  CourseStageNoteKey,
+  CourseStageNoteMutationInput,
   CourseMutationInput,
   Deliverable,
   DeliverableMutationInput,
+  LearningModule,
+  LearningModuleMutationInput,
   Observation,
   ObservationMutationInput,
   Role,
   StageCheckpointStatus,
   Task,
   TaskMutationInput,
+  TeamMember,
+  TeamMemberMutationInput,
   TimelineItem,
   TimelineItemMutationInput,
 } from '../types.js';
@@ -38,12 +44,15 @@ import {
   canCreateObservations,
   canCreateTasks,
   canDeleteDeliverables,
+  canEditCourseModules,
+  canEditStageNote,
   canDeleteObservations,
   canDeleteTasks,
   canEditDeliverable,
   canEditObservation,
   canEditTask,
   canManageHandoffs,
+  canManageCourseTeam,
   canManageCourses,
   canOperateStageCheckpoint,
 } from '../utils/permissions.js';
@@ -58,9 +67,11 @@ interface CourseWorkspacePageProps {
 type CourseSection =
   | 'summary'
   | 'general'
+  | 'architecture'
   | 'planning'
   | 'production'
   | 'resources'
+  | 'lms'
   | 'qa'
   | 'history';
 
@@ -261,6 +272,108 @@ function makeTimelineDrafts(schedule: TimelineItem[]) {
   ) as Record<string, TimelineItemMutationInput>;
 }
 
+function makeTeamMemberForm(): TeamMemberMutationInput {
+  return {
+    name: '',
+    role: 'Coordinador',
+    focus: '',
+    initials: '',
+  };
+}
+
+function makeTeamMemberDrafts(team: TeamMember[]) {
+  return Object.fromEntries(
+    team.map((member) => [
+      member.id,
+      {
+        name: member.name,
+        role: member.role,
+        focus: member.focus,
+        initials: member.initials,
+      },
+    ]),
+  ) as Record<string, TeamMemberMutationInput>;
+}
+
+function makeLearningModuleForm(): LearningModuleMutationInput {
+  return {
+    title: '',
+    learningGoal: '',
+    activities: 1,
+    ownResources: 0,
+    curatedResources: 0,
+    completion: 0,
+  };
+}
+
+function makeLearningModuleDrafts(modules: LearningModule[]) {
+  return Object.fromEntries(
+    modules.map((module) => [
+      module.id,
+      {
+        title: module.title,
+        learningGoal: module.learningGoal,
+        activities: module.activities,
+        ownResources: module.ownResources,
+        curatedResources: module.curatedResources,
+        completion: module.completion,
+      },
+    ]),
+  ) as Record<string, LearningModuleMutationInput>;
+}
+
+function makeStageNoteDrafts(course: Course | undefined) {
+  if (!course) {
+    return {
+      architecture: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      production: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      curation: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      multimedia: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      lms: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      qa: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+    } satisfies Record<CourseStageNoteKey, CourseStageNoteMutationInput>;
+  }
+
+  return {
+    architecture: {
+      status: course.stageNotes.architecture.status,
+      summary: course.stageNotes.architecture.summary,
+      evidence: course.stageNotes.architecture.evidence,
+      blockers: course.stageNotes.architecture.blockers,
+    },
+    production: {
+      status: course.stageNotes.production.status,
+      summary: course.stageNotes.production.summary,
+      evidence: course.stageNotes.production.evidence,
+      blockers: course.stageNotes.production.blockers,
+    },
+    curation: {
+      status: course.stageNotes.curation.status,
+      summary: course.stageNotes.curation.summary,
+      evidence: course.stageNotes.curation.evidence,
+      blockers: course.stageNotes.curation.blockers,
+    },
+    multimedia: {
+      status: course.stageNotes.multimedia.status,
+      summary: course.stageNotes.multimedia.summary,
+      evidence: course.stageNotes.multimedia.evidence,
+      blockers: course.stageNotes.multimedia.blockers,
+    },
+    lms: {
+      status: course.stageNotes.lms.status,
+      summary: course.stageNotes.lms.summary,
+      evidence: course.stageNotes.lms.evidence,
+      blockers: course.stageNotes.lms.blockers,
+    },
+    qa: {
+      status: course.stageNotes.qa.status,
+      summary: course.stageNotes.qa.summary,
+      evidence: course.stageNotes.qa.evidence,
+      blockers: course.stageNotes.qa.blockers,
+    },
+  } satisfies Record<CourseStageNoteKey, CourseStageNoteMutationInput>;
+}
+
 function joinLines(values: string[]) {
   return values.join('\n');
 }
@@ -338,6 +451,8 @@ export function CourseWorkspacePage({
 
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
+  const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
+  const [isModuleComposerOpen, setIsModuleComposerOpen] = useState(false);
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
   const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
@@ -345,6 +460,9 @@ export function CourseWorkspacePage({
   const [courseError, setCourseError] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [teamError, setTeamError] = useState<string | null>(null);
+  const [moduleError, setModuleError] = useState<string | null>(null);
+  const [stageNoteError, setStageNoteError] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
   const [observationError, setObservationError] = useState<string | null>(null);
@@ -353,6 +471,9 @@ export function CourseWorkspacePage({
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
+  const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
+  const [isModuleSaving, setIsModuleSaving] = useState<string | null>(null);
+  const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [isTimelineSaving, setIsTimelineSaving] = useState<string | null>(null);
   const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
   const [isObservationSaving, setIsObservationSaving] = useState(false);
@@ -406,10 +527,72 @@ export function CourseWorkspacePage({
         route: '',
       },
       auditLog: [],
+      stageNotes: {
+        architecture: {
+          owner: 'Diseñador instruccional',
+          heading: 'Arquitectura de aprendizaje',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        production: {
+          owner: 'Experto',
+          heading: 'Producción académica',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        curation: {
+          owner: 'Experto',
+          heading: 'Curación de contenidos',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        multimedia: {
+          owner: 'Diseñador multimedia',
+          heading: 'Multimedia',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        lms: {
+          owner: 'Gestor LMS',
+          heading: 'Montaje LMS',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        qa: {
+          owner: 'Analista QA',
+          heading: 'QA y validación',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+      },
     }),
   );
   const [newTimelineForm, setNewTimelineForm] = useState<TimelineItemMutationInput>(() =>
     makeTimelineForm(),
+  );
+  const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
+    makeTeamMemberForm(),
+  );
+  const [newLearningModuleForm, setNewLearningModuleForm] = useState<LearningModuleMutationInput>(
+    () => makeLearningModuleForm(),
   );
   const [newDeliverableForm, setNewDeliverableForm] = useState<DeliverableMutationInput>(() =>
     makeDeliverableForm(defaultDeliverableOwner),
@@ -420,6 +603,15 @@ export function CourseWorkspacePage({
   const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
     makeTaskDrafts(relatedTasks),
   );
+  const [teamDrafts, setTeamDrafts] = useState<Record<string, TeamMemberMutationInput>>(() =>
+    makeTeamMemberDrafts(course?.team ?? []),
+  );
+  const [moduleDrafts, setModuleDrafts] = useState<Record<string, LearningModuleMutationInput>>(() =>
+    makeLearningModuleDrafts(course?.modules ?? []),
+  );
+  const [stageNoteDrafts, setStageNoteDrafts] = useState<
+    Record<CourseStageNoteKey, CourseStageNoteMutationInput>
+  >(() => makeStageNoteDrafts(course));
   const [timelineDrafts, setTimelineDrafts] = useState<Record<string, TimelineItemMutationInput>>(() =>
     makeTimelineDrafts(course?.schedule ?? []),
   );
@@ -457,9 +649,14 @@ export function CourseWorkspacePage({
       }));
       setNewTaskForm(makeTaskForm(currentCourseSlug, currentStageId));
       setNewTimelineForm(makeTimelineForm());
+      setNewTeamMemberForm(makeTeamMemberForm());
+      setNewLearningModuleForm(makeLearningModuleForm());
       setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
       setNewObservationForm(makeObservationForm(defaultObservationRole));
       setTaskDrafts({});
+      setTeamDrafts({});
+      setModuleDrafts({});
+      setStageNoteDrafts(makeStageNoteDrafts(undefined));
       setTimelineDrafts({});
       setDeliverableDrafts({});
       setObservationDrafts({});
@@ -471,9 +668,14 @@ export function CourseWorkspacePage({
     setMetadataForm(makeMetadataForm(course));
     setNewTaskForm(makeTaskForm(course.slug, course.stageId));
     setNewTimelineForm(makeTimelineForm());
+    setNewTeamMemberForm(makeTeamMemberForm());
+    setNewLearningModuleForm(makeLearningModuleForm());
     setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
     setNewObservationForm(makeObservationForm(defaultObservationRole));
     setTaskDrafts(makeTaskDrafts(relatedTasks));
+    setTeamDrafts(makeTeamMemberDrafts(course.team));
+    setModuleDrafts(makeLearningModuleDrafts(course.modules));
+    setStageNoteDrafts(makeStageNoteDrafts(course));
     setTimelineDrafts(makeTimelineDrafts(course.schedule));
     setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
     setObservationDrafts(makeObservationDrafts(course.observations));
@@ -529,6 +731,15 @@ export function CourseWorkspacePage({
   const deliverablesOpenCount = currentCourse.deliverables.filter(
     (deliverable) => deliverable.status !== 'Listo',
   ).length;
+  const totalActivities = currentCourse.modules.reduce((sum, module) => sum + module.activities, 0);
+  const totalOwnResources = currentCourse.modules.reduce(
+    (sum, module) => sum + module.ownResources,
+    0,
+  );
+  const totalCuratedResources = currentCourse.modules.reduce(
+    (sum, module) => sum + module.curatedResources,
+    0,
+  );
   const pendingTasksCount = relatedTasks.filter((task) => task.status !== 'Lista').length;
   const pendingObservationsCount = currentCourse.observations.filter(
     (observation) => observation.status !== 'Resuelta',
@@ -883,6 +1094,316 @@ export function CourseWorkspacePage({
     }));
   }
 
+  async function handleTeamMemberCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTeamError(null);
+    setIsTeamSaving('new');
+
+    try {
+      const response = await fetch('/api/team-members', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newTeamMemberForm,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible agregar el responsable.');
+      }
+
+      refreshAppData();
+      setNewTeamMemberForm(makeTeamMemberForm());
+      setIsTeamComposerOpen(false);
+    } catch (error) {
+      setTeamError(
+        error instanceof Error ? error.message : 'No fue posible agregar el responsable.',
+      );
+    } finally {
+      setIsTeamSaving(null);
+    }
+  }
+
+  async function handleTeamMemberSave(memberId: string) {
+    const draft = teamDrafts[memberId];
+
+    if (!draft) {
+      return;
+    }
+
+    setTeamError(null);
+    setIsTeamSaving(memberId);
+
+    try {
+      const response = await fetch('/api/team-members', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: memberId,
+          ...draft,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible guardar el responsable.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setTeamError(
+        error instanceof Error ? error.message : 'No fue posible guardar el responsable.',
+      );
+    } finally {
+      setIsTeamSaving(null);
+    }
+  }
+
+  async function handleTeamMemberDelete(memberId: string) {
+    const confirmed = window.confirm(
+      'Este responsable será retirado del equipo visible del curso. ¿Quieres continuar?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setTeamError(null);
+    setIsTeamSaving(memberId);
+
+    try {
+      const response = await fetch('/api/team-members', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: memberId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible retirar el responsable.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setTeamError(
+        error instanceof Error ? error.message : 'No fue posible retirar el responsable.',
+      );
+    } finally {
+      setIsTeamSaving(null);
+    }
+  }
+
+  function updateTeamDraft<Key extends keyof TeamMemberMutationInput>(
+    memberId: string,
+    key: Key,
+    value: TeamMemberMutationInput[Key],
+  ) {
+    setTeamDrafts((current) => ({
+      ...current,
+      [memberId]: {
+        ...current[memberId],
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleModuleCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setModuleError(null);
+    setIsModuleSaving('new');
+
+    try {
+      const response = await fetch('/api/learning-modules', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newLearningModuleForm,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible crear el módulo.');
+      }
+
+      refreshAppData();
+      setNewLearningModuleForm(makeLearningModuleForm());
+      setIsModuleComposerOpen(false);
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'No fue posible crear el módulo.');
+    } finally {
+      setIsModuleSaving(null);
+    }
+  }
+
+  async function handleModuleSave(moduleId: string) {
+    const draft = moduleDrafts[moduleId];
+
+    if (!draft) {
+      return;
+    }
+
+    setModuleError(null);
+    setIsModuleSaving(moduleId);
+
+    try {
+      const response = await fetch('/api/learning-modules', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: moduleId,
+          ...draft,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible guardar el módulo.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'No fue posible guardar el módulo.');
+    } finally {
+      setIsModuleSaving(null);
+    }
+  }
+
+  async function handleModuleDelete(moduleId: string) {
+    const confirmed = window.confirm(
+      'El módulo será retirado de la arquitectura del curso. ¿Quieres continuar?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setModuleError(null);
+    setIsModuleSaving(moduleId);
+
+    try {
+      const response = await fetch('/api/learning-modules', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: moduleId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible eliminar el módulo.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setModuleError(error instanceof Error ? error.message : 'No fue posible eliminar el módulo.');
+    } finally {
+      setIsModuleSaving(null);
+    }
+  }
+
+  function updateModuleDraft<Key extends keyof LearningModuleMutationInput>(
+    moduleId: string,
+    key: Key,
+    value: LearningModuleMutationInput[Key],
+  ) {
+    setModuleDrafts((current) => ({
+      ...current,
+      [moduleId]: {
+        ...current[moduleId],
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleStageNoteSave(key: CourseStageNoteKey) {
+    const draft = stageNoteDrafts[key];
+
+    if (!draft) {
+      return;
+    }
+
+    setStageNoteError(null);
+    setIsStageNoteSaving(key);
+
+    try {
+      const response = await fetch('/api/stage-notes', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          key,
+          ...draft,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible guardar la bitácora de etapa.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setStageNoteError(
+        error instanceof Error ? error.message : 'No fue posible guardar la bitácora de etapa.',
+      );
+    } finally {
+      setIsStageNoteSaving(null);
+    }
+  }
+
+  function updateStageNoteDraft<Key extends keyof CourseStageNoteMutationInput>(
+    noteKey: CourseStageNoteKey,
+    key: Key,
+    value: CourseStageNoteMutationInput[Key],
+  ) {
+    setStageNoteDrafts((current) => ({
+      ...current,
+      [noteKey]: {
+        ...current[noteKey],
+        [key]: value,
+      },
+    }));
+  }
+
   async function handleCheckpointSave(checkpointIndex: number) {
     const status = checkpointDrafts[checkpointIndex];
 
@@ -1186,6 +1707,161 @@ export function CourseWorkspacePage({
     }));
   }
 
+  function renderStageNoteEditor(
+    noteKey: CourseStageNoteKey,
+    eyebrow: string,
+    title: string,
+    description: string,
+  ) {
+    const note = currentCourse.stageNotes[noteKey];
+    const draft = stageNoteDrafts[noteKey];
+    const canEdit = canEditStageNote(userRole, note.owner);
+
+    return (
+      <article className="surface section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{eyebrow}</span>
+            <h3>{title}</h3>
+          </div>
+          <span className={badgeClass(draft.status)}>{draft.status}</span>
+        </div>
+
+        <div className="list-stack">
+          <div className="list-item">
+            <div>
+              <strong>Responsable de etapa</strong>
+              <p>{note.owner}</p>
+            </div>
+            <div className="list-item__meta">
+              <span>Último ajuste {formatDate(note.updatedAt)}</span>
+              <span>{note.heading}</span>
+            </div>
+          </div>
+
+          <div className="list-item">
+            <div>
+              <strong>Lectura operativa</strong>
+              <p>{description}</p>
+            </div>
+            <div className="list-item__meta">
+              <span>{draft.evidence.length} evidencias</span>
+              <span>{draft.blockers.length} bloqueos</span>
+            </div>
+          </div>
+        </div>
+
+        {canEdit ? (
+          <div className="editor-card editor-card--task">
+            <div className="form-grid">
+              <label className="field">
+                <span>Estado</span>
+                <div className="field__control">
+                  <select
+                    value={draft.status}
+                    onChange={(event) =>
+                      updateStageNoteDraft(
+                        noteKey,
+                        'status',
+                        event.target.value as CourseStageNoteMutationInput['status'],
+                      )
+                    }
+                  >
+                    {['Pendiente', 'En curso', 'Listo'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Resumen</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={4}
+                    value={draft.summary}
+                    onChange={(event) =>
+                      updateStageNoteDraft(noteKey, 'summary', event.target.value)
+                    }
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Evidencias</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={4}
+                    value={joinLines(draft.evidence)}
+                    onChange={(event) =>
+                      updateStageNoteDraft(noteKey, 'evidence', splitLines(event.target.value))
+                    }
+                    placeholder="Una evidencia por línea"
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Bloqueos o dependencias</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={joinLines(draft.blockers)}
+                    onChange={(event) =>
+                      updateStageNoteDraft(noteKey, 'blockers', splitLines(event.target.value))
+                    }
+                    placeholder="Un bloqueo por línea"
+                  />
+                </div>
+              </label>
+            </div>
+
+            {stageNoteError && isStageNoteSaving === null ? (
+              <p className="form-error">{stageNoteError}</p>
+            ) : null}
+
+            <div className="action-row">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isStageNoteSaving === noteKey}
+                onClick={() => void handleStageNoteSave(noteKey)}
+              >
+                <Save size={16} />
+                <span>{isStageNoteSaving === noteKey ? 'Guardando…' : 'Guardar bitácora'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="list-stack">
+            <div className="list-item">
+              <div>
+                <strong>Resumen vigente</strong>
+                <p>{draft.summary}</p>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Evidencias</strong>
+                <p>{draft.evidence.join(' · ') || 'Sin evidencias registradas todavía.'}</p>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Bloqueos</strong>
+                <p>{draft.blockers.join(' · ') || 'Sin bloqueos activos.'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </article>
+    );
+  }
+
   return (
     <div className="page-stack workspace-page">
       <section className="surface workspace-hero">
@@ -1261,9 +1937,11 @@ export function CourseWorkspacePage({
           {[
             ['summary', 'Resumen'],
             ['general', 'Información general'],
+            ['architecture', 'Arquitectura'],
             ['planning', 'Planeación'],
             ['production', 'Producción'],
             ['resources', 'Recursos'],
+            ['lms', 'LMS'],
             ['qa', 'QA y validación'],
             ['history', 'Historial'],
           ].map(([value, label]) => (
@@ -1938,6 +2616,51 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
+      {activeSection === 'architecture' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Arquitectura</span>
+              <h3>Módulos, actividades y diseño de experiencia</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.modules.length}</strong>
+                <span>módulos activos</span>
+              </div>
+              <p>La estructura didáctica del curso ya vive dentro del expediente como arquitectura editable.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{totalActivities}</strong>
+                <span>actividades mapeadas</span>
+              </div>
+              <p>Cada módulo conserva carga, objetivo de aprendizaje y trazabilidad de avance.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{totalOwnResources}</strong>
+                <span>recursos propios</span>
+              </div>
+              <p>La arquitectura conecta piezas propias con la producción y la biblioteca del curso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{totalCuratedResources}</strong>
+                <span>recursos curados</span>
+              </div>
+              <p>La lectura de arquitectura ya expone el balance entre autoría y curación externa.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {(activeSection === 'summary' || activeSection === 'qa' || activeSection === 'history') ? (
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
@@ -2172,6 +2895,56 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
+      {activeSection === 'lms' ? (
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Montaje LMS</span>
+              <h3>Implementación técnica y checklist operativo</h3>
+            </div>
+          </div>
+
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.stageNotes.lms.status}</strong>
+                <span>estado LMS</span>
+              </div>
+              <p>El curso ya conserva una lectura operativa específica para montaje y ajustes de plataforma.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>
+                  {
+                    currentCourse.stageChecklist.filter((checkpoint) => checkpoint.owner === 'Gestor LMS')
+                      .length
+                  }
+                </strong>
+                <span>checkpoints LMS</span>
+              </div>
+              <p>Los puntos de control técnicos quedan enlazados al flujo y al expediente del curso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.stageNotes.lms.blockers.length}</strong>
+                <span>bloqueos técnicos</span>
+              </div>
+              <p>La bitácora de LMS ya expone incidencias y dependencias antes del cierre del curso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.stageNotes.lms.evidence.length}</strong>
+                <span>evidencias</span>
+              </div>
+              <p>El montaje conserva soporte documental y trazabilidad dentro de la misma ruta del curso.</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {activeSection === 'production' ? (
         <section className="surface section-card section-card--compact">
           <div className="section-heading">
@@ -2309,7 +3082,7 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
-      {['planning', 'production', 'resources', 'qa'].includes(activeSection) ? (
+      {['architecture', 'planning', 'production', 'resources', 'lms', 'qa'].includes(activeSection) ? (
       <section className="workspace-grid">
         {activeSection === 'production' ? (
         <article className="surface section-card">
@@ -2600,6 +3373,15 @@ export function CourseWorkspacePage({
         </article>
         ) : null}
 
+        {activeSection === 'qa'
+          ? renderStageNoteEditor(
+              'qa',
+              'QA',
+              'Revisión, hallazgos y aprobación',
+              'La bitácora de QA concentra control de calidad, devoluciones y criterio de cierre.',
+            )
+          : null}
+
         {activeSection === 'qa' ? (
         <article className="surface section-card">
           <div className="section-heading">
@@ -2845,37 +3627,343 @@ export function CourseWorkspacePage({
         </article>
         ) : null}
 
-        {activeSection === 'production' ? (
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Módulos</span>
-              <h3>Mapa de experiencia</h3>
-            </div>
-            <Layers3 size={18} />
-          </div>
+        {activeSection === 'architecture' ? (
+        <>
+          {renderStageNoteEditor(
+            'architecture',
+            'Arquitectura',
+            'Lectura de diseño instruccional',
+            'Aquí vive la intención de diseño del curso: módulos, progresión, actividades y criterio pedagógico.',
+          )}
 
-          <div className="module-grid">
-            {course.modules.map((module) => (
-              <div key={module.id} className="module-card">
-                <div className="module-card__top">
-                  <strong>{module.title}</strong>
-                  <span>{module.completion}%</span>
-                </div>
-                <p>{module.learningGoal}</p>
-                <div className="module-card__meta">
-                  <span>{module.activities} actividades</span>
-                  <span>{module.ownResources} propios</span>
-                  <span>{module.curatedResources} curados</span>
-                </div>
-                <div className="progress-bar">
-                  <span style={{ width: `${module.completion}%` }} />
-                </div>
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Módulos</span>
+                <h3>Mapa de experiencia</h3>
               </div>
-            ))}
-          </div>
-        </article>
+              <Layers3 size={18} />
+            </div>
+
+            {canEditCourseModules(userRole) ? (
+              <div className="toolbar-header">
+                <button
+                  type="button"
+                  className={isModuleComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsModuleComposerOpen((current) => !current)}
+                >
+                  <Plus size={16} />
+                  <span>{isModuleComposerOpen ? 'Cerrar formulario' : 'Nuevo módulo'}</span>
+                </button>
+              </div>
+            ) : null}
+
+            {isModuleComposerOpen ? (
+              <form className="editor-card editor-card--task" onSubmit={handleModuleCreate}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Título</span>
+                    <div className="field__control">
+                      <input
+                        value={newLearningModuleForm.title}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Avance</span>
+                    <div className="field__control">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={newLearningModuleForm.completion}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            completion: Number.parseInt(event.target.value, 10) || 0,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Objetivo de aprendizaje</span>
+                    <div className="field__control field__control--textarea">
+                      <textarea
+                        rows={3}
+                        value={newLearningModuleForm.learningGoal}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            learningGoal: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Actividades</span>
+                    <div className="field__control">
+                      <input
+                        type="number"
+                        min={0}
+                        value={newLearningModuleForm.activities}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            activities: Number.parseInt(event.target.value, 10) || 0,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Recursos propios</span>
+                    <div className="field__control">
+                      <input
+                        type="number"
+                        min={0}
+                        value={newLearningModuleForm.ownResources}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            ownResources: Number.parseInt(event.target.value, 10) || 0,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Recursos curados</span>
+                    <div className="field__control">
+                      <input
+                        type="number"
+                        min={0}
+                        value={newLearningModuleForm.curatedResources}
+                        onChange={(event) =>
+                          setNewLearningModuleForm((current) => ({
+                            ...current,
+                            curatedResources: Number.parseInt(event.target.value, 10) || 0,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isModuleSaving === 'new'}>
+                    <span>{isModuleSaving === 'new' ? 'Creando…' : 'Crear módulo'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {moduleError ? <p className="form-error">{moduleError}</p> : null}
+
+            <div className="list-stack">
+              {currentCourse.modules.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin módulos registrados</strong>
+                  <p>La arquitectura del curso todavía no tiene unidades o módulos visibles.</p>
+                </div>
+              ) : (
+                currentCourse.modules.map((module) => {
+                  const draft = moduleDrafts[module.id];
+
+                  if (!draft) {
+                    return null;
+                  }
+
+                  if (!canEditCourseModules(userRole)) {
+                    return (
+                      <div key={module.id} className="module-card">
+                        <div className="module-card__top">
+                          <strong>{module.title}</strong>
+                          <span>{module.completion}%</span>
+                        </div>
+                        <p>{module.learningGoal}</p>
+                        <div className="module-card__meta">
+                          <span>{module.activities} actividades</span>
+                          <span>{module.ownResources} propios</span>
+                          <span>{module.curatedResources} curados</span>
+                        </div>
+                        <div className="progress-bar">
+                          <span style={{ width: `${module.completion}%` }} />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={module.id} className="task-editor">
+                      <div>
+                        <div className="task-editor__header">
+                          <span className="badge badge--outline">{draft.completion}%</span>
+                          <strong>{module.title}</strong>
+                        </div>
+
+                        <div className="form-grid">
+                          <label className="field">
+                            <span>Título</span>
+                            <div className="field__control">
+                              <input
+                                value={draft.title}
+                                onChange={(event) =>
+                                  updateModuleDraft(module.id, 'title', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Avance</span>
+                            <div className="field__control">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={draft.completion}
+                                onChange={(event) =>
+                                  updateModuleDraft(
+                                    module.id,
+                                    'completion',
+                                    Number.parseInt(event.target.value, 10) || 0,
+                                  )
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field field--full">
+                            <span>Objetivo de aprendizaje</span>
+                            <div className="field__control field__control--textarea">
+                              <textarea
+                                rows={3}
+                                value={draft.learningGoal}
+                                onChange={(event) =>
+                                  updateModuleDraft(module.id, 'learningGoal', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Actividades</span>
+                            <div className="field__control">
+                              <input
+                                type="number"
+                                min={0}
+                                value={draft.activities}
+                                onChange={(event) =>
+                                  updateModuleDraft(
+                                    module.id,
+                                    'activities',
+                                    Number.parseInt(event.target.value, 10) || 0,
+                                  )
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Propios</span>
+                            <div className="field__control">
+                              <input
+                                type="number"
+                                min={0}
+                                value={draft.ownResources}
+                                onChange={(event) =>
+                                  updateModuleDraft(
+                                    module.id,
+                                    'ownResources',
+                                    Number.parseInt(event.target.value, 10) || 0,
+                                  )
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Curados</span>
+                            <div className="field__control">
+                              <input
+                                type="number"
+                                min={0}
+                                value={draft.curatedResources}
+                                onChange={(event) =>
+                                  updateModuleDraft(
+                                    module.id,
+                                    'curatedResources',
+                                    Number.parseInt(event.target.value, 10) || 0,
+                                  )
+                                }
+                              />
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="task-editor__sidebar">
+                        <div className="task-item__meta">
+                          <span>{draft.activities} actividades</span>
+                          <span>{draft.ownResources + draft.curatedResources} recursos</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isModuleSaving === module.id}
+                          onClick={() => void handleModuleSave(module.id)}
+                        >
+                          <Save size={16} />
+                          <span>{isModuleSaving === module.id ? 'Guardando…' : 'Guardar'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          disabled={isModuleSaving === module.id}
+                          onClick={() => void handleModuleDelete(module.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </article>
+        </>
         ) : null}
+
+        {activeSection === 'production'
+          ? renderStageNoteEditor(
+              'production',
+              'Producción',
+              'Autoría, entregables y desarrollo académico',
+              'Esta bitácora concentra el estado de autoría y producción académica del curso.',
+            )
+          : null}
 
         {activeSection === 'qa' ? (
         <article className="surface section-card">
@@ -3189,17 +4277,224 @@ export function CourseWorkspacePage({
             <UsersRound size={18} />
           </div>
 
-          <div className="team-list">
-            {course.team.map((member) => (
-              <div key={member.id} className="team-list__item">
-                <span className="avatar-pill">{member.initials}</span>
-                <div>
-                  <strong>{member.name}</strong>
-                  <p>{member.role}</p>
-                </div>
-                <span>{member.focus}</span>
+          {canManageCourseTeam(userRole) ? (
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={isTeamComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsTeamComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isTeamComposerOpen ? 'Cerrar formulario' : 'Agregar responsable'}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {isTeamComposerOpen ? (
+            <form className="editor-card editor-card--task" onSubmit={handleTeamMemberCreate}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Nombre</span>
+                  <div className="field__control">
+                    <input
+                      value={newTeamMemberForm.name}
+                      onChange={(event) =>
+                        setNewTeamMemberForm((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Rol</span>
+                  <div className="field__control">
+                    <select
+                      value={newTeamMemberForm.role}
+                      onChange={(event) =>
+                        setNewTeamMemberForm((current) => ({
+                          ...current,
+                          role: event.target.value as Role,
+                        }))
+                      }
+                    >
+                      {appData.roles.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Iniciales</span>
+                  <div className="field__control">
+                    <input
+                      value={newTeamMemberForm.initials}
+                      onChange={(event) =>
+                        setNewTeamMemberForm((current) => ({
+                          ...current,
+                          initials: event.target.value,
+                        }))
+                      }
+                      placeholder="Ej. AT"
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Foco de trabajo</span>
+                  <div className="field__control">
+                    <input
+                      value={newTeamMemberForm.focus}
+                      onChange={(event) =>
+                        setNewTeamMemberForm((current) => ({
+                          ...current,
+                          focus: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
               </div>
-            ))}
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isTeamSaving === 'new'}>
+                  <span>{isTeamSaving === 'new' ? 'Agregando…' : 'Agregar responsable'}</span>
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {teamError ? <p className="form-error">{teamError}</p> : null}
+
+          <div className="list-stack">
+            {course.team.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin responsables asignados</strong>
+                <p>La planeación del curso todavía no tiene equipo visible.</p>
+              </div>
+            ) : (
+              course.team.map((member) => {
+                const draft = teamDrafts[member.id];
+
+                if (!draft) {
+                  return null;
+                }
+
+                if (!canManageCourseTeam(userRole)) {
+                  return (
+                    <div key={member.id} className="team-list__item">
+                      <span className="avatar-pill">{member.initials}</span>
+                      <div>
+                        <strong>{member.name}</strong>
+                        <p>{member.role}</p>
+                      </div>
+                      <span>{member.focus}</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={member.id} className="task-editor">
+                    <div>
+                      <div className="task-editor__header">
+                        <span className="avatar-pill">{draft.initials || member.initials}</span>
+                        <strong>{member.name}</strong>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Nombre</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateTeamDraft(member.id, 'name', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Rol</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.role}
+                              onChange={(event) =>
+                                updateTeamDraft(member.id, 'role', event.target.value as Role)
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Iniciales</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.initials}
+                              onChange={(event) =>
+                                updateTeamDraft(member.id, 'initials', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Foco</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.focus}
+                              onChange={(event) =>
+                                updateTeamDraft(member.id, 'focus', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      <div className="task-item__meta">
+                        <span>{draft.role}</span>
+                        <span>{draft.focus}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isTeamSaving === member.id}
+                        onClick={() => void handleTeamMemberSave(member.id)}
+                      >
+                        <Save size={16} />
+                        <span>{isTeamSaving === member.id ? 'Guardando…' : 'Guardar'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        disabled={isTeamSaving === member.id}
+                        onClick={() => void handleTeamMemberDelete(member.id)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </article>
         ) : null}
@@ -3248,24 +4543,81 @@ export function CourseWorkspacePage({
         ) : null}
 
         {activeSection === 'resources' ? (
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">IA especializada</span>
-              <h3>Asistentes sugeridos</h3>
-            </div>
-            <Bot size={18} />
-          </div>
+        <>
+          {renderStageNoteEditor(
+            'curation',
+            'Curación',
+            'Fuentes y referentes',
+            'La curación documenta qué fuentes externas entran al curso y por qué.',
+          )}
 
-          <div className="assistant-grid">
-            {course.assistants.map((assistant) => (
-              <div key={assistant.id} className={`assistant-card assistant-card--${assistant.tone}`}>
-                <strong>{assistant.name}</strong>
-                <p>{assistant.mission}</p>
+          {renderStageNoteEditor(
+            'multimedia',
+            'Multimedia',
+            'Piezas, versiones y observaciones',
+            'La capa multimedia conserva recursos propios, observaciones y avances para móvil y LMS.',
+          )}
+
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">IA especializada</span>
+                <h3>Asistentes sugeridos</h3>
               </div>
-            ))}
-          </div>
-        </article>
+              <Bot size={18} />
+            </div>
+
+            <div className="assistant-grid">
+              {course.assistants.map((assistant) => (
+                <div key={assistant.id} className={`assistant-card assistant-card--${assistant.tone}`}>
+                  <strong>{assistant.name}</strong>
+                  <p>{assistant.mission}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </>
+        ) : null}
+
+        {activeSection === 'lms' ? (
+        <>
+          {renderStageNoteEditor(
+            'lms',
+            'LMS',
+            'Montaje e implementación',
+            'Esta bitácora conserva incidencias, evidencias de implementación y checklist del entorno LMS.',
+          )}
+
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Checklist técnico</span>
+                <h3>Puntos de control LMS</h3>
+              </div>
+              <Flag size={18} />
+            </div>
+
+            <div className="list-stack">
+              {currentCourse.stageChecklist
+                .filter((checkpoint) => checkpoint.owner === 'Gestor LMS')
+                .map((checkpoint) => (
+                  <div key={checkpoint.id} className="list-item">
+                    <div>
+                      <span className={checkpointBadgeClass(checkpoint.status)}>
+                        {checkpointStatusLabel(checkpoint.status)}
+                      </span>
+                      <strong>{checkpoint.label}</strong>
+                      <p>El punto técnico permanece asociado al flujo general del curso.</p>
+                    </div>
+                    <div className="list-item__meta">
+                      <span>{checkpoint.owner}</span>
+                      <span>{stage?.name ?? currentCourse.stageId}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </article>
+        </>
         ) : null}
       </section>
       ) : null}

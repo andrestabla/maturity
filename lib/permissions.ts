@@ -12,6 +12,23 @@ export function canCreateTasks(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
 }
 
+export function canManageCourseTeam(role: Role) {
+  return role === 'Administrador' || role === 'Coordinador';
+}
+
+export function canEditCourseModules(role: Role) {
+  return (
+    role === 'Administrador' ||
+    role === 'Coordinador' ||
+    role === 'Experto' ||
+    role === 'Diseñador instruccional'
+  );
+}
+
+export function canEditStageNote(role: Role, ownerRole: Role) {
+  return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
+}
+
 export function canDeleteTasks(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
 }
