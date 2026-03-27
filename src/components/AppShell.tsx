@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import {
+  BellDot,
   CalendarClock,
+  ChevronDown,
   FolderKanban,
   LayoutDashboard,
   LibraryBig,
   LogOut,
-  MoveRight,
+  Menu,
   ShieldCheck,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
@@ -51,30 +53,33 @@ export function AppShell({
 
   return (
     <div className="app-shell">
+      <div className="control-grid" aria-hidden />
       <div className="ambient-orb ambient-orb--left" aria-hidden />
       <div className="ambient-orb ambient-orb--right" aria-hidden />
 
-      <aside className="sidebar">
-        <NavLink to="/" className="brand-card">
+      <header className="control-header">
+        <NavLink to="/" className="brand-card brand-card--inline">
           <div className="brand-mark">M</div>
           <div>
-            <p className="eyebrow">Maturity 360</p>
-            <h1>Command center para producción académica.</h1>
+            <p className="eyebrow">Maturity</p>
+            <h1>Maturity</h1>
           </div>
         </NavLink>
+        <span className="control-header__label">CONTROL CENTER</span>
+      </header>
 
-        <div className="sidebar-panel surface">
-          <p className="sidebar-copy">
-            Supervisa cursos, cuellos de botella y decisiones de calidad desde una sola capa operativa.
-          </p>
-
+      <div className="control-layout">
+        <aside className="sidebar sidebar--rail surface">
+          <div className="rail-toggle" aria-hidden>
+            <Menu size={18} />
+          </div>
           <nav className="sidebar-nav" aria-label="Navegación principal">
             {navigation.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  isActive ? 'nav-link nav-link--active' : 'nav-link'
+                isActive ? 'nav-link nav-link--active' : 'nav-link'
                 }
               >
                 <Icon size={18} />
@@ -82,87 +87,68 @@ export function AppShell({
               </NavLink>
             ))}
           </nav>
+        </aside>
 
-          <div className="sidebar-note">
-            <p className="eyebrow">Signal Layer</p>
-            <strong>Velocidad operativa con trazabilidad.</strong>
-            <p>
-              Cada módulo conserva contexto, responsables y estado en tiempo real para evitar fricción entre etapas.
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-panel">
-        <header className="topbar">
-          <div className="topbar-frame surface">
+        <main className="main-panel">
+          <header className="topbar surface">
             <div className="topbar-copy">
-              <span className="topbar-kicker">Maturity OS / Academic Production</span>
-              <h2>Opera portafolio, calidad y ejecución desde una misma capa de control.</h2>
+              <span className="topbar-kicker">LIVE OPERATING LAYER</span>
               <p>
-                Una interfaz más nítida y tecnológica para coordinar responsables, hitos, alertas y avance real sin perder claridad.
+                Portafolio, tareas, biblioteca y gobierno sincronizados en una misma capa.
               </p>
-              <div className="topbar-signal-strip">
-                <span>{`role:${role.toLowerCase()}`}</span>
-                <span>{dataSource === 'neon' ? 'sync:live' : 'sync:demo'}</span>
-                <span>{isLoading ? 'state:refreshing' : 'state:stable'}</span>
-              </div>
             </div>
 
-            <aside className="topbar-float surface-muted">
-              <div className="topbar-float__avatar">{userInitials}</div>
-              <span className="eyebrow">Nodo activo</span>
-              <strong>{user.name}</strong>
-              <p>{user.role}</p>
-              <div className="topbar-float__meta">
-                <span>{isLoading ? 'Refreshing live data' : dataSource === 'neon' ? 'Neon link established' : 'Demo sandbox active'}</span>
+            <div className="topbar-actions">
+              <div className="topbar-icon" aria-hidden>
+                <BellDot size={16} />
+              </div>
+
+              <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
+                <span className="status-chip__dot" />
+                <span>{isLoading ? 'SYNCING' : dataSource === 'neon' ? 'LIVE SYNC' : 'DEMO MODE'}</span>
+              </div>
+
+              <div className="date-chip">
+                <CalendarClock size={16} />
                 <span>{formatPageDate()}</span>
               </div>
-            </aside>
-          </div>
 
-          <div className="topbar-actions">
-            <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
-              <span className="status-chip__dot" />
-              <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Datos en vivo' : 'Modo demo'}</span>
+              {availableRoles.length > 1 ? (
+                <label className="role-switch">
+                  <span>VIEW</span>
+                  <select
+                    aria-label="Seleccionar rol"
+                    value={role}
+                    onChange={(event) => onRoleChange(event.target.value as Role)}
+                  >
+                    {availableRoles.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <div className="user-chip">
+                <div className="topbar-float__avatar">{userInitials}</div>
+                <div>
+                  <strong>{user.name}</strong>
+                  <span>{user.role}</span>
+                </div>
+                <ChevronDown size={14} />
+              </div>
+
+              <button type="button" className="ghost-button" onClick={() => void onLogout()}>
+                <LogOut size={16} />
+                <span>Salir</span>
+              </button>
             </div>
+          </header>
 
-            <div className="date-chip">
-              <CalendarClock size={16} />
-              <span>{formatPageDate()}</span>
-            </div>
-
-            {availableRoles.length > 1 ? (
-              <label className="role-switch">
-                <span>Vista</span>
-                <select
-                  aria-label="Seleccionar rol"
-                  value={role}
-                  onChange={(event) => onRoleChange(event.target.value as Role)}
-                >
-                  {availableRoles.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-
-            <NavLink to="/courses" className="cta-button">
-              <span>Ir al portafolio</span>
-              <MoveRight size={16} />
-            </NavLink>
-
-            <button type="button" className="ghost-button" onClick={() => void onLogout()}>
-              <LogOut size={16} />
-              <span>Cerrar sesión</span>
-            </button>
-          </div>
-        </header>
-
-        <div className="content-stage">{children}</div>
-      </main>
+          <div className="content-stage">{children}</div>
+        </main>
+      </div>
 
       <nav className="mobile-nav" aria-label="Navegación móvil">
         {navigation.map(({ to, label, icon: Icon }) => (
