@@ -12,6 +12,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  CircleUserRound,
   Command,
   FolderKanban,
   LayoutDashboard,
@@ -64,6 +65,7 @@ const navigation = [
   { to: '/', label: 'Pulse', icon: LayoutDashboard },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
+  { to: '/profile', label: 'Mi perfil', icon: CircleUserRound },
   { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
 ];
 
@@ -121,12 +123,17 @@ export function AppShell({
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
   const courseMatch = matchPath('/courses/:slug', location.pathname);
+  const userDetailMatch = matchPath('/admin/users/:userId', location.pathname);
   const teamMatch = matchPath('/admin/:section', location.pathname);
   const activeCourse =
     courseMatch?.params.slug
       ? appData.courses.find((course) => course.slug === courseMatch.params.slug)
       : null;
   const activeGovernmentSection = teamMatch?.params.section ?? '';
+  const activeUserDetail =
+    userDetailMatch?.params.userId
+      ? appData.users.find((member) => member.id === userDetailMatch.params.userId)
+      : null;
   const activeCourseSectionHash = location.hash.replace('#', '');
 
   const breadcrumbs = useMemo(() => {
@@ -163,6 +170,18 @@ export function AppShell({
       return [{ label: 'Biblioteca', path: '/library' }];
     }
 
+    if (location.pathname === '/profile') {
+      return [{ label: 'Mi perfil', path: '/profile' }];
+    }
+
+    if (userDetailMatch && activeUserDetail) {
+      return [
+        { label: 'Gobierno', path: '/admin' },
+        { label: 'Usuarios', path: '/admin/users' },
+        { label: activeUserDetail.name, path: `/admin/users/${activeUserDetail.id}` },
+      ];
+    }
+
     if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
       const items = [{ label: 'Gobierno', path: '/admin' }];
       const sectionLabel =
@@ -179,7 +198,15 @@ export function AppShell({
     }
 
     return [];
-  }, [activeCourse, activeCourseSectionHash, activeGovernmentSection, courseMatch, location.pathname]);
+  }, [
+    activeCourse,
+    activeCourseSectionHash,
+    activeGovernmentSection,
+    activeUserDetail,
+    courseMatch,
+    location.pathname,
+    userDetailMatch,
+  ]);
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
@@ -206,6 +233,14 @@ export function AppShell({
         path: '/library',
         kind: 'view',
         keywords: 'biblioteca recursos curacion resource',
+      },
+      {
+        id: 'view-profile',
+        title: 'Mi perfil',
+        meta: 'Datos personales y seguridad',
+        path: '/profile',
+        kind: 'view',
+        keywords: 'mi perfil cuenta usuario seguridad',
       },
     ];
 
@@ -236,7 +271,7 @@ export function AppShell({
           id: `user-${member.id}`,
           title: member.name,
           meta: `${member.role} · ${member.email}`,
-          path: `/admin/users?user=${member.id}`,
+          path: `/admin/users/${member.id}`,
           kind: 'user',
           keywords: `${member.name} ${member.email} ${member.role} ${(member.secondaryRoles ?? []).join(' ')} usuario`,
         }))
@@ -443,14 +478,14 @@ export function AppShell({
                 </label>
               ) : null}
 
-              <div className="user-chip">
+              <button type="button" className="user-chip" onClick={() => navigate('/profile')}>
                 <div className="topbar-float__avatar">{userInitials}</div>
                 <div>
                   <strong>{user.name}</strong>
                   <span>{user.role}</span>
                 </div>
                 <ChevronDown size={14} />
-              </div>
+              </button>
 
               <button type="button" className="ghost-button" onClick={() => void onLogout()}>
                 <LogOut size={16} />

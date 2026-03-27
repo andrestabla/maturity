@@ -28,6 +28,9 @@ const LibraryPage = lazy(() =>
 const TeamPage = lazy(() =>
   import('./pages/TeamPage.js').then((module) => ({ default: module.TeamPage })),
 );
+const UserProfilePage = lazy(() =>
+  import('./pages/UserProfilePage.js').then((module) => ({ default: module.UserProfilePage })),
+);
 
 function createMonogramFavicon(label: string, background: string, foreground: string) {
   const safeLabel = (label || 'M').slice(0, 2);
@@ -299,6 +302,28 @@ export default function App() {
             element={
               <TeamPage
                 user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
+            path="/admin/users/:userId"
+            element={
+              <UserProfilePage
+                viewer={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <UserProfilePage
+                viewer={session.user}
                 appData={appData}
                 refreshAppData={refreshAppData}
                 refreshSession={refreshSession}

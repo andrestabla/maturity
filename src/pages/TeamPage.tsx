@@ -227,7 +227,6 @@ export function TeamPage({
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [showCreateUserAssistant, setShowCreateUserAssistant] = useState(false);
   const [focusRoleAssignment, setFocusRoleAssignment] = useState(false);
   const [isRolePickerOpen, setIsRolePickerOpen] = useState(false);
@@ -297,33 +296,14 @@ export function TeamPage({
   }, [activeTab, location.pathname, navigate]);
 
   useEffect(() => {
-    if (!adminData) {
-      return;
-    }
-
     const userId = new URLSearchParams(location.search).get('user');
 
     if (!userId) {
       return;
     }
 
-    if (activeTab !== 'users') {
-      navigate(
-        {
-          pathname: '/admin/users',
-          search: `?user=${userId}`,
-        },
-        { replace: true },
-      );
-      return;
-    }
-
-    const target = adminData.users.find((member) => member.id === userId);
-
-    if (target) {
-      startEditing(target);
-    }
-  }, [activeTab, adminData, location.search, navigate]);
+    navigate(`/admin/users/${userId}`, { replace: true });
+  }, [location.search, navigate]);
 
   useEffect(() => {
     if (!adminData || !selectedIntegrationId) {
@@ -546,7 +526,6 @@ export function TeamPage({
   function closeUserAssistant() {
     setShowCreateUserAssistant(false);
     setEditingDraft(null);
-    setEditingUserId(null);
     setFocusRoleAssignment(false);
     setIsRolePickerOpen(false);
 
@@ -562,36 +541,8 @@ export function TeamPage({
     setShowCreateUserAssistant(true);
   }
 
-  function startEditing(target: AuthUser) {
-    setShowCreateUserAssistant(false);
-    setFocusRoleAssignment(false);
-    setIsRolePickerOpen(false);
-    setEditingUserId(target.id);
-    setEditingDraft({
-      id: target.id,
-      name: target.name,
-      email: target.email,
-      role: target.role,
-      secondaryRoles: [...(target.secondaryRoles ?? [])],
-      status: target.status ?? 'Pendiente',
-      institution: target.institution ?? '',
-      faculty: target.faculty ?? '',
-      program: target.program ?? '',
-      scope: target.scope ?? '',
-      statusReason: target.statusReason ?? '',
-      password: '',
-    });
-  }
-
   function openUserAssistant(target: AuthUser) {
-    startEditing(target);
-    navigate(
-      {
-        pathname: '/admin/users',
-        search: `?user=${target.id}`,
-      },
-      { replace: true },
-    );
+    navigate(`/admin/users/${target.id}`);
   }
 
   async function handleUpdateUser() {
@@ -1013,9 +964,7 @@ export function TeamPage({
   function renderUsersTab() {
     const users = adminData?.users ?? [];
     const selectedUser =
-      users.find((member) => member.id === editingUserId) ??
-      users.find((member) => member.id === editingDraft?.id) ??
-      null;
+      editingDraft ? users.find((member) => member.id === editingDraft.id) ?? null : null;
 
     return (
       <div className="page-stack">
@@ -1108,11 +1057,7 @@ export function TeamPage({
                 return (
                   <div
                     key={member.id}
-                    className={
-                      member.id === selectedUser?.id && !showCreateUserAssistant
-                        ? 'admin-user-directory__row admin-user-directory__row--active'
-                        : 'admin-user-directory__row'
-                    }
+                    className="admin-user-directory__row"
                   >
                     <div className="admin-user-directory__cell" data-label="Usuario">
                       <div className="admin-user-directory__identity">

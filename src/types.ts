@@ -304,6 +304,10 @@ export interface AuthUser {
   role: Role;
   secondaryRoles?: Role[];
   status?: UserAccountStatus;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
   institution?: string;
   faculty?: string;
   program?: string;
@@ -325,6 +329,10 @@ export interface UserMutationInput {
   role: Role;
   secondaryRoles: Role[];
   status: UserAccountStatus;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
   institution: string;
   faculty: string;
   program: string;
@@ -340,12 +348,25 @@ export interface UserUpdateInput {
   role: Role;
   secondaryRoles: Role[];
   status: UserAccountStatus;
+  headline?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
   institution: string;
   faculty: string;
   program: string;
   scope: string;
   statusReason: string;
   password?: string;
+}
+
+export interface UserProfileUpdateInput {
+  name: string;
+  email: string;
+  headline: string;
+  phone: string;
+  location: string;
+  bio: string;
 }
 
 export interface InstitutionSettings {

@@ -36,6 +36,7 @@ import type {
   TimelineItemMutationInput,
   UserAccountStatus,
   UserMutationInput,
+  UserProfileUpdateInput,
   UserUpdateInput,
 } from '../src/types.js';
 import { getSql } from './db.js';
@@ -79,6 +80,10 @@ interface UserRow {
   role: Role;
   secondaryRoles: JsonValue;
   status: UserAccountStatus;
+  headline: string | null;
+  phone: string | null;
+  location: string | null;
+  bio: string | null;
   institution: string | null;
   faculty: string | null;
   program: string | null;
@@ -98,6 +103,10 @@ interface PublicUserRow {
   role: Role;
   secondaryRoles: JsonValue;
   status: UserAccountStatus;
+  headline: string | null;
+  phone: string | null;
+  location: string | null;
+  bio: string | null;
   institution: string | null;
   faculty: string | null;
   program: string | null;
@@ -116,6 +125,10 @@ interface SessionLookupRow {
   role: Role;
   secondaryRoles: JsonValue;
   status: UserAccountStatus;
+  headline: string | null;
+  phone: string | null;
+  location: string | null;
+  bio: string | null;
   institution: string | null;
   faculty: string | null;
   program: string | null;
@@ -138,6 +151,10 @@ function serializeUserRow(row: PublicUserRow | UserRow | SessionLookupRow): Auth
     role: row.role,
     secondaryRoles: secondaryRoles.filter((item) => item !== row.role),
     status: row.status,
+    headline: row.headline ?? '',
+    phone: row.phone ?? '',
+    location: row.location ?? '',
+    bio: row.bio ?? '',
     institution: row.institution ?? '',
     faculty: row.faculty ?? '',
     program: row.program ?? '',
@@ -1015,6 +1032,10 @@ async function ensureSchema() {
         password_hash TEXT NOT NULL,
         secondary_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
         status TEXT NOT NULL DEFAULT 'Pendiente',
+        headline TEXT,
+        phone TEXT,
+        location TEXT,
+        bio TEXT,
         institution TEXT,
         faculty TEXT,
         program TEXT,
@@ -1035,6 +1056,26 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_users
       ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Pendiente'
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS headline TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS phone TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS location TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS bio TEXT
     `;
 
     await sql`
@@ -1118,6 +1159,7 @@ async function ensureAdminUserSeed() {
       UPDATE maturity_users
       SET
         status = COALESCE(status, ${'Activo'}),
+        headline = COALESCE(headline, ${'Gobierno funcional y técnico de la plataforma'}),
         institution = COALESCE(institution, ${'Maturity University'}),
         faculty = COALESCE(faculty, ${'Gobierno del sistema'}),
         program = COALESCE(program, ${'Operación central'}),
@@ -1141,6 +1183,10 @@ async function ensureAdminUserSeed() {
       password_hash,
       secondary_roles,
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -1157,6 +1203,10 @@ async function ensureAdminUserSeed() {
       ${passwordHash},
       ${JSON.stringify([])}::jsonb,
       ${'Activo'},
+      ${'Gobierno funcional y técnico de la plataforma'},
+      ${null},
+      ${'Bogotá, Colombia'},
+      ${'Administra la configuración central, accesos e integraciones de la operación.'},
       ${'Maturity University'},
       ${'Gobierno del sistema'},
       ${'Operación central'},
@@ -1772,6 +1822,10 @@ async function readUsers() {
       role,
       secondary_roles AS "secondaryRoles",
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -1881,6 +1935,10 @@ export async function findUserByEmail(email: string) {
       role,
       secondary_roles AS "secondaryRoles",
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -1926,6 +1984,10 @@ export async function findSessionByTokenHash(tokenHash: string) {
       u.role,
       u.secondary_roles AS "secondaryRoles",
       u.status,
+      u.headline,
+      u.phone,
+      u.location,
+      u.bio,
       u.institution,
       u.faculty,
       u.program,
@@ -3258,6 +3320,10 @@ export async function findUserById(id: string) {
       role,
       secondary_roles AS "secondaryRoles",
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -3307,6 +3373,10 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       password_hash,
       secondary_roles,
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -3324,6 +3394,10 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       ${passwordHash},
       ${JSON.stringify(secondaryRoles)}::jsonb,
       ${normalizeUserStatus(input.status)},
+      ${input.headline?.trim() || null},
+      ${input.phone?.trim() || null},
+      ${input.location?.trim() || null},
+      ${input.bio?.trim() || null},
       ${normalizeUserScopeValue(input.institution)},
       ${normalizeUserScopeValue(input.faculty)},
       ${normalizeUserScopeValue(input.program)},
@@ -3340,6 +3414,10 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       role,
       secondary_roles AS "secondaryRoles",
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -3392,6 +3470,10 @@ export async function updateUserRecord(input: UserUpdateInput) {
       password_hash = ${passwordHash},
       secondary_roles = ${JSON.stringify(secondaryRoles)}::jsonb,
       status = ${nextStatus},
+      headline = ${input.headline?.trim() || null},
+      phone = ${input.phone?.trim() || null},
+      location = ${input.location?.trim() || null},
+      bio = ${input.bio?.trim() || null},
       institution = ${normalizeUserScopeValue(input.institution) || null},
       faculty = ${normalizeUserScopeValue(input.faculty) || null},
       program = ${normalizeUserScopeValue(input.program) || null},
@@ -3406,6 +3488,10 @@ export async function updateUserRecord(input: UserUpdateInput) {
       role,
       secondary_roles AS "secondaryRoles",
       status,
+      headline,
+      phone,
+      location,
+      bio,
       institution,
       faculty,
       program,
@@ -3423,6 +3509,65 @@ export async function updateUserRecord(input: UserUpdateInput) {
       WHERE user_id = ${input.id}
     `;
   }
+
+  return rows[0] ? serializeUserRow(rows[0]) : null;
+}
+
+export async function updateOwnProfileRecord(userId: string, input: UserProfileUpdateInput) {
+  await ensureSchema();
+  await ensureSeedData();
+  const sql = getSql();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const current = await findUserById(userId);
+
+  if (!current) {
+    return null;
+  }
+
+  const conflictRows = (await sql`
+    SELECT id
+    FROM maturity_users
+    WHERE email = ${normalizedEmail}
+      AND id <> ${userId}
+    LIMIT 1
+  `) as Array<{ id: string }>;
+
+  if (conflictRows.length > 0) {
+    throw new Error('Ese correo ya está en uso por otro usuario.');
+  }
+
+  const rows = (await sql`
+    UPDATE maturity_users
+    SET
+      name = ${input.name.trim()},
+      email = ${normalizedEmail},
+      headline = ${input.headline.trim() || null},
+      phone = ${input.phone.trim() || null},
+      location = ${input.location.trim() || null},
+      bio = ${input.bio.trim() || null},
+      updated_at = ${new Date().toISOString()}
+    WHERE id = ${userId}
+    RETURNING
+      id,
+      name,
+      email,
+      role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      headline,
+      phone,
+      location,
+      bio,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt"
+  `) as PublicUserRow[];
 
   return rows[0] ? serializeUserRow(rows[0]) : null;
 }

@@ -62,6 +62,10 @@ function mapToAuthUser(user: {
   role: Role;
   secondaryRoles?: unknown;
   status?: AuthUser['status'];
+  headline?: string | null;
+  phone?: string | null;
+  location?: string | null;
+  bio?: string | null;
   institution?: string | null;
   faculty?: string | null;
   program?: string | null;
@@ -78,6 +82,10 @@ function mapToAuthUser(user: {
     role: user.role,
     secondaryRoles: parseSecondaryRoles(user.secondaryRoles).filter((item) => item !== user.role),
     status: user.status,
+    headline: user.headline ?? '',
+    phone: user.phone ?? '',
+    location: user.location ?? '',
+    bio: user.bio ?? '',
     institution: user.institution ?? '',
     faculty: user.faculty ?? '',
     program: user.program ?? '',
