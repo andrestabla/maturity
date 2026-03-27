@@ -64,7 +64,7 @@ const navigation = [
   { to: '/', label: 'Pulse', icon: LayoutDashboard },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
-  { to: '/team', label: 'Gobierno', icon: ShieldCheck },
+  { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
 ];
 
 const governmentTabLabels = {
@@ -121,7 +121,7 @@ export function AppShell({
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
   const courseMatch = matchPath('/courses/:slug', location.pathname);
-  const teamMatch = matchPath('/team/:section', location.pathname);
+  const teamMatch = matchPath('/admin/:section', location.pathname);
   const activeCourse =
     courseMatch?.params.slug
       ? appData.courses.find((course) => course.slug === courseMatch.params.slug)
@@ -163,15 +163,15 @@ export function AppShell({
       return [{ label: 'Biblioteca', path: '/library' }];
     }
 
-    if (location.pathname === '/team' || location.pathname.startsWith('/team/')) {
-      const items = [{ label: 'Gobierno', path: '/team' }];
+    if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+      const items = [{ label: 'Gobierno', path: '/admin' }];
       const sectionLabel =
         governmentTabLabels[activeGovernmentSection as keyof typeof governmentTabLabels];
 
       if (sectionLabel) {
         items.push({
           label: sectionLabel,
-          path: `/team/${activeGovernmentSection}`,
+          path: `/admin/${activeGovernmentSection}`,
         });
       }
 
@@ -216,7 +216,7 @@ export function AppShell({
           id: `admin-${id}`,
           title: label,
           meta: 'Módulo Gobierno',
-          path: `/team/${id}`,
+          path: `/admin/${id}`,
           kind: 'admin',
           keywords: `gobierno ${label.toLowerCase()} administracion team settings`,
         }))
@@ -236,7 +236,7 @@ export function AppShell({
           id: `user-${member.id}`,
           title: member.name,
           meta: `${member.role} · ${member.email}`,
-          path: `/team/users?user=${member.id}`,
+          path: `/admin/users?user=${member.id}`,
           kind: 'user',
           keywords: `${member.name} ${member.email} ${member.role} ${(member.secondaryRoles ?? []).join(' ')} usuario`,
         }))

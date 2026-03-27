@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { ThemeToggle } from './components/ThemeToggle.js';
@@ -62,6 +62,14 @@ function RouteSkeleton() {
       </section>
     </div>
   );
+}
+
+function LegacyAdminRedirect() {
+  const location = useLocation();
+  const { section } = useParams<{ section?: string }>();
+  const nextPath = section ? `/admin/${section}` : '/admin';
+
+  return <Navigate to={`${nextPath}${location.search}`} replace />;
 }
 
 export default function App() {
@@ -281,7 +289,7 @@ export default function App() {
             }
           />
           <Route
-            path="/team"
+            path="/admin"
             element={
               <TeamPage
                 user={session.user}
@@ -292,7 +300,7 @@ export default function App() {
             }
           />
           <Route
-            path="/team/:section"
+            path="/admin/:section"
             element={
               <TeamPage
                 user={session.user}
@@ -302,6 +310,8 @@ export default function App() {
               />
             }
           />
+          <Route path="/team" element={<LegacyAdminRedirect />} />
+          <Route path="/team/:section" element={<LegacyAdminRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

@@ -190,7 +190,7 @@ const adminTabs: Array<{
 function getAdminTabFromPath(pathname: string): AdminTab | null {
   const [, base, section] = pathname.split('/');
 
-  if (base !== 'team' || !section) {
+  if (base !== 'admin' || !section) {
     return null;
   }
 
@@ -298,8 +298,8 @@ export function TeamPage({
   }, [isAdmin]);
 
   useEffect(() => {
-    if (location.pathname.startsWith('/team/') && activeTab === null) {
-      navigate('/team', { replace: true });
+    if (location.pathname.startsWith('/admin/') && activeTab === null) {
+      navigate('/admin', { replace: true });
     }
   }, [activeTab, location.pathname, navigate]);
 
@@ -317,7 +317,7 @@ export function TeamPage({
     if (activeTab !== 'users') {
       navigate(
         {
-          pathname: '/team/users',
+          pathname: '/admin/users',
           search: `?user=${userId}`,
         },
         { replace: true },
@@ -881,9 +881,9 @@ export function TeamPage({
       <section className="surface section-card section-card--compact">
         <div className="admin-route-grid">
           <NavLink
-            to="/team"
+            to="/admin"
             className={
-              activeTab === null && location.pathname === '/team'
+              activeTab === null && location.pathname === '/admin'
                 ? 'admin-route-card admin-route-card--active'
                 : 'admin-route-card'
             }
@@ -895,7 +895,7 @@ export function TeamPage({
           {adminTabs.map((tab) => (
             <NavLink
               key={tab.id}
-              to={`/team/${tab.id}`}
+              to={`/admin/${tab.id}`}
               className={
                 activeTab === tab.id ? 'admin-route-card admin-route-card--active' : 'admin-route-card'
               }
@@ -3050,56 +3050,60 @@ export function TeamPage({
 
   return (
     <div className="page-stack team-page team-page--admin">
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Módulo Administración</span>
-            <h3>Centro de gobierno técnico y funcional de la plataforma</h3>
-          </div>
-          <ShieldCheck size={18} />
-        </div>
-
-        <p className="section-lead">
-          Desde aquí administras usuarios, estructuras institucionales, branding, integraciones,
-          servicios conectados, logs y auditoría, sin mezclar esta capa con la operación diaria de
-          producción de cursos.
-        </p>
-
-        <div className="admin-kpi-grid">
-          <div className="admin-kpi">
-            <span>Usuarios activos</span>
-            <strong>{activeUsers}</strong>
-            <p>Con acceso vigente a la plataforma.</p>
-          </div>
-          <div className="admin-kpi">
-            <span>Integraciones activas</span>
-            <strong>{activeIntegrations}</strong>
-            <p>Conectores operando o listos para uso.</p>
-          </div>
-          <div className="admin-kpi">
-            <span>Errores visibles</span>
-            <strong>{degradedIntegrations === 0 ? 'Sin alertas' : degradedIntegrations}</strong>
-            <p>
-              {degradedIntegrations === 0
-                ? 'No hay servicios degradados en este momento.'
-                : 'Servicios degradados o con falla reciente.'}
-            </p>
-          </div>
-          <div className="admin-kpi">
-            <span>Última actividad</span>
-            <strong>
-              {adminData.audit[0]?.createdAt
-                ? formatLongDate(adminData.audit[0].createdAt.slice(0, 10))
-                : 'Sin registros'}
-            </strong>
-            <p>Último cambio crítico auditado.</p>
-          </div>
-        </div>
-      </section>
-
-      {renderGovernmentRoutes()}
-
       {adminError ? <p className="form-error">{adminError}</p> : null}
+
+      {activeTab === null ? (
+        <>
+          <section className="surface section-card section-card--compact">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Módulo Administración</span>
+                <h3>Centro de gobierno técnico y funcional de la plataforma</h3>
+              </div>
+              <ShieldCheck size={18} />
+            </div>
+
+            <p className="section-lead">
+              Desde aquí administras usuarios, estructuras institucionales, branding, integraciones,
+              servicios conectados, logs y auditoría, sin mezclar esta capa con la operación diaria de
+              producción de cursos.
+            </p>
+
+            <div className="admin-kpi-grid">
+              <div className="admin-kpi">
+                <span>Usuarios activos</span>
+                <strong>{activeUsers}</strong>
+                <p>Con acceso vigente a la plataforma.</p>
+              </div>
+              <div className="admin-kpi">
+                <span>Integraciones activas</span>
+                <strong>{activeIntegrations}</strong>
+                <p>Conectores operando o listos para uso.</p>
+              </div>
+              <div className="admin-kpi">
+                <span>Errores visibles</span>
+                <strong>{degradedIntegrations === 0 ? 'Sin alertas' : degradedIntegrations}</strong>
+                <p>
+                  {degradedIntegrations === 0
+                    ? 'No hay servicios degradados en este momento.'
+                    : 'Servicios degradados o con falla reciente.'}
+                </p>
+              </div>
+              <div className="admin-kpi">
+                <span>Última actividad</span>
+                <strong>
+                  {adminData.audit[0]?.createdAt
+                    ? formatLongDate(adminData.audit[0].createdAt.slice(0, 10))
+                    : 'Sin registros'}
+                </strong>
+                <p>Último cambio crítico auditado.</p>
+              </div>
+            </div>
+          </section>
+
+          {renderGovernmentRoutes()}
+        </>
+      ) : null}
 
       {activeTab === 'users' ? renderUsersTab() : null}
       {activeTab === 'institution' ? renderInstitutionTab() : null}
