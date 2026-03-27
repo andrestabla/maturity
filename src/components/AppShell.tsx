@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   BellDot,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   Command,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import type { AppData, AuthUser, BrandingSettings, Role } from '../types.js';
+import { formatPageDate } from '../utils/format.js';
 import { getVisibleCourses } from '../utils/domain.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
 import { ThemeToggle } from './ThemeToggle.js';
@@ -59,8 +61,8 @@ const commandKindLabel: Record<CommandItem['kind'], string> = {
 };
 
 const navigation = [
-  { to: '/', label: 'Inicio', icon: LayoutDashboard },
-  { to: '/courses', label: 'Mis cursos', icon: FolderKanban },
+  { to: '/', label: 'Pulse', icon: LayoutDashboard },
+  { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
   { to: '/team', label: 'Gobierno', icon: ShieldCheck },
 ];
@@ -125,66 +127,10 @@ export function AppShell({
       : null;
   const activeGovernmentHash = location.hash.replace('#', '');
   const activeCourseSectionHash = location.hash.replace('#', '');
-  const pageMeta = useMemo(() => {
-    if (location.pathname === '/') {
-      return {
-        title: 'Inicio',
-        description: 'Vista general del flujo, alertas y actividad reciente.',
-      };
-    }
-
-    if (location.pathname === '/courses') {
-      return {
-        title: 'Mis cursos',
-        description: 'Explora expedientes, etapas, productos y avance por curso.',
-      };
-    }
-
-    if (courseMatch && activeCourse) {
-      const sectionLabel =
-        courseSectionLabels[activeCourseSectionHash as keyof typeof courseSectionLabels];
-
-      return {
-        title: activeCourse.title,
-        description: sectionLabel
-          ? `Expediente del curso · ${sectionLabel}`
-          : `Expediente del curso · ${activeCourse.program}`,
-      };
-    }
-
-    if (location.pathname === '/library') {
-      return {
-        title: 'Biblioteca',
-        description: 'Recursos propios y curados listos para producción.',
-      };
-    }
-
-    if (location.pathname === '/team') {
-      const sectionLabel =
-        governmentTabLabels[activeGovernmentHash as keyof typeof governmentTabLabels];
-
-      return {
-        title: sectionLabel ? `Gobierno · ${sectionLabel}` : 'Gobierno',
-        description: 'Configuración, usuarios, marca e integraciones de la plataforma.',
-      };
-    }
-
-    return {
-      title: branding.platformName,
-      description: 'Navegación y operación de la plataforma.',
-    };
-  }, [
-    activeCourse,
-    activeCourseSectionHash,
-    activeGovernmentHash,
-    branding.platformName,
-    courseMatch,
-    location.pathname,
-  ]);
 
   const breadcrumbs = useMemo(() => {
     if (location.pathname === '/') {
-      return [{ label: 'Inicio', path: '/' }];
+      return [{ label: 'Pulse', path: '/' }];
     }
 
     if (location.pathname === '/courses') {
@@ -391,16 +337,22 @@ export function AppShell({
       <div className="ambient-orb ambient-orb--left" aria-hidden />
       <div className="ambient-orb ambient-orb--right" aria-hidden />
 
+      <header className="control-header">
+        <NavLink to="/" className="brand-card brand-card--inline">
+          {renderBrandMark()}
+          <div>
+            <p className="eyebrow">{branding.institutionName}</p>
+            <h1>{branding.logoText}</h1>
+          </div>
+        </NavLink>
+        <span className="control-header__label">CONTROL CENTER</span>
+      </header>
+
       <div className="control-layout">
         <aside className="sidebar sidebar--rail surface">
-          <NavLink to="/" className="brand-card brand-card--sidebar">
-            {renderBrandMark()}
-            <div>
-              <p className="eyebrow">{branding.institutionName}</p>
-              <h1>{branding.logoText}</h1>
-            </div>
-          </NavLink>
-
+          <div className="rail-toggle" aria-hidden>
+            <Menu size={18} />
+          </div>
           <nav className="sidebar-nav" aria-label="Navegación principal">
             {navigation.map(({ to, label, icon: Icon }) => (
               <NavLink
@@ -415,21 +367,10 @@ export function AppShell({
               </NavLink>
             ))}
           </nav>
-
-          <div className="sidebar-meta">
-            <span className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
-              <span className="status-chip__dot" />
-              <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Conectado' : 'Modo demo'}</span>
-            </span>
-          </div>
         </aside>
 
         <main className="main-panel">
           <header className="topbar surface">
-            <button type="button" className="topbar-icon topbar-icon--menu" aria-label="Menú principal">
-              <Menu size={18} />
-            </button>
-
             <div className="topbar-copy">
               {breadcrumbs.length > 0 ? (
                 <div className="app-breadcrumbs" aria-label="Migas de pan">
@@ -451,41 +392,42 @@ export function AppShell({
                   ))}
                 </div>
               ) : null}
-              <span className="topbar-kicker">{branding.platformName}</span>
-              <div className="topbar-title-row">
-                <h2>{pageMeta.title}</h2>
-                <span
-                  className={
-                    dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'
-                  }
-                >
-                  <span className="status-chip__dot" />
-                  <span>{isLoading ? 'SYNC' : dataSource === 'neon' ? 'LIVE' : 'DEMO'}</span>
-                </span>
-              </div>
-              <p>{pageMeta.description}</p>
+              <span className="topbar-kicker">LIVE OPERATING LAYER</span>
+              <p>
+                Portafolio, tareas, biblioteca y gobierno sincronizados en una misma capa.
+              </p>
             </div>
 
             <div className="topbar-actions">
+              <div className="topbar-icon" aria-hidden>
+                <BellDot size={16} />
+              </div>
+
               <button
                 type="button"
                 className="command-trigger ghost-button"
                 onClick={() => setIsCommandOpen(true)}
               >
                 <Search size={16} />
-                <span>Buscar...</span>
+                <span>Buscar o saltar</span>
                 <kbd>Ctrl K</kbd>
               </button>
 
-              <div className="topbar-icon" aria-hidden>
-                <BellDot size={16} />
+              <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+              <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
+                <span className="status-chip__dot" />
+                <span>{isLoading ? 'SYNCING' : dataSource === 'neon' ? 'LIVE SYNC' : 'DEMO MODE'}</span>
               </div>
 
-              <ThemeToggle theme={theme} onToggle={onToggleTheme} className="theme-switch--icon" />
+              <div className="date-chip">
+                <CalendarClock size={16} />
+                <span>{formatPageDate()}</span>
+              </div>
 
               {availableRoles.length > 1 ? (
                 <label className="role-switch">
-                  <span>Rol</span>
+                  <span>VIEW</span>
                   <select
                     aria-label="Seleccionar rol"
                     value={role}
@@ -509,14 +451,9 @@ export function AppShell({
                 <ChevronDown size={14} />
               </div>
 
-              <button
-                type="button"
-                className="topbar-icon"
-                aria-label="Cerrar sesión"
-                onClick={() => void onLogout()}
-                title="Cerrar sesión"
-              >
+              <button type="button" className="ghost-button" onClick={() => void onLogout()}>
                 <LogOut size={16} />
+                <span>Salir</span>
               </button>
             </div>
           </header>

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { LibraryBig, NotebookTabs, PackageCheck, Plus, Save, Search, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LibraryBig, NotebookTabs, PackageCheck, Plus, Save, Trash2 } from 'lucide-react';
 import type {
   AppData,
   LibraryResource,
@@ -21,7 +21,6 @@ interface LibraryPageProps {
 }
 
 type ResourceFilter = 'Todos' | 'Curado' | 'Propio';
-type ResourceStatusFilter = 'Todos' | 'Pendiente' | 'En revisión' | 'Listo';
 
 function buildResourceForm(courseSlug: string): LibraryResourceMutationInput {
   return {
@@ -67,36 +66,16 @@ function inputToTags(value: string) {
 
 export function LibraryPage({ role, userRole, appData, refreshAppData }: LibraryPageProps) {
   const [filter, setFilter] = useState<ResourceFilter>('Todos');
-  const [statusFilter, setStatusFilter] = useState<ResourceStatusFilter>('Todos');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const resources = getVisibleResources(appData, role);
   const visibleCourses = getVisibleCourses(appData, role);
   const defaultCourseSlug = visibleCourses[0]?.slug ?? appData.courses[0]?.slug ?? '';
-  const filteredResources = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    return resources.filter((resource) => {
-      const kindMatch = filter === 'Todos' || resource.kind === filter;
-      const statusMatch = statusFilter === 'Todos' || resource.status === statusFilter;
-      const queryMatch =
-        !query ||
-        [
-          resource.title,
-          resource.source,
-          resource.unit,
-          resource.summary,
-          ...resource.tags,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(query);
-
-      return kindMatch && statusMatch && queryMatch;
-    });
-  }, [filter, resources, searchQuery, statusFilter]);
+  const filteredResources =
+    filter === 'Todos'
+      ? resources
+      : resources.filter((resource) => resource.kind === filter);
   const readyCount = resources.filter((resource) => resource.status === 'Listo').length;
   const canCreate = canCreateLibraryResources(userRole);
   const canEdit = canEditLibraryResource(userRole);
@@ -305,40 +284,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
                 {item}
               </button>
             ))}
-          </div>
-
-          <div className="admin-filter-row admin-filter-row--library">
-            <label className="field field--search">
-              <span>Buscar</span>
-              <div className="field__control">
-                <Search size={16} />
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Título, fuente, tags o unidad"
-                />
-              </div>
-            </label>
-
-            <label className="field field--compact">
-              <span>Estado</span>
-              <div className="field__control">
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as ResourceStatusFilter)
-                  }
-                >
-                  {(['Todos', 'Pendiente', 'En revisión', 'Listo'] as ResourceStatusFilter[]).map(
-                    (item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-            </label>
           </div>
         </div>
 
