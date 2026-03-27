@@ -16,6 +16,8 @@ El MVP actual incluye:
 - `API serverless` para Vercel en `/api`.
 - `Persistencia inicial` en Neon PostgreSQL.
 - `Seed automático` del dominio base si la base está vacía.
+- `Autenticación real` con sesión `httpOnly`.
+- `CRUD básico` de cursos y tareas.
 
 ## Stack
 
@@ -57,6 +59,9 @@ Variables esperadas:
 
 ```bash
 DATABASE_URL=...
+INITIAL_ADMIN_EMAIL=...
+INITIAL_ADMIN_NAME=...
+INITIAL_ADMIN_PASSWORD=...
 ```
 
 Preparar la base con el esquema y seed inicial:
@@ -72,8 +77,10 @@ El proyecto queda listo para desplegar como app Vite con funciones serverless:
 - `vercel.json` define build y rewrites;
 - `/api/bootstrap` carga los datos desde Neon;
 - `/api/health` prepara y valida esquema + seed.
+- `/api/auth/*` maneja sesión y login.
+- `/api/courses` y `/api/tasks` gestionan CRUD básico.
 
-En preview y en producción, la variable `DATABASE_URL` debe existir en Vercel.
+En Vercel deben existir `DATABASE_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_NAME` e `INITIAL_ADMIN_PASSWORD`.
 
 ## Siguiente paso recomendado
 

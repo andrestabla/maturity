@@ -1,6 +1,17 @@
 import { mockAppData } from '../src/data/mockData.js';
-import type { AppData, Course, RoleProfile, StageDefinition } from '../src/types.js';
+import type {
+  AppData,
+  AuthUser,
+  Course,
+  CourseMutationInput,
+  Role,
+  RoleProfile,
+  StageDefinition,
+  Task,
+  TaskMutationInput,
+} from '../src/types.js';
 import { getSql } from './db.js';
+import { createPasswordHash } from './security.js';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -29,6 +40,106 @@ interface CourseRow {
   assistants: JsonValue;
 }
 
+interface UserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  passwordHash: string;
+}
+
+interface SessionLookupRow {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  expiresAt: string;
+}
+
+function getTodayLabel() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function slugify(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function buildStageChecklist(stageId: string): Course['stageChecklist'] {
+  const stageIndex = mockAppData.stages.findIndex((stage) => stage.id === stageId);
+
+  return mockAppData.stages.map((stage, index) => ({
+    id: `ck-${stage.id}`,
+    label: stage.name,
+    owner: stage.owner,
+    status:
+      index < stageIndex
+        ? 'done'
+        : index === stageIndex
+          ? 'active'
+          : 'pending',
+  }));
+}
+
+function makeCourseRecord(input: CourseMutationInput): Course {
+  const slugBase = slugify(`${input.title}-${input.code}`) || `curso-${crypto.randomUUID().slice(0, 8)}`;
+
+  return {
+    id: crypto.randomUUID(),
+    slug: slugBase,
+    title: input.title,
+    code: input.code,
+    faculty: input.faculty,
+    program: input.program,
+    modality: input.modality,
+    credits: input.credits,
+    stageId: input.stageId,
+    status: input.status,
+    progress: 12,
+    summary: input.summary,
+    nextMilestone: input.nextMilestone,
+    updatedAt: getTodayLabel(),
+    pulse: {
+      velocity: 58,
+      quality: 76,
+      alignment: 80,
+    },
+    team: [],
+    deliverables: [],
+    modules: [],
+    observations: [],
+    schedule: [
+      {
+        id: crypto.randomUUID(),
+        label: 'Configuración inicial',
+        dueDate: getTodayLabel(),
+        status: 'active',
+      },
+    ],
+    stageChecklist: buildStageChecklist(input.stageId),
+    assistants: [],
+  };
+}
+
+function makeTaskRecord(input: TaskMutationInput): Task {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    courseSlug: input.courseSlug,
+    role: input.role,
+    stageId: input.stageId,
+    dueDate: input.dueDate,
+    priority: input.priority,
+    status: input.status,
+    summary: input.summary,
+  };
+}
+
 function parseJson<T>(value: JsonValue): T {
   if (typeof value === 'string') {
     return JSON.parse(value) as T;
@@ -39,101 +150,300 @@ function parseJson<T>(value: JsonValue): T {
 
 async function ensureSchema() {
   const sql = getSql();
+  await sql`SELECT pg_advisory_lock(3602026)`;
+
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_roles (
+        role TEXT PRIMARY KEY,
+        position INTEGER NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_stages (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        tone TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_courses (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        code TEXT NOT NULL,
+        faculty TEXT NOT NULL,
+        program TEXT NOT NULL,
+        modality TEXT NOT NULL,
+        credits INTEGER NOT NULL,
+        stage_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        progress INTEGER NOT NULL,
+        summary TEXT NOT NULL,
+        next_milestone TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        pulse JSONB NOT NULL,
+        team JSONB NOT NULL,
+        deliverables JSONB NOT NULL,
+        modules JSONB NOT NULL,
+        observations JSONB NOT NULL,
+        schedule JSONB NOT NULL,
+        stage_checklist JSONB NOT NULL,
+        assistants JSONB NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        course_slug TEXT NOT NULL,
+        role TEXT NOT NULL,
+        stage_id TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        status TEXT NOT NULL,
+        summary TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_alerts (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        course_slug TEXT NOT NULL,
+        tone TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        detail TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_library_resources (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        course_slug TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        source TEXT NOT NULL,
+        status TEXT NOT NULL,
+        tags JSONB NOT NULL,
+        summary TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_role_profiles (
+        role TEXT PRIMARY KEY,
+        overview TEXT NOT NULL,
+        focus TEXT NOT NULL,
+        modules JSONB NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        role TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT UNIQUE NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `;
+  } finally {
+    await sql`SELECT pg_advisory_unlock(3602026)`;
+  }
+}
+
+async function ensureAdminUserSeed() {
+  const email =
+    process.env.INITIAL_ADMIN_EMAIL ??
+    (process.env.NODE_ENV === 'production' ? undefined : 'admin@maturity.local');
+  const password =
+    process.env.INITIAL_ADMIN_PASSWORD ??
+    (process.env.NODE_ENV === 'production' ? undefined : 'MaturityDev123!');
+  const name = process.env.INITIAL_ADMIN_NAME ?? 'Administrador Maturity';
+
+  if (!email || !password) {
+    return;
+  }
+
+  const sql = getSql();
+  const normalizedEmail = email.trim().toLowerCase();
+  const existingRows = (await sql`
+    SELECT id
+    FROM maturity_users
+    WHERE email = ${normalizedEmail}
+    LIMIT 1
+  `) as Array<{ id: string }>;
+
+  if (existingRows.length > 0) {
+    return;
+  }
+
+  const passwordHash = await createPasswordHash(password);
 
   await sql`
-    CREATE TABLE IF NOT EXISTS maturity_roles (
-      role TEXT PRIMARY KEY,
-      position INTEGER NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_stages (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL,
-      owner TEXT NOT NULL,
-      tone TEXT NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_courses (
-      id TEXT PRIMARY KEY,
-      slug TEXT UNIQUE NOT NULL,
-      title TEXT NOT NULL,
-      code TEXT NOT NULL,
-      faculty TEXT NOT NULL,
-      program TEXT NOT NULL,
-      modality TEXT NOT NULL,
-      credits INTEGER NOT NULL,
-      stage_id TEXT NOT NULL,
-      status TEXT NOT NULL,
-      progress INTEGER NOT NULL,
-      summary TEXT NOT NULL,
-      next_milestone TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      pulse JSONB NOT NULL,
-      team JSONB NOT NULL,
-      deliverables JSONB NOT NULL,
-      modules JSONB NOT NULL,
-      observations JSONB NOT NULL,
-      schedule JSONB NOT NULL,
-      stage_checklist JSONB NOT NULL,
-      assistants JSONB NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      course_slug TEXT NOT NULL,
-      role TEXT NOT NULL,
-      stage_id TEXT NOT NULL,
-      due_date TEXT NOT NULL,
-      priority TEXT NOT NULL,
-      status TEXT NOT NULL,
-      summary TEXT NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_alerts (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      course_slug TEXT NOT NULL,
-      tone TEXT NOT NULL,
-      owner TEXT NOT NULL,
-      detail TEXT NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_library_resources (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      course_slug TEXT NOT NULL,
-      unit TEXT NOT NULL,
-      source TEXT NOT NULL,
-      status TEXT NOT NULL,
-      tags JSONB NOT NULL,
-      summary TEXT NOT NULL
-    )
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS maturity_role_profiles (
-      role TEXT PRIMARY KEY,
-      overview TEXT NOT NULL,
-      focus TEXT NOT NULL,
-      modules JSONB NOT NULL
+    INSERT INTO maturity_users (id, name, email, role, password_hash, created_at)
+    VALUES (
+      ${crypto.randomUUID()},
+      ${name},
+      ${normalizedEmail},
+      ${'Administrador'},
+      ${passwordHash},
+      ${new Date().toISOString()}
     )
   `;
 }
 
+function serializeCourseRow(row: CourseRow): Course {
+  return {
+    ...row,
+    pulse: parseJson<Course['pulse']>(row.pulse),
+    team: parseJson<Course['team']>(row.team),
+    deliverables: parseJson<Course['deliverables']>(row.deliverables),
+    modules: parseJson<Course['modules']>(row.modules),
+    observations: parseJson<Course['observations']>(row.observations),
+    schedule: parseJson<Course['schedule']>(row.schedule),
+    stageChecklist: parseJson<Course['stageChecklist']>(row.stageChecklist),
+    assistants: parseJson<Course['assistants']>(row.assistants),
+  };
+}
+
+async function persistCourse(course: Course) {
+  const sql = getSql();
+
+  await sql`
+    INSERT INTO maturity_courses (
+      id,
+      slug,
+      title,
+      code,
+      faculty,
+      program,
+      modality,
+      credits,
+      stage_id,
+      status,
+      progress,
+      summary,
+      next_milestone,
+      updated_at,
+      pulse,
+      team,
+      deliverables,
+      modules,
+      observations,
+      schedule,
+      stage_checklist,
+      assistants
+    )
+    VALUES (
+      ${course.id},
+      ${course.slug},
+      ${course.title},
+      ${course.code},
+      ${course.faculty},
+      ${course.program},
+      ${course.modality},
+      ${course.credits},
+      ${course.stageId},
+      ${course.status},
+      ${course.progress},
+      ${course.summary},
+      ${course.nextMilestone},
+      ${course.updatedAt},
+      ${JSON.stringify(course.pulse)}::jsonb,
+      ${JSON.stringify(course.team)}::jsonb,
+      ${JSON.stringify(course.deliverables)}::jsonb,
+      ${JSON.stringify(course.modules)}::jsonb,
+      ${JSON.stringify(course.observations)}::jsonb,
+      ${JSON.stringify(course.schedule)}::jsonb,
+      ${JSON.stringify(course.stageChecklist)}::jsonb,
+      ${JSON.stringify(course.assistants)}::jsonb
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      slug = EXCLUDED.slug,
+      title = EXCLUDED.title,
+      code = EXCLUDED.code,
+      faculty = EXCLUDED.faculty,
+      program = EXCLUDED.program,
+      modality = EXCLUDED.modality,
+      credits = EXCLUDED.credits,
+      stage_id = EXCLUDED.stage_id,
+      status = EXCLUDED.status,
+      progress = EXCLUDED.progress,
+      summary = EXCLUDED.summary,
+      next_milestone = EXCLUDED.next_milestone,
+      updated_at = EXCLUDED.updated_at,
+      pulse = EXCLUDED.pulse,
+      team = EXCLUDED.team,
+      deliverables = EXCLUDED.deliverables,
+      modules = EXCLUDED.modules,
+      observations = EXCLUDED.observations,
+      schedule = EXCLUDED.schedule,
+      stage_checklist = EXCLUDED.stage_checklist,
+      assistants = EXCLUDED.assistants
+  `;
+}
+
+async function persistTask(task: Task) {
+  const sql = getSql();
+  await sql`
+    INSERT INTO maturity_tasks (
+      id,
+      title,
+      course_slug,
+      role,
+      stage_id,
+      due_date,
+      priority,
+      status,
+      summary
+    )
+    VALUES (
+      ${task.id},
+      ${task.title},
+      ${task.courseSlug},
+      ${task.role},
+      ${task.stageId},
+      ${task.dueDate},
+      ${task.priority},
+      ${task.status},
+      ${task.summary}
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      title = EXCLUDED.title,
+      course_slug = EXCLUDED.course_slug,
+      role = EXCLUDED.role,
+      stage_id = EXCLUDED.stage_id,
+      due_date = EXCLUDED.due_date,
+      priority = EXCLUDED.priority,
+      status = EXCLUDED.status,
+      summary = EXCLUDED.summary
+  `;
+}
+
 async function ensureSeedData() {
+  await ensureAdminUserSeed();
+
   const sql = getSql();
   const countRows = (await sql`
     SELECT COUNT(*)::INT AS count
@@ -170,116 +480,11 @@ async function ensureSeedData() {
   }
 
   for (const course of mockAppData.courses) {
-    await sql`
-      INSERT INTO maturity_courses (
-        id,
-        slug,
-        title,
-        code,
-        faculty,
-        program,
-        modality,
-        credits,
-        stage_id,
-        status,
-        progress,
-        summary,
-        next_milestone,
-        updated_at,
-        pulse,
-        team,
-        deliverables,
-        modules,
-        observations,
-        schedule,
-        stage_checklist,
-        assistants
-      )
-      VALUES (
-        ${course.id},
-        ${course.slug},
-        ${course.title},
-        ${course.code},
-        ${course.faculty},
-        ${course.program},
-        ${course.modality},
-        ${course.credits},
-        ${course.stageId},
-        ${course.status},
-        ${course.progress},
-        ${course.summary},
-        ${course.nextMilestone},
-        ${course.updatedAt},
-        ${JSON.stringify(course.pulse)}::jsonb,
-        ${JSON.stringify(course.team)}::jsonb,
-        ${JSON.stringify(course.deliverables)}::jsonb,
-        ${JSON.stringify(course.modules)}::jsonb,
-        ${JSON.stringify(course.observations)}::jsonb,
-        ${JSON.stringify(course.schedule)}::jsonb,
-        ${JSON.stringify(course.stageChecklist)}::jsonb,
-        ${JSON.stringify(course.assistants)}::jsonb
-      )
-      ON CONFLICT (id) DO UPDATE
-      SET
-        slug = EXCLUDED.slug,
-        title = EXCLUDED.title,
-        code = EXCLUDED.code,
-        faculty = EXCLUDED.faculty,
-        program = EXCLUDED.program,
-        modality = EXCLUDED.modality,
-        credits = EXCLUDED.credits,
-        stage_id = EXCLUDED.stage_id,
-        status = EXCLUDED.status,
-        progress = EXCLUDED.progress,
-        summary = EXCLUDED.summary,
-        next_milestone = EXCLUDED.next_milestone,
-        updated_at = EXCLUDED.updated_at,
-        pulse = EXCLUDED.pulse,
-        team = EXCLUDED.team,
-        deliverables = EXCLUDED.deliverables,
-        modules = EXCLUDED.modules,
-        observations = EXCLUDED.observations,
-        schedule = EXCLUDED.schedule,
-        stage_checklist = EXCLUDED.stage_checklist,
-        assistants = EXCLUDED.assistants
-    `;
+    await persistCourse(course);
   }
 
   for (const task of mockAppData.tasks) {
-    await sql`
-      INSERT INTO maturity_tasks (
-        id,
-        title,
-        course_slug,
-        role,
-        stage_id,
-        due_date,
-        priority,
-        status,
-        summary
-      )
-      VALUES (
-        ${task.id},
-        ${task.title},
-        ${task.courseSlug},
-        ${task.role},
-        ${task.stageId},
-        ${task.dueDate},
-        ${task.priority},
-        ${task.status},
-        ${task.summary}
-      )
-      ON CONFLICT (id) DO UPDATE
-      SET
-        title = EXCLUDED.title,
-        course_slug = EXCLUDED.course_slug,
-        role = EXCLUDED.role,
-        stage_id = EXCLUDED.stage_id,
-        due_date = EXCLUDED.due_date,
-        priority = EXCLUDED.priority,
-        status = EXCLUDED.status,
-        summary = EXCLUDED.summary
-    `;
+    await persistTask(task);
   }
 
   for (const alert of mockAppData.alerts) {
@@ -420,17 +625,7 @@ async function readCourses() {
     ORDER BY title ASC
   `) as CourseRow[];
 
-  return rows.map((row) => ({
-    ...row,
-    pulse: parseJson<Course['pulse']>(row.pulse),
-    team: parseJson<Course['team']>(row.team),
-    deliverables: parseJson<Course['deliverables']>(row.deliverables),
-    modules: parseJson<Course['modules']>(row.modules),
-    observations: parseJson<Course['observations']>(row.observations),
-    schedule: parseJson<Course['schedule']>(row.schedule),
-    stageChecklist: parseJson<Course['stageChecklist']>(row.stageChecklist),
-    assistants: parseJson<Course['assistants']>(row.assistants),
-  }));
+  return rows.map(serializeCourseRow);
 }
 
 async function readTasks() {
@@ -544,4 +739,262 @@ export async function loadAppData(): Promise<AppData> {
     libraryResources,
     roleProfiles,
   };
+}
+
+export async function findUserByEmail(email: string) {
+  await ensureSchema();
+  await ensureAdminUserSeed();
+
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      name,
+      email,
+      role,
+      password_hash AS "passwordHash"
+    FROM maturity_users
+    WHERE email = ${email.trim().toLowerCase()}
+    LIMIT 1
+  `) as UserRow[];
+
+  return rows[0] ?? null;
+}
+
+export async function createSessionRecord(userId: string, tokenHash: string, expiresAt: string) {
+  await ensureSchema();
+  const sql = getSql();
+
+  await sql`
+    INSERT INTO maturity_sessions (id, user_id, token_hash, expires_at, created_at)
+    VALUES (
+      ${crypto.randomUUID()},
+      ${userId},
+      ${tokenHash},
+      ${expiresAt},
+      ${new Date().toISOString()}
+    )
+  `;
+}
+
+export async function findSessionByTokenHash(tokenHash: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      u.id AS "userId",
+      u.name,
+      u.email,
+      u.role,
+      s.expires_at AS "expiresAt"
+    FROM maturity_sessions s
+    INNER JOIN maturity_users u
+      ON u.id = s.user_id
+    WHERE s.token_hash = ${tokenHash}
+    LIMIT 1
+  `) as SessionLookupRow[];
+
+  return rows[0] ?? null;
+}
+
+export async function deleteSessionByTokenHash(tokenHash: string) {
+  await ensureSchema();
+  const sql = getSql();
+
+  await sql`
+    DELETE FROM maturity_sessions
+    WHERE token_hash = ${tokenHash}
+  `;
+}
+
+export async function createCourseRecord(input: CourseMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = makeCourseRecord(input);
+  await persistCourse(course);
+  return course;
+}
+
+export async function updateCourseRecord(slug: string, input: CourseMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      slug,
+      title,
+      code,
+      faculty,
+      program,
+      modality,
+      credits,
+      stage_id AS "stageId",
+      status,
+      progress,
+      summary,
+      next_milestone AS "nextMilestone",
+      updated_at AS "updatedAt",
+      pulse,
+      team,
+      deliverables,
+      modules,
+      observations,
+      schedule,
+      stage_checklist AS "stageChecklist",
+      assistants
+    FROM maturity_courses
+    WHERE slug = ${slug}
+    LIMIT 1
+  `) as CourseRow[];
+
+  const current = rows[0] ? serializeCourseRow(rows[0]) : null;
+
+  if (!current) {
+    return null;
+  }
+
+  const nextCourse: Course = {
+    ...current,
+    title: input.title,
+    code: input.code,
+    faculty: input.faculty,
+    program: input.program,
+    modality: input.modality,
+    credits: input.credits,
+    stageId: input.stageId,
+    status: input.status,
+    summary: input.summary,
+    nextMilestone: input.nextMilestone,
+    updatedAt: getTodayLabel(),
+    stageChecklist: buildStageChecklist(input.stageId),
+  };
+
+  await persistCourse(nextCourse);
+  return nextCourse;
+}
+
+export async function deleteCourseRecord(slug: string) {
+  await ensureSchema();
+  const sql = getSql();
+
+  await sql`
+    DELETE FROM maturity_tasks
+    WHERE course_slug = ${slug}
+  `;
+
+  await sql`
+    DELETE FROM maturity_alerts
+    WHERE course_slug = ${slug}
+  `;
+
+  await sql`
+    DELETE FROM maturity_library_resources
+    WHERE course_slug = ${slug}
+  `;
+
+  const result = (await sql`
+    DELETE FROM maturity_courses
+    WHERE slug = ${slug}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return result.length > 0;
+}
+
+export async function createTaskRecord(input: TaskMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const task = makeTaskRecord(input);
+  await persistTask(task);
+  return task;
+}
+
+export async function updateTaskRecord(id: string, input: Partial<TaskMutationInput>) {
+  await ensureSchema();
+  await ensureSeedData();
+  const sql = getSql();
+
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      course_slug AS "courseSlug",
+      role,
+      stage_id AS "stageId",
+      due_date AS "dueDate",
+      priority,
+      status,
+      summary
+    FROM maturity_tasks
+    WHERE id = ${id}
+    LIMIT 1
+  `) as Task[];
+
+  const current = rows[0];
+
+  if (!current) {
+    return null;
+  }
+
+  const nextTask: Task = {
+    ...current,
+    ...input,
+  };
+
+  await persistTask(nextTask);
+  return nextTask;
+}
+
+export async function deleteTaskRecord(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const result = (await sql`
+    DELETE FROM maturity_tasks
+    WHERE id = ${id}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return result.length > 0;
+}
+
+export async function findTaskById(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      course_slug AS "courseSlug",
+      role,
+      stage_id AS "stageId",
+      due_date AS "dueDate",
+      priority,
+      status,
+      summary
+    FROM maturity_tasks
+    WHERE id = ${id}
+    LIMIT 1
+  `) as Task[];
+
+  return rows[0] ?? null;
+}
+
+export async function getUserDirectory() {
+  await ensureSchema();
+  await ensureAdminUserSeed();
+  const sql = getSql();
+
+  return (await sql`
+    SELECT
+      id,
+      name,
+      email,
+      role
+    FROM maturity_users
+    ORDER BY role ASC, name ASC
+  `) as AuthUser[];
 }

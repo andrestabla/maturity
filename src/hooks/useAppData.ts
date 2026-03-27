@@ -8,19 +8,28 @@ interface BootstrapResponse {
   data: AppData;
 }
 
-export function useAppData() {
+export function useAppData(enabled: boolean) {
   const [appData, setAppData] = useState<AppData>(mockAppData);
   const [source, setSource] = useState<DataSource>('demo');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
 
     async function loadAppData() {
+      setIsLoading(true);
+
       try {
         const response = await fetch('/api/bootstrap', {
           signal: controller.signal,
+          credentials: 'same-origin',
           headers: {
             Accept: 'application/json',
           },
@@ -58,12 +67,13 @@ export function useAppData() {
     void loadAppData();
 
     return () => controller.abort();
-  }, []);
+  }, [enabled, refreshKey]);
 
   return {
     appData,
     source,
     isLoading,
     error,
+    refreshAppData: () => setRefreshKey((current) => current + 1),
   };
 }

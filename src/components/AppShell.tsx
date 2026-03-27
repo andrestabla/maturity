@@ -4,17 +4,21 @@ import {
   FolderKanban,
   LayoutDashboard,
   LibraryBig,
+  LogOut,
   MoveRight,
   ShieldCheck,
+  UserRound,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { roles } from '../data/mockData.js';
-import type { Role } from '../types.js';
+import type { AuthUser, Role } from '../types.js';
 import { formatPageDate } from '../utils/format.js';
 
 interface AppShellProps {
+  user: AuthUser;
   role: Role;
+  availableRoles: Role[];
   onRoleChange: (role: Role) => void;
+  onLogout: () => Promise<void>;
   dataSource: 'demo' | 'neon';
   isLoading: boolean;
   children: ReactNode;
@@ -28,8 +32,11 @@ const navigation = [
 ];
 
 export function AppShell({
+  user,
   role,
+  availableRoles,
   onRoleChange,
+  onLogout,
   dataSource,
   isLoading,
   children,
@@ -81,6 +88,14 @@ export function AppShell({
           </div>
 
           <div className="topbar-actions">
+            <div className="user-chip">
+              <UserRound size={16} />
+              <div>
+                <strong>{user.name}</strong>
+                <span>{user.role}</span>
+              </div>
+            </div>
+
             <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
               <span className="status-chip__dot" />
               <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Neon live' : 'Modo demo'}</span>
@@ -91,25 +106,32 @@ export function AppShell({
               <span>{formatPageDate()}</span>
             </div>
 
-            <label className="role-switch">
-              <span>Vista actual</span>
-              <select
-                aria-label="Seleccionar rol"
-                value={role}
-                onChange={(event) => onRoleChange(event.target.value as Role)}
-              >
-                {roles.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {availableRoles.length > 1 ? (
+              <label className="role-switch">
+                <span>Vista actual</span>
+                <select
+                  aria-label="Seleccionar rol"
+                  value={role}
+                  onChange={(event) => onRoleChange(event.target.value as Role)}
+                >
+                  {availableRoles.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <NavLink to="/courses" className="cta-button">
               <span>Ver portafolio</span>
               <MoveRight size={16} />
             </NavLink>
+
+            <button type="button" className="ghost-button" onClick={() => void onLogout()}>
+              <LogOut size={16} />
+              <span>Salir</span>
+            </button>
           </div>
         </header>
 

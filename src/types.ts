@@ -159,7 +159,7 @@ export interface RoleProfile {
   modules: {
     name: string;
     permissions: string;
-    }[];
+  }[];
 }
 
 export interface AppData {
@@ -170,4 +170,40 @@ export interface AppData {
   alerts: Alert[];
   libraryResources: LibraryResource[];
   roleProfiles: RoleProfile[];
+}
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+}
+
+export interface AuthSession {
+  authenticated: boolean;
+  user: AuthUser | null;
+}
+
+export interface CourseMutationInput {
+  title: string;
+  code: string;
+  faculty: string;
+  program: string;
+  modality: string;
+  credits: number;
+  stageId: string;
+  status: CourseStatus;
+  summary: string;
+  nextMilestone: string;
+}
+
+export interface TaskMutationInput {
+  title: string;
+  courseSlug: string;
+  role: Role;
+  stageId: string;
+  dueDate: string;
+  priority: Priority;
+  status: Task['status'];
+  summary: string;
 }

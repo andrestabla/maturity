@@ -1,14 +1,22 @@
+import { errorResponse, jsonResponse } from '../lib/http.js';
+import { getSessionUser } from '../lib/session.js';
 import { loadAppData } from '../lib/store.js';
 
 export const config = {
   runtime: 'edge',
 };
 
-export default async function handler() {
+export default async function handler(request: Request) {
   try {
+    const user = await getSessionUser(request);
+
+    if (!user) {
+      return errorResponse(401, 'Authentication required');
+    }
+
     const data = await loadAppData();
 
-    return Response.json(
+    return jsonResponse(
       {
         data,
       },
@@ -22,7 +30,7 @@ export default async function handler() {
     const message =
       error instanceof Error ? error.message : 'Unexpected error while loading data';
 
-    return Response.json(
+    return jsonResponse(
       {
         error: message,
       },
