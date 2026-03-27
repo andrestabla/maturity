@@ -1476,6 +1476,13 @@ button {
   font-weight: 700;
 }
 
+.form-success {
+  margin: 0;
+  color: #28513e;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
 .action-row,
 .toolbar-header,
 .hero-actions {
@@ -1517,6 +1524,41 @@ button {
   justify-items: stretch;
 }
 
+.user-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.user-card,
+.user-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.user-card {
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.user-card__top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.user-card__top strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.user-card__top p {
+  margin: 0;
+  color: var(--muted);
+}
+
 @media (max-width: 1080px) {
   .auth-panel,
   .task-editor {
@@ -1526,6 +1568,10 @@ button {
 
 @media (max-width: 840px) {
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-grid {
     grid-template-columns: 1fr;
   }
 

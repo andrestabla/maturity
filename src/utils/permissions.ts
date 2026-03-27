@@ -15,3 +15,7 @@ export function canDeleteTasks(role: Role) {
 export function canEditTask(role: Role, taskRole: Role) {
   return role === 'Administrador' || role === 'Coordinador' || role === taskRole;
 }
+
+export function canManageUsers(role: Role) {
+  return role === 'Administrador';
+}

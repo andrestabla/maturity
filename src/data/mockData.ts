@@ -808,4 +808,12 @@ export const mockAppData: AppData = {
   alerts,
   libraryResources,
   roleProfiles,
+  users: [
+    {
+      id: 'user-admin-demo',
+      name: 'Administrador Maturity',
+      email: 'admin@maturity.local',
+      role: 'Administrador',
+    },
+  ],
 };

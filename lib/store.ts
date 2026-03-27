@@ -4,14 +4,17 @@ import type {
   AuthUser,
   Course,
   CourseMutationInput,
+  PasswordChangeInput,
   Role,
   RoleProfile,
   StageDefinition,
   Task,
   TaskMutationInput,
+  UserMutationInput,
+  UserUpdateInput,
 } from '../src/types.js';
 import { getSql } from './db.js';
-import { createPasswordHash } from './security.js';
+import { createPasswordHash, verifyPassword } from './security.js';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -46,6 +49,13 @@ interface UserRow {
   email: string;
   role: Role;
   passwordHash: string;
+}
+
+interface PublicUserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
 }
 
 interface SessionLookupRow {
@@ -710,6 +720,19 @@ async function readRoleProfiles() {
   }));
 }
 
+async function readUsers() {
+  const sql = getSql();
+  return (await sql`
+    SELECT
+      id,
+      name,
+      email,
+      role
+    FROM maturity_users
+    ORDER BY role ASC, name ASC
+  `) as AuthUser[];
+}
+
 export async function prepareDatabase() {
   await ensureSchema();
   return ensureSeedData();
@@ -719,7 +742,7 @@ export async function loadAppData(): Promise<AppData> {
   await ensureSchema();
   await ensureSeedData();
 
-  const [roles, stages, courses, tasks, alerts, libraryResources, roleProfiles] =
+  const [roles, stages, courses, tasks, alerts, libraryResources, roleProfiles, users] =
     await Promise.all([
       readRoles(),
       readStages(),
@@ -728,6 +751,7 @@ export async function loadAppData(): Promise<AppData> {
       readAlerts(),
       readLibraryResources(),
       readRoleProfiles(),
+      readUsers(),
     ]);
 
   return {
@@ -738,6 +762,7 @@ export async function loadAppData(): Promise<AppData> {
     alerts,
     libraryResources,
     roleProfiles,
+    users,
   };
 }
 
@@ -986,15 +1011,143 @@ export async function findTaskById(id: string) {
 export async function getUserDirectory() {
   await ensureSchema();
   await ensureAdminUserSeed();
-  const sql = getSql();
+  return readUsers();
+}
 
-  return (await sql`
+export async function findUserById(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+  const rows = (await sql`
     SELECT
       id,
       name,
       email,
-      role
+      role,
+      password_hash AS "passwordHash"
     FROM maturity_users
-    ORDER BY role ASC, name ASC
-  `) as AuthUser[];
+    WHERE id = ${id}
+    LIMIT 1
+  `) as UserRow[];
+
+  return rows[0] ?? null;
+}
+
+export async function createUserRecord(input: UserMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const sql = getSql();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const existingRows = (await sql`
+    SELECT id
+    FROM maturity_users
+    WHERE email = ${normalizedEmail}
+    LIMIT 1
+  `) as Array<{ id: string }>;
+
+  if (existingRows.length > 0) {
+    throw new Error('Ya existe un usuario con ese correo.');
+  }
+
+  const passwordHash = await createPasswordHash(input.password);
+  const id = crypto.randomUUID();
+
+  const rows = (await sql`
+    INSERT INTO maturity_users (id, name, email, role, password_hash, created_at)
+    VALUES (
+      ${id},
+      ${input.name},
+      ${normalizedEmail},
+      ${input.role},
+      ${passwordHash},
+      ${new Date().toISOString()}
+    )
+    RETURNING id, name, email, role
+  `) as PublicUserRow[];
+
+  return rows[0];
+}
+
+export async function updateUserRecord(input: UserUpdateInput) {
+  await ensureSchema();
+  await ensureSeedData();
+  const sql = getSql();
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const current = await findUserById(input.id);
+
+  if (!current) {
+    return null;
+  }
+
+  const conflictRows = (await sql`
+    SELECT id
+    FROM maturity_users
+    WHERE email = ${normalizedEmail}
+      AND id <> ${input.id}
+    LIMIT 1
+  `) as Array<{ id: string }>;
+
+  if (conflictRows.length > 0) {
+    throw new Error('Ese correo ya está en uso por otro usuario.');
+  }
+
+  const passwordHash = input.password?.trim()
+    ? await createPasswordHash(input.password)
+    : current.passwordHash;
+
+  const rows = (await sql`
+    UPDATE maturity_users
+    SET
+      name = ${input.name},
+      email = ${normalizedEmail},
+      role = ${input.role},
+      password_hash = ${passwordHash}
+    WHERE id = ${input.id}
+    RETURNING id, name, email, role
+  `) as PublicUserRow[];
+
+  return rows[0] ?? null;
+}
+
+export async function deleteUserRecord(id: string) {
+  await ensureSchema();
+  const sql = getSql();
+
+  await sql`
+    DELETE FROM maturity_sessions
+    WHERE user_id = ${id}
+  `;
+
+  const rows = (await sql`
+    DELETE FROM maturity_users
+    WHERE id = ${id}
+    RETURNING id
+  `) as Array<{ id: string }>;
+
+  return rows.length > 0;
+}
+
+export async function changeUserPassword(userId: string, payload: PasswordChangeInput) {
+  await ensureSchema();
+  await ensureSeedData();
+  const current = await findUserById(userId);
+
+  if (!current) {
+    throw new Error('Usuario no encontrado.');
+  }
+
+  const isValid = await verifyPassword(payload.currentPassword, current.passwordHash);
+
+  if (!isValid) {
+    throw new Error('La contraseña actual no coincide.');
+  }
+
+  const sql = getSql();
+  const passwordHash = await createPasswordHash(payload.nextPassword);
+
+  await sql`
+    UPDATE maturity_users
+    SET password_hash = ${passwordHash}
+    WHERE id = ${userId}
+  `;
 }

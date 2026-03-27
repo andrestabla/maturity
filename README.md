@@ -18,6 +18,8 @@ El MVP actual incluye:
 - `Seed automático` del dominio base si la base está vacía.
 - `Autenticación real` con sesión `httpOnly`.
 - `CRUD básico` de cursos y tareas.
+- `Gestión de usuarios` por rol para administradores.
+- `Cambio de contraseña` para usuarios autenticados.
 
 ## Stack
 
@@ -78,7 +80,9 @@ El proyecto queda listo para desplegar como app Vite con funciones serverless:
 - `/api/bootstrap` carga los datos desde Neon;
 - `/api/health` prepara y valida esquema + seed.
 - `/api/auth/*` maneja sesión y login.
+- `/api/auth/password` permite cambiar la contraseña actual.
 - `/api/courses` y `/api/tasks` gestionan CRUD básico.
+- `/api/users` expone directorio y administración de usuarios.
 
 En Vercel deben existir `DATABASE_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_NAME` e `INITIAL_ADMIN_PASSWORD`.
 

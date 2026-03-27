@@ -170,6 +170,7 @@ export interface AppData {
   alerts: Alert[];
   libraryResources: LibraryResource[];
   roleProfiles: RoleProfile[];
+  users: AuthUser[];
 }
 
 export interface AuthUser {
@@ -182,6 +183,26 @@ export interface AuthUser {
 export interface AuthSession {
   authenticated: boolean;
   user: AuthUser | null;
+}
+
+export interface UserMutationInput {
+  name: string;
+  email: string;
+  role: Role;
+  password: string;
+}
+
+export interface UserUpdateInput {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  password?: string;
+}
+
+export interface PasswordChangeInput {
+  currentPassword: string;
+  nextPassword: string;
 }
 
 export interface CourseMutationInput {

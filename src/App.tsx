@@ -12,7 +12,7 @@ import { TeamPage } from './pages/TeamPage.js';
 import type { Role } from './types.js';
 
 export default function App() {
-  const { session, status, login, logout } = useSession();
+  const { session, status, login, logout, refreshSession } = useSession();
   const [role, setRole] = useState<Role>('Coordinador');
   const {
     appData,
@@ -81,7 +81,18 @@ export default function App() {
           }
         />
         <Route path="/library" element={<LibraryPage role={activeRole} appData={appData} />} />
-        <Route path="/team" element={<TeamPage role={activeRole} appData={appData} />} />
+        <Route
+          path="/team"
+          element={
+            <TeamPage
+              role={activeRole}
+              user={session.user}
+              appData={appData}
+              refreshAppData={refreshAppData}
+              refreshSession={refreshSession}
+            />
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
