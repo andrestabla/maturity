@@ -6,6 +6,7 @@ import {
   Cable,
   Clock3,
   Database,
+  Eye,
   KeyRound,
   Logs,
   RefreshCcw,
@@ -242,17 +243,6 @@ export function TeamPage({
   const [auditQuery, setAuditQuery] = useState('');
   const [auditClassificationFilter, setAuditClassificationFilter] = useState<string>('Todas');
 
-  const roleCoverage = useMemo(
-    () =>
-      appData.roleProfiles.map((profile) => ({
-        profile,
-        count: appData.courses.filter((course) =>
-          course.team.some((member) => member.role === profile.role),
-        ).length,
-      })),
-    [appData.courses, appData.roleProfiles],
-  );
-
   async function loadAdminCenter() {
     if (!isAdmin) {
       return;
@@ -467,13 +457,31 @@ export function TeamPage({
       await loadAdminCenter();
       refreshAppData();
       setUserForm(buildUserForm(institutionDraft ?? undefined));
-      setShowCreateUserAssistant(false);
-      setIsRolePickerOpen(false);
+      closeUserAssistant();
     } catch (error) {
       setUserError(error instanceof Error ? error.message : 'No fue posible crear el usuario.');
     } finally {
       setIsCreatingUser(false);
     }
+  }
+
+  function closeUserAssistant() {
+    setShowCreateUserAssistant(false);
+    setEditingDraft(null);
+    setEditingUserId(null);
+    setFocusRoleAssignment(false);
+    setIsRolePickerOpen(false);
+
+    if (location.pathname === '/admin/users' && new URLSearchParams(location.search).get('user')) {
+      navigate('/admin/users', { replace: true });
+    }
+  }
+
+  function openCreateUserAssistant() {
+    setUserError(null);
+    setUserForm(buildUserForm(institutionDraft ?? undefined));
+    closeUserAssistant();
+    setShowCreateUserAssistant(true);
   }
 
   function startEditing(target: AuthUser) {
@@ -495,6 +503,17 @@ export function TeamPage({
       statusReason: target.statusReason ?? '',
       password: '',
     });
+  }
+
+  function openUserAssistant(target: AuthUser) {
+    startEditing(target);
+    navigate(
+      {
+        pathname: '/admin/users',
+        search: `?user=${target.id}`,
+      },
+      { replace: true },
+    );
   }
 
   async function handleUpdateUser() {
@@ -523,10 +542,7 @@ export function TeamPage({
 
       await loadAdminCenter();
       refreshAppData();
-      setEditingDraft(null);
-      setEditingUserId(null);
-      setFocusRoleAssignment(false);
-      setIsRolePickerOpen(false);
+      closeUserAssistant();
 
       if (editingDraft.id === user.id) {
         await refreshSession();
@@ -565,6 +581,7 @@ export function TeamPage({
 
     await loadAdminCenter();
     refreshAppData();
+    closeUserAssistant();
   }
 
   async function handlePasswordChange(event: React.FormEvent<HTMLFormElement>) {
@@ -922,12 +939,13 @@ export function TeamPage({
           <div className="section-heading">
             <div>
               <span className="eyebrow">Usuarios y roles</span>
-              <h3>Lista clara de acceso y asistente lateral de edición</h3>
+              <h3>Resumen de acceso y directorio operativo</h3>
             </div>
             <UsersRound size={18} />
           </div>
           <p className="section-lead">
-            Aquí solo ves usuarios creados, roles asignados y un asistente de edición. Sin ruido.
+            Aquí ves el estado general de acceso. El detalle y las acciones sobre cada usuario se
+            abren solo cuando entras por <strong>Acciones</strong>.
           </p>
 
           <div className="admin-kpi-grid">
@@ -954,455 +972,193 @@ export function TeamPage({
           </div>
         </section>
 
-        <section className="admin-split admin-split--users">
-          <article className="surface section-card admin-pane">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Directorio</span>
-                <h3>Usuarios creados</h3>
+        <article className="surface section-card admin-pane">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Directorio</span>
+              <h3>Usuarios creados</h3>
+            </div>
+            <UserCog size={18} />
+          </div>
+
+          <div className="admin-filter-row">
+            <label className="field field--compact field--search">
+              <span>Buscar usuario</span>
+              <div className="field__control">
+                <input
+                  value={userSearch}
+                  onChange={(event) => setUserSearch(event.target.value)}
+                  placeholder="Nombre, correo, rol..."
+                />
               </div>
-              <UserCog size={18} />
+            </label>
+
+            <button type="button" className="cta-button" onClick={openCreateUserAssistant}>
+              <UserPlus size={16} />
+              <span>Nuevo usuario</span>
+            </button>
+          </div>
+
+          <div className="admin-user-directory">
+            <div className="admin-user-directory__header">
+              <span>Usuario</span>
+              <span>Rol</span>
+              <span>Estado</span>
+              <span>Seguimiento</span>
+              <span>Acciones</span>
             </div>
 
-            <div className="admin-filter-row">
-              <label className="field field--compact field--search">
-                <span>Buscar usuario</span>
-                <div className="field__control">
-                  <input
-                    value={userSearch}
-                    onChange={(event) => setUserSearch(event.target.value)}
-                    placeholder="Nombre, correo, rol..."
-                  />
-                </div>
-              </label>
+            {filteredUsers.length === 0 ? (
+              <div className="empty-state empty-state--embedded">
+                <strong>No encontramos usuarios con ese filtro</strong>
+                <p>Ajusta la búsqueda para volver a ver el directorio completo.</p>
+              </div>
+            ) : (
+              filteredUsers.map((member) => {
+                const trackingDetail = member.lastAccessAt
+                  ? `Último acceso ${formatDateTime(member.lastAccessAt)}`
+                  : member.createdAt
+                    ? `Creado ${formatDate(member.createdAt)}`
+                    : 'Sin trazabilidad registrada';
 
-              <button
-                type="button"
-                className="cta-button"
-                onClick={() => {
-                  setShowCreateUserAssistant(true);
-                  setEditingDraft(null);
-                  setEditingUserId(null);
-                  setFocusRoleAssignment(false);
-                  setIsRolePickerOpen(false);
-                }}
-              >
-                <UserPlus size={16} />
-                <span>Nuevo usuario</span>
-              </button>
+                return (
+                  <div
+                    key={member.id}
+                    className={
+                      member.id === selectedUser?.id && !showCreateUserAssistant
+                        ? 'admin-user-directory__row admin-user-directory__row--active'
+                        : 'admin-user-directory__row'
+                    }
+                  >
+                    <div className="admin-user-directory__cell" data-label="Usuario">
+                      <div className="admin-user-directory__identity">
+                        <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
+                        <div>
+                          <strong>{member.name}</strong>
+                          <p>{member.email}</p>
+                        </div>
+                      </div>
+                    </div>
 
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  if (!selectedUser) {
-                    return;
-                  }
-                  startEditing(selectedUser);
-                  setFocusRoleAssignment(true);
-                  setIsRolePickerOpen(true);
-                }}
-                disabled={!selectedUser}
-              >
-                <Waypoints size={16} />
-                <span>Asignar rol</span>
-              </button>
-            </div>
+                    <div className="admin-user-directory__cell" data-label="Rol">
+                      <div className="admin-user-directory__role">
+                        <strong>{member.role}</strong>
+                        {(member.secondaryRoles ?? []).length > 0 ? (
+                          <span>+ {(member.secondaryRoles ?? []).length} complementario(s)</span>
+                        ) : (
+                          <span>Sin roles adicionales</span>
+                        )}
+                      </div>
+                    </div>
 
-            <div className="admin-user-list">
-              {filteredUsers.map((member) => (
-                <button
-                  key={member.id}
-                  type="button"
-                  className={
-                    member.id === selectedUser?.id && !showCreateUserAssistant
-                      ? 'admin-user-list__item admin-user-list__item--active'
-                      : 'admin-user-list__item'
-                  }
-                  onClick={() => startEditing(member)}
-                >
-                  <div className="admin-user-list__identity">
-                    <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
-                    <div>
-                      <strong>{member.name}</strong>
-                      <p>{member.email}</p>
+                    <div className="admin-user-directory__cell" data-label="Estado">
+                      <span className={getBadgeClass(formatUserStateLabel(member.status))}>
+                        {formatUserStateLabel(member.status)}
+                      </span>
+                    </div>
+
+                    <div className="admin-user-directory__cell" data-label="Seguimiento">
+                      <div className="admin-user-directory__tracking">
+                        <span className="badge badge--outline">
+                          {member.scope || member.program || 'Global'}
+                        </span>
+                        <small>{trackingDetail}</small>
+                      </div>
+                    </div>
+
+                    <div className="admin-user-directory__cell" data-label="Acciones">
+                      <button
+                        type="button"
+                        className="ghost-button admin-user-directory__action"
+                        onClick={() => openUserAssistant(member)}
+                      >
+                        <Eye size={16} />
+                        <span>Ver</span>
+                      </button>
                     </div>
                   </div>
-                  <div className="admin-user-list__roles">
-                    <span className="badge badge--outline">{member.role}</span>
-                    {(member.secondaryRoles ?? []).map((role) => (
-                      <span key={`${member.id}-${role}`} className="badge badge--outline">
-                        {role}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="admin-user-list__meta">
-                    <span className={getBadgeClass(formatUserStateLabel(member.status))}>
-                      {formatUserStateLabel(member.status)}
-                    </span>
-                    <span>{member.scope || member.program || 'Sin alcance definido'}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+                );
+              })
+            )}
+          </div>
 
-            <div className="coverage-list coverage-list--compact">
-              {roleCoverage.map(({ profile, count }) => (
-                <div key={profile.role} className="coverage-list__item">
-                  <div>
-                    <strong>{profile.role}</strong>
-                    <p>{profile.focus}</p>
-                  </div>
-                  <span>{count} cursos</span>
-                </div>
-              ))}
-            </div>
+          {userError ? <p className="form-error">{userError}</p> : null}
+        </article>
 
-            {userError ? <p className="form-error">{userError}</p> : null}
-          </article>
-
+        {showCreateUserAssistant ? (
           <article className="surface section-card admin-pane">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Asistente</span>
-                <h3>
-                  {showCreateUserAssistant
-                    ? 'Crear nuevo usuario'
-                    : selectedUser
-                      ? `Editar a ${selectedUser.name}`
-                      : 'Selecciona un usuario'}
-                </h3>
+                <span className="eyebrow">Acciones</span>
+                <h3>Crear nuevo usuario</h3>
               </div>
               <ShieldCheck size={18} />
             </div>
 
-            {showCreateUserAssistant ? (
-              <form className="editor-card" onSubmit={handleCreateUser}>
-                <fieldset className="form-section">
-                  <legend>Datos personales</legend>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Nombre</span>
-                      <div className="field__control">
-                        <input
-                          value={userForm.name}
-                          onChange={(event) =>
-                            setUserForm((current) => ({ ...current, name: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Correo</span>
-                      <div className="field__control">
-                        <input
-                          type="email"
-                          value={userForm.email}
-                          onChange={(event) =>
-                            setUserForm((current) => ({ ...current, email: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Contraseña temporal</span>
-                      <div className="field__control">
-                        <input
-                          type="password"
-                          minLength={10}
-                          value={userForm.password}
-                          onChange={(event) =>
-                            setUserForm((current) => ({ ...current, password: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-                  </div>
-                </fieldset>
-
-                <fieldset className="form-section">
-                  <legend>Rol y permisos</legend>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Rol principal</span>
-                      <div className="field__control">
-                        <select
-                          value={userForm.role}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              role: event.target.value as Role,
-                              secondaryRoles: current.secondaryRoles.filter(
-                                (item) => item !== event.target.value,
-                              ),
-                            }))
-                          }
-                        >
-                          {appData.roles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={userForm.status}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              status: event.target.value as UserMutationInput['status'],
-                            }))
-                          }
-                        >
-                          {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-                  </div>
-
-                  <label className="field field--full">
-                    <span>Roles complementarios</span>
-                    <div className="tag-token-list">
-                      {userForm.secondaryRoles.length === 0 ? (
-                        <span className="tag-token tag-token--muted">Sin roles complementarios</span>
-                      ) : (
-                        userForm.secondaryRoles.map((item) => (
-                          <span key={`summary-role-${item}`} className="tag-token">
-                            {item}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                    <div className="action-row action-row--inline">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => setIsRolePickerOpen((current) => !current)}
-                      >
-                        <span>
-                          {isRolePickerOpen ? 'Ocultar selector' : 'Seleccionar roles complementarios'}
-                        </span>
-                      </button>
-                    </div>
-
-                    {isRolePickerOpen ? (
-                      <div className="role-picker-panel">
-                        {appData.roles
-                          .filter((item) => item !== userForm.role)
-                          .map((item) => (
-                            <button
-                              key={`new-user-${item}`}
-                              type="button"
-                              className={
-                                userForm.secondaryRoles.includes(item)
-                                  ? 'filter-chip filter-chip--active'
-                                  : 'filter-chip'
-                              }
-                              onClick={() =>
-                                setUserForm((current) => toggleSecondaryRole(current, item))
-                              }
-                            >
-                              <span>{item}</span>
-                            </button>
-                          ))}
-                      </div>
-                    ) : null}
-                  </label>
-
-                  <label className="field field--full">
-                    <span>Motivo de estado</span>
+            <form className="editor-card" onSubmit={handleCreateUser}>
+              <fieldset className="form-section">
+                <legend>Datos personales</legend>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Nombre</span>
                     <div className="field__control">
-                      <textarea
-                        rows={3}
-                        value={userForm.statusReason}
+                      <input
+                        value={userForm.name}
                         onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            statusReason: event.target.value,
-                          }))
+                          setUserForm((current) => ({ ...current, name: event.target.value }))
                         }
-                        placeholder="Úsalo si el usuario no inicia activo."
+                        required
                       />
                     </div>
                   </label>
-                </fieldset>
 
-                <fieldset className="form-section">
-                  <legend>Organización</legend>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Institución</span>
-                      <div className="field__control">
-                        <input
-                          list="institution-options"
-                          value={userForm.institution}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              institution: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    </label>
+                  <label className="field">
+                    <span>Correo</span>
+                    <div className="field__control">
+                      <input
+                        type="email"
+                        value={userForm.email}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, email: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
 
-                    <label className="field">
-                      <span>Facultad</span>
-                      <div className="field__control">
-                        <input
-                          list="faculty-options"
-                          value={userForm.faculty}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              faculty: event.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Programa</span>
-                      <div className="field__control">
-                        <input
-                          list="program-options"
-                          value={userForm.program}
-                          onChange={(event) =>
-                            setUserForm((current) => ({ ...current, program: event.target.value }))
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Alcance organizacional</span>
-                      <div className="field__control">
-                        <input
-                          value={userForm.scope}
-                          onChange={(event) =>
-                            setUserForm((current) => ({ ...current, scope: event.target.value }))
-                          }
-                          placeholder="Global, facultad, cohorte..."
-                        />
-                      </div>
-                      <small className="field-help">
-                        Define si el usuario verá datos de toda la institución o solo de una
-                        facultad, programa o cohorte.
-                      </small>
-                    </label>
-                  </div>
-                </fieldset>
-
-                <datalist id="institution-options">
-                  {(institutionDraft?.institutions ?? []).map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
-                <datalist id="faculty-options">
-                  {(institutionDraft?.faculties ?? []).map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
-                <datalist id="program-options">
-                  {(institutionDraft?.programs ?? []).map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
-
-                <div className="action-row">
-                  <button type="submit" className="cta-button" disabled={isCreatingUser}>
-                    <span>{isCreatingUser ? 'Creando…' : 'Crear usuario'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="filter-chip"
-                    onClick={() => {
-                      setShowCreateUserAssistant(false);
-                      setIsRolePickerOpen(false);
-                    }}
-                  >
-                    <span>Cerrar</span>
-                  </button>
+                  <label className="field">
+                    <span>Contraseña temporal</span>
+                    <div className="field__control">
+                      <input
+                        type="password"
+                        minLength={10}
+                        value={userForm.password}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, password: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
                 </div>
-              </form>
-            ) : editingDraft && selectedUser ? (
-              <div className="editor-card">
-                <div className="admin-assistant-intro">
-                  <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
-                    {formatUserStateLabel(selectedUser.status)}
-                  </span>
-                  <p>
-                    {focusRoleAssignment
-                      ? 'Modo rápido para asignar o retirar roles sin perder el contexto del usuario.'
-                      : 'Ajusta cuenta, acceso y alcance desde un solo panel lateral.'}
-                  </p>
-                </div>
+              </fieldset>
 
-                {!focusRoleAssignment ? (
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Nombre</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.name}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, name: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Correo</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.email}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, email: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-                  </div>
-                ) : null}
-
+              <fieldset className="form-section">
+                <legend>Rol y permisos</legend>
                 <div className="form-grid">
                   <label className="field">
                     <span>Rol principal</span>
                     <div className="field__control">
                       <select
-                        value={editingDraft.role}
+                        value={userForm.role}
                         onChange={(event) =>
-                          setEditingDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  role: event.target.value as Role,
-                                  secondaryRoles: current.secondaryRoles.filter(
-                                    (item) => item !== event.target.value,
-                                  ),
-                                }
-                              : current,
-                          )
+                          setUserForm((current) => ({
+                            ...current,
+                            role: event.target.value as Role,
+                            secondaryRoles: current.secondaryRoles.filter(
+                              (item) => item !== event.target.value,
+                            ),
+                          }))
                         }
                       >
                         {appData.roles.map((item) => (
@@ -1418,16 +1174,12 @@ export function TeamPage({
                     <span>Estado</span>
                     <div className="field__control">
                       <select
-                        value={editingDraft.status}
+                        value={userForm.status}
                         onChange={(event) =>
-                          setEditingDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  status: event.target.value as UserUpdateInput['status'],
-                                }
-                              : current,
-                          )
+                          setUserForm((current) => ({
+                            ...current,
+                            status: event.target.value as UserMutationInput['status'],
+                          }))
                         }
                       >
                         {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
@@ -1440,14 +1192,14 @@ export function TeamPage({
                   </label>
                 </div>
 
-                <label className="field">
+                <label className="field field--full">
                   <span>Roles complementarios</span>
                   <div className="tag-token-list">
-                    {editingDraft.secondaryRoles.length === 0 ? (
+                    {userForm.secondaryRoles.length === 0 ? (
                       <span className="tag-token tag-token--muted">Sin roles complementarios</span>
                     ) : (
-                      editingDraft.secondaryRoles.map((item) => (
-                        <span key={`editing-role-${item}`} className="tag-token">
+                      userForm.secondaryRoles.map((item) => (
+                        <span key={`summary-role-${item}`} className="tag-token">
                           {item}
                         </span>
                       ))
@@ -1459,26 +1211,27 @@ export function TeamPage({
                       className="ghost-button"
                       onClick={() => setIsRolePickerOpen((current) => !current)}
                     >
-                      <span>{isRolePickerOpen ? 'Ocultar selector' : 'Editar roles complementarios'}</span>
+                      <span>
+                        {isRolePickerOpen ? 'Ocultar selector' : 'Seleccionar roles complementarios'}
+                      </span>
                     </button>
                   </div>
+
                   {isRolePickerOpen ? (
                     <div className="role-picker-panel">
                       {appData.roles
-                        .filter((item) => item !== editingDraft.role)
+                        .filter((item) => item !== userForm.role)
                         .map((item) => (
                           <button
-                            key={`${editingDraft.id}-${item}`}
+                            key={`new-user-${item}`}
                             type="button"
                             className={
-                              editingDraft.secondaryRoles.includes(item)
+                              userForm.secondaryRoles.includes(item)
                                 ? 'filter-chip filter-chip--active'
                                 : 'filter-chip'
                             }
                             onClick={() =>
-                              setEditingDraft((current) =>
-                                current ? toggleSecondaryRole(current, item) : current,
-                              )
+                              setUserForm((current) => toggleSecondaryRole(current, item))
                             }
                           >
                             <span>{item}</span>
@@ -1488,149 +1241,413 @@ export function TeamPage({
                   ) : null}
                 </label>
 
-                {!focusRoleAssignment ? (
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Institución</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.institution}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, institution: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Facultad</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.faculty}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, faculty: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Programa</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.program}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, program: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Alcance organizacional</span>
-                      <div className="field__control">
-                        <input
-                          value={editingDraft.scope}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, scope: event.target.value } : current,
-                            )
-                          }
-                        />
-                      </div>
-                      <small className="field-help">
-                        Define si este usuario opera sobre toda la institución o sobre un ámbito
-                        acotado.
-                      </small>
-                    </label>
-
-                    <label className="field">
-                      <span>Nueva contraseña</span>
-                      <div className="field__control">
-                        <input
-                          type="password"
-                          value={editingDraft.password ?? ''}
-                          onChange={(event) =>
-                            setEditingDraft((current) =>
-                              current ? { ...current, password: event.target.value } : current,
-                            )
-                          }
-                          placeholder="Opcional"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                ) : null}
-
-                <label className="field">
+                <label className="field field--full">
                   <span>Motivo de estado</span>
                   <div className="field__control">
                     <textarea
                       rows={3}
-                      value={editingDraft.statusReason}
+                      value={userForm.statusReason}
                       onChange={(event) =>
-                        setEditingDraft((current) =>
-                          current ? { ...current, statusReason: event.target.value } : current,
-                        )
+                        setUserForm((current) => ({
+                          ...current,
+                          statusReason: event.target.value,
+                        }))
                       }
-                      placeholder="Describe el motivo si el acceso no está activo."
+                      placeholder="Úsalo si el usuario no inicia activo."
                     />
                   </div>
                 </label>
+              </fieldset>
 
-                <div className="admin-user-signals">
-                  <span>
-                    Último acceso {selectedUser.lastAccessAt ? formatDateTime(selectedUser.lastAccessAt) : 'sin registro'}
-                  </span>
-                  <span>Institución {selectedUser.institution || 'sin definir'}</span>
-                  <span>Programa {selectedUser.program || 'sin definir'}</span>
+              <fieldset className="form-section">
+                <legend>Organización</legend>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Institución</span>
+                    <div className="field__control">
+                      <input
+                        list="institution-options"
+                        value={userForm.institution}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            institution: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Facultad</span>
+                    <div className="field__control">
+                      <input
+                        list="faculty-options"
+                        value={userForm.faculty}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            faculty: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Programa</span>
+                    <div className="field__control">
+                      <input
+                        list="program-options"
+                        value={userForm.program}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, program: event.target.value }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Alcance organizacional</span>
+                    <div className="field__control">
+                      <input
+                        value={userForm.scope}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, scope: event.target.value }))
+                        }
+                        placeholder="Global, facultad, cohorte..."
+                      />
+                    </div>
+                    <small className="field-help">
+                      Define si el usuario verá datos de toda la institución o solo de una
+                      facultad, programa o cohorte.
+                    </small>
+                  </label>
                 </div>
+              </fieldset>
 
-                <div className="action-row">
-                  <button
-                    type="button"
-                    className="cta-button"
-                    onClick={() => void handleUpdateUser()}
-                    disabled={isSavingUser}
-                  >
-                    <span>{isSavingUser ? 'Guardando…' : 'Guardar cambios'}</span>
-                  </button>
+              <datalist id="institution-options">
+                {(institutionDraft?.institutions ?? []).map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+              <datalist id="faculty-options">
+                {(institutionDraft?.faculties ?? []).map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+              <datalist id="program-options">
+                {(institutionDraft?.programs ?? []).map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isCreatingUser}>
+                  <span>{isCreatingUser ? 'Creando…' : 'Crear usuario'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
+                  <span>Cerrar</span>
+                </button>
+              </div>
+            </form>
+          </article>
+        ) : editingDraft && selectedUser ? (
+          <article className="surface section-card admin-pane">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Acciones</span>
+                <h3>{selectedUser.name}</h3>
+              </div>
+              <ShieldCheck size={18} />
+            </div>
+
+            <div className="editor-card">
+              <div className="admin-assistant-intro">
+                <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
+                  {formatUserStateLabel(selectedUser.status)}
+                </span>
+                <p>
+                  {focusRoleAssignment
+                    ? 'Modo rápido para asignar o retirar roles sin perder el contexto del usuario.'
+                    : 'Desde aquí ajustas cuenta, acceso, alcance y roles del usuario seleccionado.'}
+                </p>
+              </div>
+
+              {!focusRoleAssignment ? (
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Nombre</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.name}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, name: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Correo</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.email}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, email: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+                </div>
+              ) : null}
+
+              <div className="form-grid">
+                <label className="field">
+                  <span>Rol principal</span>
+                  <div className="field__control">
+                    <select
+                      value={editingDraft.role}
+                      onChange={(event) =>
+                        setEditingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                role: event.target.value as Role,
+                                secondaryRoles: current.secondaryRoles.filter(
+                                  (item) => item !== event.target.value,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {appData.roles.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={editingDraft.status}
+                      onChange={(event) =>
+                        setEditingDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                status: event.target.value as UserUpdateInput['status'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Roles complementarios</span>
+                <div className="tag-token-list">
+                  {editingDraft.secondaryRoles.length === 0 ? (
+                    <span className="tag-token tag-token--muted">Sin roles complementarios</span>
+                  ) : (
+                    editingDraft.secondaryRoles.map((item) => (
+                      <span key={`editing-role-${item}`} className="tag-token">
+                        {item}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="action-row action-row--inline">
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => setFocusRoleAssignment((current) => !current)}
+                    onClick={() => setIsRolePickerOpen((current) => !current)}
                   >
-                    <span>{focusRoleAssignment ? 'Volver a edición general' : 'Enfocar roles'}</span>
+                    <span>{isRolePickerOpen ? 'Ocultar selector' : 'Editar roles complementarios'}</span>
                   </button>
-                  {selectedUser.id !== user.id ? (
-                    <button
-                      type="button"
-                      className="danger-button danger-button--ghost"
-                      onClick={() => void handleDeleteUser(selectedUser.id, selectedUser.name)}
-                    >
-                      <Trash2 size={16} />
-                      <span>Eliminar</span>
-                    </button>
-                  ) : null}
                 </div>
+                {isRolePickerOpen ? (
+                  <div className="role-picker-panel">
+                    {appData.roles
+                      .filter((item) => item !== editingDraft.role)
+                      .map((item) => (
+                        <button
+                          key={`${editingDraft.id}-${item}`}
+                          type="button"
+                          className={
+                            editingDraft.secondaryRoles.includes(item)
+                              ? 'filter-chip filter-chip--active'
+                              : 'filter-chip'
+                          }
+                          onClick={() =>
+                            setEditingDraft((current) =>
+                              current ? toggleSecondaryRole(current, item) : current,
+                            )
+                          }
+                        >
+                          <span>{item}</span>
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
+              </label>
+
+              {!focusRoleAssignment ? (
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Institución</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.institution}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, institution: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Facultad</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.faculty}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, faculty: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Programa</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.program}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, program: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Alcance organizacional</span>
+                    <div className="field__control">
+                      <input
+                        value={editingDraft.scope}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, scope: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                    <small className="field-help">
+                      Define si este usuario opera sobre toda la institución o sobre un ámbito
+                      acotado.
+                    </small>
+                  </label>
+
+                  <label className="field">
+                    <span>Nueva contraseña</span>
+                    <div className="field__control">
+                      <input
+                        type="password"
+                        value={editingDraft.password ?? ''}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current ? { ...current, password: event.target.value } : current,
+                          )
+                        }
+                        placeholder="Opcional"
+                      />
+                    </div>
+                  </label>
+                </div>
+              ) : null}
+
+              <label className="field">
+                <span>Motivo de estado</span>
+                <div className="field__control">
+                  <textarea
+                    rows={3}
+                    value={editingDraft.statusReason}
+                    onChange={(event) =>
+                      setEditingDraft((current) =>
+                        current ? { ...current, statusReason: event.target.value } : current,
+                      )
+                    }
+                    placeholder="Describe el motivo si el acceso no está activo."
+                  />
+                </div>
+              </label>
+
+              <div className="admin-user-signals">
+                <span>
+                  Último acceso{' '}
+                  {selectedUser.lastAccessAt ? formatDateTime(selectedUser.lastAccessAt) : 'sin registro'}
+                </span>
+                <span>Institución {selectedUser.institution || 'sin definir'}</span>
+                <span>Programa {selectedUser.program || 'sin definir'}</span>
               </div>
-            ) : (
-              <div className="empty-state">
-                <strong>Selecciona un usuario o crea uno nuevo</strong>
-                <p>
-                  El asistente lateral concentra edición, asignación de roles y ajuste de acceso para
-                  no saturar la vista principal.
-                </p>
+
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="cta-button"
+                  onClick={() => void handleUpdateUser()}
+                  disabled={isSavingUser}
+                >
+                  <span>{isSavingUser ? 'Guardando…' : 'Guardar cambios'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setFocusRoleAssignment((current) => !current)}
+                >
+                  <Waypoints size={16} />
+                  <span>{focusRoleAssignment ? 'Volver a edición general' : 'Enfocar roles'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
+                  <span>Cerrar</span>
+                </button>
+                {selectedUser.id !== user.id ? (
+                  <button
+                    type="button"
+                    className="danger-button danger-button--ghost"
+                    onClick={() => void handleDeleteUser(selectedUser.id, selectedUser.name)}
+                  >
+                    <Trash2 size={16} />
+                    <span>Eliminar</span>
+                  </button>
+                ) : null}
               </div>
-            )}
+            </div>
           </article>
-        </section>
+        ) : null}
 
         {renderAccountSecurity()}
       </div>
