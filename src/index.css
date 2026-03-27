@@ -5786,8 +5786,21 @@ body::after {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.section-card > .editor-card + .editor-card {
+  margin-top: 18px;
+}
+
 .timeline-stack--history {
   margin-top: 18px;
+}
+
+.task-editor--timeline {
+  align-items: flex-start;
+}
+
+.timeline-item .badge {
+  width: fit-content;
+  margin-bottom: 8px;
 }
 
 .timeline-item__meta {

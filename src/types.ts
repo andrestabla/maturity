@@ -25,6 +25,7 @@ export type ObservationStatus = 'Pendiente' | 'En ajuste' | 'Resuelta';
 export type Priority = 'Alta' | 'Media' | 'Baja';
 export type Tone = 'coral' | 'sage' | 'ocean' | 'gold' | 'ink';
 export type StageCheckpointStatus = 'done' | 'active' | 'pending' | 'blocked';
+export type RiskLevel = 'Bajo' | 'Medio' | 'Alto';
 
 export interface StageDefinition {
   id: string;
@@ -84,6 +85,39 @@ export interface TimelineItem {
   status: 'done' | 'active' | 'pending';
 }
 
+export interface CourseMetadata {
+  institution: string;
+  shortName: string;
+  semester: string;
+  academicPeriod: string;
+  courseType: string;
+  learningOutcomes: string[];
+  topics: string[];
+  methodology: string;
+  evaluation: string;
+  bibliography: string[];
+  targetCloseDate: string;
+  currentVersion: string;
+  priority: Priority;
+  riskLevel: RiskLevel;
+  route: string;
+}
+
+export interface CourseAuditEntry {
+  id: string;
+  title: string;
+  detail: string;
+  happenedAt: string;
+  type:
+    | 'course'
+    | 'planning'
+    | 'production'
+    | 'resource'
+    | 'qa'
+    | 'handoff'
+    | 'history';
+}
+
 export interface AssistantCard {
   id: string;
   name: string;
@@ -118,6 +152,8 @@ export interface Course {
   schedule: TimelineItem[];
   stageChecklist: StageCheckpoint[];
   assistants: AssistantCard[];
+  metadata: CourseMetadata;
+  auditLog: CourseAuditEntry[];
 }
 
 export interface Task {
@@ -216,6 +252,29 @@ export interface AlertMutationInput {
   tone: Tone;
   owner: Role;
   detail: string;
+}
+
+export interface CourseMetadataMutationInput {
+  institution: string;
+  shortName: string;
+  semester: string;
+  academicPeriod: string;
+  courseType: string;
+  learningOutcomes: string[];
+  topics: string[];
+  methodology: string;
+  evaluation: string;
+  bibliography: string[];
+  targetCloseDate: string;
+  currentVersion: string;
+  priority: Priority;
+  riskLevel: RiskLevel;
+}
+
+export interface TimelineItemMutationInput {
+  label: string;
+  dueDate: string;
+  status: TimelineItem['status'];
 }
 
 export interface DeliverableMutationInput {

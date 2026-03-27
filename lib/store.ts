@@ -5,6 +5,9 @@ import type {
   AppData,
   AuthUser,
   Course,
+  CourseAuditEntry,
+  CourseMetadata,
+  CourseMetadataMutationInput,
   CourseMutationInput,
   Deliverable,
   DeliverableMutationInput,
@@ -20,6 +23,8 @@ import type {
   StageCheckpointMutationInput,
   Task,
   TaskMutationInput,
+  TimelineItem,
+  TimelineItemMutationInput,
   UserMutationInput,
   UserUpdateInput,
 } from '../src/types.js';
@@ -51,6 +56,8 @@ interface CourseRow {
   schedule: JsonValue;
   stageChecklist: JsonValue;
   assistants: JsonValue;
+  metadata: JsonValue;
+  auditLog: JsonValue;
 }
 
 interface UserRow {
@@ -112,10 +119,164 @@ function buildStageChecklist(stageId: string): Course['stageChecklist'] {
   }));
 }
 
+function buildCourseRoute(course: Pick<Course, 'faculty' | 'program' | 'title'>) {
+  return `Repositorio institucional / ${course.faculty} / ${course.program} / ${course.title}`;
+}
+
+function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
+  if (status === 'Bloqueado' || status === 'Riesgo') {
+    return 'Alto';
+  }
+
+  if (status === 'En revisión') {
+    return 'Medio';
+  }
+
+  return 'Bajo';
+}
+
+function derivePriority(status: Course['status']): CourseMetadata['priority'] {
+  return status === 'Bloqueado' || status === 'Riesgo' ? 'Alta' : 'Media';
+}
+
+function buildDefaultCourseMetadata(
+  course: Pick<
+    Course,
+    | 'title'
+    | 'code'
+    | 'faculty'
+    | 'program'
+    | 'modality'
+    | 'summary'
+    | 'status'
+    | 'updatedAt'
+    | 'schedule'
+    | 'modules'
+  >,
+): CourseMetadata {
+  const targetCloseDate =
+    course.schedule
+      .slice()
+      .sort((left, right) => right.dueDate.localeCompare(left.dueDate))[0]?.dueDate ?? course.updatedAt;
+
+  return {
+    institution: 'Maturity University',
+    shortName: course.title,
+    semester: 'Por definir',
+    academicPeriod: '2026-1',
+    courseType: 'Curso',
+    learningOutcomes: [course.summary],
+    topics: course.modules.map((module) => module.title),
+    methodology: `${course.modality} con seguimiento por etapas y expediente persistente.`,
+    evaluation:
+      'Seguimiento por entregables, validación por etapa y observaciones trazables dentro del expediente.',
+    bibliography: ['Documento base del curso', 'Biblioteca asociada al expediente'],
+    targetCloseDate,
+    currentVersion: 'v1.0',
+    priority: derivePriority(course.status),
+    riskLevel: deriveRiskLevel(course.status),
+    route: buildCourseRoute(course),
+  };
+}
+
+function makeAuditEntry(
+  title: string,
+  detail: string,
+  type: CourseAuditEntry['type'],
+  happenedAt = getTodayLabel(),
+): CourseAuditEntry {
+  return {
+    id: crypto.randomUUID(),
+    title,
+    detail,
+    happenedAt,
+    type,
+  };
+}
+
+function buildInitialAuditLog(course: Course): CourseAuditEntry[] {
+  return [
+    makeAuditEntry(
+      'Expediente activo',
+      `El curso mantiene una ficha consolidada en ${mockAppData.stages.find((stage) => stage.id === course.stageId)?.name ?? course.stageId}.`,
+      'history',
+      course.updatedAt,
+    ),
+    ...course.schedule.slice(0, 3).map((item) =>
+      makeAuditEntry(
+        item.label,
+        `Hito del cronograma en estado ${item.status}.`,
+        'planning',
+        item.dueDate,
+      ),
+    ),
+    ...course.deliverables.slice(0, 2).map((item) =>
+      makeAuditEntry(
+        item.title,
+        `Entregable de ${item.owner} en estado ${item.status}.`,
+        'production',
+        item.dueDate,
+      ),
+    ),
+    ...course.observations.slice(0, 2).map((item) =>
+      makeAuditEntry(
+        item.title,
+        `Observación ${item.severity.toLowerCase()} con estado ${item.status}.`,
+        'qa',
+        course.updatedAt,
+      ),
+    ),
+  ];
+}
+
+function normalizeCourse(course: Course): Course {
+  const normalizedMetadata = {
+    ...buildDefaultCourseMetadata(course),
+    ...(course.metadata ?? {}),
+    route: buildCourseRoute(course),
+  };
+
+  const normalizedAuditLog =
+    course.auditLog.length > 0
+      ? course.auditLog
+          .slice()
+          .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt))
+      : buildInitialAuditLog({
+          ...course,
+          metadata: normalizedMetadata,
+          auditLog: [],
+        });
+
+  return {
+    ...course,
+    metadata: normalizedMetadata,
+    auditLog: normalizedAuditLog,
+  };
+}
+
+function appendAuditEntry(
+  course: Course,
+  title: string,
+  detail: string,
+  type: CourseAuditEntry['type'],
+  happenedAt = getTodayLabel(),
+) {
+  const nextCourse = normalizeCourse(course);
+
+  return {
+    ...nextCourse,
+    updatedAt: happenedAt,
+    auditLog: [
+      makeAuditEntry(title, detail, type, happenedAt),
+      ...nextCourse.auditLog,
+    ].slice(0, 80),
+  };
+}
+
 function makeCourseRecord(input: CourseMutationInput): Course {
   const slugBase = slugify(`${input.title}-${input.code}`) || `curso-${crypto.randomUUID().slice(0, 8)}`;
 
-  return {
+  return normalizeCourse({
     id: crypto.randomUUID(),
     slug: slugBase,
     title: input.title,
@@ -149,7 +310,27 @@ function makeCourseRecord(input: CourseMutationInput): Course {
     ],
     stageChecklist: buildStageChecklist(input.stageId),
     assistants: [],
-  };
+    metadata: buildDefaultCourseMetadata({
+      title: input.title,
+      code: input.code,
+      faculty: input.faculty,
+      program: input.program,
+      modality: input.modality,
+      summary: input.summary,
+      status: input.status,
+      updatedAt: getTodayLabel(),
+      schedule: [
+        {
+          id: 'bootstrap',
+          label: 'Configuración inicial',
+          dueDate: getTodayLabel(),
+          status: 'active',
+        },
+      ],
+      modules: [],
+    }),
+    auditLog: [],
+  });
 }
 
 function makeTaskRecord(input: TaskMutationInput): Task {
@@ -289,8 +470,20 @@ async function ensureSchema() {
         observations JSONB NOT NULL,
         schedule JSONB NOT NULL,
         stage_checklist JSONB NOT NULL,
-        assistants JSONB NOT NULL
+        assistants JSONB NOT NULL,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        audit_log JSONB NOT NULL DEFAULT '[]'::jsonb
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS audit_log JSONB NOT NULL DEFAULT '[]'::jsonb
     `;
 
     await sql`
@@ -408,7 +601,7 @@ async function ensureAdminUserSeed() {
 }
 
 function serializeCourseRow(row: CourseRow): Course {
-  return {
+  return normalizeCourse({
     ...row,
     pulse: parseJson<Course['pulse']>(row.pulse),
     team: parseJson<Course['team']>(row.team),
@@ -418,7 +611,9 @@ function serializeCourseRow(row: CourseRow): Course {
     schedule: parseJson<Course['schedule']>(row.schedule),
     stageChecklist: parseJson<Course['stageChecklist']>(row.stageChecklist),
     assistants: parseJson<Course['assistants']>(row.assistants),
-  };
+    metadata: parseJson<Course['metadata']>(row.metadata),
+    auditLog: parseJson<Course['auditLog']>(row.auditLog),
+  });
 }
 
 async function persistCourse(course: Course) {
@@ -447,7 +642,9 @@ async function persistCourse(course: Course) {
       observations,
       schedule,
       stage_checklist,
-      assistants
+      assistants,
+      metadata,
+      audit_log
     )
     VALUES (
       ${course.id},
@@ -471,7 +668,9 @@ async function persistCourse(course: Course) {
       ${JSON.stringify(course.observations)}::jsonb,
       ${JSON.stringify(course.schedule)}::jsonb,
       ${JSON.stringify(course.stageChecklist)}::jsonb,
-      ${JSON.stringify(course.assistants)}::jsonb
+      ${JSON.stringify(course.assistants)}::jsonb,
+      ${JSON.stringify(course.metadata)}::jsonb,
+      ${JSON.stringify(course.auditLog)}::jsonb
     )
     ON CONFLICT (id) DO UPDATE
     SET
@@ -495,7 +694,9 @@ async function persistCourse(course: Course) {
       observations = EXCLUDED.observations,
       schedule = EXCLUDED.schedule,
       stage_checklist = EXCLUDED.stage_checklist,
-      assistants = EXCLUDED.assistants
+      assistants = EXCLUDED.assistants,
+      metadata = EXCLUDED.metadata,
+      audit_log = EXCLUDED.audit_log
   `;
 }
 
@@ -631,13 +832,57 @@ async function readCourseBySlug(slug: string) {
       observations,
       schedule,
       stage_checklist AS "stageChecklist",
-      assistants
+      assistants,
+      metadata,
+      audit_log AS "auditLog"
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
   `) as CourseRow[];
 
   return rows[0] ? serializeCourseRow(rows[0]) : null;
+}
+
+function mergeCourseMetadata(
+  course: Course,
+  metadata: Partial<CourseMetadataMutationInput>,
+): Course['metadata'] {
+  return {
+    ...buildDefaultCourseMetadata(course),
+    ...course.metadata,
+    ...metadata,
+    route: buildCourseRoute(course),
+  };
+}
+
+function deriveNextMilestoneFromSchedule(schedule: TimelineItem[], fallback: string) {
+  const nextItem = schedule
+    .slice()
+    .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
+    .find((item) => item.status !== 'done');
+
+  if (!nextItem) {
+    return fallback;
+  }
+
+  return `${nextItem.label} · ${nextItem.dueDate}`;
+}
+
+async function appendAuditEntryByCourseSlug(
+  courseSlug: string,
+  title: string,
+  detail: string,
+  type: CourseAuditEntry['type'],
+) {
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const nextCourse = appendAuditEntry(course, title, detail, type);
+  await persistCourse(nextCourse);
+  return nextCourse;
 }
 
 async function ensureSeedData() {
@@ -819,7 +1064,9 @@ async function readCourses() {
       observations,
       schedule,
       stage_checklist AS "stageChecklist",
-      assistants
+      assistants,
+      metadata,
+      audit_log AS "auditLog"
     FROM maturity_courses
     ORDER BY title ASC
   `) as CourseRow[];
@@ -1104,7 +1351,9 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
       observations,
       schedule,
       stage_checklist AS "stageChecklist",
-      assistants
+      assistants,
+      metadata,
+      audit_log AS "auditLog"
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
@@ -1117,7 +1366,12 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
   }
 
   const nextCourse: Course = {
-    ...current,
+    ...appendAuditEntry(
+      current,
+      'Ficha general actualizada',
+      `Se ajustó la identidad del curso a ${input.title} (${input.code}) dentro de ${input.program}.`,
+      'course',
+    ),
     title: input.title,
     code: input.code,
     faculty: input.faculty,
@@ -1130,10 +1384,172 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
     nextMilestone: input.nextMilestone,
     updatedAt: getTodayLabel(),
     stageChecklist: buildStageChecklist(input.stageId),
+    metadata: mergeCourseMetadata(
+      {
+        ...current,
+        title: input.title,
+        code: input.code,
+        faculty: input.faculty,
+        program: input.program,
+        modality: input.modality,
+        summary: input.summary,
+        status: input.status,
+        stageId: input.stageId,
+        updatedAt: getTodayLabel(),
+      },
+      {},
+    ),
   };
 
   await persistCourse(nextCourse);
   return nextCourse;
+}
+
+export async function updateCourseMetadataRecord(
+  courseSlug: string,
+  input: CourseMetadataMutationInput,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      metadata: mergeCourseMetadata(course, input),
+    },
+    'Ficha operativa actualizada',
+    `Se ajustaron metadatos, resultados de aprendizaje y criterios de seguimiento del curso ${course.title}.`,
+    'course',
+  );
+
+  await persistCourse(nextCourse);
+  return nextCourse;
+}
+
+export async function createTimelineItemRecord(courseSlug: string, input: TimelineItemMutationInput) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const timelineItem: TimelineItem = {
+    id: crypto.randomUUID(),
+    label: input.label,
+    dueDate: input.dueDate,
+    status: input.status,
+  };
+
+  const nextSchedule = [
+    ...course.schedule,
+    timelineItem,
+  ].sort((left, right) => left.dueDate.localeCompare(right.dueDate));
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      schedule: nextSchedule,
+      nextMilestone: deriveNextMilestoneFromSchedule(nextSchedule, course.nextMilestone),
+    },
+    'Hito agregado al cronograma',
+    `Se registró el hito "${input.label}" para ${input.dueDate} con estado ${input.status}.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return timelineItem;
+}
+
+export async function updateTimelineItemRecord(
+  courseSlug: string,
+  timelineItemId: string,
+  input: Partial<TimelineItemMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedTimelineItem: TimelineItem | null = null;
+  const nextSchedule = course.schedule
+    .map((item) => {
+      if (item.id !== timelineItemId) {
+        return item;
+      }
+
+      updatedTimelineItem = {
+        ...item,
+        ...input,
+      };
+
+      return updatedTimelineItem;
+    })
+    .sort((left, right) => left.dueDate.localeCompare(right.dueDate));
+
+  if (!updatedTimelineItem) {
+    return null;
+  }
+
+  const finalTimelineItem = updatedTimelineItem as TimelineItem;
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      schedule: nextSchedule,
+      nextMilestone: deriveNextMilestoneFromSchedule(nextSchedule, course.nextMilestone),
+    },
+    'Hito actualizado',
+    `Se actualizó "${finalTimelineItem.label}" y ahora figura como ${finalTimelineItem.status}.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return finalTimelineItem;
+}
+
+export async function deleteTimelineItemRecord(courseSlug: string, timelineItemId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const deletedTimelineItem = course.schedule.find((item) => item.id === timelineItemId);
+  const nextSchedule = course.schedule.filter((item) => item.id !== timelineItemId);
+
+  if (!deletedTimelineItem || nextSchedule.length === course.schedule.length) {
+    return false;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      schedule: nextSchedule,
+      nextMilestone: deriveNextMilestoneFromSchedule(nextSchedule, course.nextMilestone),
+    },
+    'Hito retirado del cronograma',
+    `Se retiró "${deletedTimelineItem.label}" de la planeación visible del curso.`,
+    'planning',
+  );
+
+  await persistCourse(nextCourse);
+  return true;
 }
 
 export async function deleteCourseRecord(slug: string) {
@@ -1170,6 +1586,12 @@ export async function createTaskRecord(input: TaskMutationInput) {
 
   const task = makeTaskRecord(input);
   await persistTask(task);
+  await appendAuditEntryByCourseSlug(
+    input.courseSlug,
+    'Tarea creada',
+    `Se asignó "${task.title}" a ${task.role} con vencimiento ${task.dueDate}.`,
+    'planning',
+  );
   return task;
 }
 
@@ -1206,17 +1628,33 @@ export async function updateTaskRecord(id: string, input: Partial<TaskMutationIn
   };
 
   await persistTask(nextTask);
+  await appendAuditEntryByCourseSlug(
+    nextTask.courseSlug,
+    'Tarea actualizada',
+    `La tarea "${nextTask.title}" quedó en estado ${nextTask.status}.`,
+    'planning',
+  );
   return nextTask;
 }
 
 export async function deleteTaskRecord(id: string) {
   await ensureSchema();
   const sql = getSql();
+  const current = await findTaskById(id);
   const result = (await sql`
     DELETE FROM maturity_tasks
     WHERE id = ${id}
     RETURNING id
   `) as Array<{ id: string }>;
+
+  if (result.length > 0 && current) {
+    await appendAuditEntryByCourseSlug(
+      current.courseSlug,
+      'Tarea eliminada',
+      `Se retiró la tarea "${current.title}" del tablero operativo del curso.`,
+      'planning',
+    );
+  }
 
   return result.length > 0;
 }
@@ -1273,7 +1711,12 @@ export async function updateStageCheckpointRecord(
   );
 
   const nextCourse: Course = {
-    ...course,
+    ...appendAuditEntry(
+      course,
+      'Checkpoint actualizado',
+      `El punto "${currentCheckpoint.label}" quedó en estado ${input.status}.`,
+      input.status === 'blocked' ? 'qa' : 'planning',
+    ),
     updatedAt: getTodayLabel(),
     status: deriveCourseStatusFromChecklist(course.status, nextStageChecklist),
     stageChecklist: nextStageChecklist,
@@ -1372,7 +1815,14 @@ export async function advanceCourseStageRecord(courseSlug: string) {
   });
 
   const nextCourse: Course = {
-    ...course,
+    ...appendAuditEntry(
+      course,
+      isLastStage ? 'Curso cerrado' : 'Handoff ejecutado',
+      isLastStage
+        ? 'Todas las etapas quedaron completadas y el curso pasó a cierre o publicación.'
+        : `El curso pasó desde ${mockAppData.stages[currentStageIndex]?.name ?? 'la etapa actual'} hacia ${nextStage?.name ?? 'la siguiente etapa'}.`,
+      'handoff',
+    ),
     stageId: nextStage?.id ?? course.stageId,
     updatedAt: getTodayLabel(),
     progress: isLastStage
@@ -1435,8 +1885,12 @@ export async function createDeliverableRecord(courseSlug: string, input: Deliver
   }
 
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Entregable creado',
+      `Se agregó "${input.title}" para ${input.owner} con vencimiento ${input.dueDate}.`,
+      'production',
+    ),
     deliverables: [...course.deliverables, makeDeliverableRecord(input)],
   };
 
@@ -1476,14 +1930,20 @@ export async function updateDeliverableRecord(
     return null;
   }
 
+  const finalDeliverable = updatedDeliverable as Deliverable;
+
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Entregable actualizado',
+      `El entregable "${finalDeliverable.title}" quedó en estado ${finalDeliverable.status}.`,
+      'production',
+    ),
     deliverables: nextDeliverables,
   };
 
   await persistCourse(nextCourse);
-  return updatedDeliverable;
+  return finalDeliverable;
 }
 
 export async function deleteDeliverableRecord(courseSlug: string, deliverableId: string) {
@@ -1503,8 +1963,12 @@ export async function deleteDeliverableRecord(courseSlug: string, deliverableId:
   }
 
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Entregable retirado',
+      `Se retiró "${course.deliverables.find((deliverable) => deliverable.id === deliverableId)?.title ?? 'un entregable'}" del expediente.`,
+      'production',
+    ),
     deliverables: nextDeliverables,
   };
 
@@ -1531,8 +1995,12 @@ export async function createObservationRecord(courseSlug: string, input: Observa
   }
 
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Observación registrada',
+      `Se abrió "${input.title}" desde ${input.role} con severidad ${input.severity}.`,
+      'qa',
+    ),
     observations: [...course.observations, makeObservationRecord(input)],
   };
 
@@ -1572,14 +2040,20 @@ export async function updateObservationRecord(
     return null;
   }
 
+  const finalObservation = updatedObservation as Observation;
+
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Observación actualizada',
+      `La observación "${finalObservation.title}" quedó en estado ${finalObservation.status}.`,
+      'qa',
+    ),
     observations: nextObservations,
   };
 
   await persistCourse(nextCourse);
-  return updatedObservation;
+  return finalObservation;
 }
 
 export async function deleteObservationRecord(courseSlug: string, observationId: string) {
@@ -1599,8 +2073,12 @@ export async function deleteObservationRecord(courseSlug: string, observationId:
   }
 
   const nextCourse: Course = {
-    ...course,
-    updatedAt: getTodayLabel(),
+    ...appendAuditEntry(
+      course,
+      'Observación retirada',
+      `Se retiró "${course.observations.find((observation) => observation.id === observationId)?.title ?? 'una observación'}" del expediente.`,
+      'qa',
+    ),
     observations: nextObservations,
   };
 
@@ -1622,6 +2100,12 @@ export async function createLibraryResourceRecord(input: LibraryResourceMutation
 
   const resource = makeLibraryResourceRecord(input);
   await persistLibraryResource(resource);
+  await appendAuditEntryByCourseSlug(
+    input.courseSlug,
+    'Recurso vinculado',
+    `Se agregó "${resource.title}" como recurso ${resource.kind.toLowerCase()} del curso.`,
+    'resource',
+  );
   return resource;
 }
 
@@ -1680,17 +2164,33 @@ export async function updateLibraryResourceRecord(
   };
 
   await persistLibraryResource(resource);
+  await appendAuditEntryByCourseSlug(
+    resource.courseSlug,
+    'Recurso actualizado',
+    `El recurso "${resource.title}" quedó en estado ${resource.status}.`,
+    'resource',
+  );
   return resource;
 }
 
 export async function deleteLibraryResourceRecord(id: string) {
   await ensureSchema();
   const sql = getSql();
+  const current = await findLibraryResourceById(id);
   const rows = (await sql`
     DELETE FROM maturity_library_resources
     WHERE id = ${id}
     RETURNING id
   `) as Array<{ id: string }>;
+
+  if (rows.length > 0 && current) {
+    await appendAuditEntryByCourseSlug(
+      current.courseSlug,
+      'Recurso retirado',
+      `Se eliminó "${current.title}" de la biblioteca vinculada del curso.`,
+      'resource',
+    );
+  }
 
   return rows.length > 0;
 }

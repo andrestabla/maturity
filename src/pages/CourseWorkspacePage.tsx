@@ -18,6 +18,7 @@ import { StageRail } from '../components/StageRail.js';
 import type {
   AppData,
   Course,
+  CourseMetadataMutationInput,
   CourseMutationInput,
   Deliverable,
   DeliverableMutationInput,
@@ -27,6 +28,8 @@ import type {
   StageCheckpointStatus,
   Task,
   TaskMutationInput,
+  TimelineItem,
+  TimelineItemMutationInput,
 } from '../types.js';
 import { formatDate, formatLongDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
@@ -218,6 +221,95 @@ function makeObservationDrafts(observations: Observation[]) {
   ) as Record<string, ObservationMutationInput>;
 }
 
+function makeMetadataForm(course: Course): CourseMetadataMutationInput {
+  return {
+    institution: course.metadata.institution,
+    shortName: course.metadata.shortName,
+    semester: course.metadata.semester,
+    academicPeriod: course.metadata.academicPeriod,
+    courseType: course.metadata.courseType,
+    learningOutcomes: course.metadata.learningOutcomes,
+    topics: course.metadata.topics,
+    methodology: course.metadata.methodology,
+    evaluation: course.metadata.evaluation,
+    bibliography: course.metadata.bibliography,
+    targetCloseDate: course.metadata.targetCloseDate,
+    currentVersion: course.metadata.currentVersion,
+    priority: course.metadata.priority,
+    riskLevel: course.metadata.riskLevel,
+  };
+}
+
+function makeTimelineForm(): TimelineItemMutationInput {
+  return {
+    label: '',
+    dueDate: new Date().toISOString().slice(0, 10),
+    status: 'pending',
+  };
+}
+
+function makeTimelineDrafts(schedule: TimelineItem[]) {
+  return Object.fromEntries(
+    schedule.map((item) => [
+      item.id,
+      {
+        label: item.label,
+        dueDate: item.dueDate,
+        status: item.status,
+      },
+    ]),
+  ) as Record<string, TimelineItemMutationInput>;
+}
+
+function joinLines(values: string[]) {
+  return values.join('\n');
+}
+
+function splitLines(value: string) {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function historyTypeBadge(type: string) {
+  switch (type) {
+    case 'course':
+      return 'badge badge--ocean';
+    case 'planning':
+      return 'badge badge--gold';
+    case 'production':
+      return 'badge badge--sage';
+    case 'resource':
+      return 'badge badge--outline';
+    case 'qa':
+      return 'badge badge--coral';
+    case 'handoff':
+      return 'badge badge--ocean';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+function historyTypeLabel(type: string) {
+  switch (type) {
+    case 'course':
+      return 'Ficha';
+    case 'planning':
+      return 'Planeación';
+    case 'production':
+      return 'Producción';
+    case 'resource':
+      return 'Recursos';
+    case 'qa':
+      return 'QA';
+    case 'handoff':
+      return 'Handoff';
+    default:
+      return 'Historial';
+  }
+}
+
 export function CourseWorkspacePage({
   role,
   userRole,
@@ -248,15 +340,20 @@ export function CourseWorkspacePage({
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
+  const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<CourseSection>('summary');
   const [courseError, setCourseError] = useState<string | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
   const [observationError, setObservationError] = useState<string | null>(null);
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [isCourseSaving, setIsCourseSaving] = useState(false);
+  const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
+  const [isTimelineSaving, setIsTimelineSaving] = useState<string | null>(null);
   const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
   const [isObservationSaving, setIsObservationSaving] = useState(false);
   const [isCheckpointSaving, setIsCheckpointSaving] = useState<number | null>(null);
@@ -267,6 +364,53 @@ export function CourseWorkspacePage({
   const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
     makeTaskForm(currentCourseSlug, currentStageId),
   );
+  const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
+    course ? makeMetadataForm(course) : makeMetadataForm({
+      id: '',
+      slug: '',
+      title: '',
+      code: '',
+      faculty: '',
+      program: '',
+      modality: '',
+      credits: 0,
+      stageId: fallbackStageId,
+      status: 'En ritmo',
+      progress: 0,
+      summary: '',
+      nextMilestone: '',
+      updatedAt: new Date().toISOString().slice(0, 10),
+      pulse: { velocity: 0, quality: 0, alignment: 0 },
+      team: [],
+      deliverables: [],
+      modules: [],
+      observations: [],
+      schedule: [],
+      stageChecklist: [],
+      assistants: [],
+      metadata: {
+        institution: '',
+        shortName: '',
+        semester: '',
+        academicPeriod: '',
+        courseType: '',
+        learningOutcomes: [],
+        topics: [],
+        methodology: '',
+        evaluation: '',
+        bibliography: [],
+        targetCloseDate: new Date().toISOString().slice(0, 10),
+        currentVersion: 'v1.0',
+        priority: 'Media',
+        riskLevel: 'Bajo',
+        route: '',
+      },
+      auditLog: [],
+    }),
+  );
+  const [newTimelineForm, setNewTimelineForm] = useState<TimelineItemMutationInput>(() =>
+    makeTimelineForm(),
+  );
   const [newDeliverableForm, setNewDeliverableForm] = useState<DeliverableMutationInput>(() =>
     makeDeliverableForm(defaultDeliverableOwner),
   );
@@ -275,6 +419,9 @@ export function CourseWorkspacePage({
   );
   const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
     makeTaskDrafts(relatedTasks),
+  );
+  const [timelineDrafts, setTimelineDrafts] = useState<Record<string, TimelineItemMutationInput>>(() =>
+    makeTimelineDrafts(course?.schedule ?? []),
   );
   const [deliverableDrafts, setDeliverableDrafts] = useState<
     Record<string, DeliverableMutationInput>
@@ -291,10 +438,29 @@ export function CourseWorkspacePage({
   useEffect(() => {
     if (!course) {
       setCourseForm(buildEmptyCourseForm(currentStageId));
+      setMetadataForm((current) => ({
+        ...current,
+        institution: '',
+        shortName: '',
+        semester: '',
+        academicPeriod: '',
+        courseType: '',
+        learningOutcomes: [],
+        topics: [],
+        methodology: '',
+        evaluation: '',
+        bibliography: [],
+        targetCloseDate: new Date().toISOString().slice(0, 10),
+        currentVersion: 'v1.0',
+        priority: 'Media',
+        riskLevel: 'Bajo',
+      }));
       setNewTaskForm(makeTaskForm(currentCourseSlug, currentStageId));
+      setNewTimelineForm(makeTimelineForm());
       setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
       setNewObservationForm(makeObservationForm(defaultObservationRole));
       setTaskDrafts({});
+      setTimelineDrafts({});
       setDeliverableDrafts({});
       setObservationDrafts({});
       setCheckpointDrafts({});
@@ -302,10 +468,13 @@ export function CourseWorkspacePage({
     }
 
     setCourseForm(makeCourseForm(course));
+    setMetadataForm(makeMetadataForm(course));
     setNewTaskForm(makeTaskForm(course.slug, course.stageId));
+    setNewTimelineForm(makeTimelineForm());
     setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
     setNewObservationForm(makeObservationForm(defaultObservationRole));
     setTaskDrafts(makeTaskDrafts(relatedTasks));
+    setTimelineDrafts(makeTimelineDrafts(course.schedule));
     setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
     setObservationDrafts(makeObservationDrafts(course.observations));
     setCheckpointDrafts(
@@ -342,7 +511,7 @@ export function CourseWorkspacePage({
   const relatedResources = appData.libraryResources.filter(
     (resource) => resource.courseSlug === currentCourse.slug,
   );
-  const courseRouteLabel = `Repositorio institucional / ${currentCourse.faculty} / ${currentCourse.program} / ${currentCourse.title}`;
+  const courseRouteLabel = currentCourse.metadata.route;
   const blockingCheckpoints = currentCourse.stageChecklist.filter(
     (checkpoint, index) => index <= currentStageIndex && checkpoint.status === 'blocked',
   );
@@ -387,38 +556,9 @@ export function CourseWorkspacePage({
       member: currentCourse.team.find((member) => member.role === roleName),
     }))
     .filter((item) => item.member);
-  const historyEvents = [
-    {
-      id: `course-${currentCourse.id}`,
-      title: 'Expediente actualizado',
-      detail: `El curso mantiene versión activa en ${stage?.name ?? currentCourse.stageId}.`,
-      date: currentCourse.updatedAt,
-      type: 'course',
-    },
-    ...currentCourse.schedule.map((item) => ({
-      id: item.id,
-      title: item.label,
-      detail: `Hito de cronograma marcado como ${item.status}.`,
-      date: item.dueDate,
-      type: 'milestone',
-    })),
-    ...currentCourse.deliverables.map((item) => ({
-      id: item.id,
-      title: item.title,
-      detail: `Entregable de ${item.owner} en estado ${item.status}.`,
-      date: item.dueDate,
-      type: 'deliverable',
-    })),
-    ...relatedTasks.map((item) => ({
-      id: item.id,
-      title: item.title,
-      detail: `Tarea de ${item.role} con prioridad ${item.priority}.`,
-      date: item.dueDate,
-      type: 'task',
-    })),
-  ]
-    .sort((left, right) => right.date.localeCompare(left.date))
-    .slice(0, 8);
+  const historyFeed = currentCourse.auditLog
+    .slice()
+    .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt));
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -447,6 +587,40 @@ export function CourseWorkspacePage({
       setCourseError(error instanceof Error ? error.message : 'No fue posible actualizar el curso.');
     } finally {
       setIsCourseSaving(false);
+    }
+  }
+
+  async function handleMetadataSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsMetadataSaving(true);
+    setMetadataError(null);
+
+    try {
+      const response = await fetch(
+        `/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`,
+        {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(metadataForm),
+        },
+      );
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible actualizar la ficha operativa.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setMetadataError(
+        error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.',
+      );
+    } finally {
+      setIsMetadataSaving(false);
     }
   }
 
@@ -579,6 +753,131 @@ export function CourseWorkspacePage({
       ...current,
       [taskId]: {
         ...current[taskId],
+        [key]: value,
+      },
+    }));
+  }
+
+  async function handleTimelineCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTimelineError(null);
+    setIsTimelineSaving('new');
+
+    try {
+      const response = await fetch('/api/timeline', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newTimelineForm,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible crear el hito.');
+      }
+
+      refreshAppData();
+      setNewTimelineForm(makeTimelineForm());
+      setIsTimelineComposerOpen(false);
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : 'No fue posible crear el hito.');
+    } finally {
+      setIsTimelineSaving(null);
+    }
+  }
+
+  async function handleTimelineSave(timelineItemId: string) {
+    const draft = timelineDrafts[timelineItemId];
+
+    if (!draft) {
+      return;
+    }
+
+    setTimelineError(null);
+    setIsTimelineSaving(timelineItemId);
+
+    try {
+      const response = await fetch('/api/timeline', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: timelineItemId,
+          ...draft,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible guardar el hito.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : 'No fue posible guardar el hito.');
+    } finally {
+      setIsTimelineSaving(null);
+    }
+  }
+
+  async function handleTimelineDelete(timelineItemId: string) {
+    const confirmed = window.confirm(
+      'El hito será retirado del cronograma visible del curso. ¿Quieres continuar?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setTimelineError(null);
+    setIsTimelineSaving(timelineItemId);
+
+    try {
+      const response = await fetch('/api/timeline', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: timelineItemId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible eliminar el hito.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setTimelineError(error instanceof Error ? error.message : 'No fue posible eliminar el hito.');
+    } finally {
+      setIsTimelineSaving(null);
+    }
+  }
+
+  function updateTimelineDraft<Key extends keyof TimelineItemMutationInput>(
+    timelineItemId: string,
+    key: Key,
+    value: TimelineItemMutationInput[Key],
+  ) {
+    setTimelineDrafts((current) => ({
+      ...current,
+      [timelineItemId]: {
+        ...current[timelineItemId],
         [key]: value,
       },
     }));
@@ -1162,6 +1461,268 @@ export function CourseWorkspacePage({
               </button>
             </div>
           </form>
+
+          <form className="editor-card" onSubmit={handleMetadataSave}>
+            <div className="editor-card__header">
+              <div>
+                <span className="eyebrow">Ficha operativa</span>
+                <h3>Metadatos y criterios académicos</h3>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <label className="field">
+                <span>Institución</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.institution}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        institution: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Nombre corto</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.shortName}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        shortName: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Semestre</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.semester}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        semester: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Periodo académico</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.academicPeriod}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        academicPeriod: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Tipo de curso</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.courseType}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        courseType: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Cierre objetivo</span>
+                <div className="field__control">
+                  <input
+                    type="date"
+                    value={metadataForm.targetCloseDate}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        targetCloseDate: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Versión</span>
+                <div className="field__control">
+                  <input
+                    value={metadataForm.currentVersion}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        currentVersion: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Prioridad</span>
+                <div className="field__control">
+                  <select
+                    value={metadataForm.priority}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        priority: event.target.value as CourseMetadataMutationInput['priority'],
+                      }))
+                    }
+                  >
+                    {['Alta', 'Media', 'Baja'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Riesgo</span>
+                <div className="field__control">
+                  <select
+                    value={metadataForm.riskLevel}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        riskLevel: event.target.value as CourseMetadataMutationInput['riskLevel'],
+                      }))
+                    }
+                  >
+                    {['Bajo', 'Medio', 'Alto'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Metodología</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={metadataForm.methodology}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        methodology: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Evaluación</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={metadataForm.evaluation}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        evaluation: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Resultados de aprendizaje</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={4}
+                    value={joinLines(metadataForm.learningOutcomes)}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        learningOutcomes: splitLines(event.target.value),
+                      }))
+                    }
+                    placeholder="Un resultado por línea"
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Temas clave</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={joinLines(metadataForm.topics)}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        topics: splitLines(event.target.value),
+                      }))
+                    }
+                    placeholder="Un tema por línea"
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Bibliografía base</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={4}
+                    value={joinLines(metadataForm.bibliography)}
+                    onChange={(event) =>
+                      setMetadataForm((current) => ({
+                        ...current,
+                        bibliography: splitLines(event.target.value),
+                      }))
+                    }
+                    placeholder="Una referencia por línea"
+                    required
+                  />
+                </div>
+              </label>
+            </div>
+
+            {metadataError ? <p className="form-error">{metadataError}</p> : null}
+
+            <div className="action-row">
+              <button type="submit" className="cta-button" disabled={isMetadataSaving}>
+                <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
+              </button>
+            </div>
+          </form>
         </section>
       ) : null}
 
@@ -1305,29 +1866,34 @@ export function CourseWorkspacePage({
           <div className="module-grid module-grid--summary">
             <div className="module-card">
               <div className="module-card__top">
-                <strong>{currentCourse.title}</strong>
-                <span>{currentCourse.code}</span>
+                <strong>{currentCourse.metadata.shortName}</strong>
+                <span>{currentCourse.metadata.institution}</span>
               </div>
               <p>{currentCourse.summary}</p>
             </div>
             <div className="module-card">
               <div className="module-card__top">
-                <strong>{currentCourse.faculty}</strong>
-                <span>Facultad</span>
+                <strong>{currentCourse.metadata.academicPeriod}</strong>
+                <span>Periodo académico</span>
               </div>
-              <p>{currentCourse.program}</p>
+              <p>
+                Semestre {currentCourse.metadata.semester} · {currentCourse.metadata.courseType}
+              </p>
             </div>
             <div className="module-card">
               <div className="module-card__top">
-                <strong>{currentCourse.modality}</strong>
-                <span>Modalidad</span>
+                <strong>{currentCourse.metadata.currentVersion}</strong>
+                <span>Versión vigente</span>
               </div>
-              <p>{currentCourse.credits} créditos y expediente activo dentro de la ruta institucional.</p>
+              <p>
+                Prioridad {currentCourse.metadata.priority} · Riesgo{' '}
+                {currentCourse.metadata.riskLevel}
+              </p>
             </div>
             <div className="module-card">
               <div className="module-card__top">
-                <strong>{currentCourse.nextMilestone}</strong>
-                <span>Próximo hito</span>
+                <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
+                <span>Cierre objetivo</span>
               </div>
               <p>{courseRouteLabel}</p>
             </div>
@@ -1347,8 +1913,8 @@ export function CourseWorkspacePage({
 
             <div className="list-item">
               <div>
-                <strong>Intención formativa</strong>
-                <p>{currentCourse.summary}</p>
+                <strong>Resultados de aprendizaje</strong>
+                <p>{currentCourse.metadata.learningOutcomes.join(' · ')}</p>
               </div>
               <div className="list-item__meta">
                 <span>{currentCourse.credits} créditos</span>
@@ -1358,15 +1924,14 @@ export function CourseWorkspacePage({
 
             <div className="list-item">
               <div>
-                <strong>Documentos base y versión vigente</strong>
+                <strong>Metodología y evaluación</strong>
                 <p>
-                  Este expediente ya concentra ficha general, arquitectura, entregables, observaciones,
-                  recursos y handoffs dentro de una misma ruta estable del curso.
+                  {currentCourse.metadata.methodology} Evaluación: {currentCourse.metadata.evaluation}
                 </p>
               </div>
               <div className="list-item__meta">
-                <span>{stage?.name ?? currentCourse.stageId}</span>
-                <span>{currentCourse.status}</span>
+                <span>{currentCourse.metadata.topics.length} temas clave</span>
+                <span>{currentCourse.metadata.bibliography.length} referencias</span>
               </div>
             </div>
           </div>
@@ -2075,21 +2640,207 @@ export function CourseWorkspacePage({
           <div className="section-heading">
             <div>
               <span className="eyebrow">Agenda</span>
-              <h3>Próximos hitos</h3>
+              <h3>Cronograma operativo</h3>
             </div>
             <Compass size={18} />
           </div>
 
-          <div className="timeline-stack">
-            {course.schedule.map((item) => (
-              <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
-                <span className="timeline-item__dot" />
-                <div>
-                  <strong>{item.label}</strong>
-                  <p>{formatLongDate(item.dueDate)}</p>
-                </div>
+          {canCreateTasks(userRole) ? (
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={isTimelineComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsTimelineComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isTimelineComposerOpen ? 'Cerrar formulario' : 'Nuevo hito'}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {isTimelineComposerOpen ? (
+            <form className="editor-card editor-card--task" onSubmit={handleTimelineCreate}>
+              <div className="form-grid">
+                <label className="field field--full">
+                  <span>Nombre del hito</span>
+                  <div className="field__control">
+                    <input
+                      value={newTimelineForm.label}
+                      onChange={(event) =>
+                        setNewTimelineForm((current) => ({
+                          ...current,
+                          label: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Fecha objetivo</span>
+                  <div className="field__control">
+                    <input
+                      type="date"
+                      value={newTimelineForm.dueDate}
+                      onChange={(event) =>
+                        setNewTimelineForm((current) => ({
+                          ...current,
+                          dueDate: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={newTimelineForm.status}
+                      onChange={(event) =>
+                        setNewTimelineForm((current) => ({
+                          ...current,
+                          status: event.target.value as TimelineItemMutationInput['status'],
+                        }))
+                      }
+                    >
+                      {[
+                        ['pending', 'Pendiente'],
+                        ['active', 'Activo'],
+                        ['done', 'Completado'],
+                      ].map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
               </div>
-            ))}
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isTimelineSaving === 'new'}>
+                  <span>{isTimelineSaving === 'new' ? 'Creando…' : 'Agregar hito'}</span>
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {timelineError ? <p className="form-error">{timelineError}</p> : null}
+
+          <div className="timeline-stack">
+            {course.schedule.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin hitos registrados</strong>
+                <p>La planeación del curso todavía no tiene cronograma visible.</p>
+              </div>
+            ) : (
+              course.schedule.map((item) => {
+                const draft = timelineDrafts[item.id];
+
+                if (!draft) {
+                  return null;
+                }
+
+                if (!canCreateTasks(userRole)) {
+                  return (
+                    <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
+                      <span className="timeline-item__dot" />
+                      <div>
+                        <strong>{item.label}</strong>
+                        <p>{formatLongDate(item.dueDate)}</p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={item.id} className="task-editor task-editor--timeline">
+                    <div className="form-grid">
+                      <label className="field field--full">
+                        <span>Hito</span>
+                        <div className="field__control">
+                          <input
+                            value={draft.label}
+                            onChange={(event) =>
+                              updateTimelineDraft(item.id, 'label', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Fecha</span>
+                        <div className="field__control">
+                          <input
+                            type="date"
+                            value={draft.dueDate}
+                            onChange={(event) =>
+                              updateTimelineDraft(item.id, 'dueDate', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Estado</span>
+                        <div className="field__control">
+                          <select
+                            value={draft.status}
+                            onChange={(event) =>
+                              updateTimelineDraft(
+                                item.id,
+                                'status',
+                                event.target.value as TimelineItemMutationInput['status'],
+                              )
+                            }
+                          >
+                            {[
+                              ['pending', 'Pendiente'],
+                              ['active', 'Activo'],
+                              ['done', 'Completado'],
+                            ].map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      <div className="task-item__meta">
+                        <span>{formatDate(draft.dueDate)}</span>
+                        <span>{draft.status}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isTimelineSaving === item.id}
+                        onClick={() => void handleTimelineSave(item.id)}
+                      >
+                        <Save size={16} />
+                        <span>{isTimelineSaving === item.id ? 'Guardando…' : 'Guardar'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        disabled={isTimelineSaving === item.id}
+                        onClick={() => void handleTimelineDelete(item.id)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </article>
         ) : null}
@@ -2905,6 +3656,40 @@ export function CourseWorkspacePage({
             </div>
           </div>
 
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{historyFeed.length}</strong>
+                <span>movimientos persistentes</span>
+              </div>
+              <p>Cada cambio importante del curso queda registrado en una bitácora operativa visible.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.metadata.currentVersion}</strong>
+                <span>versión activa</span>
+              </div>
+              <p>La ficha, el cronograma y el flujo comparten una misma lectura de versión.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
+                <span>fecha objetivo</span>
+              </div>
+              <p>La salida del curso se puede contrastar contra hitos reales y cambios del expediente.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{currentCourse.metadata.riskLevel}</strong>
+                <span>riesgo consolidado</span>
+              </div>
+              <p>La bitácora ayuda a entender por qué el curso está como está, no solo en qué estado quedó.</p>
+            </div>
+          </div>
+
           <div className="list-stack">
             <div className="list-item">
               <div>
@@ -2930,27 +3715,30 @@ export function CourseWorkspacePage({
 
             <div className="list-item">
               <div>
-                <strong>Bitácora visible del curso</strong>
+                <strong>Cierre objetivo y referencia documental</strong>
                 <p>
-                  Entregables, observaciones, checkpoints y handoffs quedan asociados al curso como
-                  expediente persistente.
+                  {currentCourse.metadata.bibliography[0] ??
+                    'La bitácora del curso conserva la referencia base del expediente.'}
                 </p>
               </div>
               <div className="list-item__meta">
-                <span>{currentCourse.deliverables.length} entregables</span>
-                <span>{currentCourse.observations.length} observaciones</span>
+                <span>Cierre {formatDate(currentCourse.metadata.targetCloseDate)}</span>
+                <span>{currentCourse.metadata.priority} prioridad</span>
               </div>
             </div>
           </div>
 
           <div className="timeline-stack timeline-stack--history">
-            {historyEvents.map((event) => (
+            {historyFeed.map((event) => (
               <div key={event.id} className="timeline-item timeline-item--active">
                 <span className="timeline-item__dot" />
                 <div>
+                  <span className={historyTypeBadge(event.type)}>{historyTypeLabel(event.type)}</span>
                   <strong>{event.title}</strong>
                   <p>{event.detail}</p>
-                  <span className="timeline-item__meta">Fecha de referencia: {formatDate(event.date)}</span>
+                  <span className="timeline-item__meta">
+                    Fecha de referencia: {formatDate(event.happenedAt)}
+                  </span>
                 </div>
               </div>
             ))}

@@ -2,12 +2,192 @@ import type {
   Alert,
   AppData,
   Course,
+  CourseAuditEntry,
+  CourseMetadata,
   LibraryResource,
   Role,
   RoleProfile,
   StageDefinition,
   Task,
 } from '../types.js';
+
+type BaseCourse = Omit<Course, 'metadata' | 'auditLog'>;
+
+const metadataOverrides: Partial<Record<string, Partial<CourseMetadata>>> = {
+  'pensamiento-sistemico': {
+    institution: 'Maturity University',
+    shortName: 'Pensamiento Sistémico',
+    semester: '6',
+    academicPeriod: '2026-1',
+    courseType: 'Troncal',
+    learningOutcomes: [
+      'Analizar sistemas organizacionales con enfoque causal.',
+      'Modelar relaciones entre actores, variables y tensiones.',
+      'Tomar decisiones sostenibles con mirada relacional.',
+    ],
+    topics: ['Mapas causales', 'Bucles de retroalimentación', 'Intervención sistémica'],
+    methodology: 'Aprendizaje basado en casos, recursos breves y trabajo aplicado por unidad.',
+    evaluation: 'Reto integrador por unidad, actividades guiadas y validación pedagógica progresiva.',
+    bibliography: [
+      'Senge, P. - La quinta disciplina',
+      'Meadows, D. - Thinking in Systems',
+      'Colección interna de casos organizacionales',
+    ],
+    targetCloseDate: '2026-04-04',
+    currentVersion: 'v1.4',
+    priority: 'Media',
+    riskLevel: 'Medio',
+  },
+  'bioetica-aplicada': {
+    institution: 'Maturity University',
+    shortName: 'Bioética Aplicada',
+    semester: '5',
+    academicPeriod: '2026-1',
+    courseType: 'Disciplinar',
+    learningOutcomes: [
+      'Analizar dilemas clínicos con criterio bioético.',
+      'Construir argumentos éticos sustentados en casos.',
+    ],
+    topics: ['Principios bioéticos', 'Dilemas clínicos', 'Argumentación'],
+    methodology: 'Estudio de casos, discusión guiada y reflexión argumentativa.',
+    evaluation: 'Análisis de dilemas, participación en foros y actividad de cierre reflexivo.',
+    bibliography: [
+      'Beauchamp, T. y Childress, J. - Principles of Biomedical Ethics',
+      'Selección institucional de casos clínicos',
+    ],
+    targetCloseDate: '2026-04-01',
+    currentVersion: 'v0.9',
+    priority: 'Media',
+    riskLevel: 'Medio',
+  },
+  'calculo-integral': {
+    institution: 'Maturity University',
+    shortName: 'Cálculo Integral',
+    semester: '3',
+    academicPeriod: '2026-1',
+    courseType: 'Fundamentación',
+    learningOutcomes: [
+      'Resolver integrales y justificar procedimientos.',
+      'Aplicar la integral a problemas de área, volumen y acumulación.',
+    ],
+    topics: ['Antiderivadas', 'Aplicaciones', 'Simuladores y práctica guiada'],
+    methodology: 'Práctica procedimental, simuladores y acompañamiento por resolución paso a paso.',
+    evaluation: 'Talleres, cuestionarios progresivos y validación técnica final en LMS.',
+    bibliography: [
+      'Stewart, J. - Cálculo',
+      'Repositorio institucional de ejercicios y simuladores',
+    ],
+    targetCloseDate: '2026-03-30',
+    currentVersion: 'v2.1',
+    priority: 'Alta',
+    riskLevel: 'Alto',
+  },
+  'transformacion-organizacional': {
+    institution: 'Maturity University',
+    shortName: 'Transformación Organizacional',
+    semester: '8',
+    academicPeriod: '2026-1',
+    courseType: 'Énfasis',
+    learningOutcomes: [
+      'Diseñar hojas de ruta para procesos de cambio.',
+      'Relacionar liderazgo, cultura y gobernanza del cambio.',
+    ],
+    topics: ['Cambio cultural', 'Liderazgo adaptativo', 'Roadmaps organizacionales'],
+    methodology: 'Análisis de escenarios, trabajo aplicado y diseño de iniciativas de cambio.',
+    evaluation: 'Proyecto de transformación, bitácora por etapas y entregables de equipo.',
+    bibliography: [
+      'Hiatt, J. - ADKAR',
+      'Kotter, J. - Leading Change',
+    ],
+    targetCloseDate: '2026-04-02',
+    currentVersion: 'v0.7',
+    priority: 'Alta',
+    riskLevel: 'Alto',
+  },
+};
+
+function makeCourseRoute(course: Pick<BaseCourse, 'faculty' | 'program' | 'title'>) {
+  return `Repositorio institucional / ${course.faculty} / ${course.program} / ${course.title}`;
+}
+
+function makeCourseMetadata(course: BaseCourse): CourseMetadata {
+  const override = metadataOverrides[course.slug] ?? {};
+
+  return {
+    institution: override.institution ?? 'Maturity University',
+    shortName: override.shortName ?? course.title,
+    semester: override.semester ?? 'Por definir',
+    academicPeriod: override.academicPeriod ?? '2026-1',
+    courseType: override.courseType ?? 'Curso',
+    learningOutcomes: override.learningOutcomes ?? [course.summary],
+    topics: override.topics ?? course.modules.map((module) => module.title),
+    methodology:
+      override.methodology ?? `${course.modality} con seguimiento por etapas y evidencias del proyecto.`,
+    evaluation:
+      override.evaluation ??
+      'Seguimiento por entregables, validación por etapa y observaciones persistentes del expediente.',
+    bibliography:
+      override.bibliography ?? ['Documento base del curso', 'Biblioteca asociada al expediente'],
+    targetCloseDate:
+      override.targetCloseDate ??
+      course.schedule
+        .slice()
+        .sort((left, right) => right.dueDate.localeCompare(left.dueDate))[0]?.dueDate ??
+      course.updatedAt,
+    currentVersion: override.currentVersion ?? 'v1.0',
+    priority: override.priority ?? (course.status === 'Riesgo' || course.status === 'Bloqueado' ? 'Alta' : 'Media'),
+    riskLevel:
+      override.riskLevel ??
+      (course.status === 'Bloqueado'
+        ? 'Alto'
+        : course.status === 'Riesgo'
+          ? 'Alto'
+          : course.status === 'En revisión'
+            ? 'Medio'
+            : 'Bajo'),
+    route: makeCourseRoute(course),
+  };
+}
+
+function makeCourseAuditLog(course: BaseCourse): CourseAuditEntry[] {
+  return [
+    {
+      id: `audit-${course.slug}-latest`,
+      title: 'Expediente operativo vigente',
+      detail: `El curso se encuentra en ${course.stageId} con estado ${course.status.toLowerCase()} y próximo paso "${course.nextMilestone}".`,
+      happenedAt: course.updatedAt,
+      type: 'history',
+    },
+    {
+      id: `audit-${course.slug}-bootstrap`,
+      title: 'Ficha base consolidada',
+      detail: `Se consolidó la ruta ${makeCourseRoute(course)} dentro del módulo Mis cursos.`,
+      happenedAt: course.updatedAt,
+      type: 'course',
+    },
+    ...course.schedule.slice(0, 3).map((item, index) => ({
+      id: `audit-${course.slug}-schedule-${index}`,
+      title: item.label,
+      detail: `Hito de planeación registrado como ${item.status}.`,
+      happenedAt: item.dueDate,
+      type: 'planning' as const,
+    })),
+    ...course.deliverables.slice(0, 2).map((item, index) => ({
+      id: `audit-${course.slug}-deliverable-${index}`,
+      title: item.title,
+      detail: `Entregable de ${item.owner} en estado ${item.status}.`,
+      happenedAt: item.dueDate,
+      type: 'production' as const,
+    })),
+    ...course.observations.slice(0, 2).map((item, index) => ({
+      id: `audit-${course.slug}-qa-${index}`,
+      title: item.title,
+      detail: `Observación ${item.severity.toLowerCase()} con estado ${item.status}.`,
+      happenedAt: course.updatedAt,
+      type: 'qa' as const,
+    })),
+  ];
+}
 
 export const roles: Role[] = [
   'Administrador',
@@ -65,7 +245,7 @@ export const stages: StageDefinition[] = [
   },
 ];
 
-export const courses: Course[] = [
+const courseCatalog: BaseCourse[] = [
   {
     id: 'course-01',
     slug: 'pensamiento-sistemico',
@@ -540,6 +720,12 @@ export const courses: Course[] = [
     ],
   },
 ];
+
+export const courses: Course[] = courseCatalog.map((course) => ({
+  ...course,
+  metadata: makeCourseMetadata(course),
+  auditLog: makeCourseAuditLog(course),
+}));
 
 export const tasks: Task[] = [
   {
