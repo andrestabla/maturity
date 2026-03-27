@@ -1,4 +1,4 @@
-import { mockAppData } from '../src/data/mockData.js';
+import { defaultBranding, mockAppData } from '../src/data/mockData.js';
 import type {
   Alert,
   AlertMutationInput,
@@ -34,6 +34,7 @@ import type {
   TeamMemberMutationInput,
   TimelineItem,
   TimelineItemMutationInput,
+  UserAccountStatus,
   UserMutationInput,
   UserUpdateInput,
 } from '../src/types.js';
@@ -76,6 +77,17 @@ interface UserRow {
   name: string;
   email: string;
   role: Role;
+  secondaryRoles: JsonValue;
+  status: UserAccountStatus;
+  institution: string | null;
+  faculty: string | null;
+  program: string | null;
+  scope: string | null;
+  statusReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string | null;
+  lastAccessAt: string | null;
   passwordHash: string;
 }
 
@@ -84,14 +96,69 @@ interface PublicUserRow {
   name: string;
   email: string;
   role: Role;
+  secondaryRoles: JsonValue;
+  status: UserAccountStatus;
+  institution: string | null;
+  faculty: string | null;
+  program: string | null;
+  scope: string | null;
+  statusReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string | null;
+  lastAccessAt: string | null;
 }
 
 interface SessionLookupRow {
-  userId: string;
+  id: string;
   name: string;
   email: string;
   role: Role;
+  secondaryRoles: JsonValue;
+  status: UserAccountStatus;
+  institution: string | null;
+  faculty: string | null;
+  program: string | null;
+  scope: string | null;
+  statusReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  updatedAt: string | null;
+  lastAccessAt: string | null;
   expiresAt: string;
+}
+
+function serializeUserRow(row: PublicUserRow | UserRow | SessionLookupRow): AuthUser {
+  const secondaryRoles = parseJson<Role[]>(row.secondaryRoles ?? []);
+
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    secondaryRoles: secondaryRoles.filter((item) => item !== row.role),
+    status: row.status,
+    institution: row.institution ?? '',
+    faculty: row.faculty ?? '',
+    program: row.program ?? '',
+    scope: row.scope ?? '',
+    createdAt: row.createdAt,
+    createdBy: row.createdBy,
+    lastAccessAt: row.lastAccessAt,
+    statusReason: row.statusReason,
+  };
+}
+
+function normalizeRoleList(primaryRole: Role, secondaryRoles: Role[] | undefined) {
+  return Array.from(new Set((secondaryRoles ?? []).filter((item) => item && item !== primaryRole)));
+}
+
+function normalizeUserStatus(status: UserAccountStatus | undefined) {
+  return status ?? 'Pendiente';
+}
+
+function normalizeUserScopeValue(value: string | undefined) {
+  return value?.trim() ?? '';
 }
 
 function getTodayLabel() {
@@ -946,8 +1013,68 @@ async function ensureSchema() {
         email TEXT UNIQUE NOT NULL,
         role TEXT NOT NULL,
         password_hash TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        secondary_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
+        status TEXT NOT NULL DEFAULT 'Pendiente',
+        institution TEXT,
+        faculty TEXT,
+        program TEXT,
+        scope TEXT,
+        status_reason TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        last_access_at TEXT
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS secondary_roles JSONB NOT NULL DEFAULT '[]'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Pendiente'
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS institution TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS faculty TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS program TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS scope TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS status_reason TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS created_by TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS updated_at TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS last_access_at TEXT
     `;
 
     await sql`
@@ -987,20 +1114,56 @@ async function ensureAdminUserSeed() {
   `) as Array<{ id: string }>;
 
   if (existingRows.length > 0) {
+    await sql`
+      UPDATE maturity_users
+      SET
+        status = COALESCE(status, ${'Activo'}),
+        institution = COALESCE(institution, ${'Maturity University'}),
+        faculty = COALESCE(faculty, ${'Gobierno del sistema'}),
+        program = COALESCE(program, ${'Operación central'}),
+        scope = COALESCE(scope, ${'Global'}),
+        updated_at = ${new Date().toISOString()}
+      WHERE id = ${existingRows[0].id}
+    `;
     return;
   }
 
   const passwordHash = await createPasswordHash(password);
 
+  const createdAt = new Date().toISOString();
+
   await sql`
-    INSERT INTO maturity_users (id, name, email, role, password_hash, created_at)
+    INSERT INTO maturity_users (
+      id,
+      name,
+      email,
+      role,
+      password_hash,
+      secondary_roles,
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      created_by,
+      created_at,
+      updated_at
+    )
     VALUES (
       ${crypto.randomUUID()},
       ${name},
       ${normalizedEmail},
       ${'Administrador'},
       ${passwordHash},
-      ${new Date().toISOString()}
+      ${JSON.stringify([])}::jsonb,
+      ${'Activo'},
+      ${'Maturity University'},
+      ${'Gobierno del sistema'},
+      ${'Operación central'},
+      ${'Global'},
+      ${'system'},
+      ${createdAt},
+      ${createdAt}
     )
   `;
 }
@@ -1601,15 +1764,28 @@ async function readRoleProfiles() {
 
 async function readUsers() {
   const sql = getSql();
-  return (await sql`
+  const rows = (await sql`
     SELECT
       id,
       name,
       email,
-      role
+      role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt"
     FROM maturity_users
     ORDER BY role ASC, name ASC
-  `) as AuthUser[];
+  `) as PublicUserRow[];
+
+  return rows.map(serializeUserRow);
 }
 
 export async function prepareDatabase() {
@@ -1642,6 +1818,7 @@ export async function loadAppData(): Promise<AppData> {
     libraryResources,
     roleProfiles,
     users,
+    branding: defaultBranding,
   };
 }
 
@@ -1702,6 +1879,17 @@ export async function findUserByEmail(email: string) {
       name,
       email,
       role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt",
       password_hash AS "passwordHash"
     FROM maturity_users
     WHERE email = ${email.trim().toLowerCase()}
@@ -1732,19 +1920,44 @@ export async function findSessionByTokenHash(tokenHash: string) {
   const sql = getSql();
   const rows = (await sql`
     SELECT
-      u.id AS "userId",
+      u.id,
       u.name,
       u.email,
       u.role,
+      u.secondary_roles AS "secondaryRoles",
+      u.status,
+      u.institution,
+      u.faculty,
+      u.program,
+      u.scope,
+      u.status_reason AS "statusReason",
+      u.created_by AS "createdBy",
+      u.created_at AS "createdAt",
+      u.updated_at AS "updatedAt",
+      u.last_access_at AS "lastAccessAt",
       s.expires_at AS "expiresAt"
     FROM maturity_sessions s
     INNER JOIN maturity_users u
       ON u.id = s.user_id
     WHERE s.token_hash = ${tokenHash}
+      AND u.status = ${'Activo'}
     LIMIT 1
   `) as SessionLookupRow[];
 
   return rows[0] ?? null;
+}
+
+export async function touchUserLastAccess(userId: string) {
+  await ensureSchema();
+  const sql = getSql();
+
+  await sql`
+    UPDATE maturity_users
+    SET
+      last_access_at = ${new Date().toISOString()},
+      updated_at = ${new Date().toISOString()}
+    WHERE id = ${userId}
+  `;
 }
 
 export async function deleteSessionByTokenHash(tokenHash: string) {
@@ -3043,6 +3256,17 @@ export async function findUserById(id: string) {
       name,
       email,
       role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt",
       password_hash AS "passwordHash"
     FROM maturity_users
     WHERE id = ${id}
@@ -3052,7 +3276,7 @@ export async function findUserById(id: string) {
   return rows[0] ?? null;
 }
 
-export async function createUserRecord(input: UserMutationInput) {
+export async function createUserRecord(input: UserMutationInput, actorId?: string | null) {
   await ensureSchema();
   await ensureSeedData();
 
@@ -3071,21 +3295,63 @@ export async function createUserRecord(input: UserMutationInput) {
 
   const passwordHash = await createPasswordHash(input.password);
   const id = crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
 
   const rows = (await sql`
-    INSERT INTO maturity_users (id, name, email, role, password_hash, created_at)
+    INSERT INTO maturity_users (
+      id,
+      name,
+      email,
+      role,
+      password_hash,
+      secondary_roles,
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason,
+      created_by,
+      created_at,
+      updated_at
+    )
     VALUES (
       ${id},
-      ${input.name},
+      ${input.name.trim()},
       ${normalizedEmail},
       ${input.role},
       ${passwordHash},
-      ${new Date().toISOString()}
+      ${JSON.stringify(secondaryRoles)}::jsonb,
+      ${normalizeUserStatus(input.status)},
+      ${normalizeUserScopeValue(input.institution)},
+      ${normalizeUserScopeValue(input.faculty)},
+      ${normalizeUserScopeValue(input.program)},
+      ${normalizeUserScopeValue(input.scope)},
+      ${input.statusReason.trim() || null},
+      ${actorId ?? null},
+      ${timestamp},
+      ${timestamp}
     )
-    RETURNING id, name, email, role
+    RETURNING
+      id,
+      name,
+      email,
+      role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt"
   `) as PublicUserRow[];
 
-  return rows[0];
+  return serializeUserRow(rows[0]);
 }
 
 export async function updateUserRecord(input: UserUpdateInput) {
@@ -3114,19 +3380,51 @@ export async function updateUserRecord(input: UserUpdateInput) {
   const passwordHash = input.password?.trim()
     ? await createPasswordHash(input.password)
     : current.passwordHash;
+  const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
+  const nextStatus = normalizeUserStatus(input.status);
 
   const rows = (await sql`
     UPDATE maturity_users
     SET
-      name = ${input.name},
+      name = ${input.name.trim()},
       email = ${normalizedEmail},
       role = ${input.role},
-      password_hash = ${passwordHash}
+      password_hash = ${passwordHash},
+      secondary_roles = ${JSON.stringify(secondaryRoles)}::jsonb,
+      status = ${nextStatus},
+      institution = ${normalizeUserScopeValue(input.institution) || null},
+      faculty = ${normalizeUserScopeValue(input.faculty) || null},
+      program = ${normalizeUserScopeValue(input.program) || null},
+      scope = ${normalizeUserScopeValue(input.scope) || null},
+      status_reason = ${input.statusReason.trim() || null},
+      updated_at = ${new Date().toISOString()}
     WHERE id = ${input.id}
-    RETURNING id, name, email, role
+    RETURNING
+      id,
+      name,
+      email,
+      role,
+      secondary_roles AS "secondaryRoles",
+      status,
+      institution,
+      faculty,
+      program,
+      scope,
+      status_reason AS "statusReason",
+      created_by AS "createdBy",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_access_at AS "lastAccessAt"
   `) as PublicUserRow[];
 
-  return rows[0] ?? null;
+  if (nextStatus !== 'Activo') {
+    await sql`
+      DELETE FROM maturity_sessions
+      WHERE user_id = ${input.id}
+    `;
+  }
+
+  return rows[0] ? serializeUserRow(rows[0]) : null;
 }
 
 export async function deleteUserRecord(id: string) {
@@ -3167,7 +3465,9 @@ export async function changeUserPassword(userId: string, payload: PasswordChange
 
   await sql`
     UPDATE maturity_users
-    SET password_hash = ${passwordHash}
+    SET
+      password_hash = ${passwordHash},
+      updated_at = ${new Date().toISOString()}
     WHERE id = ${userId}
   `;
 }

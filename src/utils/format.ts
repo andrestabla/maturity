@@ -2,7 +2,7 @@ export function formatDate(dateString: string) {
   return new Intl.DateTimeFormat('es-CO', {
     day: 'numeric',
     month: 'short',
-  }).format(new Date(`${dateString}T12:00:00`));
+  }).format(new Date(dateString.includes('T') ? dateString : `${dateString}T12:00:00`));
 }
 
 export function formatLongDate(dateString: string) {
@@ -10,7 +10,16 @@ export function formatLongDate(dateString: string) {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(new Date(`${dateString}T12:00:00`));
+  }).format(new Date(dateString.includes('T') ? dateString : `${dateString}T12:00:00`));
+}
+
+export function formatDateTime(dateString: string) {
+  return new Intl.DateTimeFormat('es-CO', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(dateString));
 }
 
 export function formatPageDate(date = new Date()) {

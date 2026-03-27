@@ -1,6 +1,7 @@
 import type {
   Alert,
   AppData,
+  BrandingSettings,
   Course,
   CourseAuditEntry,
   CourseMetadata,
@@ -1197,6 +1198,18 @@ export const roleProfiles: RoleProfile[] = [
   },
 ];
 
+export const defaultBranding: BrandingSettings = {
+  platformName: 'Maturity',
+  institutionName: 'Maturity University',
+  shortMark: 'M',
+  logoText: 'Maturity',
+  faviconLabel: 'M',
+  primaryColor: '#22b9d2',
+  accentColor: '#65ddf0',
+  surfaceStyle: 'Control center técnico con contraste alto y superficies limpias.',
+  supportUrl: 'mailto:soporte@maturity360.co',
+};
+
 export const mockAppData: AppData = {
   roles,
   stages,
@@ -1205,12 +1218,23 @@ export const mockAppData: AppData = {
   alerts,
   libraryResources,
   roleProfiles,
+  branding: defaultBranding,
   users: [
     {
       id: 'user-admin-demo',
       name: 'Administrador Maturity',
       email: 'admin@maturity.local',
       role: 'Administrador',
+      secondaryRoles: [],
+      status: 'Activo',
+      institution: 'Maturity University',
+      faculty: 'Gobierno del sistema',
+      program: 'Operación central',
+      scope: 'Global',
+      createdAt: '2026-03-01T09:00:00.000Z',
+      createdBy: 'system',
+      lastAccessAt: '2026-03-27T08:00:00.000Z',
+      statusReason: null,
     },
   ],
 };

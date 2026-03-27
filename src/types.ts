@@ -27,6 +27,28 @@ export type Tone = 'coral' | 'sage' | 'ocean' | 'gold' | 'ink';
 export type StageCheckpointStatus = 'done' | 'active' | 'pending' | 'blocked';
 export type RiskLevel = 'Bajo' | 'Medio' | 'Alto';
 export type StageNoteStatus = 'Pendiente' | 'En curso' | 'Listo';
+export type UserAccountStatus = 'Activo' | 'Inactivo' | 'Suspendido' | 'Pendiente';
+export type AdminIntegrationStatus =
+  | 'Activa'
+  | 'Inactiva'
+  | 'Pendiente'
+  | 'En prueba'
+  | 'Con error';
+export type AdminIntegrationCategory =
+  | 'Correo'
+  | 'IA'
+  | 'Académicas'
+  | 'Google'
+  | 'Storage'
+  | 'Audiovisual'
+  | 'Sistema';
+export type AdminLogSeverity = 'Info' | 'Success' | 'Warning' | 'Error';
+export type AdminLogCategory =
+  | 'Sistema'
+  | 'Autenticación'
+  | 'Integración'
+  | 'Administración';
+export type AdminAuditClassification = 'Funcional' | 'Técnica' | 'Administrativa';
 export type CourseStageNoteKey =
   | 'architecture'
   | 'production'
@@ -270,6 +292,7 @@ export interface AppData {
   libraryResources: LibraryResource[];
   roleProfiles: RoleProfile[];
   users: AuthUser[];
+  branding: BrandingSettings;
 }
 
 export interface AuthUser {
@@ -277,6 +300,16 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  secondaryRoles?: Role[];
+  status?: UserAccountStatus;
+  institution?: string;
+  faculty?: string;
+  program?: string;
+  scope?: string;
+  createdAt?: string;
+  createdBy?: string | null;
+  lastAccessAt?: string | null;
+  statusReason?: string | null;
 }
 
 export interface AuthSession {
@@ -288,6 +321,13 @@ export interface UserMutationInput {
   name: string;
   email: string;
   role: Role;
+  secondaryRoles: Role[];
+  status: UserAccountStatus;
+  institution: string;
+  faculty: string;
+  program: string;
+  scope: string;
+  statusReason: string;
   password: string;
 }
 
@@ -296,7 +336,104 @@ export interface UserUpdateInput {
   name: string;
   email: string;
   role: Role;
+  secondaryRoles: Role[];
+  status: UserAccountStatus;
+  institution: string;
+  faculty: string;
+  program: string;
+  scope: string;
+  statusReason: string;
   password?: string;
+}
+
+export interface InstitutionSettings {
+  displayName: string;
+  institutions: string[];
+  faculties: string[];
+  programs: string[];
+  academicPeriods: string[];
+  courseTypes: string[];
+  supportEmail: string;
+  defaultDomain: string;
+  defaultUserState: UserAccountStatus;
+  allowAutoProvisioning: boolean;
+}
+
+export interface BrandingSettings {
+  platformName: string;
+  institutionName: string;
+  shortMark: string;
+  logoText: string;
+  faviconLabel: string;
+  primaryColor: string;
+  accentColor: string;
+  surfaceStyle: string;
+  supportUrl: string;
+}
+
+export interface AdminIntegration {
+  id: string;
+  name: string;
+  category: AdminIntegrationCategory;
+  provider: string;
+  description: string;
+  enabled: boolean;
+  status: AdminIntegrationStatus;
+  requiredEnvKeys: string[];
+  envReady: boolean;
+  runtimeSummary: string;
+  scopes: string[];
+  config: Record<string, string>;
+  lastTestAt: string | null;
+  lastError: string | null;
+  notes: string;
+  fallbackTo: string;
+}
+
+export interface AdminLogEntry {
+  id: string;
+  createdAt: string;
+  category: AdminLogCategory;
+  module: string;
+  service: string;
+  severity: AdminLogSeverity;
+  event: string;
+  result: string;
+  detail: string;
+  userId: string | null;
+  userName: string | null;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  createdAt: string;
+  classification: AdminAuditClassification;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actorId: string | null;
+  actorName: string;
+  detail: string;
+  beforeValue: string | null;
+  afterValue: string | null;
+}
+
+export interface AdminCenterData {
+  users: AuthUser[];
+  institution: InstitutionSettings;
+  branding: BrandingSettings;
+  integrations: AdminIntegration[];
+  logs: AdminLogEntry[];
+  audit: AdminAuditEntry[];
+}
+
+export interface AdminIntegrationMutationInput {
+  id: string;
+  enabled: boolean;
+  scopes: string[];
+  config: Record<string, string>;
+  notes: string;
+  fallbackTo: string;
 }
 
 export interface PasswordChangeInput {

@@ -1,10 +1,11 @@
-import type { AuthUser } from '../src/types.js';
+import type { AuthUser, Role } from '../src/types.js';
 import { createSessionToken, hashSessionToken, verifyPassword } from './security.js';
 import {
   createSessionRecord,
   deleteSessionByTokenHash,
   findSessionByTokenHash,
   findUserByEmail,
+  touchUserLastAccess,
 } from './store.js';
 
 const SESSION_COOKIE = 'maturity_session';
@@ -38,6 +39,56 @@ function createCookie(token: string, expiresAt: string) {
   ].join('; ');
 }
 
+function parseSecondaryRoles(value: unknown) {
+  if (Array.isArray(value)) {
+    return value as Role[];
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return JSON.parse(value) as Role[];
+    } catch {
+      return [];
+    }
+  }
+
+  return [] as Role[];
+}
+
+function mapToAuthUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  secondaryRoles?: unknown;
+  status?: AuthUser['status'];
+  institution?: string | null;
+  faculty?: string | null;
+  program?: string | null;
+  scope?: string | null;
+  createdAt?: string;
+  createdBy?: string | null;
+  lastAccessAt?: string | null;
+  statusReason?: string | null;
+}) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    secondaryRoles: parseSecondaryRoles(user.secondaryRoles).filter((item) => item !== user.role),
+    status: user.status,
+    institution: user.institution ?? '',
+    faculty: user.faculty ?? '',
+    program: user.program ?? '',
+    scope: user.scope ?? '',
+    createdAt: user.createdAt,
+    createdBy: user.createdBy ?? null,
+    lastAccessAt: user.lastAccessAt ?? null,
+    statusReason: user.statusReason ?? null,
+  } satisfies AuthUser;
+}
+
 export function clearSessionCookie() {
   return [
     `${SESSION_COOKIE}=`,
@@ -62,12 +113,7 @@ export async function authenticateUser(email: string, password: string) {
     return null;
   }
 
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-  } satisfies AuthUser;
+  return mapToAuthUser(user);
 }
 
 export async function createSession(userId: string) {
@@ -76,6 +122,7 @@ export async function createSession(userId: string) {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   await createSessionRecord(userId, tokenHash, expiresAt);
+  await touchUserLastAccess(userId);
 
   return {
     token,
@@ -104,10 +151,7 @@ export async function getSessionUser(request: Request) {
   }
 
   return {
-    id: session.userId,
-    name: session.name,
-    email: session.email,
-    role: session.role,
+    ...mapToAuthUser(session),
   } satisfies AuthUser;
 }
 

@@ -1,3 +1,7 @@
+import {
+  recordAdministrativeUserAudit,
+  recordAuthenticationLog,
+} from '../../lib/admin-center.js';
 import { errorResponse, jsonResponse, readJson } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
 import { changeUserPassword } from '../../lib/store.js';
@@ -30,6 +34,22 @@ export default async function handler(request: Request) {
 
   try {
     await changeUserPassword(user.id, payload);
+
+    await recordAuthenticationLog({
+      event: 'password_changed',
+      result: 'ok',
+      detail: `El usuario ${user.email} actualizó su contraseña.`,
+      user,
+    });
+    await recordAdministrativeUserAudit({
+      action: 'password_change',
+      actor: {
+        id: user.id,
+        name: user.name,
+      },
+      entityId: user.id,
+      detail: 'Se actualizó la contraseña de la cuenta.',
+    });
 
     return jsonResponse({
       ok: true,

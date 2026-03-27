@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { ThemeToggle } from './components/ThemeToggle.js';
+import { defaultBranding } from './data/mockData.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
@@ -18,6 +19,7 @@ export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
   const { theme, toggleTheme } = useTheme();
   const [role, setRole] = useState<Role>('Coordinador');
+  const [branding, setBranding] = useState(defaultBranding);
   const {
     appData,
     source,
@@ -29,7 +31,7 @@ export default function App() {
     authenticatedUser?.role === 'Administrador'
       ? appData.roles
       : authenticatedUser
-        ? [authenticatedUser.role]
+        ? Array.from(new Set([authenticatedUser.role, ...(authenticatedUser.secondaryRoles ?? [])]))
         : [];
   const activeRole =
     authenticatedUser && availableRoles.includes(role) ? role : authenticatedUser?.role ?? role;
@@ -44,6 +46,49 @@ export default function App() {
     }
   }, [activeRole, authenticatedUser, role]);
 
+  useEffect(() => {
+    if (status === 'authenticated') {
+      setBranding(appData.branding);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadBranding() {
+      try {
+        const response = await fetch('/api/public-config', {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as { branding?: typeof defaultBranding };
+
+        if (!cancelled && payload.branding) {
+          setBranding(payload.branding);
+        }
+      } catch {
+        /* noop */
+      }
+    }
+
+    void loadBranding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appData.branding, status]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--accent', branding.primaryColor);
+    document.documentElement.style.setProperty('--accent-strong', branding.accentColor);
+    document.title = branding.platformName;
+  }, [branding]);
+
   if (status === 'loading') {
     return (
       <main className="access-screen">
@@ -53,9 +98,9 @@ export default function App() {
         <section className="access-screen__panel access-screen__panel--loading">
           <div className="access-screen__panel-head">
             <div className="access-screen__brand">
-              <div className="access-screen__mark">M</div>
+              <div className="access-screen__mark">{branding.shortMark}</div>
               <div>
-                <span>Maturity</span>
+                <span>{branding.logoText}</span>
                 <strong>Control Center</strong>
               </div>
             </div>
@@ -84,7 +129,15 @@ export default function App() {
   }
 
   if (!session.authenticated || !session.user) {
-    return <LoginPage isLoading={false} onLogin={login} theme={theme} onToggleTheme={toggleTheme} />;
+    return (
+      <LoginPage
+        isLoading={false}
+        onLogin={login}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        branding={branding}
+      />
+    );
   }
 
   return (
@@ -98,6 +151,7 @@ export default function App() {
       isLoading={isLoading}
       theme={theme}
       onToggleTheme={toggleTheme}
+      branding={branding}
     >
       <AmbientCursor />
       <Routes>
@@ -150,7 +204,6 @@ export default function App() {
           path="/team"
           element={
             <TeamPage
-              role={activeRole}
               user={session.user}
               appData={appData}
               refreshAppData={refreshAppData}

@@ -11,7 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import type { AuthUser, Role } from '../types.js';
+import type { AuthUser, BrandingSettings, Role } from '../types.js';
 import { formatPageDate } from '../utils/format.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
 import { ThemeToggle } from './ThemeToggle.js';
@@ -27,6 +27,7 @@ interface AppShellProps {
   isLoading: boolean;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  branding: BrandingSettings;
   children: ReactNode;
 }
 
@@ -47,6 +48,7 @@ export function AppShell({
   isLoading,
   theme,
   onToggleTheme,
+  branding,
   children,
 }: AppShellProps) {
   useAmbientMotion();
@@ -65,10 +67,10 @@ export function AppShell({
 
       <header className="control-header">
         <NavLink to="/" className="brand-card brand-card--inline">
-          <div className="brand-mark">M</div>
+          <div className="brand-mark">{branding.shortMark}</div>
           <div>
-            <p className="eyebrow">Maturity</p>
-            <h1>Maturity</h1>
+            <p className="eyebrow">{branding.institutionName}</p>
+            <h1>{branding.logoText}</h1>
           </div>
         </NavLink>
         <span className="control-header__label">CONTROL CENTER</span>

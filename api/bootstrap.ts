@@ -1,3 +1,4 @@
+import { getBrandingSettings } from '../lib/admin-center.js';
 import { errorResponse, jsonResponse } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 import { loadAppData } from '../lib/store.js';
@@ -14,11 +15,14 @@ export default async function handler(request: Request) {
       return errorResponse(401, 'Authentication required');
     }
 
-    const data = await loadAppData();
+    const [data, branding] = await Promise.all([loadAppData(), getBrandingSettings()]);
 
     return jsonResponse(
       {
-        data,
+        data: {
+          ...data,
+          branding,
+        },
       },
       {
         headers: {

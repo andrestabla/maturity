@@ -2,15 +2,23 @@ import { useState } from 'react';
 import { ArrowRight, LockKeyhole, Mail } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
+import type { BrandingSettings } from '../types.js';
 
 interface LoginPageProps {
   isLoading: boolean;
   onLogin: (payload: { email: string; password: string }) => Promise<void>;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  branding: BrandingSettings;
 }
 
-export function LoginPage({ isLoading, onLogin, theme, onToggleTheme }: LoginPageProps) {
+export function LoginPage({
+  isLoading,
+  onLogin,
+  theme,
+  onToggleTheme,
+  branding,
+}: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -42,9 +50,9 @@ export function LoginPage({ isLoading, onLogin, theme, onToggleTheme }: LoginPag
       <section className="access-screen__panel">
         <div className="access-screen__panel-head">
           <div className="access-screen__brand">
-            <div className="access-screen__mark">M</div>
+            <div className="access-screen__mark">{branding.shortMark}</div>
             <div>
-              <span>Maturity</span>
+              <span>{branding.logoText}</span>
               <strong>Control Center</strong>
             </div>
           </div>
@@ -54,7 +62,7 @@ export function LoginPage({ isLoading, onLogin, theme, onToggleTheme }: LoginPag
 
         <div className="access-screen__copy">
           <span className="access-screen__kicker">Academic Production OS</span>
-          <h1>Entrar a Maturity</h1>
+          <h1>Entrar a {branding.platformName}</h1>
           <p>Accede para operar cursos, tareas y entregables desde una sola capa de control.</p>
         </div>
 
@@ -98,7 +106,7 @@ export function LoginPage({ isLoading, onLogin, theme, onToggleTheme }: LoginPag
         </form>
 
         <p className="access-screen__footnote">
-          Diseñado para escritorio y preparado para experiencia tipo app móvil.
+          {branding.institutionName} · Diseñado para escritorio y preparado para experiencia tipo app móvil.
         </p>
       </section>
     </main>

@@ -1,8 +1,13 @@
+import {
+  recordAdministrativeUserAudit,
+  recordAdminLog,
+} from '../lib/admin-center.js';
 import { canManageUsers } from '../lib/permissions.js';
 import { errorResponse, jsonResponse, readJson } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 import {
   createUserRecord,
+  findUserById,
   deleteUserRecord,
   getUserDirectory,
   updateUserRecord,
@@ -15,6 +20,16 @@ export const config = {
 
 interface UserDeletePayload {
   id?: string;
+}
+
+function sanitizeUserSnapshot<T extends object>(user: T | null | undefined) {
+  if (!user) {
+    return null;
+  }
+
+  const safeUser = { ...user } as Record<string, unknown>;
+  delete safeUser.passwordHash;
+  return safeUser;
 }
 
 export default async function handler(request: Request) {
@@ -47,8 +62,34 @@ export default async function handler(request: Request) {
       return errorResponse(400, 'The password must be at least 10 characters long');
     }
 
+    if (payload.status !== 'Activo' && !payload.statusReason.trim()) {
+      return errorResponse(400, 'Debes registrar el motivo cuando el usuario no inicia activo');
+    }
+
     try {
-      const createdUser = await createUserRecord(payload);
+      const createdUser = await createUserRecord(payload, user.id);
+
+      await recordAdministrativeUserAudit({
+        action: 'create',
+        actor: {
+          id: user.id,
+          name: user.name,
+        },
+        entityId: createdUser.id,
+        detail: `Se creó el usuario ${createdUser.email} con estado ${createdUser.status?.toLowerCase()}.`,
+        afterValue: JSON.stringify(sanitizeUserSnapshot(createdUser)),
+      });
+      await recordAdminLog({
+        category: 'Administración',
+        module: 'Gobierno',
+        service: 'Usuarios',
+        severity: 'Success',
+        event: 'user_created',
+        result: 'ok',
+        detail: `Se registró ${createdUser.email} con rol principal ${createdUser.role}.`,
+        userId: user.id,
+        userName: user.name,
+      });
 
       return jsonResponse(
         {
@@ -76,12 +117,40 @@ export default async function handler(request: Request) {
       return errorResponse(400, 'The password must be at least 10 characters long');
     }
 
+    if (payload.status !== 'Activo' && !payload.statusReason.trim()) {
+      return errorResponse(400, 'Debes registrar el motivo cuando el usuario no queda activo');
+    }
+
     try {
+      const before = await findUserById(payload.id);
       const updatedUser = await updateUserRecord(payload);
 
       if (!updatedUser) {
         return errorResponse(404, 'User not found');
       }
+
+      await recordAdministrativeUserAudit({
+        action: 'update',
+        actor: {
+          id: user.id,
+          name: user.name,
+        },
+        entityId: updatedUser.id,
+        detail: `Se actualizó ${updatedUser.email}; estado actual ${updatedUser.status?.toLowerCase()}.`,
+        beforeValue: before ? JSON.stringify(sanitizeUserSnapshot(before)) : null,
+        afterValue: JSON.stringify(sanitizeUserSnapshot(updatedUser)),
+      });
+      await recordAdminLog({
+        category: 'Administración',
+        module: 'Gobierno',
+        service: 'Usuarios',
+        severity: 'Success',
+        event: 'user_updated',
+        result: 'ok',
+        detail: `Se actualizaron roles, alcance o estado para ${updatedUser.email}.`,
+        userId: user.id,
+        userName: user.name,
+      });
 
       return jsonResponse({
         user: updatedUser,
@@ -104,11 +173,34 @@ export default async function handler(request: Request) {
       return errorResponse(400, 'You cannot delete your own account');
     }
 
+    const before = await findUserById(payload.id);
     const deleted = await deleteUserRecord(payload.id);
 
     if (!deleted) {
       return errorResponse(404, 'User not found');
     }
+
+    await recordAdministrativeUserAudit({
+      action: 'delete',
+      actor: {
+        id: user.id,
+        name: user.name,
+      },
+      entityId: payload.id,
+      detail: `Se eliminó el usuario ${before?.email ?? payload.id} del directorio activo.`,
+      beforeValue: before ? JSON.stringify(sanitizeUserSnapshot(before)) : null,
+    });
+    await recordAdminLog({
+      category: 'Administración',
+      module: 'Gobierno',
+      service: 'Usuarios',
+      severity: 'Warning',
+      event: 'user_deleted',
+      result: 'ok',
+      detail: `Se retiró ${before?.email ?? payload.id} del directorio.`,
+      userId: user.id,
+      userName: user.name,
+    });
 
     return jsonResponse({
       ok: true,
