@@ -5794,6 +5794,14 @@ body::after {
   margin-top: 18px;
 }
 
+.product-guide {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+}
+
 .task-editor--timeline {
   align-items: flex-start;
 }

@@ -945,6 +945,429 @@ export function CourseWorkspacePage({
     return currentCourse.products.filter((product) => product.stage === stageId).length;
   }
 
+  function cleanPreviewLine(line: string) {
+    return line
+      .replace(/^#+\s*/, '')
+      .replace(/^\d+[\.\)]\s*/, '')
+      .replace(/^[-*]\s*/, '')
+      .trim();
+  }
+
+  function extractPreviewItems(body: string) {
+    const lines = splitLines(body);
+    const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line));
+    const source = bulletLines.length > 0 ? bulletLines : lines;
+
+    return source.map(cleanPreviewLine).filter(Boolean);
+  }
+
+  function productTemplateActionLabel(stageId: CourseProductStage) {
+    switch (stageId) {
+      case 'general':
+        return 'Cargar sílabus base';
+      case 'architecture':
+        return 'Cargar blueprint';
+      case 'production':
+        return 'Construir por módulos';
+      case 'curation':
+        return 'Cargar inventario';
+      case 'multimedia':
+        return 'Cargar storyboard';
+      case 'qa':
+        return 'Cargar rúbrica base';
+      default:
+        return 'Cargar base';
+    }
+  }
+
+  function defaultProductSummary(stageId: CourseProductStage) {
+    switch (stageId) {
+      case 'general':
+        return 'Documento marco del curso con ficha académica, resultados, metodología y referencias.';
+      case 'architecture':
+        return 'Define la experiencia de aprendizaje, la secuencia pedagógica y la lógica modular del curso.';
+      case 'production':
+        return 'Agrupa la autoría del curso: actividades, instrucciones, recursos y materiales de trabajo.';
+      case 'curation':
+        return 'Consolida el inventario curado y su pertinencia pedagógica por módulo.';
+      case 'multimedia':
+        return 'Organiza piezas propias como HTML, audio, lecturas e infografías listas para producción.';
+      case 'qa':
+        return 'Establece los criterios de revisión, control de calidad y cierre del curso.';
+      default:
+        return 'Producto editable del expediente del curso.';
+    }
+  }
+
+  function buildProductTemplate(
+    stageId: CourseProductStage,
+    format: CourseProductMutationInput['format'],
+  ) {
+    switch (stageId) {
+      case 'general':
+        return [
+          '# Identificación del curso',
+          `Institución: ${currentCourse.metadata.institution}`,
+          `Programa: ${currentCourse.program}`,
+          `Curso: ${currentCourse.title}`,
+          `Código: ${currentCourse.code}`,
+          `Modalidad: ${currentCourse.modality}`,
+          `Créditos: ${currentCourse.credits}`,
+          '',
+          '# Resultados de aprendizaje',
+          ...currentCourse.metadata.learningOutcomes.map((item) => `- ${item}`),
+          '',
+          '# Temas clave',
+          ...currentCourse.metadata.topics.map((item) => `- ${item}`),
+          '',
+          '# Metodología',
+          currentCourse.metadata.methodology,
+          '',
+          '# Evaluación',
+          currentCourse.metadata.evaluation,
+          '',
+          '# Bibliografía base',
+          ...currentCourse.metadata.bibliography.map((item) => `- ${item}`),
+        ].join('\n');
+      case 'architecture':
+        return currentCourse.modules
+          .map(
+            (module, index) =>
+              [
+                `# Unidad ${index + 1}: ${module.title}`,
+                `Objetivo de aprendizaje: ${module.learningGoal}`,
+                `Actividades previstas: ${module.activities}`,
+                `Recursos propios previstos: ${module.ownResources}`,
+                `Recursos curados previstos: ${module.curatedResources}`,
+                `Avance actual: ${module.completion}%`,
+              ].join('\n'),
+          )
+          .join('\n\n');
+      case 'production':
+        return currentCourse.modules
+          .map((module, index) => {
+            const activities = Array.from(
+              { length: Math.max(module.activities, 1) },
+              (_, activityIndex) => `- Actividad ${activityIndex + 1}: describir propósito, instrucción y evidencia`,
+            );
+
+            return [
+              `# Módulo ${index + 1}: ${module.title}`,
+              `Objetivo: ${module.learningGoal}`,
+              'Actividades:',
+              ...activities,
+              `Recursos propios de apoyo: ${module.ownResources}`,
+              `Recursos curados de apoyo: ${module.curatedResources}`,
+            ].join('\n');
+          })
+          .join('\n\n');
+      case 'curation':
+        return currentCourse.modules
+          .map(
+            (module, index) =>
+              [
+                `# Unidad ${index + 1}: ${module.title}`,
+                `Propósito pedagógico: ${module.learningGoal}`,
+                `Recursos curados estimados: ${module.curatedResources}`,
+                '- Fuente 1:',
+                '- Tipo de recurso:',
+                '- Justificación didáctica:',
+              ].join('\n'),
+          )
+          .join('\n\n');
+      case 'multimedia': {
+        const multimediaPieces =
+          format === 'HTML'
+            ? [
+                '- HTML interactivo: experiencia principal',
+                '- Lectura extendida: apoyo descargable',
+                '- Infografía: resumen visual',
+              ]
+            : format === 'Pódcast'
+              ? [
+                  '- Pódcast principal: guion narrativo',
+                  '- Cápsula de audio: refuerzo conceptual',
+                  '- Pieza visual de portada: pendiente',
+                ]
+              : format === 'Infografía'
+                ? [
+                    '- Infografía vertical: estructura principal',
+                    '- Pieza social complementaria: pendiente',
+                    '- Texto alternativo accesible: pendiente',
+                  ]
+                : [
+                    '- Lectura central',
+                    '- Pieza complementaria',
+                    '- Adaptación móvil',
+                  ];
+
+        return [
+          `# Paquete ${format}`,
+          'Objetivo de la pieza:',
+          `${currentCourse.summary}`,
+          '',
+          '# Componentes',
+          ...multimediaPieces,
+          '',
+          '# Consideraciones de experiencia',
+          '- Legibilidad móvil',
+          '- Coherencia con arquitectura del curso',
+          '- Accesibilidad y contraste',
+        ].join('\n');
+      }
+      case 'qa':
+        return [
+          '# Rúbrica de validación',
+          '- Coherencia entre resultados, actividades y evaluación',
+          '- Calidad instruccional y claridad de instrucciones',
+          '- Uso pertinente de recursos curados y propios',
+          '- Legibilidad, accesibilidad y consistencia visual',
+          '- Preparación del curso para cierre y handoff',
+        ].join('\n');
+      default:
+        return '';
+    }
+  }
+
+  function applyTemplateToComposer(stageId: CourseProductStage) {
+    setNewProductForm((current) => ({
+      ...current,
+      stage: stageId,
+      summary: current.summary.trim() || defaultProductSummary(stageId),
+      body: buildProductTemplate(stageId, current.format),
+    }));
+  }
+
+  function applyTemplateToDraft(productId: string) {
+    const draft = productDrafts[productId];
+
+    if (!draft) {
+      return;
+    }
+
+    setProductDrafts((current) => ({
+      ...current,
+      [productId]: {
+        ...draft,
+        summary: draft.summary.trim() || defaultProductSummary(draft.stage),
+        body: buildProductTemplate(draft.stage, draft.format),
+      },
+    }));
+  }
+
+  function renderProductSupportPanel(
+    product: Pick<CourseProductMutationInput, 'stage' | 'format' | 'body'>,
+    onLoadTemplate?: () => void,
+  ) {
+    const previewItems = extractPreviewItems(product.body).slice(0, 6);
+
+    return (
+      <div className="surface-muted product-guide">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Guía estructurada</span>
+            <h3>Edición asistida del producto</h3>
+          </div>
+
+          {onLoadTemplate ? (
+            <button type="button" className="ghost-button" onClick={onLoadTemplate}>
+              <span>{productTemplateActionLabel(product.stage)}</span>
+            </button>
+          ) : null}
+        </div>
+
+        {product.stage === 'general' ? (
+          <>
+            <div className="module-grid module-grid--summary">
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.institution}</strong>
+                  <span>institución</span>
+                </div>
+                <p>{currentCourse.program} · {currentCourse.code}</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.learningOutcomes.length}</strong>
+                  <span>resultados</span>
+                </div>
+                <p>La ficha operativa ya entrega la base curricular para el sílabus.</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.topics.length}</strong>
+                  <span>temas clave</span>
+                </div>
+                <p>Los temas y referencias pueden convertirse en una versión completa del documento base.</p>
+              </div>
+            </div>
+
+            <div className="list-stack">
+              <div className="list-item">
+                <div>
+                  <strong>Metodología vigente</strong>
+                  <p>{currentCourse.metadata.methodology}</p>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        {product.stage === 'architecture' ? (
+          <div className="list-stack">
+            {currentCourse.modules.map((module) => (
+              <div key={module.id} className="list-item">
+                <div>
+                  <strong>{module.title}</strong>
+                  <p>{module.learningGoal}</p>
+                </div>
+                <div className="list-item__meta">
+                  <span>{module.activities} actividades</span>
+                  <span>{module.completion}% avance</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {product.stage === 'production' ? (
+          <div className="list-stack">
+            {currentCourse.modules.map((module) => (
+              <div key={module.id} className="list-item">
+                <div>
+                  <strong>{module.title}</strong>
+                  <p>{module.learningGoal}</p>
+                </div>
+                <div className="list-item__meta">
+                  <span>{module.activities} actividades</span>
+                  <span>{module.ownResources} propios · {module.curatedResources} curados</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {product.stage === 'curation' ? (
+          <div className="list-stack">
+            {currentCourse.modules.map((module) => (
+              <div key={module.id} className="list-item">
+                <div>
+                  <strong>{module.title}</strong>
+                  <p>Curación prevista para reforzar {module.learningGoal.toLowerCase()}.</p>
+                </div>
+                <div className="list-item__meta">
+                  <span>{module.curatedResources} recursos curados</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {product.stage === 'multimedia' ? (
+          <>
+            <div className="module-grid module-grid--summary">
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{product.format}</strong>
+                  <span>salida principal</span>
+                </div>
+                <p>La pieza se piensa para experiencia tecnológica, legible y adaptable a móvil.</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{previewItems.length}</strong>
+                  <span>bloques detectados</span>
+                </div>
+                <p>La vista previa identifica componentes del paquete antes de pasar a LMS.</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{ownedResources.length}</strong>
+                  <span>activos propios</span>
+                </div>
+                <p>El expediente combina recursos del curso con entregables multimedia específicos.</p>
+              </div>
+            </div>
+
+            <div className="module-grid module-grid--summary">
+              {previewItems.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin preview disponible todavía</strong>
+                  <p>Carga un storyboard base para visualizar las piezas previstas.</p>
+                </div>
+              ) : (
+                previewItems.map((item, index) => (
+                  <div key={`${product.format}-${index}`} className="module-card">
+                    <div className="module-card__top">
+                      <strong>Pieza {index + 1}</strong>
+                      <span>{product.format}</span>
+                    </div>
+                    <p>{item}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {product.stage === 'qa' ? (
+          <>
+            <div className="module-grid module-grid--summary">
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{pendingObservationsCount}</strong>
+                  <span>hallazgos abiertos</span>
+                </div>
+                <p>La rúbrica dialoga con el estado real del curso y sus observaciones vivas.</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{blockingCheckpoints.length}</strong>
+                  <span>bloqueos</span>
+                </div>
+                <p>Los criterios de validación ayudan a destrabar el paso hacia el cierre o el handoff.</p>
+              </div>
+
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{previewItems.length}</strong>
+                  <span>criterios</span>
+                </div>
+                <p>La rúbrica se visualiza como checklist vivo dentro del expediente del curso.</p>
+              </div>
+            </div>
+
+            <div className="list-stack">
+              {previewItems.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin criterios visibles todavía</strong>
+                  <p>Carga una rúbrica base para empezar la validación estructurada del curso.</p>
+                </div>
+              ) : (
+                previewItems.map((item, index) => (
+                  <div key={`qa-${index}`} className="list-item">
+                    <div>
+                      <strong>Criterio {index + 1}</strong>
+                      <p>{item}</p>
+                    </div>
+                    <div className="list-item__meta">
+                      <span>{index < resolvedObservationsCount ? 'Revisado' : 'Pendiente'}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsCourseSaving(true);
@@ -2225,6 +2648,8 @@ export function CourseWorkspacePage({
 
         {isComposerOpen ? (
           <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
+            {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
+
             <div className="form-grid">
               <label className="field">
                 <span>Título</span>
@@ -2410,6 +2835,8 @@ export function CourseWorkspacePage({
                         <strong>{product.title}</strong>
                       </div>
 
+                      {renderProductSupportPanel(product)}
+
                       <div className="list-stack">
                         <div className="list-item">
                           <div>
@@ -2452,6 +2879,8 @@ export function CourseWorkspacePage({
                       <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
                       <strong>{product.title}</strong>
                     </div>
+
+                    {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
 
                     <div className="form-grid">
                       <label className="field">
