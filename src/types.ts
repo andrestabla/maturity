@@ -42,6 +42,8 @@ export type AdminIntegrationCategory =
   | 'Storage'
   | 'Audiovisual'
   | 'Sistema';
+export type BrandingFontPreset = 'Control' | 'Editorial' | 'Institutional';
+export type BrandingLoginVariant = 'Minimal' | 'Split' | 'Command';
 export type AdminLogSeverity = 'Info' | 'Success' | 'Warning' | 'Error';
 export type AdminLogCategory =
   | 'Sistema'
@@ -364,10 +366,24 @@ export interface BrandingSettings {
   institutionName: string;
   shortMark: string;
   logoText: string;
+  logoUrl: string;
+  logoMode: 'Monograma' | 'Wordmark' | 'Imagen';
   faviconLabel: string;
+  faviconUrl: string;
+  faviconMode: 'Monograma' | 'Imagen';
   primaryColor: string;
   accentColor: string;
   surfaceStyle: string;
+  fontPreset: BrandingFontPreset;
+  bodyFontFamily: string;
+  displayFontFamily: string;
+  monoFontFamily: string;
+  loginVariant: BrandingLoginVariant;
+  loginEyebrow: string;
+  loginHeadline: string;
+  loginMessage: string;
+  loaderLabel: string;
+  loaderMessage: string;
   supportUrl: string;
 }
 
@@ -388,6 +404,9 @@ export interface AdminIntegration {
   lastError: string | null;
   notes: string;
   fallbackTo: string;
+  assistantTitle: string;
+  assistantSummary: string;
+  assistantSteps: string[];
 }
 
 export interface AdminLogEntry {

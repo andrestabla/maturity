@@ -15,6 +15,18 @@ import { LoginPage } from './pages/LoginPage.js';
 import { TeamPage } from './pages/TeamPage.js';
 import type { Role } from './types.js';
 
+function createMonogramFavicon(label: string, background: string, foreground: string) {
+  const safeLabel = (label || 'M').slice(0, 2);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="18" fill="${background}" />
+      <text x="32" y="38" text-anchor="middle" font-family="IBM Plex Sans, Arial, sans-serif" font-size="28" font-weight="700" fill="${foreground}">${safeLabel}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
   const { theme, toggleTheme } = useTheme();
@@ -86,8 +98,37 @@ export default function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', branding.primaryColor);
     document.documentElement.style.setProperty('--accent-strong', branding.accentColor);
+    document.documentElement.style.setProperty('--font-body', `"${branding.bodyFontFamily}", sans-serif`);
+    document.documentElement.style.setProperty('--font-display', `"${branding.displayFontFamily}", sans-serif`);
+    document.documentElement.style.setProperty('--font-mono', `"${branding.monoFontFamily}", monospace`);
     document.title = branding.platformName;
+
+    const faviconHref =
+      branding.faviconMode === 'Imagen' && branding.faviconUrl.trim()
+        ? branding.faviconUrl.trim()
+        : createMonogramFavicon(branding.faviconLabel, branding.primaryColor, '#061018');
+    let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+
+    favicon.href = faviconHref;
   }, [branding]);
+
+  function renderBrandMark() {
+    if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
+      return <img className="access-screen__logo" src={branding.logoUrl} alt={branding.logoText} />;
+    }
+
+    if (branding.logoMode === 'Wordmark') {
+      return <div className="access-screen__wordmark">{branding.logoText}</div>;
+    }
+
+    return <div className="access-screen__mark">{branding.shortMark}</div>;
+  }
 
   if (status === 'loading') {
     return (
@@ -98,7 +139,7 @@ export default function App() {
         <section className="access-screen__panel access-screen__panel--loading">
           <div className="access-screen__panel-head">
             <div className="access-screen__brand">
-              <div className="access-screen__mark">{branding.shortMark}</div>
+              {renderBrandMark()}
               <div>
                 <span>{branding.logoText}</span>
                 <strong>Control Center</strong>
@@ -109,9 +150,9 @@ export default function App() {
           </div>
 
           <div className="access-screen__copy">
-            <span className="access-screen__kicker">Preparando la sesión</span>
+            <span className="access-screen__kicker">{branding.loaderLabel}</span>
             <h1>Sincronizando tu espacio de trabajo.</h1>
-            <p>Estamos validando acceso y preparando la capa operativa.</p>
+            <p>{branding.loaderMessage}</p>
           </div>
 
           <div className="access-screen__loading">

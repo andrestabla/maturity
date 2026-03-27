@@ -114,15 +114,32 @@ function sanitizeBrandingSettings(input: BrandingSettings): BrandingSettings {
     institutionName: input.institutionName.trim() || defaultBranding.institutionName,
     shortMark: input.shortMark.trim().slice(0, 4) || defaultBranding.shortMark,
     logoText: input.logoText.trim() || defaultBranding.logoText,
+    logoUrl: input.logoUrl.trim(),
+    logoMode: input.logoMode ?? defaultBranding.logoMode,
     faviconLabel: input.faviconLabel.trim().slice(0, 2) || defaultBranding.faviconLabel,
+    faviconUrl: input.faviconUrl.trim(),
+    faviconMode: input.faviconMode ?? defaultBranding.faviconMode,
     primaryColor: input.primaryColor.trim() || defaultBranding.primaryColor,
     accentColor: input.accentColor.trim() || defaultBranding.accentColor,
     surfaceStyle: input.surfaceStyle.trim() || defaultBranding.surfaceStyle,
+    fontPreset: input.fontPreset ?? defaultBranding.fontPreset,
+    bodyFontFamily: input.bodyFontFamily.trim() || defaultBranding.bodyFontFamily,
+    displayFontFamily: input.displayFontFamily.trim() || defaultBranding.displayFontFamily,
+    monoFontFamily: input.monoFontFamily.trim() || defaultBranding.monoFontFamily,
+    loginVariant: input.loginVariant ?? defaultBranding.loginVariant,
+    loginEyebrow: input.loginEyebrow.trim() || defaultBranding.loginEyebrow,
+    loginHeadline: input.loginHeadline.trim() || defaultBranding.loginHeadline,
+    loginMessage: input.loginMessage.trim() || defaultBranding.loginMessage,
+    loaderLabel: input.loaderLabel.trim() || defaultBranding.loaderLabel,
+    loaderMessage: input.loaderMessage.trim() || defaultBranding.loaderMessage,
     supportUrl: input.supportUrl.trim() || defaultBranding.supportUrl,
   };
 }
 
-type IntegrationPreset = Omit<AdminIntegration, 'envReady' | 'runtimeSummary' | 'status'> & {
+type IntegrationPreset = Omit<
+  AdminIntegration,
+  'envReady' | 'runtimeSummary' | 'status' | 'assistantTitle' | 'assistantSummary' | 'assistantSteps'
+> & {
   status: AdminIntegrationStatus;
 };
 
@@ -353,6 +370,111 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
 const integrationPresetMap = Object.fromEntries(
   defaultIntegrationPresets.map((integration) => [integration.id, integration]),
 ) as Record<string, IntegrationPreset>;
+
+const integrationAssistantMap: Record<
+  string,
+  Pick<AdminIntegration, 'assistantTitle' | 'assistantSummary' | 'assistantSteps'>
+> = {
+  'outbound-mail': {
+    assistantTitle: 'Asistente de correo saliente',
+    assistantSummary: 'Define remitente, tipo de proveedor y prueba inicial sin exponer secretos del runtime.',
+    assistantSteps: [
+      'Confirma proveedor visible y dominio remitente.',
+      'Ajusta plantillas, remitente y fallback operativo.',
+      'Ejecuta prueba de conectividad para validar el servicio.',
+    ],
+  },
+  openai: {
+    assistantTitle: 'Asistente OpenAI',
+    assistantSummary: 'Delimita módulos, modelo por defecto y funciones autorizadas para la capa inteligente.',
+    assistantSteps: [
+      'Elige el modelo visible para la operación.',
+      'Define qué módulos o etapas pueden usar OpenAI.',
+      'Guarda y corre una prueba para confirmar disponibilidad.',
+    ],
+  },
+  gemini: {
+    assistantTitle: 'Asistente Gemini',
+    assistantSummary: 'Configura Gemini como motor principal o alterno para flujos específicos.',
+    assistantSteps: [
+      'Define casos de uso y módulos habilitados.',
+      'Ajusta fallback hacia OpenAI o flujo manual.',
+      'Valida disponibilidad en runtime y registra la prueba.',
+    ],
+  },
+  'academic-databases': {
+    assistantTitle: 'Asistente de fuentes académicas',
+    assistantSummary: 'Ordena endpoint, mapeo de metadatos y alcance de curación dentro de la plataforma.',
+    assistantSteps: [
+      'Registra endpoint y tipo de acceso.',
+      'Define campos recuperados y mapeo básico.',
+      'Corre una consulta de prueba y revisa trazabilidad.',
+    ],
+  },
+  'google-sso': {
+    assistantTitle: 'Asistente Google SSO',
+    assistantSummary: 'Configura modo de acceso, aprovisionamiento y dominio institucional permitido.',
+    assistantSteps: [
+      'Activa acceso opcional u obligatorio.',
+      'Define dominio y política de aprovisionamiento.',
+      'Valida autenticación con una prueba controlada.',
+    ],
+  },
+  'google-calendar': {
+    assistantTitle: 'Asistente Google Calendar',
+    assistantSummary: 'Organiza agendas, hitos y reglas de sincronización con el flujo de producción.',
+    assistantSteps: [
+      'Define calendario y tipo de eventos a sincronizar.',
+      'Ajusta timezone y visibilidad.',
+      'Prueba conexión y registra el resultado.',
+    ],
+  },
+  'google-meet': {
+    assistantTitle: 'Asistente Google Meet',
+    assistantSummary: 'Asocia reuniones a hitos o eventos del flujo sin salir de Gobierno.',
+    assistantSteps: [
+      'Configura creación automática o manual.',
+      'Define a qué eventos del flujo se vincula.',
+      'Valida autenticación y creación de reunión.',
+    ],
+  },
+  'cloudflare-r2': {
+    assistantTitle: 'Asistente Cloudflare R2',
+    assistantSummary: 'Estructura bucket, ruta base y reglas de ubicación para recursos y multimedia.',
+    assistantSteps: [
+      'Define partición por curso, módulo o tipo de recurso.',
+      'Ajusta retención y fallback de almacenamiento.',
+      'Prueba lectura y escritura desde runtime.',
+    ],
+  },
+  'youtube-data-api': {
+    assistantTitle: 'Asistente YouTube Data API',
+    assistantSummary: 'Regula su uso por módulo y configura búsqueda audiovisual segura.',
+    assistantSteps: [
+      'Elige módulos autorizados para consulta.',
+      'Configura región y nivel de filtrado.',
+      'Ejecuta una prueba de consulta desde Gobierno.',
+    ],
+  },
+  'neon-database': {
+    assistantTitle: 'Asistente Neon',
+    assistantSummary: 'Verifica salud de la persistencia principal y documenta el entorno conectado.',
+    assistantSteps: [
+      'Confirma entorno y topología visibles.',
+      'Revisa fallback de operación si la base falla.',
+      'Ejecuta prueba de disponibilidad.',
+    ],
+  },
+  'vercel-runtime': {
+    assistantTitle: 'Asistente Vercel',
+    assistantSummary: 'Resume el entorno desplegado, variables detectadas y contexto del proyecto.',
+    assistantSteps: [
+      'Confirma proyecto, entorno y branch.',
+      'Revisa disponibilidad de variables públicas y privadas.',
+      'Ejecuta validación operativa del runtime.',
+    ],
+  },
+};
 
 async function ensureAdminCenterSchema() {
   await prepareDatabase();
@@ -650,9 +772,20 @@ function evaluateIntegrationRuntime(
 
 function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
   const preset = integrationPresetMap[row.id];
+  const assistant = integrationAssistantMap[row.id];
   const config = parseJson<Record<string, string>>(row.config);
   const scopes = parseJson<string[]>(row.scopes);
   const runtime = evaluateIntegrationRuntime(row.id, config);
+  const effectiveEnabled = row.enabled || runtime.ready;
+  const effectiveStatus: AdminIntegrationStatus = !effectiveEnabled
+    ? 'Inactiva'
+    : runtime.ready
+      ? 'Activa'
+      : row.lastError
+        ? 'Con error'
+        : row.status === 'En prueba'
+          ? 'En prueba'
+          : 'Pendiente';
 
   return {
     id: row.id,
@@ -660,16 +793,8 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
     category: row.category,
     provider: row.provider,
     description: row.description,
-    enabled: row.enabled,
-    status: !row.enabled
-      ? 'Inactiva'
-      : runtime.ready
-        ? row.status === 'Inactiva'
-          ? 'Pendiente'
-          : row.status
-        : row.lastError
-          ? 'Con error'
-          : 'Pendiente',
+    enabled: effectiveEnabled,
+    status: effectiveStatus,
     requiredEnvKeys: preset?.requiredEnvKeys ?? [],
     envReady: runtime.ready,
     runtimeSummary: runtime.summary,
@@ -679,6 +804,14 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
     lastError: row.lastError,
     notes: row.notes,
     fallbackTo: row.fallbackTo,
+    assistantTitle: assistant?.assistantTitle ?? 'Asistente de integración',
+    assistantSummary:
+      assistant?.assistantSummary ?? 'Configura alcance, fallback y validación operativa.',
+    assistantSteps: assistant?.assistantSteps ?? [
+      'Define configuración visible.',
+      'Ajusta alcances permitidos.',
+      'Ejecuta una prueba de conectividad.',
+    ],
   };
 }
 
@@ -1047,13 +1180,13 @@ export async function runIntegrationConnectivityTest(id: string, actor: AdminAct
   }
 
   const serialized = serializeIntegrationRow(current);
-  let status: AdminIntegrationStatus = current.enabled ? 'En prueba' : 'Inactiva';
+  let status: AdminIntegrationStatus = serialized.enabled ? 'En prueba' : 'Inactiva';
   let detail = serialized.runtimeSummary;
   let lastError: string | null = null;
   const sql = getSql();
   const timestamp = new Date().toISOString();
 
-  if (!current.enabled) {
+  if (!serialized.enabled) {
     detail = 'La integración está inactiva. Actívala antes de ejecutar pruebas.';
     status = 'Inactiva';
   } else if (!serialized.envReady) {

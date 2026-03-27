@@ -152,7 +152,7 @@ const adminTabs: Array<{
   id: AdminTab;
   label: string;
 }> = [
-  { id: 'users', label: 'Usuarios y roles' },
+  { id: 'users', label: 'Usuarios' },
   { id: 'institution', label: 'Institución' },
   { id: 'branding', label: 'Branding' },
   { id: 'integrations', label: 'Integraciones' },
@@ -186,6 +186,9 @@ export function TeamPage({
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [showCreateUserAssistant, setShowCreateUserAssistant] = useState(false);
+  const [focusRoleAssignment, setFocusRoleAssignment] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
   const [userForm, setUserForm] = useState<UserMutationInput>(() => buildUserForm());
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionSettings | null>(null);
@@ -238,7 +241,12 @@ export function TeamPage({
       setInstitutionDraft(nextData.institution);
       setBrandingDraft(nextData.branding);
       setUserForm(buildUserForm(nextData.institution));
-      setSelectedIntegrationId((current) => current ?? nextData.integrations[0]?.id ?? null);
+      setSelectedIntegrationId((current) =>
+        current ??
+        nextData.integrations.find((item) => item.envReady)?.id ??
+        nextData.integrations[0]?.id ??
+        null,
+      );
     } catch (error) {
       setAdminError(error instanceof Error ? error.message : 'No fue posible cargar Gobierno.');
     } finally {
@@ -279,6 +287,32 @@ export function TeamPage({
       return statusMatch && categoryMatch;
     });
   }, [adminData?.integrations, serviceCategoryFilter, serviceStatusFilter]);
+
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    const users = adminData?.users ?? [];
+
+    return users.filter((member) => {
+      if (!query) {
+        return true;
+      }
+
+      return [
+        member.name,
+        member.email,
+        member.role,
+        ...(member.secondaryRoles ?? []),
+        member.institution ?? '',
+        member.faculty ?? '',
+        member.program ?? '',
+        member.scope ?? '',
+        member.status ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [adminData?.users, userSearch]);
 
   const filteredLogs = useMemo(() => {
     const query = logQuery.trim().toLowerCase();
@@ -359,6 +393,7 @@ export function TeamPage({
       await loadAdminCenter();
       refreshAppData();
       setUserForm(buildUserForm(institutionDraft ?? undefined));
+      setShowCreateUserAssistant(false);
     } catch (error) {
       setUserError(error instanceof Error ? error.message : 'No fue posible crear el usuario.');
     } finally {
@@ -367,6 +402,8 @@ export function TeamPage({
   }
 
   function startEditing(target: AuthUser) {
+    setShowCreateUserAssistant(false);
+    setFocusRoleAssignment(false);
     setEditingUserId(target.id);
     setEditingDraft({
       id: target.id,
@@ -412,6 +449,7 @@ export function TeamPage({
       refreshAppData();
       setEditingDraft(null);
       setEditingUserId(null);
+      setFocusRoleAssignment(false);
 
       if (editingDraft.id === user.id) {
         await refreshSession();
@@ -763,53 +801,140 @@ export function TeamPage({
 
   function renderUsersTab() {
     const users = adminData?.users ?? [];
+    const selectedUser =
+      users.find((member) => member.id === editingUserId) ??
+      users.find((member) => member.id === editingDraft?.id) ??
+      null;
 
     return (
       <div className="page-stack">
-        <section className="insight-grid">
-          <article className="surface section-card">
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Usuarios y roles</span>
+              <h3>Lista clara de acceso y asistente lateral de edición</h3>
+            </div>
+            <UsersRound size={18} />
+          </div>
+          <p className="section-lead">
+            Aquí solo ves usuarios creados, roles asignados y un asistente de edición. Sin ruido.
+          </p>
+
+          <div className="admin-kpi-grid">
+            <div className="admin-kpi">
+              <span>Usuarios</span>
+              <strong>{users.length}</strong>
+              <p>Directorio total.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Activos</span>
+              <strong>{activeUsers}</strong>
+              <p>Con ingreso habilitado.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Suspendidos</span>
+              <strong>{suspendedUsers}</strong>
+              <p>Con acceso bloqueado.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Accesos recientes</span>
+              <strong>{authenticationLogs.slice(0, 14).length}</strong>
+              <p>Eventos de autenticación.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-split admin-split--users">
+          <article className="surface section-card admin-pane">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Usuarios</span>
-                <h3>Acceso, roles y alcance organizacional</h3>
+                <span className="eyebrow">Directorio</span>
+                <h3>Usuarios creados</h3>
               </div>
-              <UsersRound size={18} />
+              <UserCog size={18} />
             </div>
 
-            <div className="admin-kpi-grid">
-              <div className="admin-kpi">
-                <span>Directorio total</span>
-                <strong>{users.length}</strong>
-                <p>Usuarios registrados en la plataforma.</p>
-              </div>
-              <div className="admin-kpi">
-                <span>Activos</span>
-                <strong>{activeUsers}</strong>
-                <p>Pueden ingresar y operar hoy.</p>
-              </div>
-              <div className="admin-kpi">
-                <span>Suspendidos</span>
-                <strong>{suspendedUsers}</strong>
-                <p>Bloqueados por política o incidente.</p>
-              </div>
-              <div className="admin-kpi">
-                <span>Accesos recientes</span>
-                <strong>{authenticationLogs.slice(0, 14).length}</strong>
-                <p>Eventos recientes de autenticación trazados.</p>
-              </div>
-            </div>
-          </article>
+            <div className="admin-filter-row">
+              <label className="field field--compact field--search">
+                <span>Buscar usuario</span>
+                <div className="field__control">
+                  <input
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="Nombre, correo, rol..."
+                  />
+                </div>
+              </label>
 
-          <article className="surface section-card">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Cobertura</span>
-                <h3>Roles presentes en el flujo</h3>
-              </div>
-              <Waypoints size={18} />
+              <button
+                type="button"
+                className="cta-button"
+                onClick={() => {
+                  setShowCreateUserAssistant(true);
+                  setEditingDraft(null);
+                  setEditingUserId(null);
+                  setFocusRoleAssignment(false);
+                }}
+              >
+                <UserPlus size={16} />
+                <span>Nuevo usuario</span>
+              </button>
+
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  if (!selectedUser) {
+                    return;
+                  }
+                  startEditing(selectedUser);
+                  setFocusRoleAssignment(true);
+                }}
+                disabled={!selectedUser}
+              >
+                <Waypoints size={16} />
+                <span>Asignar rol</span>
+              </button>
             </div>
 
-            <div className="coverage-list">
+            <div className="admin-user-list">
+              {filteredUsers.map((member) => (
+                <button
+                  key={member.id}
+                  type="button"
+                  className={
+                    member.id === selectedUser?.id && !showCreateUserAssistant
+                      ? 'admin-user-list__item admin-user-list__item--active'
+                      : 'admin-user-list__item'
+                  }
+                  onClick={() => startEditing(member)}
+                >
+                  <div className="admin-user-list__identity">
+                    <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
+                    <div>
+                      <strong>{member.name}</strong>
+                      <p>{member.email}</p>
+                    </div>
+                  </div>
+                  <div className="admin-user-list__roles">
+                    <span className="badge badge--outline">{member.role}</span>
+                    {(member.secondaryRoles ?? []).map((role) => (
+                      <span key={`${member.id}-${role}`} className="badge badge--outline">
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="admin-user-list__meta">
+                    <span className={getBadgeClass(formatUserStateLabel(member.status))}>
+                      {formatUserStateLabel(member.status)}
+                    </span>
+                    <span>{member.scope || member.program || 'Sin alcance definido'}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="coverage-list coverage-list--compact">
               {roleCoverage.map(({ profile, count }) => (
                 <div key={profile.role} className="coverage-list__item">
                   <div>
@@ -820,466 +945,200 @@ export function TeamPage({
                 </div>
               ))}
             </div>
-          </article>
-        </section>
-
-        <section className="insight-grid">
-          <article className="surface section-card">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Directorio</span>
-                <h3>Usuarios y trazabilidad de cuenta</h3>
-              </div>
-              <UserCog size={18} />
-            </div>
-
-            <div className="user-grid">
-              {users.map((member) => (
-                <article key={member.id} className="user-card">
-                  <div className="user-card__top">
-                    <div className="avatar-pill">{deriveUserInitials(member.name)}</div>
-                    <div>
-                      <strong>{member.name}</strong>
-                      <p>{member.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="admin-user-meta">
-                    <span className="badge badge--outline">{member.role}</span>
-                    <span className={getBadgeClass(formatUserStateLabel(member.status))}>
-                      {formatUserStateLabel(member.status)}
-                    </span>
-                  </div>
-
-                  <div className="admin-user-signals">
-                    <span>{member.institution || 'Sin institución'}</span>
-                    <span>{member.program || 'Sin programa'}</span>
-                    <span>
-                      Último acceso {member.lastAccessAt ? formatDateTime(member.lastAccessAt) : 'sin registro'}
-                    </span>
-                  </div>
-
-                  {(member.secondaryRoles ?? []).length > 0 ? (
-                    <div className="role-pill-group">
-                      {(member.secondaryRoles ?? []).map((item) => (
-                        <span key={`${member.id}-${item}`} className="role-pill">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {editingUserId === member.id && editingDraft ? (
-                    <div className="user-editor">
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Nombre</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.name}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, name: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Correo</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.email}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, email: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Rol principal</span>
-                          <div className="field__control">
-                            <select
-                              value={editingDraft.role}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        role: event.target.value as Role,
-                                        secondaryRoles: current.secondaryRoles.filter(
-                                          (item) => item !== event.target.value,
-                                        ),
-                                      }
-                                    : current,
-                                )
-                              }
-                            >
-                              {appData.roles.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={editingDraft.status}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        status: event.target.value as UserUpdateInput['status'],
-                                      }
-                                    : current,
-                                )
-                              }
-                            >
-                              {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                                <option key={status} value={status}>
-                                  {status}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Institución</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.institution}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, institution: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Facultad</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.faculty}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, faculty: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Programa</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.program}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, program: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Alcance</span>
-                          <div className="field__control">
-                            <input
-                              value={editingDraft.scope}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, scope: event.target.value } : current,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-                      </div>
-
-                      <label className="field">
-                        <span>Roles complementarios</span>
-                        <div className="role-pill-group">
-                          {appData.roles
-                            .filter((item) => item !== editingDraft.role)
-                            .map((item) => (
-                              <button
-                                key={`${editingDraft.id}-${item}`}
-                                type="button"
-                                className={
-                                  editingDraft.secondaryRoles.includes(item)
-                                    ? 'filter-chip filter-chip--active'
-                                    : 'filter-chip'
-                                }
-                                onClick={() =>
-                                  setEditingDraft((current) =>
-                                    current ? toggleSecondaryRole(current, item) : current,
-                                  )
-                                }
-                              >
-                                <span>{item}</span>
-                              </button>
-                            ))}
-                        </div>
-                      </label>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Motivo de estado</span>
-                          <div className="field__control">
-                            <textarea
-                              rows={3}
-                              value={editingDraft.statusReason}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, statusReason: event.target.value } : current,
-                                )
-                              }
-                              placeholder="Describe motivo de suspensión, inactividad o pendiente si aplica."
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Nueva contraseña</span>
-                          <div className="field__control">
-                            <input
-                              type="password"
-                              value={editingDraft.password ?? ''}
-                              onChange={(event) =>
-                                setEditingDraft((current) =>
-                                  current ? { ...current, password: event.target.value } : current,
-                                )
-                              }
-                              placeholder="Opcional"
-                            />
-                          </div>
-                        </label>
-                      </div>
-
-                      <div className="action-row">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => void handleUpdateUser()}
-                          disabled={isSavingUser}
-                        >
-                          <span>{isSavingUser ? 'Guardando…' : 'Guardar usuario'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="filter-chip"
-                          onClick={() => {
-                            setEditingUserId(null);
-                            setEditingDraft(null);
-                          }}
-                        >
-                          <span>Cancelar</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="action-row">
-                      <button type="button" className="ghost-button" onClick={() => startEditing(member)}>
-                        <span>Editar</span>
-                      </button>
-
-                      {member.id !== user.id ? (
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          onClick={() => void handleDeleteUser(member.id, member.name)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
 
             {userError ? <p className="form-error">{userError}</p> : null}
           </article>
 
-          <article className="surface section-card">
+          <article className="surface section-card admin-pane">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Alta de usuario</span>
-                <h3>Crear acceso con roles, alcance y estado inicial</h3>
+                <span className="eyebrow">Asistente</span>
+                <h3>
+                  {showCreateUserAssistant
+                    ? 'Crear nuevo usuario'
+                    : selectedUser
+                      ? `Editar a ${selectedUser.name}`
+                      : 'Selecciona un usuario'}
+                </h3>
               </div>
-              <UserPlus size={18} />
+              <ShieldCheck size={18} />
             </div>
 
-            <form className="editor-card" onSubmit={handleCreateUser}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Nombre</span>
-                  <div className="field__control">
-                    <input
-                      value={userForm.name}
-                      onChange={(event) =>
-                        setUserForm((current) => ({ ...current, name: event.target.value }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Correo</span>
-                  <div className="field__control">
-                    <input
-                      type="email"
-                      value={userForm.email}
-                      onChange={(event) =>
-                        setUserForm((current) => ({ ...current, email: event.target.value }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Rol principal</span>
-                  <div className="field__control">
-                    <select
-                      value={userForm.role}
-                      onChange={(event) =>
-                        setUserForm((current) => ({
-                          ...current,
-                          role: event.target.value as Role,
-                          secondaryRoles: current.secondaryRoles.filter(
-                            (item) => item !== event.target.value,
-                          ),
-                        }))
-                      }
-                    >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado inicial</span>
-                  <div className="field__control">
-                    <select
-                      value={userForm.status}
-                      onChange={(event) =>
-                        setUserForm((current) => ({
-                          ...current,
-                          status: event.target.value as UserMutationInput['status'],
-                        }))
-                      }
-                    >
-                      {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Institución</span>
-                  <div className="field__control">
-                    <input
-                      list="institution-options"
-                      value={userForm.institution}
-                      onChange={(event) =>
-                        setUserForm((current) => ({
-                          ...current,
-                          institution: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Facultad</span>
-                  <div className="field__control">
-                    <input
-                      list="faculty-options"
-                      value={userForm.faculty}
-                      onChange={(event) =>
-                        setUserForm((current) => ({ ...current, faculty: event.target.value }))
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Programa</span>
-                  <div className="field__control">
-                    <input
-                      list="program-options"
-                      value={userForm.program}
-                      onChange={(event) =>
-                        setUserForm((current) => ({ ...current, program: event.target.value }))
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Alcance organizacional</span>
-                  <div className="field__control">
-                    <input
-                      value={userForm.scope}
-                      onChange={(event) =>
-                        setUserForm((current) => ({ ...current, scope: event.target.value }))
-                      }
-                      placeholder="Global, facultad, programa, cohorte..."
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <label className="field">
-                <span>Roles complementarios</span>
-                <div className="role-pill-group">
-                  {appData.roles
-                    .filter((item) => item !== userForm.role)
-                    .map((item) => (
-                      <button
-                        key={`new-user-${item}`}
-                        type="button"
-                        className={
-                          userForm.secondaryRoles.includes(item)
-                            ? 'filter-chip filter-chip--active'
-                            : 'filter-chip'
+            {showCreateUserAssistant ? (
+              <form className="editor-card" onSubmit={handleCreateUser}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Nombre</span>
+                    <div className="field__control">
+                      <input
+                        value={userForm.name}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, name: event.target.value }))
                         }
-                        onClick={() =>
-                          setUserForm((current) => toggleSecondaryRole(current, item))
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Correo</span>
+                    <div className="field__control">
+                      <input
+                        type="email"
+                        value={userForm.email}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, email: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Rol principal</span>
+                    <div className="field__control">
+                      <select
+                        value={userForm.role}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            role: event.target.value as Role,
+                            secondaryRoles: current.secondaryRoles.filter(
+                              (item) => item !== event.target.value,
+                            ),
+                          }))
                         }
                       >
-                        <span>{item}</span>
-                      </button>
-                    ))}
-                </div>
-              </label>
+                        {appData.roles.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
 
-              <div className="form-grid">
+                  <label className="field">
+                    <span>Estado</span>
+                    <div className="field__control">
+                      <select
+                        value={userForm.status}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            status: event.target.value as UserMutationInput['status'],
+                          }))
+                        }
+                      >
+                        {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+                </div>
+
+                <label className="field">
+                  <span>Roles asignados</span>
+                  <div className="role-pill-group">
+                    {appData.roles
+                      .filter((item) => item !== userForm.role)
+                      .map((item) => (
+                        <button
+                          key={`new-user-${item}`}
+                          type="button"
+                          className={
+                            userForm.secondaryRoles.includes(item)
+                              ? 'filter-chip filter-chip--active'
+                              : 'filter-chip'
+                          }
+                          onClick={() =>
+                            setUserForm((current) => toggleSecondaryRole(current, item))
+                          }
+                        >
+                          <span>{item}</span>
+                        </button>
+                      ))}
+                  </div>
+                </label>
+
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Institución</span>
+                    <div className="field__control">
+                      <input
+                        list="institution-options"
+                        value={userForm.institution}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            institution: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Facultad</span>
+                    <div className="field__control">
+                      <input
+                        list="faculty-options"
+                        value={userForm.faculty}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            faculty: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Programa</span>
+                    <div className="field__control">
+                      <input
+                        list="program-options"
+                        value={userForm.program}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, program: event.target.value }))
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Alcance</span>
+                    <div className="field__control">
+                      <input
+                        value={userForm.scope}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, scope: event.target.value }))
+                        }
+                        placeholder="Global, facultad, cohorte..."
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Contraseña temporal</span>
+                    <div className="field__control">
+                      <input
+                        type="password"
+                        minLength={10}
+                        value={userForm.password}
+                        onChange={(event) =>
+                          setUserForm((current) => ({ ...current, password: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+                </div>
+
                 <label className="field">
                   <span>Motivo de estado</span>
                   <div className="field__control">
@@ -1292,49 +1151,303 @@ export function TeamPage({
                           statusReason: event.target.value,
                         }))
                       }
-                      placeholder="Requerido si no inicia activo."
+                      placeholder="Úsalo si el usuario no inicia activo."
                     />
                   </div>
                 </label>
+
+                <datalist id="institution-options">
+                  {(institutionDraft?.institutions ?? []).map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+                <datalist id="faculty-options">
+                  {(institutionDraft?.faculties ?? []).map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+                <datalist id="program-options">
+                  {(institutionDraft?.programs ?? []).map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isCreatingUser}>
+                    <span>{isCreatingUser ? 'Creando…' : 'Crear usuario'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    onClick={() => setShowCreateUserAssistant(false)}
+                  >
+                    <span>Cerrar</span>
+                  </button>
+                </div>
+              </form>
+            ) : editingDraft && selectedUser ? (
+              <div className="editor-card">
+                <div className="admin-assistant-intro">
+                  <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
+                    {formatUserStateLabel(selectedUser.status)}
+                  </span>
+                  <p>
+                    {focusRoleAssignment
+                      ? 'Modo rápido para asignar o retirar roles sin perder el contexto del usuario.'
+                      : 'Ajusta cuenta, acceso y alcance desde un solo panel lateral.'}
+                  </p>
+                </div>
+
+                {!focusRoleAssignment ? (
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Nombre</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.name}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, name: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Correo</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.email}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, email: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Rol principal</span>
+                    <div className="field__control">
+                      <select
+                        value={editingDraft.role}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  role: event.target.value as Role,
+                                  secondaryRoles: current.secondaryRoles.filter(
+                                    (item) => item !== event.target.value,
+                                  ),
+                                }
+                              : current,
+                          )
+                        }
+                      >
+                        {appData.roles.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Estado</span>
+                    <div className="field__control">
+                      <select
+                        value={editingDraft.status}
+                        onChange={(event) =>
+                          setEditingDraft((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  status: event.target.value as UserUpdateInput['status'],
+                                }
+                              : current,
+                          )
+                        }
+                      >
+                        {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+                </div>
 
                 <label className="field">
-                  <span>Contraseña temporal</span>
+                  <span>Roles asignados</span>
+                  <div className="role-pill-group">
+                    {appData.roles
+                      .filter((item) => item !== editingDraft.role)
+                      .map((item) => (
+                        <button
+                          key={`${editingDraft.id}-${item}`}
+                          type="button"
+                          className={
+                            editingDraft.secondaryRoles.includes(item)
+                              ? 'filter-chip filter-chip--active'
+                              : 'filter-chip'
+                          }
+                          onClick={() =>
+                            setEditingDraft((current) =>
+                              current ? toggleSecondaryRole(current, item) : current,
+                            )
+                          }
+                        >
+                          <span>{item}</span>
+                        </button>
+                      ))}
+                  </div>
+                </label>
+
+                {!focusRoleAssignment ? (
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Institución</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.institution}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, institution: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Facultad</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.faculty}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, faculty: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Programa</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.program}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, program: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Alcance</span>
+                      <div className="field__control">
+                        <input
+                          value={editingDraft.scope}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, scope: event.target.value } : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Nueva contraseña</span>
+                      <div className="field__control">
+                        <input
+                          type="password"
+                          value={editingDraft.password ?? ''}
+                          onChange={(event) =>
+                            setEditingDraft((current) =>
+                              current ? { ...current, password: event.target.value } : current,
+                            )
+                          }
+                          placeholder="Opcional"
+                        />
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+
+                <label className="field">
+                  <span>Motivo de estado</span>
                   <div className="field__control">
-                    <input
-                      type="password"
-                      minLength={10}
-                      value={userForm.password}
+                    <textarea
+                      rows={3}
+                      value={editingDraft.statusReason}
                       onChange={(event) =>
-                        setUserForm((current) => ({ ...current, password: event.target.value }))
+                        setEditingDraft((current) =>
+                          current ? { ...current, statusReason: event.target.value } : current,
+                        )
                       }
-                      required
+                      placeholder="Describe el motivo si el acceso no está activo."
                     />
                   </div>
                 </label>
-              </div>
 
-              <datalist id="institution-options">
-                {(institutionDraft?.institutions ?? []).map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-              <datalist id="faculty-options">
-                {(institutionDraft?.faculties ?? []).map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-              <datalist id="program-options">
-                {(institutionDraft?.programs ?? []).map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
+                <div className="admin-user-signals">
+                  <span>
+                    Último acceso {selectedUser.lastAccessAt ? formatDateTime(selectedUser.lastAccessAt) : 'sin registro'}
+                  </span>
+                  <span>Institución {selectedUser.institution || 'sin definir'}</span>
+                  <span>Programa {selectedUser.program || 'sin definir'}</span>
+                </div>
 
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isCreatingUser}>
-                  <span>{isCreatingUser ? 'Creando…' : 'Crear usuario'}</span>
-                </button>
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="cta-button"
+                    onClick={() => void handleUpdateUser()}
+                    disabled={isSavingUser}
+                  >
+                    <span>{isSavingUser ? 'Guardando…' : 'Guardar cambios'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setFocusRoleAssignment((current) => !current)}
+                  >
+                    <span>{focusRoleAssignment ? 'Volver a edición general' : 'Enfocar roles'}</span>
+                  </button>
+                  {selectedUser.id !== user.id ? (
+                    <button
+                      type="button"
+                      className="danger-button danger-button--ghost"
+                      onClick={() => void handleDeleteUser(selectedUser.id, selectedUser.name)}
+                    >
+                      <Trash2 size={16} />
+                      <span>Eliminar</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </form>
+            ) : (
+              <div className="empty-state">
+                <strong>Selecciona un usuario o crea uno nuevo</strong>
+                <p>
+                  El asistente lateral concentra edición, asignación de roles y ajuste de acceso para
+                  no saturar la vista principal.
+                </p>
+              </div>
+            )}
           </article>
         </section>
 
@@ -1574,15 +1687,25 @@ export function TeamPage({
             <div className="section-heading">
               <div>
                 <span className="eyebrow">Branding</span>
-                <h3>Marca, colores y presencia institucional</h3>
+                <h3>Marca, login y lenguaje visual operativo</h3>
               </div>
               <Brush size={18} />
             </div>
 
             <div className="admin-brand-preview">
-              <div className="admin-brand-mark" style={{ background: brandingDraft.primaryColor }}>
-                {brandingDraft.shortMark}
-              </div>
+              {brandingDraft.logoMode === 'Imagen' && brandingDraft.logoUrl.trim() ? (
+                <img
+                  className="admin-brand-logo"
+                  src={brandingDraft.logoUrl}
+                  alt={brandingDraft.logoText}
+                />
+              ) : brandingDraft.logoMode === 'Wordmark' ? (
+                <div className="admin-brand-wordmark">{brandingDraft.logoText}</div>
+              ) : (
+                <div className="admin-brand-mark" style={{ background: brandingDraft.primaryColor }}>
+                  {brandingDraft.shortMark}
+                </div>
+              )}
               <div>
                 <strong>{brandingDraft.logoText}</strong>
                 <p>{brandingDraft.institutionName}</p>
@@ -1595,24 +1718,64 @@ export function TeamPage({
           <article className="surface section-card">
             <div className="section-heading">
               <div>
-                <span className="eyebrow">Aplicación</span>
-                <h3>Cambios visibles</h3>
+                <span className="eyebrow">Previews</span>
+                <h3>Login, tipografía y loader</h3>
               </div>
               <BadgeCheck size={18} />
             </div>
 
-            <div className="checklist">
-              <div className="checklist__item">
-                <strong>Marca principal</strong>
-                <p>Actualiza logo textual, marca corta y título visible en acceso y shell.</p>
+            <div className="login-preview-grid">
+              {(['Minimal', 'Split', 'Command'] as const).map((variant) => (
+                <button
+                  key={variant}
+                  type="button"
+                  className={
+                    brandingDraft.loginVariant === variant
+                      ? 'login-preview-card login-preview-card--active'
+                      : 'login-preview-card'
+                  }
+                  onClick={() =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loginVariant: variant } : current,
+                    )
+                  }
+                >
+                  <span>{variant}</span>
+                  <strong>
+                    {variant === 'Minimal'
+                      ? 'Pantalla limpia'
+                      : variant === 'Split'
+                        ? 'Copia + formulario'
+                        : 'Control center'}
+                  </strong>
+                  <p>
+                    {variant === 'Minimal'
+                      ? 'Acceso directo con una sola columna.'
+                      : variant === 'Split'
+                        ? 'Presentación editorial con panel lateral.'
+                        : 'Estética técnica con sensación de consola.'}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="admin-font-preview">
+              <div>
+                <span>Tipografía de títulos</span>
+                <strong style={{ fontFamily: `"${brandingDraft.displayFontFamily}", sans-serif` }}>
+                  {brandingDraft.displayFontFamily}
+                </strong>
               </div>
-              <div className="checklist__item">
-                <strong>Colores</strong>
-                <p>Sincroniza acento principal y brillo operativo sin tocar la lógica del tema.</p>
+              <div>
+                <span>Tipografía de interfaz</span>
+                <strong style={{ fontFamily: `"${brandingDraft.bodyFontFamily}", sans-serif` }}>
+                  {brandingDraft.bodyFontFamily}
+                </strong>
               </div>
-              <div className="checklist__item">
-                <strong>Enlace de soporte</strong>
-                <p>Permite llevar al usuario a contacto o ayuda institucional.</p>
+              <div>
+                <span>Loader</span>
+                <strong>{brandingDraft.loaderLabel}</strong>
+                <p>{brandingDraft.loaderMessage}</p>
               </div>
             </div>
           </article>
@@ -1622,7 +1785,7 @@ export function TeamPage({
           <div className="section-heading">
             <div>
               <span className="eyebrow">Identidad visual</span>
-              <h3>Configurar branding</h3>
+              <h3>Configurar marca completa</h3>
             </div>
             <ShieldCheck size={18} />
           </div>
@@ -1686,6 +1849,71 @@ export function TeamPage({
             </label>
 
             <label className="field">
+              <span>Modo de logo</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.logoMode}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            logoMode: event.target.value as BrandingSettings['logoMode'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Monograma', 'Wordmark', 'Imagen'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>URL del logo</span>
+              <div className="field__control">
+                <input
+                  value={brandingDraft.logoUrl}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, logoUrl: event.target.value } : current,
+                    )
+                  }
+                  placeholder="https://..."
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Modo de favicon</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.faviconMode}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            faviconMode: event.target.value as BrandingSettings['faviconMode'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Monograma', 'Imagen'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
               <span>Favicon</span>
               <div className="field__control">
                 <input
@@ -1701,6 +1929,21 @@ export function TeamPage({
             </label>
 
             <label className="field">
+              <span>URL del favicon</span>
+              <div className="field__control">
+                <input
+                  value={brandingDraft.faviconUrl}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, faviconUrl: event.target.value } : current,
+                    )
+                  }
+                  placeholder="https://..."
+                />
+              </div>
+            </label>
+
+            <label className="field">
               <span>URL de soporte</span>
               <div className="field__control">
                 <input
@@ -1711,6 +1954,120 @@ export function TeamPage({
                     )
                   }
                 />
+              </div>
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label className="field">
+              <span>Preset tipográfico</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.fontPreset}
+                  onChange={(event) =>
+                    setBrandingDraft((current) => {
+                      if (!current) {
+                        return current;
+                      }
+
+                      const preset = event.target.value as BrandingSettings['fontPreset'];
+
+                      if (preset === 'Editorial') {
+                        return {
+                          ...current,
+                          fontPreset: preset,
+                          bodyFontFamily: 'IBM Plex Sans',
+                          displayFontFamily: 'Fraunces',
+                          monoFontFamily: 'IBM Plex Mono',
+                        };
+                      }
+
+                      if (preset === 'Institutional') {
+                        return {
+                          ...current,
+                          fontPreset: preset,
+                          bodyFontFamily: 'Manrope',
+                          displayFontFamily: 'Space Grotesk',
+                          monoFontFamily: 'IBM Plex Mono',
+                        };
+                      }
+
+                      return {
+                        ...current,
+                        fontPreset: preset,
+                        bodyFontFamily: 'IBM Plex Sans',
+                        displayFontFamily: 'Space Grotesk',
+                        monoFontFamily: 'IBM Plex Mono',
+                      };
+                    })
+                  }
+                >
+                  {['Control', 'Editorial', 'Institutional'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Fuente de interfaz</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.bodyFontFamily}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, bodyFontFamily: event.target.value } : current,
+                    )
+                  }
+                >
+                  {['IBM Plex Sans', 'Manrope', 'Space Grotesk'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Fuente de títulos</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.displayFontFamily}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, displayFontFamily: event.target.value } : current,
+                    )
+                  }
+                >
+                  {['Space Grotesk', 'Fraunces', 'IBM Plex Sans'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Fuente mono</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.monoFontFamily}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, monoFontFamily: event.target.value } : current,
+                    )
+                  }
+                >
+                  {['IBM Plex Mono', 'Space Grotesk'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
             </label>
           </div>
@@ -1763,6 +2120,105 @@ export function TeamPage({
             </label>
           </div>
 
+          <div className="form-grid">
+            <label className="field">
+              <span>Variante de login</span>
+              <div className="field__control">
+                <select
+                  value={brandingDraft.loginVariant}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            loginVariant: event.target.value as BrandingSettings['loginVariant'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Minimal', 'Split', 'Command'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Etiqueta superior</span>
+              <div className="field__control">
+                <input
+                  value={brandingDraft.loginEyebrow}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loginEyebrow: event.target.value } : current,
+                    )
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Título del login</span>
+              <div className="field__control">
+                <input
+                  value={brandingDraft.loginHeadline}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loginHeadline: event.target.value } : current,
+                    )
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Mensaje del login</span>
+              <div className="field__control">
+                <textarea
+                  rows={3}
+                  value={brandingDraft.loginMessage}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loginMessage: event.target.value } : current,
+                    )
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Etiqueta del loader</span>
+              <div className="field__control">
+                <input
+                  value={brandingDraft.loaderLabel}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loaderLabel: event.target.value } : current,
+                    )
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Mensaje del loader</span>
+              <div className="field__control">
+                <textarea
+                  rows={3}
+                  value={brandingDraft.loaderMessage}
+                  onChange={(event) =>
+                    setBrandingDraft((current) =>
+                      current ? { ...current, loaderMessage: event.target.value } : current,
+                    )
+                  }
+                />
+              </div>
+            </label>
+          </div>
+
           <label className="field">
             <span>Dirección visual</span>
             <div className="field__control">
@@ -1792,6 +2248,19 @@ export function TeamPage({
 
   function renderIntegrationsTab() {
     const integrations = adminData?.integrations ?? [];
+    const sortedIntegrations = [...integrations].sort((left, right) => {
+      if (left.envReady !== right.envReady) {
+        return Number(right.envReady) - Number(left.envReady);
+      }
+
+      if (left.enabled !== right.enabled) {
+        return Number(right.enabled) - Number(left.enabled);
+      }
+
+      return left.name.localeCompare(right.name, 'es');
+    });
+    const readyIntegrations = integrations.filter((integration) => integration.envReady);
+    const pendingIntegrations = integrations.filter((integration) => !integration.envReady);
 
     return (
       <div className="page-stack">
@@ -1799,14 +2268,37 @@ export function TeamPage({
           <div className="section-heading">
             <div>
               <span className="eyebrow">Integraciones</span>
-              <h3>Conectividad, reglas de uso y validación operativa</h3>
+              <h3>Integraciones activas por runtime y asistentes de configuración</h3>
             </div>
             <Cable size={18} />
           </div>
           <p className="section-lead">
-            Las credenciales sensibles siguen en Vercel/runtime. Aquí se gobiernan alcance,
-            activación, diagnóstico y parámetros visibles de cada servicio.
+            Las que ya están configuradas en Vercel aparecen activas en la interfaz. Desde aquí
+            terminas de ajustar alcance, fallback y prueba técnica con un asistente por servicio.
           </p>
+
+          <div className="admin-kpi-grid">
+            <div className="admin-kpi">
+              <span>Activas por runtime</span>
+              <strong>{readyIntegrations.length}</strong>
+              <p>Configuradas ya en variables del entorno.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Por configurar</span>
+              <strong>{pendingIntegrations.length}</strong>
+              <p>Aún requieren credenciales o parámetros base.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Con prueba</span>
+              <strong>{integrations.filter((item) => item.lastTestAt).length}</strong>
+              <p>Servicios ya validados desde Gobierno.</p>
+            </div>
+            <div className="admin-kpi">
+              <span>Con error</span>
+              <strong>{degradedIntegrations}</strong>
+              <p>Integraciones degradadas o con fallas recientes.</p>
+            </div>
+          </div>
         </section>
 
         <section className="admin-split">
@@ -1814,13 +2306,13 @@ export function TeamPage({
             <div className="section-heading">
               <div>
                 <span className="eyebrow">Conectores</span>
-                <h3>Integraciones disponibles</h3>
+                <h3>Disponibles hoy</h3>
               </div>
               <Waypoints size={18} />
             </div>
 
             <div className="admin-service-list">
-              {integrations.map((integration) => (
+              {sortedIntegrations.map((integration) => (
                 <button
                   key={integration.id}
                   type="button"
@@ -1837,8 +2329,11 @@ export function TeamPage({
                   </div>
                   <div className="admin-service-card__meta">
                     <span className={getBadgeClass(integration.status)}>{integration.status}</span>
-                    <span className="badge badge--outline">{integration.category}</span>
+                    <span className="badge badge--outline">
+                      {integration.envReady ? 'Activa por runtime' : integration.category}
+                    </span>
                   </div>
+                  <small>{integration.assistantSummary}</small>
                 </button>
               ))}
             </div>
@@ -1869,9 +2364,22 @@ export function TeamPage({
                   <small>{selectedIntegration.runtimeSummary}</small>
                 </div>
 
+                <div className="integration-assistant">
+                  <strong>{selectedIntegration.assistantTitle}</strong>
+                  <p>{selectedIntegration.assistantSummary}</p>
+                  <div className="integration-assistant__steps">
+                    {selectedIntegration.assistantSteps.map((step, index) => (
+                      <div key={`${selectedIntegration.id}-step-${index}`} className="integration-assistant__step">
+                        <span>{index + 1}</span>
+                        <p>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="form-grid">
                   <label className="field field--toggle">
-                    <span>Activar integración</span>
+                    <span>Estado visible en front</span>
                     <div className="field__toggle">
                       <input
                         type="checkbox"
@@ -1882,12 +2390,15 @@ export function TeamPage({
                           )
                         }
                       />
-                      <p>Si está desactivada, el sistema no permitirá uso desde módulos autorizados.</p>
+                      <p>
+                        Si el runtime ya está completo, esta integración se mostrará activa aunque
+                        aún estés afinando el asistente.
+                      </p>
                     </div>
                   </label>
 
                   <label className="field">
-                    <span>Proveedor alterno / fallback</span>
+                    <span>Fallback operativo</span>
                     <div className="field__control">
                       <input
                         value={integrationDraft.fallbackTo}
@@ -1902,7 +2413,7 @@ export function TeamPage({
                 </div>
 
                 <label className="field">
-                  <span>Alcances habilitados</span>
+                  <span>Alcances habilitados por el asistente</span>
                   <div className="role-pill-group">
                     {selectedIntegration.scopes.map((scope) => (
                       <button
@@ -1959,7 +2470,7 @@ export function TeamPage({
                 </div>
 
                 <label className="field">
-                  <span>Notas operativas</span>
+                  <span>Notas del asistente</span>
                   <div className="field__control">
                     <textarea
                       rows={4}
@@ -1987,6 +2498,11 @@ export function TeamPage({
                     {selectedIntegration.lastTestAt
                       ? formatDateTime(selectedIntegration.lastTestAt)
                       : 'Aún no ejecutada'}
+                  </p>
+                  <p>
+                    {selectedIntegration.envReady
+                      ? 'El runtime ya detecta las variables necesarias.'
+                      : 'Completa variables en Vercel para que se active automáticamente en el front.'}
                   </p>
                   {selectedIntegration.lastError ? (
                     <p className="form-error">{selectedIntegration.lastError}</p>

@@ -59,6 +59,18 @@ export function AppShell({
     .slice(0, 2)
     .join('');
 
+  function renderBrandMark() {
+    if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
+      return <img className="brand-logo-image" src={branding.logoUrl} alt={branding.logoText} />;
+    }
+
+    if (branding.logoMode === 'Wordmark') {
+      return <div className="brand-wordmark">{branding.logoText}</div>;
+    }
+
+    return <div className="brand-mark">{branding.shortMark}</div>;
+  }
+
   return (
     <div className="app-shell">
       <div className="control-grid" aria-hidden />
@@ -67,7 +79,7 @@ export function AppShell({
 
       <header className="control-header">
         <NavLink to="/" className="brand-card brand-card--inline">
-          <div className="brand-mark">{branding.shortMark}</div>
+          {renderBrandMark()}
           <div>
             <p className="eyebrow">{branding.institutionName}</p>
             <h1>{branding.logoText}</h1>

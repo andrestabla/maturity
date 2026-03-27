@@ -41,16 +41,35 @@ export function LoginPage({
     }
   }
 
+  const loginVariantClass =
+    branding.loginVariant === 'Split'
+      ? 'access-screen__panel access-screen__panel--split'
+      : branding.loginVariant === 'Command'
+        ? 'access-screen__panel access-screen__panel--command'
+        : 'access-screen__panel';
+
+  function renderBrandMark() {
+    if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
+      return <img className="access-screen__logo" src={branding.logoUrl} alt={branding.logoText} />;
+    }
+
+    if (branding.logoMode === 'Wordmark') {
+      return <div className="access-screen__wordmark">{branding.logoText}</div>;
+    }
+
+    return <div className="access-screen__mark">{branding.shortMark}</div>;
+  }
+
   return (
     <main className="access-screen">
       <div className="control-grid" aria-hidden />
       <div className="access-screen__glow access-screen__glow--left" aria-hidden />
       <div className="access-screen__glow access-screen__glow--right" aria-hidden />
 
-      <section className="access-screen__panel">
+      <section className={loginVariantClass}>
         <div className="access-screen__panel-head">
           <div className="access-screen__brand">
-            <div className="access-screen__mark">{branding.shortMark}</div>
+            {renderBrandMark()}
             <div>
               <span>{branding.logoText}</span>
               <strong>Control Center</strong>
@@ -61,9 +80,9 @@ export function LoginPage({
         </div>
 
         <div className="access-screen__copy">
-          <span className="access-screen__kicker">Academic Production OS</span>
-          <h1>Entrar a {branding.platformName}</h1>
-          <p>Accede para operar cursos, tareas y entregables desde una sola capa de control.</p>
+          <span className="access-screen__kicker">{branding.loginEyebrow}</span>
+          <h1>{branding.loginHeadline}</h1>
+          <p>{branding.loginMessage}</p>
         </div>
 
         <form className="access-screen__form" onSubmit={handleSubmit}>
@@ -100,7 +119,7 @@ export function LoginPage({
           {error ? <p className="form-error">{error}</p> : null}
 
           <button type="submit" className="access-screen__button" disabled={isLoading}>
-            <span>{isLoading ? 'Conectando sesión…' : 'Entrar a Maturity'}</span>
+            <span>{isLoading ? 'Conectando sesión…' : `Entrar a ${branding.platformName}`}</span>
             <ArrowRight size={16} />
           </button>
         </form>
