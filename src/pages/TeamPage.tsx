@@ -18,7 +18,7 @@ import {
   Waypoints,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type {
   AdminCenterData,
   AdminIntegration,
@@ -152,15 +152,50 @@ function deriveUserInitials(name: string) {
 const adminTabs: Array<{
   id: AdminTab;
   label: string;
+  description: string;
 }> = [
-  { id: 'users', label: 'Usuarios' },
-  { id: 'institution', label: 'Institución' },
-  { id: 'branding', label: 'Branding' },
-  { id: 'integrations', label: 'Integraciones' },
-  { id: 'services', label: 'Servicios' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'audit', label: 'Auditoría' },
+  { id: 'users', label: 'Usuarios', description: 'Usuarios creados, roles y estados de acceso.' },
+  {
+    id: 'institution',
+    label: 'Institución',
+    description: 'Parámetros institucionales, catálogos y estructura académica.',
+  },
+  {
+    id: 'branding',
+    label: 'Branding',
+    description: 'Marca, tipografía, login, loader y recursos visuales base.',
+  },
+  {
+    id: 'integrations',
+    label: 'Integraciones',
+    description: 'Configuración y asistentes por servicio externo.',
+  },
+  {
+    id: 'services',
+    label: 'Servicios',
+    description: 'Catálogo operativo y estado resumido de conectores.',
+  },
+  {
+    id: 'logs',
+    label: 'Logs',
+    description: 'Eventos técnicos, autenticación e integraciones.',
+  },
+  {
+    id: 'audit',
+    label: 'Auditoría',
+    description: 'Bitácora administrativa y trazabilidad de cambios críticos.',
+  },
 ];
+
+function getAdminTabFromPath(pathname: string): AdminTab | null {
+  const [, base, section] = pathname.split('/');
+
+  if (base !== 'team' || !section) {
+    return null;
+  }
+
+  return adminTabs.some((tab) => tab.id === section) ? (section as AdminTab) : null;
+}
 
 export function TeamPage({
   user,
@@ -171,7 +206,7 @@ export function TeamPage({
   const isAdmin = canManageUsers(user.role);
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<AdminTab>('users');
+  const activeTab = useMemo(() => getAdminTabFromPath(location.pathname), [location.pathname]);
   const [adminData, setAdminData] = useState<AdminCenterData | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
@@ -263,16 +298,10 @@ export function TeamPage({
   }, [isAdmin]);
 
   useEffect(() => {
-    const hash = location.hash.replace('#', '');
-
-    if (!hash) {
-      return;
+    if (location.pathname.startsWith('/team/') && activeTab === null) {
+      navigate('/team', { replace: true });
     }
-
-    if (adminTabs.some((tab) => tab.id === hash) && hash !== activeTab) {
-      setActiveTab(hash as AdminTab);
-    }
-  }, [activeTab, location.hash]);
+  }, [activeTab, location.pathname, navigate]);
 
   useEffect(() => {
     if (!adminData) {
@@ -285,23 +314,23 @@ export function TeamPage({
       return;
     }
 
+    if (activeTab !== 'users') {
+      navigate(
+        {
+          pathname: '/team/users',
+          search: `?user=${userId}`,
+        },
+        { replace: true },
+      );
+      return;
+    }
+
     const target = adminData.users.find((member) => member.id === userId);
 
     if (target) {
       startEditing(target);
     }
-  }, [adminData, location.search]);
-
-  function handleTabChange(nextTab: AdminTab) {
-    setActiveTab(nextTab);
-    navigate(
-      {
-        pathname: location.pathname,
-        hash: nextTab,
-      },
-      { replace: true },
-    );
-  }
+  }, [activeTab, adminData, location.search, navigate]);
 
   useEffect(() => {
     if (!adminData || !selectedIntegrationId) {
@@ -844,6 +873,39 @@ export function TeamPage({
           </div>
         </form>
       </article>
+    );
+  }
+
+  function renderGovernmentRoutes() {
+    return (
+      <section className="surface section-card section-card--compact">
+        <div className="admin-route-grid">
+          <NavLink
+            to="/team"
+            className={
+              activeTab === null && location.pathname === '/team'
+                ? 'admin-route-card admin-route-card--active'
+                : 'admin-route-card'
+            }
+          >
+            <strong>Resumen</strong>
+            <p>Portada del módulo y acceso rápido a la capa de gobierno.</p>
+          </NavLink>
+
+          {adminTabs.map((tab) => (
+            <NavLink
+              key={tab.id}
+              to={`/team/${tab.id}`}
+              className={
+                activeTab === tab.id ? 'admin-route-card admin-route-card--active' : 'admin-route-card'
+              }
+            >
+              <strong>{tab.label}</strong>
+              <p>{tab.description}</p>
+            </NavLink>
+          ))}
+        </div>
+      </section>
     );
   }
 
@@ -3035,20 +3097,7 @@ export function TeamPage({
         </div>
       </section>
 
-      <section className="surface section-card section-card--compact">
-        <div className="admin-tabs" role="tablist" aria-label="Submódulos de Gobierno">
-          {adminTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={activeTab === tab.id ? 'admin-tab admin-tab--active' : 'admin-tab'}
-              onClick={() => handleTabChange(tab.id)}
-            >
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      {renderGovernmentRoutes()}
 
       {adminError ? <p className="form-error">{adminError}</p> : null}
 

@@ -5988,6 +5988,48 @@ body::after {
   flex-wrap: wrap;
 }
 
+.admin-route-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-route-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.admin-route-card strong {
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 1.06rem;
+  line-height: 1.15;
+}
+
+.admin-route-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.admin-route-card:hover,
+.admin-route-card--active {
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
 .admin-tab {
   padding: 10px 16px;
   border-radius: 999px;
@@ -6369,6 +6411,7 @@ body::after {
   .workspace-grid--summary,
   .admin-split,
   .admin-kpi-grid,
+  .admin-route-grid,
   .admin-catalog-grid,
   .login-preview-grid,
   .admin-font-preview {

@@ -291,6 +291,17 @@ export default function App() {
               />
             }
           />
+          <Route
+            path="/team/:section"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

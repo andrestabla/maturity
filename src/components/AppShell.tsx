@@ -121,11 +121,12 @@ export function AppShell({
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
   const courseMatch = matchPath('/courses/:slug', location.pathname);
+  const teamMatch = matchPath('/team/:section', location.pathname);
   const activeCourse =
     courseMatch?.params.slug
       ? appData.courses.find((course) => course.slug === courseMatch.params.slug)
       : null;
-  const activeGovernmentHash = location.hash.replace('#', '');
+  const activeGovernmentSection = teamMatch?.params.section ?? '';
   const activeCourseSectionHash = location.hash.replace('#', '');
 
   const breadcrumbs = useMemo(() => {
@@ -162,15 +163,15 @@ export function AppShell({
       return [{ label: 'Biblioteca', path: '/library' }];
     }
 
-    if (location.pathname === '/team') {
-      const items = [{ label: 'Gobierno', path: '/team#users' }];
+    if (location.pathname === '/team' || location.pathname.startsWith('/team/')) {
+      const items = [{ label: 'Gobierno', path: '/team' }];
       const sectionLabel =
-        governmentTabLabels[activeGovernmentHash as keyof typeof governmentTabLabels];
+        governmentTabLabels[activeGovernmentSection as keyof typeof governmentTabLabels];
 
-      if (sectionLabel && activeGovernmentHash !== 'users') {
+      if (sectionLabel) {
         items.push({
           label: sectionLabel,
-          path: `/team#${activeGovernmentHash}`,
+          path: `/team/${activeGovernmentSection}`,
         });
       }
 
@@ -178,7 +179,7 @@ export function AppShell({
     }
 
     return [];
-  }, [activeCourse, activeCourseSectionHash, activeGovernmentHash, courseMatch, location.pathname]);
+  }, [activeCourse, activeCourseSectionHash, activeGovernmentSection, courseMatch, location.pathname]);
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
@@ -215,7 +216,7 @@ export function AppShell({
           id: `admin-${id}`,
           title: label,
           meta: 'Módulo Gobierno',
-          path: `/team#${id}`,
+          path: `/team/${id}`,
           kind: 'admin',
           keywords: `gobierno ${label.toLowerCase()} administracion team settings`,
         }))
@@ -235,7 +236,7 @@ export function AppShell({
           id: `user-${member.id}`,
           title: member.name,
           meta: `${member.role} · ${member.email}`,
-          path: `/team?user=${member.id}#users`,
+          path: `/team/users?user=${member.id}`,
           kind: 'user',
           keywords: `${member.name} ${member.email} ${member.role} ${(member.secondaryRoles ?? []).join(' ')} usuario`,
         }))
