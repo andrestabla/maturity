@@ -25,16 +25,16 @@ interface DashboardPageProps {
 }
 
 const roleMessage: Record<Role, string> = {
-  Administrador: 'Vista global para gobernar indicadores, reglas y el pulso completo de la operación.',
-  Coordinador: 'Control del ritmo operativo, bloqueos y capacidad de los equipos por curso.',
-  Experto: 'Espacio centrado en autoría, curaduría y piezas que todavía exigen criterio disciplinar.',
+  Administrador: 'Vista global para gobernar indicadores, permisos y throughput completo de la operación.',
+  Coordinador: 'Control del ritmo operativo, capacidad de equipos y bloqueos que afectan la entrega.',
+  Experto: 'Espacio enfocado en autoría, criterio disciplinar y piezas que todavía requieren validación.',
   'Diseñador instruccional':
-    'Lectura clara de arquitectura, observaciones y decisiones pedagógicas que destraban el flujo.',
+    'Lectura técnica de arquitectura, observaciones y decisiones pedagógicas que destraban el flujo.',
   'Diseñador multimedia':
-    'Seguimiento de recursos propios, entregas visuales y puntos de accesibilidad listos para producción.',
+    'Seguimiento de recursos, entregas visuales y puntos de accesibilidad listos para producción.',
   'Gestor LMS': 'Radar técnico sobre cursos listos para montaje y elementos que afectan la experiencia final.',
-  'Analista QA': 'Panel de revisión final con hallazgos, aprobaciones y riesgos que no deberían escapar.',
-  Auditor: 'Trazabilidad de punta a punta para validar la consistencia del proceso y sus cierres.',
+  'Analista QA': 'Panel de revisión con hallazgos, aprobaciones y riesgos que no deberían escapar.',
+  Auditor: 'Trazabilidad de punta a punta para validar consistencia operativa y cierres del flujo.',
 };
 
 function DashboardSkeleton() {
@@ -104,34 +104,34 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
       <section className="hero-card hero-card--editorial surface">
         <div className="hero-card__copy">
           <span className="hero-badge">{role}</span>
-          <span className="hero-kicker hero-kicker--warm">Tablero editorial de operación</span>
-          <h3>La producción académica se mueve mejor cuando el ritmo, la calidad y los bloqueos hablan claro.</h3>
+          <span className="hero-kicker hero-kicker--warm">Command View</span>
+          <h3>Observa el portafolio como sistema: throughput, riesgos y calidad en una sola lectura.</h3>
           <p className="hero-lead">{roleMessage[role]}</p>
 
           <div className="hero-points">
             <div>
               <strong>{visibleCourses.length}</strong>
-              <span>cursos hoy en tu radar</span>
+              <span>cursos monitorizados</span>
             </div>
             <div>
               <strong>{visibleTasks.length}</strong>
-              <span>frentes abiertos con trazabilidad</span>
+              <span>work items activos</span>
             </div>
             <div>
               <strong>{visibleAlerts.length}</strong>
-              <span>alertas que piden criterio</span>
+              <span>señales críticas</span>
             </div>
           </div>
         </div>
 
         <div className="hero-card__stats">
           <div className="hero-orbit surface-muted">
-            <span className="eyebrow">Momento del portafolio</span>
-            <strong>{busiestStage?.name ?? 'Sin etapa dominante'}</strong>
+            <span className="eyebrow">Hot Zone</span>
+            <strong>{busiestStage?.name ?? 'No dominant stage'}</strong>
             <p>
               {busiestStage?.count
-                ? `${busiestStage.count} cursos se concentran aquí y están marcando el pulso operativo.`
-                : 'Todavía no hay masa crítica suficiente para destacar una etapa dominante.'}
+                ? `${busiestStage.count} cursos se concentran aquí y están marcando la carga operativa actual.`
+                : 'Todavía no hay concentración suficiente para destacar una etapa dominante.'}
             </p>
           </div>
 
@@ -139,13 +139,13 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
             <div className="hero-progress-card surface-muted">
               <ProgressRing
                 value={averageProgress(visibleCourses)}
-                label="Portafolio visible"
-                detail="Promedio de avance de los cursos que hoy están en tu campo de acción."
+                label="Visible throughput"
+                detail="Promedio de avance de los cursos que hoy están dentro de tu campo de acción."
               />
             </div>
 
             <div className="hero-mini surface-muted">
-              <span className="eyebrow">Siguiente gesto</span>
+              <span className="eyebrow">Next action</span>
               <strong>{visibleTasks[0]?.title ?? 'Sin tareas inmediatas'}</strong>
               <p>{visibleTasks[0]?.summary ?? 'La plataforma no registra pendientes urgentes para este rol.'}</p>
               {visibleTasks[0] ? <span>Vence {formatDate(visibleTasks[0].dueDate)}</span> : null}
@@ -158,14 +158,14 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
         <MetricCard
           label="Cursos activos"
           value={String(visibleCourses.length)}
-          detail="Portafolio que hoy pide seguimiento real, no solo visibilidad."
+          detail="Portafolio que hoy requiere seguimiento real, no solo visibilidad."
           icon={BriefcaseBusiness}
           tone="coral"
         />
         <MetricCard
-          label="Pendientes próximos"
+          label="Queue inmediata"
           value={String(visibleTasks.filter((task) => task.status !== 'Lista').length)}
-          detail="Tareas próximas con responsable claro y fecha en juego."
+          detail="Tareas próximas con responsable claro y fecha comprometida."
           icon={FolderClock}
           tone="gold"
         />
@@ -177,9 +177,9 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
           tone="ocean"
         />
         <MetricCard
-          label="Calidad promedio"
+          label="Calidad media"
           value={`${averageQuality}%`}
-          detail="Lectura rápida del estándar actual del portafolio visible."
+          detail="Lectura rápida del estándar actual sobre el portafolio visible."
           icon={CheckCheck}
           tone="sage"
         />
@@ -189,8 +189,8 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
         <article className="surface section-card section-card--raised">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Panorama</span>
-              <h3>Etapas donde se está jugando el avance</h3>
+              <span className="eyebrow">Distribution</span>
+              <h3>Etapas donde hoy se concentra la operación</h3>
             </div>
             <Sparkles size={18} />
           </div>
@@ -209,8 +209,8 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
         <article className="surface section-card section-card--trail">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Radar</span>
-              <h3>Lo que hoy pide intervención</h3>
+              <span className="eyebrow">Signals</span>
+              <h3>Eventos que piden intervención</h3>
             </div>
             <AlertTriangle size={18} />
           </div>
@@ -249,8 +249,8 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
         <article className="surface section-card section-card--raised">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Worklist</span>
-              <h3>Lo siguiente en la mesa</h3>
+              <span className="eyebrow">Queue</span>
+              <h3>Lo siguiente en la cola priorizada</h3>
             </div>
             <FolderClock size={18} />
           </div>
@@ -285,8 +285,8 @@ export function DashboardPage({ role, appData, isLoading = false }: DashboardPag
         <article className="surface section-card section-card--trail">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Cursos</span>
-              <h3>Piezas que hoy marcan el tono</h3>
+              <span className="eyebrow">Portfolio</span>
+              <h3>Cursos con mayor avance visible</h3>
             </div>
             <BriefcaseBusiness size={18} />
           </div>

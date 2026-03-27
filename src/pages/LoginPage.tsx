@@ -33,24 +33,24 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
     <main className="auth-layout">
       <section className="auth-panel surface">
         <div className="auth-copy">
-          <span className="hero-badge">Acceso curado</span>
-          <span className="topbar-kicker">Maturity 360</span>
-          <h1>Un espacio de trabajo que se siente más editorial que burocrático.</h1>
+          <span className="hero-badge">Access Node</span>
+          <span className="topbar-kicker">Maturity OS</span>
+          <h1>La capa operativa de tu portafolio académico.</h1>
           <p>
-            Entra con tu cuenta institucional para coordinar cursos, mover entregables y sostener una operación real sobre Neon sin perder contexto.
+            Entra con tu cuenta institucional para coordinar cursos, mover entregables y operar el flujo real sobre Neon desde una interfaz más tecnológica y precisa.
           </p>
           <div className="auth-highlights">
             <div>
-              <strong>Lectura clara</strong>
-              <span>La interfaz prioriza foco, profundidad visual y pasos evidentes para cada rol.</span>
+              <strong>Live sync</strong>
+              <span>La operación se actualiza desde Neon sin salir del mismo entorno de trabajo.</span>
             </div>
             <div>
-              <strong>Persistencia viva</strong>
-              <span>Los datos operativos viajan desde Neon dentro de la misma experiencia de producto.</span>
+              <strong>Role control</strong>
+              <span>Cada sesión define el alcance real del usuario, sus permisos y su lectura operativa.</span>
             </div>
             <div>
-              <strong>Alcance real</strong>
-              <span>La sesión define exactamente qué puede ver, mover y aprobar cada persona.</span>
+              <strong>Unified workflow</strong>
+              <span>Portafolio, tareas, gobierno y biblioteca conviven en una misma capa de control.</span>
             </div>
           </div>
         </div>
@@ -59,7 +59,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
           <div className="section-heading">
             <div>
               <span className="eyebrow">Ingreso</span>
-              <h3>Abrir mi espacio</h3>
+              <h3>Entrar al control center</h3>
             </div>
           </div>
 
@@ -96,7 +96,7 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
           {error ? <p className="form-error">{error}</p> : null}
 
           <button type="submit" className="cta-button auth-submit" disabled={isLoading}>
-            <span>{isLoading ? 'Abriendo tu espacio…' : 'Comenzar mi jornada'}</span>
+            <span>{isLoading ? 'Conectando sesión…' : 'Entrar a Maturity'}</span>
             <ArrowRight size={16} />
           </button>
         </form>

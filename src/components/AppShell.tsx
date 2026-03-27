@@ -59,13 +59,13 @@ export function AppShell({
           <div className="brand-mark">M</div>
           <div>
             <p className="eyebrow">Maturity 360</p>
-            <h1>Project management para producción académica.</h1>
+            <h1>Command center para producción académica.</h1>
           </div>
         </NavLink>
 
         <div className="sidebar-panel surface">
           <p className="sidebar-copy">
-            Una mesa de operación más editorial que burocrática para mover cursos, equipos y decisiones con una sola lectura.
+            Supervisa cursos, cuellos de botella y decisiones de calidad desde una sola capa operativa.
           </p>
 
           <nav className="sidebar-nav" aria-label="Navegación principal">
@@ -84,10 +84,10 @@ export function AppShell({
           </nav>
 
           <div className="sidebar-note">
-            <p className="eyebrow">Pulso del día</p>
-            <strong>Menos cajas, más continuidad visual.</strong>
+            <p className="eyebrow">Signal Layer</p>
+            <strong>Velocidad operativa con trazabilidad.</strong>
             <p>
-              La plataforma deja respirar la información, cruza capas y mantiene cerca lo importante sin saturar la vista.
+              Cada módulo conserva contexto, responsables y estado en tiempo real para evitar fricción entre etapas.
             </p>
           </div>
         </div>
@@ -97,20 +97,25 @@ export function AppShell({
         <header className="topbar">
           <div className="topbar-frame surface">
             <div className="topbar-copy">
-              <span className="topbar-kicker">Sistema operativo para producción académica</span>
-              <h2>Una operación viva para cursos, equipos y decisiones que no caben en una grilla rígida.</h2>
+              <span className="topbar-kicker">Maturity OS / Academic Production</span>
+              <h2>Opera portafolio, calidad y ejecución desde una misma capa de control.</h2>
               <p>
-                Diseñada para coordinar criterio pedagógico, ritmo operativo y control de calidad con una lectura más humana del proceso.
+                Una interfaz más nítida y tecnológica para coordinar responsables, hitos, alertas y avance real sin perder claridad.
               </p>
+              <div className="topbar-signal-strip">
+                <span>{`role:${role.toLowerCase()}`}</span>
+                <span>{dataSource === 'neon' ? 'sync:live' : 'sync:demo'}</span>
+                <span>{isLoading ? 'state:refreshing' : 'state:stable'}</span>
+              </div>
             </div>
 
             <aside className="topbar-float surface-muted">
               <div className="topbar-float__avatar">{userInitials}</div>
-              <span className="eyebrow">Sesión activa</span>
+              <span className="eyebrow">Nodo activo</span>
               <strong>{user.name}</strong>
               <p>{user.role}</p>
               <div className="topbar-float__meta">
-                <span>{isLoading ? 'Sincronizando capa real' : dataSource === 'neon' ? 'Neon conectado' : 'Modo demo activo'}</span>
+                <span>{isLoading ? 'Refreshing live data' : dataSource === 'neon' ? 'Neon link established' : 'Demo sandbox active'}</span>
                 <span>{formatPageDate()}</span>
               </div>
             </aside>
@@ -129,7 +134,7 @@ export function AppShell({
 
             {availableRoles.length > 1 ? (
               <label className="role-switch">
-                <span>Mirada actual</span>
+                <span>Vista</span>
                 <select
                   aria-label="Seleccionar rol"
                   value={role}
@@ -145,7 +150,7 @@ export function AppShell({
             ) : null}
 
             <NavLink to="/courses" className="cta-button">
-              <span>Abrir portafolio</span>
+              <span>Ir al portafolio</span>
               <MoveRight size={16} />
             </NavLink>
 
