@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
+import { ThemeToggle } from './components/ThemeToggle.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
+import { useTheme } from './hooks/useTheme.js';
 import { CourseWorkspacePage } from './pages/CourseWorkspacePage.js';
 import { CoursesPage } from './pages/CoursesPage.js';
 import { DashboardPage } from './pages/DashboardPage.js';
@@ -14,6 +16,7 @@ import type { Role } from './types.js';
 
 export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
+  const { theme, toggleTheme } = useTheme();
   const [role, setRole] = useState<Role>('Coordinador');
   const {
     appData,
@@ -48,12 +51,16 @@ export default function App() {
         <div className="access-screen__glow access-screen__glow--left" aria-hidden />
         <div className="access-screen__glow access-screen__glow--right" aria-hidden />
         <section className="access-screen__panel access-screen__panel--loading">
-          <div className="access-screen__brand">
-            <div className="access-screen__mark">M</div>
-            <div>
-              <span>Maturity</span>
-              <strong>Control Center</strong>
+          <div className="access-screen__panel-head">
+            <div className="access-screen__brand">
+              <div className="access-screen__mark">M</div>
+              <div>
+                <span>Maturity</span>
+                <strong>Control Center</strong>
+              </div>
             </div>
+
+            <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-switch--panel" />
           </div>
 
           <div className="access-screen__copy">
@@ -77,7 +84,7 @@ export default function App() {
   }
 
   if (!session.authenticated || !session.user) {
-    return <LoginPage isLoading={false} onLogin={login} />;
+    return <LoginPage isLoading={false} onLogin={login} theme={theme} onToggleTheme={toggleTheme} />;
   }
 
   return (
@@ -89,6 +96,8 @@ export default function App() {
       onLogout={logout}
       dataSource={source}
       isLoading={isLoading}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     >
       <AmbientCursor />
       <Routes>

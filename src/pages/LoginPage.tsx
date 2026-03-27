@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { ArrowRight, LockKeyhole, Mail } from 'lucide-react';
+import { ThemeToggle } from '../components/ThemeToggle.js';
+import type { ThemeMode } from '../hooks/useTheme.js';
 
 interface LoginPageProps {
   isLoading: boolean;
   onLogin: (payload: { email: string; password: string }) => Promise<void>;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
 }
 
-export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
+export function LoginPage({ isLoading, onLogin, theme, onToggleTheme }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +40,16 @@ export function LoginPage({ isLoading, onLogin }: LoginPageProps) {
       <div className="access-screen__glow access-screen__glow--right" aria-hidden />
 
       <section className="access-screen__panel">
-        <div className="access-screen__brand">
-          <div className="access-screen__mark">M</div>
-          <div>
-            <span>Maturity</span>
-            <strong>Control Center</strong>
+        <div className="access-screen__panel-head">
+          <div className="access-screen__brand">
+            <div className="access-screen__mark">M</div>
+            <div>
+              <span>Maturity</span>
+              <strong>Control Center</strong>
+            </div>
           </div>
+
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} className="theme-switch--panel" />
         </div>
 
         <div className="access-screen__copy">

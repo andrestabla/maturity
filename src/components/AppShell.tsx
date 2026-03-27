@@ -14,6 +14,8 @@ import { NavLink } from 'react-router-dom';
 import type { AuthUser, Role } from '../types.js';
 import { formatPageDate } from '../utils/format.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
+import { ThemeToggle } from './ThemeToggle.js';
+import type { ThemeMode } from '../hooks/useTheme.js';
 
 interface AppShellProps {
   user: AuthUser;
@@ -23,6 +25,8 @@ interface AppShellProps {
   onLogout: () => Promise<void>;
   dataSource: 'demo' | 'neon';
   isLoading: boolean;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
   children: ReactNode;
 }
 
@@ -41,6 +45,8 @@ export function AppShell({
   onLogout,
   dataSource,
   isLoading,
+  theme,
+  onToggleTheme,
   children,
 }: AppShellProps) {
   useAmbientMotion();
@@ -102,6 +108,8 @@ export function AppShell({
               <div className="topbar-icon" aria-hidden>
                 <BellDot size={16} />
               </div>
+
+              <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 
               <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
                 <span className="status-chip__dot" />
