@@ -8,15 +8,15 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { ProgressRing } from '../components/ProgressRing';
-import { StageRail } from '../components/StageRail';
-import { tasks } from '../data/mockData';
-import type { Role } from '../types';
-import { formatDate, formatLongDate } from '../utils/format';
-import { getCourseBySlug, getStageMeta } from '../utils/domain';
+import { ProgressRing } from '../components/ProgressRing.js';
+import { StageRail } from '../components/StageRail.js';
+import type { AppData, Role } from '../types.js';
+import { formatDate, formatLongDate } from '../utils/format.js';
+import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 
 interface CourseWorkspacePageProps {
   role: Role;
+  appData: AppData;
 }
 
 function badgeClass(status: string) {
@@ -36,9 +36,9 @@ function badgeClass(status: string) {
   }
 }
 
-export function CourseWorkspacePage({ role }: CourseWorkspacePageProps) {
+export function CourseWorkspacePage({ role, appData }: CourseWorkspacePageProps) {
   const { slug = '' } = useParams();
-  const course = getCourseBySlug(slug);
+  const course = getCourseBySlug(appData, slug);
 
   if (!course) {
     return (
@@ -53,8 +53,8 @@ export function CourseWorkspacePage({ role }: CourseWorkspacePageProps) {
     );
   }
 
-  const stage = getStageMeta(course.stageId);
-  const relatedTasks = tasks.filter((task) => task.courseSlug === course.slug);
+  const stage = getStageMeta(appData, course.stageId);
+  const relatedTasks = appData.tasks.filter((task) => task.courseSlug === course.slug);
   const myTasks =
     role === 'Administrador' || role === 'Auditor'
       ? relatedTasks

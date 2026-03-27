@@ -1,11 +1,11 @@
 import { ArrowUpRight, CalendarDays, CircleAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { Course } from '../types';
-import { formatDate } from '../utils/format';
-import { getStageName } from '../utils/domain';
+import type { Course } from '../types.js';
+import { formatDate } from '../utils/format.js';
 
 interface CourseCardProps {
   course: Course;
+  stageName: string;
 }
 
 function statusClass(status: Course['status']) {
@@ -25,7 +25,7 @@ function statusClass(status: Course['status']) {
   }
 }
 
-export function CourseCard({ course }: CourseCardProps) {
+export function CourseCard({ course, stageName }: CourseCardProps) {
   return (
     <Link to={`/courses/${course.slug}`} className="course-card surface">
       <div className="course-card__top">
@@ -47,7 +47,7 @@ export function CourseCard({ course }: CourseCardProps) {
 
       <div className="course-card__badges">
         <span className={statusClass(course.status)}>{course.status}</span>
-        <span className="badge badge--outline">{getStageName(course.stageId)}</span>
+        <span className="badge badge--outline">{stageName}</span>
       </div>
 
       <div className="course-card__progress">

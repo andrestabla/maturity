@@ -1,14 +1,14 @@
 import { ArrowRightLeft, ShieldCheck, UsersRound } from 'lucide-react';
-import { roleProfiles, stages } from '../data/mockData';
-import type { Role } from '../types';
-import { getVisibleCourses } from '../utils/domain';
+import type { AppData, Role } from '../types.js';
+import { getVisibleCourses } from '../utils/domain.js';
 
 interface TeamPageProps {
   role: Role;
+  appData: AppData;
 }
 
-export function TeamPage({ role }: TeamPageProps) {
-  const visibleCourses = getVisibleCourses(role);
+export function TeamPage({ role, appData }: TeamPageProps) {
+  const visibleCourses = getVisibleCourses(appData, role);
 
   return (
     <div className="page-stack">
@@ -27,7 +27,7 @@ export function TeamPage({ role }: TeamPageProps) {
         </p>
 
         <div className="handoff-flow">
-          {stages.map((stage) => (
+          {appData.stages.map((stage) => (
             <div key={stage.id} className={`handoff-step handoff-step--${stage.tone}`}>
               <strong>{stage.name}</strong>
               <span>{stage.owner}</span>
@@ -48,7 +48,7 @@ export function TeamPage({ role }: TeamPageProps) {
           </div>
 
           <div className="coverage-list">
-            {roleProfiles.map((profile) => {
+            {appData.roleProfiles.map((profile) => {
               const count = visibleCourses.filter((course) =>
                 course.team.some((member) => member.role === profile.role),
               ).length;
@@ -97,7 +97,7 @@ export function TeamPage({ role }: TeamPageProps) {
       </section>
 
       <section className="profile-grid">
-        {roleProfiles.map((profile) => (
+        {appData.roleProfiles.map((profile) => (
           <article key={profile.role} className="surface role-card">
             <span className="eyebrow">{profile.role}</span>
             <h3>{profile.overview}</h3>

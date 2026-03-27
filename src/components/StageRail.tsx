@@ -1,4 +1,4 @@
-import type { StageCheckpoint } from '../types';
+import type { StageCheckpoint } from '../types.js';
 
 interface StageRailProps {
   items: StageCheckpoint[];

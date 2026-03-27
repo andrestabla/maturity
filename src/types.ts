@@ -159,5 +159,15 @@ export interface RoleProfile {
   modules: {
     name: string;
     permissions: string;
-  }[];
+    }[];
+}
+
+export interface AppData {
+  roles: Role[];
+  stages: StageDefinition[];
+  courses: Course[];
+  tasks: Task[];
+  alerts: Alert[];
+  libraryResources: LibraryResource[];
+  roleProfiles: RoleProfile[];
 }

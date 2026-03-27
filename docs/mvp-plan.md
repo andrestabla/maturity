@@ -74,7 +74,9 @@ Se evitó un estilo neutro o genérico. La interfaz usa una dirección visual c�
 
 - `React + TypeScript + Vite`
 - `React Router` para escalar a múltiples módulos
-- `mock domain layer` con cursos, etapas, tareas, alertas, recursos y perfiles de rol
+- `capa de datos compartida` con cursos, etapas, tareas, alertas, recursos y perfiles de rol
+- `API serverless` en Vercel para bootstrap y health check
+- `Neon PostgreSQL` como persistencia inicial
 - `CSS tokens` para sostener identidad visual consistente
 - `manifest.webmanifest` como base para proyección móvil/PWA
 
@@ -84,8 +86,8 @@ Se evitó un estilo neutro o genérico. La interfaz usa una dirección visual c�
 
 - autenticación;
 - permisos efectivos;
-- persistencia;
 - CRUD de cursos, tareas, observaciones y recursos.
+- normalización progresiva del esquema hoy sembrado en JSONB.
 
 ### Fase 3. Flujo transaccional
 

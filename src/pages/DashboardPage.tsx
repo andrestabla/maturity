@@ -5,16 +5,22 @@ import {
   FolderClock,
   Sparkles,
 } from 'lucide-react';
-import { CourseCard } from '../components/CourseCard';
-import { MetricCard } from '../components/MetricCard';
-import { ProgressRing } from '../components/ProgressRing';
-import { stages } from '../data/mockData';
-import type { Role } from '../types';
-import { formatDate } from '../utils/format';
-import { averageProgress, getStageMeta, getVisibleAlerts, getVisibleCourses, getVisibleTasks } from '../utils/domain';
+import { CourseCard } from '../components/CourseCard.js';
+import { MetricCard } from '../components/MetricCard.js';
+import { ProgressRing } from '../components/ProgressRing.js';
+import type { AppData, Role } from '../types.js';
+import { formatDate } from '../utils/format.js';
+import {
+  averageProgress,
+  getStageMeta,
+  getVisibleAlerts,
+  getVisibleCourses,
+  getVisibleTasks,
+} from '../utils/domain.js';
 
 interface DashboardPageProps {
   role: Role;
+  appData: AppData;
 }
 
 const roleMessage: Record<Role, string> = {
@@ -30,12 +36,12 @@ const roleMessage: Record<Role, string> = {
   Auditor: 'Trazabilidad de punta a punta para validar la consistencia del proceso y sus cierres.',
 };
 
-export function DashboardPage({ role }: DashboardPageProps) {
-  const visibleCourses = getVisibleCourses(role);
-  const visibleTasks = getVisibleTasks(role).sort((left, right) =>
+export function DashboardPage({ role, appData }: DashboardPageProps) {
+  const visibleCourses = getVisibleCourses(appData, role);
+  const visibleTasks = getVisibleTasks(appData, role).sort((left, right) =>
     left.dueDate.localeCompare(right.dueDate),
   );
-  const visibleAlerts = getVisibleAlerts(role);
+  const visibleAlerts = getVisibleAlerts(appData, role);
   const averageQuality =
     visibleCourses.length === 0
       ? 0
@@ -44,7 +50,7 @@ export function DashboardPage({ role }: DashboardPageProps) {
             visibleCourses.length,
         );
 
-  const stageCounts = stages.map((stage) => ({
+  const stageCounts = appData.stages.map((stage) => ({
     ...stage,
     count: visibleCourses.filter((course) => course.stageId === stage.id).length,
   }));
@@ -163,7 +169,7 @@ export function DashboardPage({ role }: DashboardPageProps) {
             ) : (
               visibleAlerts.map((alert) => {
                 const course = visibleCourses.find((item) => item.slug === alert.courseSlug);
-                const stage = course ? getStageMeta(course.stageId) : undefined;
+                const stage = course ? getStageMeta(appData, course.stageId) : undefined;
 
                 return (
                   <div key={alert.id} className="list-item">
@@ -225,7 +231,11 @@ export function DashboardPage({ role }: DashboardPageProps) {
 
           <div className="mini-course-grid">
             {spotlightCourses.map((course) => (
-              <CourseCard key={course.id} course={course} />
+              <CourseCard
+                key={course.id}
+                course={course}
+                stageName={getStageMeta(appData, course.stageId)?.name ?? course.stageId}
+              />
             ))}
           </div>
         </article>

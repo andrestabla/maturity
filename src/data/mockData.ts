@@ -1,12 +1,13 @@
 import type {
   Alert,
+  AppData,
   Course,
   LibraryResource,
   Role,
   RoleProfile,
   StageDefinition,
   Task,
-} from '../types';
+} from '../types.js';
 
 export const roles: Role[] = [
   'Administrador',
@@ -798,3 +799,13 @@ export const roleProfiles: RoleProfile[] = [
     ],
   },
 ];
+
+export const mockAppData: AppData = {
+  roles,
+  stages,
+  courses,
+  tasks,
+  alerts,
+  libraryResources,
+  roleProfiles,
+};

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { FolderKanban, LayoutGrid, Rows3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { CourseCard } from '../components/CourseCard';
-import { stages } from '../data/mockData';
-import type { CourseStatus, Role } from '../types';
-import { getStageName, getVisibleCourses } from '../utils/domain';
+import { CourseCard } from '../components/CourseCard.js';
+import type { AppData, CourseStatus, Role } from '../types.js';
+import { getStageName, getVisibleCourses } from '../utils/domain.js';
 
 interface CoursesPageProps {
   role: Role;
+  appData: AppData;
 }
 
 type ViewMode = 'portfolio' | 'pipeline';
@@ -15,11 +15,11 @@ type FilterMode = 'Todos' | CourseStatus;
 
 const filters: FilterMode[] = ['Todos', 'En ritmo', 'En revisión', 'Riesgo', 'Bloqueado', 'Listo'];
 
-export function CoursesPage({ role }: CoursesPageProps) {
+export function CoursesPage({ role, appData }: CoursesPageProps) {
   const [view, setView] = useState<ViewMode>('portfolio');
   const [filter, setFilter] = useState<FilterMode>('Todos');
 
-  const visibleCourses = getVisibleCourses(role);
+  const visibleCourses = getVisibleCourses(appData, role);
   const filteredCourses =
     filter === 'Todos'
       ? visibleCourses
@@ -78,12 +78,16 @@ export function CoursesPage({ role }: CoursesPageProps) {
       {view === 'portfolio' ? (
         <section className="courses-grid">
           {filteredCourses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseCard
+              key={course.id}
+              course={course}
+              stageName={getStageName(appData, course.stageId)}
+            />
           ))}
         </section>
       ) : (
         <section className="pipeline-grid">
-          {stages.map((stage) => {
+          {appData.stages.map((stage) => {
             const items = filteredCourses.filter((course) => course.stageId === stage.id);
 
             return (
@@ -134,7 +138,7 @@ export function CoursesPage({ role }: CoursesPageProps) {
           {filteredCourses.map((course) => (
             <div key={course.id} className="flow-glance__item">
               <strong>{course.title}</strong>
-              <span>{getStageName(course.stageId)}</span>
+              <span>{getStageName(appData, course.stageId)}</span>
               <p>{course.nextMilestone}</p>
             </div>
           ))}

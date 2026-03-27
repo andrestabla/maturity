@@ -6,13 +6,16 @@ Esta primera entrega arranca el producto como una `project management platform` 
 
 ## Estado actual
 
-El MVP frontend incluye:
+El MVP actual incluye:
 
 - `Dashboard` por rol con métricas, alertas y tareas visibles.
 - `Portafolio de cursos` con vista tipo portfolio y pipeline por etapas.
 - `Workspace del curso` con flujo, entregables, módulos, observaciones, equipo y asistentes IA.
 - `Biblioteca` de recursos curados y propios.
 - `Gobierno` con relevo entre etapas y lectura de permisos por rol.
+- `API serverless` para Vercel en `/api`.
+- `Persistencia inicial` en Neon PostgreSQL.
+- `Seed automático` del dominio base si la base está vacía.
 
 ## Stack
 
@@ -20,6 +23,8 @@ El MVP frontend incluye:
 - TypeScript
 - Vite
 - React Router
+- Neon PostgreSQL
+- Vercel Functions
 - CSS custom, sin framework visual pesado
 
 ## Diseño
@@ -38,20 +43,46 @@ npm install
 npm run dev
 ```
 
+`npm run dev` levanta la interfaz en modo frontend. Si no existe API disponible, la app usa datos demo automáticamente.
+
 ## Build de producción
 
 ```bash
 npm run build
 ```
 
+## Base de datos
+
+Variables esperadas:
+
+```bash
+DATABASE_URL=...
+```
+
+Preparar la base con el esquema y seed inicial:
+
+```bash
+npm run db:setup
+```
+
+## Vercel
+
+El proyecto queda listo para desplegar como app Vite con funciones serverless:
+
+- `vercel.json` define build y rewrites;
+- `/api/bootstrap` carga los datos desde Neon;
+- `/api/health` prepara y valida esquema + seed.
+
+En preview y en producción, la variable `DATABASE_URL` debe existir en Vercel.
+
 ## Siguiente paso recomendado
 
-La siguiente iteración debería conectar este frontend con persistencia real y autenticación por roles. El orden sugerido es:
+La siguiente iteración debería convertir esta base en producto transaccional. El orden sugerido es:
 
-1. modelo de datos y API;
-2. login y permisos efectivos;
-3. creación/edición real de cursos y tareas;
-4. trazabilidad de comentarios, aprobaciones y devoluciones;
+1. login y permisos efectivos;
+2. creación/edición real de cursos y tareas;
+3. trazabilidad de comentarios, aprobaciones y devoluciones;
+4. versionado de entregables y biblioteca;
 5. integración posterior con asistentes IA por etapa.
 
 ## Referencia funcional

@@ -8,13 +8,15 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { roles } from '../data/mockData';
-import type { Role } from '../types';
-import { formatPageDate } from '../utils/format';
+import { roles } from '../data/mockData.js';
+import type { Role } from '../types.js';
+import { formatPageDate } from '../utils/format.js';
 
 interface AppShellProps {
   role: Role;
   onRoleChange: (role: Role) => void;
+  dataSource: 'demo' | 'neon';
+  isLoading: boolean;
   children: ReactNode;
 }
 
@@ -25,7 +27,13 @@ const navigation = [
   { to: '/team', label: 'Gobierno', icon: ShieldCheck },
 ];
 
-export function AppShell({ role, onRoleChange, children }: AppShellProps) {
+export function AppShell({
+  role,
+  onRoleChange,
+  dataSource,
+  isLoading,
+  children,
+}: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -73,6 +81,11 @@ export function AppShell({ role, onRoleChange, children }: AppShellProps) {
           </div>
 
           <div className="topbar-actions">
+            <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
+              <span className="status-chip__dot" />
+              <span>{isLoading ? 'Sincronizando' : dataSource === 'neon' ? 'Neon live' : 'Modo demo'}</span>
+            </div>
+
             <div className="date-chip">
               <CalendarClock size={16} />
               <span>{formatPageDate()}</span>

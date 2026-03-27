@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { LibraryBig, NotebookTabs, PackageCheck } from 'lucide-react';
-import type { Role } from '../types';
-import { getVisibleResources } from '../utils/domain';
+import type { AppData, Role } from '../types.js';
+import { getVisibleResources } from '../utils/domain.js';
 
 interface LibraryPageProps {
   role: Role;
+  appData: AppData;
 }
 
 type ResourceFilter = 'Todos' | 'Curado' | 'Propio';
 
-export function LibraryPage({ role }: LibraryPageProps) {
+export function LibraryPage({ role, appData }: LibraryPageProps) {
   const [filter, setFilter] = useState<ResourceFilter>('Todos');
-  const resources = getVisibleResources(role);
+  const resources = getVisibleResources(appData, role);
   const filteredResources =
     filter === 'Todos'
       ? resources
