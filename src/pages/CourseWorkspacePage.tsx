@@ -19,6 +19,9 @@ import type {
   AppData,
   Course,
   CourseMetadataMutationInput,
+  CourseProduct,
+  CourseProductMutationInput,
+  CourseProductStage,
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
   CourseMutationInput,
@@ -42,8 +45,11 @@ import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
   canCreateDeliverables,
   canCreateObservations,
+  canCreateCourseProducts,
   canCreateTasks,
+  canDeleteCourseProducts,
   canDeleteDeliverables,
+  canEditCourseProduct,
   canEditCourseModules,
   canEditStageNote,
   canDeleteObservations,
@@ -322,6 +328,138 @@ function makeLearningModuleDrafts(modules: LearningModule[]) {
   ) as Record<string, LearningModuleMutationInput>;
 }
 
+function defaultProductFormat(stage: CourseProductStage): CourseProductMutationInput['format'] {
+  switch (stage) {
+    case 'general':
+      return 'Sílabus';
+    case 'architecture':
+      return 'Lineamiento';
+    case 'production':
+      return 'Actividad';
+    case 'curation':
+      return 'Documento';
+    case 'multimedia':
+      return 'HTML';
+    case 'qa':
+      return 'Rúbrica';
+    default:
+      return 'Documento';
+  }
+}
+
+function defaultProductOwner(stage: CourseProductStage): Role {
+  switch (stage) {
+    case 'general':
+      return 'Coordinador';
+    case 'architecture':
+      return 'Diseñador instruccional';
+    case 'production':
+    case 'curation':
+      return 'Experto';
+    case 'multimedia':
+      return 'Diseñador multimedia';
+    case 'qa':
+      return 'Analista QA';
+    default:
+      return 'Coordinador';
+  }
+}
+
+function makeCourseProductForm(stage: CourseProductStage = 'general'): CourseProductMutationInput {
+  return {
+    title: '',
+    stage,
+    format: defaultProductFormat(stage),
+    owner: defaultProductOwner(stage),
+    status: 'Borrador',
+    summary: '',
+    body: '',
+    tags: [],
+    version: 'v0.1',
+  };
+}
+
+function makeCourseProductDrafts(products: CourseProduct[]) {
+  return Object.fromEntries(
+    products.map((product) => [
+      product.id,
+      {
+        title: product.title,
+        stage: product.stage,
+        format: product.format,
+        owner: product.owner,
+        status: product.status,
+        summary: product.summary,
+        body: product.body,
+        tags: product.tags,
+        version: product.version,
+      },
+    ]),
+  ) as Record<string, CourseProductMutationInput>;
+}
+
+function productStageLabel(stage: CourseProductStage) {
+  switch (stage) {
+    case 'general':
+      return 'Información general';
+    case 'architecture':
+      return 'Arquitectura';
+    case 'production':
+      return 'Producción';
+    case 'curation':
+      return 'Curación';
+    case 'multimedia':
+      return 'Multimedia';
+    case 'qa':
+      return 'QA';
+    default:
+      return 'Producto';
+  }
+}
+
+function productStatusBadgeClass(status: CourseProduct['status']) {
+  switch (status) {
+    case 'Aprobado':
+      return 'badge badge--sage';
+    case 'En revisión':
+      return 'badge badge--gold';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+function productFormatsForStage(
+  stage: CourseProductStage,
+): CourseProductMutationInput['format'][] {
+  switch (stage) {
+    case 'general':
+      return ['Sílabus', 'Documento'];
+    case 'architecture':
+      return ['Lineamiento', 'Documento'];
+    case 'production':
+      return ['Actividad', 'Recurso', 'Documento'];
+    case 'curation':
+      return ['Recurso', 'Lectura', 'Documento'];
+    case 'multimedia':
+      return ['HTML', 'Pódcast', 'Lectura', 'Infografía'];
+    case 'qa':
+      return ['Rúbrica', 'Documento'];
+    default:
+      return ['Documento'];
+  }
+}
+
+function joinTags(tags: string[]) {
+  return tags.join(', ');
+}
+
+function splitTags(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function makeStageNoteDrafts(course: Course | undefined) {
   if (!course) {
     return {
@@ -453,6 +591,7 @@ export function CourseWorkspacePage({
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
   const [isModuleComposerOpen, setIsModuleComposerOpen] = useState(false);
+  const [productComposerStage, setProductComposerStage] = useState<CourseProductStage | null>(null);
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
   const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
@@ -462,6 +601,7 @@ export function CourseWorkspacePage({
   const [taskError, setTaskError] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [moduleError, setModuleError] = useState<string | null>(null);
+  const [productError, setProductError] = useState<string | null>(null);
   const [stageNoteError, setStageNoteError] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
@@ -473,6 +613,7 @@ export function CourseWorkspacePage({
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
   const [isModuleSaving, setIsModuleSaving] = useState<string | null>(null);
+  const [isProductSaving, setIsProductSaving] = useState<string | null>(null);
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [isTimelineSaving, setIsTimelineSaving] = useState<string | null>(null);
   const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
@@ -583,6 +724,7 @@ export function CourseWorkspacePage({
           updatedAt: new Date().toISOString().slice(0, 10),
         },
       },
+      products: [],
     }),
   );
   const [newTimelineForm, setNewTimelineForm] = useState<TimelineItemMutationInput>(() =>
@@ -593,6 +735,9 @@ export function CourseWorkspacePage({
   );
   const [newLearningModuleForm, setNewLearningModuleForm] = useState<LearningModuleMutationInput>(
     () => makeLearningModuleForm(),
+  );
+  const [newProductForm, setNewProductForm] = useState<CourseProductMutationInput>(() =>
+    makeCourseProductForm(),
   );
   const [newDeliverableForm, setNewDeliverableForm] = useState<DeliverableMutationInput>(() =>
     makeDeliverableForm(defaultDeliverableOwner),
@@ -608,6 +753,9 @@ export function CourseWorkspacePage({
   );
   const [moduleDrafts, setModuleDrafts] = useState<Record<string, LearningModuleMutationInput>>(() =>
     makeLearningModuleDrafts(course?.modules ?? []),
+  );
+  const [productDrafts, setProductDrafts] = useState<Record<string, CourseProductMutationInput>>(() =>
+    makeCourseProductDrafts(course?.products ?? []),
   );
   const [stageNoteDrafts, setStageNoteDrafts] = useState<
     Record<CourseStageNoteKey, CourseStageNoteMutationInput>
@@ -626,6 +774,18 @@ export function CourseWorkspacePage({
       (course?.stageChecklist ?? []).map((checkpoint, index) => [index, checkpoint.status]),
     ) as Record<number, StageCheckpointStatus>,
   );
+
+  function toggleProductComposer(stageId: CourseProductStage) {
+    setProductError(null);
+
+    if (productComposerStage === stageId) {
+      setProductComposerStage(null);
+      return;
+    }
+
+    setNewProductForm(makeCourseProductForm(stageId));
+    setProductComposerStage(stageId);
+  }
 
   useEffect(() => {
     if (!course) {
@@ -651,11 +811,14 @@ export function CourseWorkspacePage({
       setNewTimelineForm(makeTimelineForm());
       setNewTeamMemberForm(makeTeamMemberForm());
       setNewLearningModuleForm(makeLearningModuleForm());
+      setNewProductForm(makeCourseProductForm());
       setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
       setNewObservationForm(makeObservationForm(defaultObservationRole));
       setTaskDrafts({});
       setTeamDrafts({});
       setModuleDrafts({});
+      setProductDrafts({});
+      setProductComposerStage(null);
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
       setTimelineDrafts({});
       setDeliverableDrafts({});
@@ -670,11 +833,14 @@ export function CourseWorkspacePage({
     setNewTimelineForm(makeTimelineForm());
     setNewTeamMemberForm(makeTeamMemberForm());
     setNewLearningModuleForm(makeLearningModuleForm());
+    setNewProductForm(makeCourseProductForm());
     setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
     setNewObservationForm(makeObservationForm(defaultObservationRole));
     setTaskDrafts(makeTaskDrafts(relatedTasks));
     setTeamDrafts(makeTeamMemberDrafts(course.team));
     setModuleDrafts(makeLearningModuleDrafts(course.modules));
+    setProductDrafts(makeCourseProductDrafts(course.products));
+    setProductComposerStage(null);
     setStageNoteDrafts(makeStageNoteDrafts(course));
     setTimelineDrafts(makeTimelineDrafts(course.schedule));
     setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
@@ -745,6 +911,10 @@ export function CourseWorkspacePage({
     (observation) => observation.status !== 'Resuelta',
   ).length;
   const resolvedObservationsCount = currentCourse.observations.length - pendingObservationsCount;
+  const totalProductsCount = currentCourse.products.length;
+  const approvedProductsCount = currentCourse.products.filter(
+    (product) => product.status === 'Aprobado',
+  ).length;
   const curatedResources = relatedResources.filter((resource) => resource.kind === 'Curado');
   const ownedResources = relatedResources.filter((resource) => resource.kind === 'Propio');
   const upcomingMilestones = currentCourse.schedule
@@ -770,6 +940,10 @@ export function CourseWorkspacePage({
   const historyFeed = currentCourse.auditLog
     .slice()
     .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt));
+
+  function countProductsByStage(stageId: CourseProductStage) {
+    return currentCourse.products.filter((product) => product.stage === stageId).length;
+  }
 
   async function handleCourseSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1350,6 +1524,137 @@ export function CourseWorkspacePage({
     }));
   }
 
+  async function handleProductCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProductError(null);
+    setIsProductSaving('new');
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          ...newProductForm,
+          tags: newProductForm.tags.map((tag) => tag.trim()).filter(Boolean),
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible crear el producto.');
+      }
+
+      refreshAppData();
+      setProductComposerStage(null);
+      setNewProductForm(makeCourseProductForm());
+    } catch (error) {
+      setProductError(error instanceof Error ? error.message : 'No fue posible crear el producto.');
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleProductSave(productId: string) {
+    const draft = productDrafts[productId];
+
+    if (!draft) {
+      return;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: productId,
+          ...draft,
+          tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible guardar el producto.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setProductError(
+        error instanceof Error ? error.message : 'No fue posible guardar el producto.',
+      );
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleProductDelete(productId: string) {
+    const confirmed = window.confirm(
+      'Este producto será retirado del expediente editable del curso. ¿Quieres continuar?',
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: productId,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'No fue posible eliminar el producto.');
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setProductError(
+        error instanceof Error ? error.message : 'No fue posible eliminar el producto.',
+      );
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  function updateProductDraft<Key extends keyof CourseProductMutationInput>(
+    productId: string,
+    key: Key,
+    value: CourseProductMutationInput[Key],
+  ) {
+    setProductDrafts((current) => ({
+      ...current,
+      [productId]: {
+        ...current[productId],
+        [key]: value,
+      },
+    }));
+  }
+
   async function handleStageNoteSave(key: CourseStageNoteKey) {
     const draft = stageNoteDrafts[key];
 
@@ -1858,6 +2163,464 @@ export function CourseWorkspacePage({
             </div>
           </div>
         )}
+      </article>
+    );
+  }
+
+  function renderProductStudio(
+    productStage: CourseProductStage,
+    eyebrow: string,
+    title: string,
+    description: string,
+  ) {
+    const stageProducts = currentCourse.products.filter((product) => product.stage === productStage);
+    const stageFormats = productFormatsForStage(productStage);
+    const isComposerOpen = productComposerStage === productStage;
+    const stageApprovedCount = stageProducts.filter((product) => product.status === 'Aprobado').length;
+
+    return (
+      <article className="surface section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">{eyebrow}</span>
+            <h3>{title}</h3>
+          </div>
+          <span className="badge badge--outline">
+            {stageApprovedCount}/{stageProducts.length} aprobados
+          </span>
+        </div>
+
+        <p className="handoff-copy">{description}</p>
+
+        <div className="module-grid module-grid--summary">
+          <div className="module-card">
+            <div className="module-card__top">
+              <strong>{stageProducts.length}</strong>
+              <span>productos</span>
+            </div>
+            <p>Esta etapa ya produce artefactos editables dentro del expediente, no solo seguimiento.</p>
+          </div>
+
+          <div className="module-card">
+            <div className="module-card__top">
+              <strong>{stageApprovedCount}</strong>
+              <span>aprobados</span>
+            </div>
+            <p>La validación queda trazada por versión, estado y responsable del artefacto.</p>
+          </div>
+        </div>
+
+        {canCreateCourseProducts(userRole) ? (
+          <div className="toolbar-header">
+            <button
+              type="button"
+              className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+              onClick={() => toggleProductComposer(productStage)}
+            >
+              <Plus size={16} />
+              <span>{isComposerOpen ? 'Cerrar formulario' : 'Nuevo producto'}</span>
+            </button>
+          </div>
+        ) : null}
+
+        {isComposerOpen ? (
+          <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
+            <div className="form-grid">
+              <label className="field">
+                <span>Título</span>
+                <div className="field__control">
+                  <input
+                    value={newProductForm.title}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Formato</span>
+                <div className="field__control">
+                  <select
+                    value={newProductForm.format}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        format: event.target.value as CourseProductMutationInput['format'],
+                      }))
+                    }
+                  >
+                    {stageFormats.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Responsable</span>
+                <div className="field__control">
+                  <select
+                    value={newProductForm.owner}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        owner: event.target.value as Role,
+                      }))
+                    }
+                  >
+                    {appData.roles.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Estado</span>
+                <div className="field__control">
+                  <select
+                    value={newProductForm.status}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        status: event.target.value as CourseProductMutationInput['status'],
+                      }))
+                    }
+                  >
+                    {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Versión</span>
+                <div className="field__control">
+                  <input
+                    value={newProductForm.version}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        version: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Etiquetas</span>
+                <div className="field__control">
+                  <input
+                    value={joinTags(newProductForm.tags)}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        tags: splitTags(event.target.value),
+                      }))
+                    }
+                    placeholder="sílabus, currículo, recursos"
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Resumen</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={newProductForm.summary}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        summary: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Contenido del producto</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={10}
+                    value={newProductForm.body}
+                    onChange={(event) =>
+                      setNewProductForm((current) => ({
+                        ...current,
+                        stage: productStage,
+                        body: event.target.value,
+                      }))
+                    }
+                    placeholder="Desarrolla aquí el contenido base del producto."
+                    required
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="action-row">
+              <button type="submit" className="cta-button" disabled={isProductSaving === 'new'}>
+                <span>{isProductSaving === 'new' ? 'Creando…' : 'Crear producto'}</span>
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {productError && isProductSaving !== 'new' ? <p className="form-error">{productError}</p> : null}
+
+        <div className="list-stack">
+          {stageProducts.length === 0 ? (
+            <div className="empty-state">
+              <strong>Sin productos registrados en esta etapa</strong>
+              <p>Cuando el equipo empiece a producir artefactos, aparecerán aquí como contenido editable.</p>
+            </div>
+          ) : (
+            stageProducts.map((product) => {
+              const draft = productDrafts[product.id];
+              const isEditable = canEditCourseProduct(userRole, product.owner);
+
+              if (!draft || !isEditable) {
+                return (
+                  <div key={product.id} className="task-editor">
+                    <div>
+                      <div className="task-editor__header">
+                        <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                        <strong>{product.title}</strong>
+                      </div>
+
+                      <div className="list-stack">
+                        <div className="list-item">
+                          <div>
+                            <strong>Resumen</strong>
+                            <p>{product.summary}</p>
+                          </div>
+                          <div className="list-item__meta">
+                            <span>{product.format}</span>
+                            <span>{product.version}</span>
+                          </div>
+                        </div>
+
+                        <div className="list-item">
+                          <div>
+                            <strong>Contenido</strong>
+                            <p style={{ whiteSpace: 'pre-wrap' }}>{product.body}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      <div className="task-item__meta">
+                        <span>{product.owner}</span>
+                        <span>{formatDate(product.updatedAt)}</span>
+                      </div>
+                      <div className="task-item__meta">
+                        <span>{productStageLabel(product.stage)}</span>
+                        <span>{joinTags(product.tags) || 'Sin tags'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={product.id} className="task-editor">
+                  <div>
+                    <div className="task-editor__header">
+                      <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
+                      <strong>{product.title}</strong>
+                    </div>
+
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Título</span>
+                        <div className="field__control">
+                          <input
+                            value={draft.title}
+                            onChange={(event) =>
+                              updateProductDraft(product.id, 'title', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Formato</span>
+                        <div className="field__control">
+                          <select
+                            value={draft.format}
+                            onChange={(event) =>
+                              updateProductDraft(
+                                product.id,
+                                'format',
+                                event.target.value as CourseProductMutationInput['format'],
+                              )
+                            }
+                          >
+                            {stageFormats.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Responsable</span>
+                        <div className="field__control">
+                          <select
+                            value={draft.owner}
+                            onChange={(event) =>
+                              updateProductDraft(
+                                product.id,
+                                'owner',
+                                event.target.value as Role,
+                              )
+                            }
+                          >
+                            {appData.roles.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Estado</span>
+                        <div className="field__control">
+                          <select
+                            value={draft.status}
+                            onChange={(event) =>
+                              updateProductDraft(
+                                product.id,
+                                'status',
+                                event.target.value as CourseProductMutationInput['status'],
+                              )
+                            }
+                          >
+                            {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Versión</span>
+                        <div className="field__control">
+                          <input
+                            value={draft.version}
+                            onChange={(event) =>
+                              updateProductDraft(product.id, 'version', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field field--full">
+                        <span>Etiquetas</span>
+                        <div className="field__control">
+                          <input
+                            value={joinTags(draft.tags)}
+                            onChange={(event) =>
+                              updateProductDraft(product.id, 'tags', splitTags(event.target.value))
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field field--full">
+                        <span>Resumen</span>
+                        <div className="field__control field__control--textarea">
+                          <textarea
+                            rows={3}
+                            value={draft.summary}
+                            onChange={(event) =>
+                              updateProductDraft(product.id, 'summary', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field field--full">
+                        <span>Contenido del producto</span>
+                        <div className="field__control field__control--textarea">
+                          <textarea
+                            rows={10}
+                            value={draft.body}
+                            onChange={(event) =>
+                              updateProductDraft(product.id, 'body', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="task-editor__sidebar">
+                    <div className="task-item__meta">
+                      <span>{draft.owner}</span>
+                      <span>{formatDate(product.updatedAt)}</span>
+                    </div>
+                    <div className="task-item__meta">
+                      <span>{productStageLabel(draft.stage)}</span>
+                      <span>{draft.format}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={isProductSaving === product.id}
+                      onClick={() => void handleProductSave(product.id)}
+                    >
+                      <Save size={16} />
+                      <span>{isProductSaving === product.id ? 'Guardando…' : 'Guardar'}</span>
+                    </button>
+
+                    {canDeleteCourseProducts(userRole) ? (
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        disabled={isProductSaving === product.id}
+                        onClick={() => void handleProductDelete(product.id)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </article>
     );
   }
@@ -2440,6 +3203,14 @@ export function CourseWorkspacePage({
 
             <div className="module-card">
               <div className="module-card__top">
+                <strong>{totalProductsCount}</strong>
+                <span>productos editables</span>
+              </div>
+              <p>El curso ya concentra sílabus, guías, recursos y rúbricas dentro del mismo expediente.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
                 <strong>{currentOwner}</strong>
                 <span>responsable actual</span>
               </div>
@@ -2526,6 +3297,11 @@ export function CourseWorkspacePage({
                   <span>recursos vinculados</span>
                   <p>Los recursos propios y curados acompañan el expediente y la arquitectura del curso.</p>
                 </div>
+                <div className="flow-glance__item">
+                  <strong>{approvedProductsCount}/{totalProductsCount || 1}</strong>
+                  <span>productos aprobados</span>
+                  <p>El curso ya combina seguimiento operativo con producción real de artefactos dentro de la plataforma.</p>
+                </div>
               </div>
             </article>
           </div>
@@ -2533,87 +3309,105 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'general' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Información general</span>
-              <h3>Ficha académica y documental</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.metadata.shortName}</strong>
-                <span>{currentCourse.metadata.institution}</span>
-              </div>
-              <p>{currentCourse.summary}</p>
-            </div>
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.metadata.academicPeriod}</strong>
-                <span>Periodo académico</span>
-              </div>
-              <p>
-                Semestre {currentCourse.metadata.semester} · {currentCourse.metadata.courseType}
-              </p>
-            </div>
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.metadata.currentVersion}</strong>
-                <span>Versión vigente</span>
-              </div>
-              <p>
-                Prioridad {currentCourse.metadata.priority} · Riesgo{' '}
-                {currentCourse.metadata.riskLevel}
-              </p>
-            </div>
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
-                <span>Cierre objetivo</span>
-              </div>
-              <p>{courseRouteLabel}</p>
-            </div>
-          </div>
-
-          <div className="list-stack">
-            <div className="list-item">
+        <>
+          <section className="surface section-card section-card--compact">
+            <div className="section-heading">
               <div>
-                <strong>Ruta institucional y trazabilidad</strong>
-                <p>{courseRouteLabel}</p>
-              </div>
-              <div className="list-item__meta">
-                <span>ID {currentCourse.code}</span>
-                <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
+                <span className="eyebrow">Información general</span>
+                <h3>Ficha académica y documental</h3>
               </div>
             </div>
 
-            <div className="list-item">
-              <div>
-                <strong>Resultados de aprendizaje</strong>
-                <p>{currentCourse.metadata.learningOutcomes.join(' · ')}</p>
+            <div className="module-grid module-grid--summary">
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.shortName}</strong>
+                  <span>{currentCourse.metadata.institution}</span>
+                </div>
+                <p>{currentCourse.summary}</p>
               </div>
-              <div className="list-item__meta">
-                <span>{currentCourse.credits} créditos</span>
-                <span>{currentCourse.modality}</span>
-              </div>
-            </div>
-
-            <div className="list-item">
-              <div>
-                <strong>Metodología y evaluación</strong>
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.academicPeriod}</strong>
+                  <span>Periodo académico</span>
+                </div>
                 <p>
-                  {currentCourse.metadata.methodology} Evaluación: {currentCourse.metadata.evaluation}
+                  Semestre {currentCourse.metadata.semester} · {currentCourse.metadata.courseType}
                 </p>
               </div>
-              <div className="list-item__meta">
-                <span>{currentCourse.metadata.topics.length} temas clave</span>
-                <span>{currentCourse.metadata.bibliography.length} referencias</span>
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{currentCourse.metadata.currentVersion}</strong>
+                  <span>Versión vigente</span>
+                </div>
+                <p>
+                  Prioridad {currentCourse.metadata.priority} · Riesgo{' '}
+                  {currentCourse.metadata.riskLevel}
+                </p>
+              </div>
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{countProductsByStage('general')}</strong>
+                  <span>documentos base</span>
+                </div>
+                <p>El sílabus y los artefactos curriculares quedan versionados dentro del curso.</p>
+              </div>
+              <div className="module-card">
+                <div className="module-card__top">
+                  <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
+                  <span>Cierre objetivo</span>
+                </div>
+                <p>{courseRouteLabel}</p>
               </div>
             </div>
-          </div>
-        </section>
+
+            <div className="list-stack">
+              <div className="list-item">
+                <div>
+                  <strong>Ruta institucional y trazabilidad</strong>
+                  <p>{courseRouteLabel}</p>
+                </div>
+                <div className="list-item__meta">
+                  <span>ID {currentCourse.code}</span>
+                  <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
+                </div>
+              </div>
+
+              <div className="list-item">
+                <div>
+                  <strong>Resultados de aprendizaje</strong>
+                  <p>{currentCourse.metadata.learningOutcomes.join(' · ')}</p>
+                </div>
+                <div className="list-item__meta">
+                  <span>{currentCourse.credits} créditos</span>
+                  <span>{currentCourse.modality}</span>
+                </div>
+              </div>
+
+              <div className="list-item">
+                <div>
+                  <strong>Metodología y evaluación</strong>
+                  <p>
+                    {currentCourse.metadata.methodology} Evaluación: {currentCourse.metadata.evaluation}
+                  </p>
+                </div>
+                <div className="list-item__meta">
+                  <span>{currentCourse.metadata.topics.length} temas clave</span>
+                  <span>{currentCourse.metadata.bibliography.length} referencias</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="workspace-grid">
+            {renderProductStudio(
+              'general',
+              'Sílabus y base curricular',
+              'Productos nucleares del curso',
+              'Aquí se crean, editan y versionan el sílabus, microcurrículo y demás documentos fundacionales del curso.',
+            )}
+          </section>
+        </>
       ) : null}
 
       {activeSection === 'architecture' ? (
@@ -2656,6 +3450,14 @@ export function CourseWorkspacePage({
                 <span>recursos curados</span>
               </div>
               <p>La lectura de arquitectura ya expone el balance entre autoría y curación externa.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{countProductsByStage('architecture')}</strong>
+                <span>productos instruccionales</span>
+              </div>
+              <p>La capa pedagógica del curso se conserva como artefacto editable y no solo como nota.</p>
             </div>
           </div>
         </section>
@@ -2988,6 +3790,14 @@ export function CourseWorkspacePage({
               </div>
               <p>La lectura de avance no se limita al porcentaje general; también expone evidencia concreta.</p>
             </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{countProductsByStage('production')}</strong>
+                <span>productos de autoría</span>
+              </div>
+              <p>Guías, actividades y recursos propios ya viven como producción editable dentro del curso.</p>
+            </div>
           </div>
         </section>
       ) : null}
@@ -3033,6 +3843,14 @@ export function CourseWorkspacePage({
               </div>
               <p>La biblioteca se conecta al expediente y mantiene el contexto por unidad o necesidad.</p>
             </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{countProductsByStage('curation') + countProductsByStage('multimedia')}</strong>
+                <span>productos de apoyo</span>
+              </div>
+              <p>La curación y multimedia ya quedan como piezas desarrollables, revisables y visibles.</p>
+            </div>
           </div>
         </section>
       ) : null}
@@ -3077,6 +3895,14 @@ export function CourseWorkspacePage({
                 <span>checkpoints bloqueados</span>
               </div>
               <p>La transición de etapa valida prerequisitos antes de habilitar el siguiente paso.</p>
+            </div>
+
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{countProductsByStage('qa')}</strong>
+                <span>productos de validación</span>
+              </div>
+              <p>Las rúbricas y criterios de cierre también forman parte del expediente editable del curso.</p>
             </div>
           </div>
         </section>
@@ -3629,6 +4455,13 @@ export function CourseWorkspacePage({
 
         {activeSection === 'architecture' ? (
         <>
+          {renderProductStudio(
+            'architecture',
+            'Producto pedagógico',
+            'Lineamientos y diseño instruccional',
+            'La arquitectura del curso se expresa aquí como documentos y lineamientos editables por versión.',
+          )}
+
           {renderStageNoteEditor(
             'architecture',
             'Arquitectura',
@@ -3962,6 +4795,15 @@ export function CourseWorkspacePage({
               'Producción',
               'Autoría, entregables y desarrollo académico',
               'Esta bitácora concentra el estado de autoría y producción académica del curso.',
+            )
+          : null}
+
+        {activeSection === 'production'
+          ? renderProductStudio(
+              'production',
+              'Producto de autoría',
+              'Actividades, guías y recursos propios',
+              'La etapa de producción ahora permite desarrollar directamente los materiales académicos dentro del expediente.',
             )
           : null}
 
@@ -4544,11 +5386,25 @@ export function CourseWorkspacePage({
 
         {activeSection === 'resources' ? (
         <>
+          {renderProductStudio(
+            'curation',
+            'Producto curado',
+            'Inventario y validación de recursos curados',
+            'Esta etapa conserva el inventario curado, las lecturas seleccionadas y su justificación de uso dentro del curso.',
+          )}
+
           {renderStageNoteEditor(
             'curation',
             'Curación',
             'Fuentes y referentes',
             'La curación documenta qué fuentes externas entran al curso y por qué.',
+          )}
+
+          {renderProductStudio(
+            'multimedia',
+            'Producto multimedia',
+            'Piezas propias para desarrollo del curso',
+            'Aquí se desarrollan HTML, pódcast, lecturas extendidas e infografías como productos internos del expediente.',
           )}
 
           {renderStageNoteEditor(
@@ -4619,6 +5475,15 @@ export function CourseWorkspacePage({
           </article>
         </>
         ) : null}
+
+        {activeSection === 'qa'
+          ? renderProductStudio(
+              'qa',
+              'Producto QA',
+              'Rúbricas y criterio de aprobación',
+              'La validación final ya no depende solo de observaciones: aquí también se construyen y versionan las rúbricas de calidad.',
+            )
+          : null}
       </section>
       ) : null}
 

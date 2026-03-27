@@ -4,6 +4,7 @@ import type {
   Course,
   CourseAuditEntry,
   CourseMetadata,
+  CourseProduct,
   CourseStageNotes,
   LibraryResource,
   Role,
@@ -12,7 +13,7 @@ import type {
   Task,
 } from '../types.js';
 
-type BaseCourse = Omit<Course, 'metadata' | 'auditLog' | 'stageNotes'>;
+type BaseCourse = Omit<Course, 'metadata' | 'auditLog' | 'stageNotes' | 'products'>;
 
 const metadataOverrides: Partial<Record<string, Partial<CourseMetadata>>> = {
   'pensamiento-sistemico': {
@@ -279,6 +280,122 @@ function makeCourseStageNotes(course: BaseCourse): CourseStageNotes {
       updatedAt: course.updatedAt,
     },
   };
+}
+
+function makeCourseProducts(course: BaseCourse): CourseProduct[] {
+  return [
+    {
+      id: `prod-${course.slug}-syllabus`,
+      title: 'Sílabus base del curso',
+      stage: 'general',
+      format: 'Sílabus',
+      owner: 'Coordinador',
+      status: 'Aprobado',
+      summary: 'Documento base con configuración académica, enfoque metodológico y trazabilidad curricular.',
+      body: [
+        `Curso: ${course.title} (${course.code})`,
+        `Programa: ${course.program}`,
+        `Modalidad: ${course.modality}`,
+        `Resultados de aprendizaje: ${course.summary}`,
+      ].join('\n'),
+      tags: ['base', 'curricular', 'sílabus'],
+      version: 'v1.0',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `prod-${course.slug}-architecture`,
+      title: 'Lineamiento pedagógico del curso',
+      stage: 'architecture',
+      format: 'Lineamiento',
+      owner: 'Diseñador instruccional',
+      status: course.stageId === 'arquitectura' ? 'En revisión' : 'Aprobado',
+      summary: 'Define unidades, criterios de secuencia, actividades y lectura pedagógica del curso.',
+      body: course.modules
+        .map(
+          (module, index) =>
+            `Unidad ${index + 1}: ${module.title}\nObjetivo: ${module.learningGoal}\nActividades: ${module.activities}`,
+        )
+        .join('\n\n'),
+      tags: ['arquitectura', 'pedagogía', 'módulos'],
+      version: 'v1.1',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `prod-${course.slug}-authoring`,
+      title: 'Guía de actividades y recursos',
+      stage: 'production',
+      format: 'Actividad',
+      owner: 'Experto',
+      status: course.stageId === 'produccion' ? 'En revisión' : 'Borrador',
+      summary: 'Contiene instrucciones, actividades y recursos escritos del curso en desarrollo.',
+      body: course.deliverables
+        .map(
+          (item) =>
+            `${item.title}\nResponsable: ${item.owner}\nEstado: ${item.status}\nNota: ${item.note}`,
+        )
+        .join('\n\n'),
+      tags: ['autoría', 'actividades', 'recursos'],
+      version: 'v0.9',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `prod-${course.slug}-curation`,
+      title: 'Inventario de recursos curados',
+      stage: 'curation',
+      format: 'Documento',
+      owner: 'Experto',
+      status: 'En revisión',
+      summary: 'Registro de fuentes externas, selección y justificación pedagógica por unidad.',
+      body: course.modules
+        .map(
+          (module) =>
+            `${module.title}\nRecursos curados estimados: ${module.curatedResources}\nJustificación: Reforzar ${module.learningGoal.toLowerCase()}.`,
+        )
+        .join('\n\n'),
+      tags: ['curación', 'fuentes', 'bibliografía'],
+      version: 'v0.8',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `prod-${course.slug}-multimedia`,
+      title: 'Paquete multimedia del curso',
+      stage: 'multimedia',
+      format: 'HTML',
+      owner: 'Diseñador multimedia',
+      status: course.team.some((member) => member.role === 'Diseñador multimedia')
+        ? 'En revisión'
+        : 'Borrador',
+      summary: 'Compila piezas propias del curso, guiones y salidas multimedia listas para revisión.',
+      body: [
+        'Piezas previstas:',
+        '1. HTML interactivo por unidad prioritaria',
+        '2. Guion de pódcast o microaudio',
+        '3. Lectura complementaria',
+        '4. Infografía o apoyo visual',
+      ].join('\n'),
+      tags: ['multimedia', 'html', 'propio'],
+      version: 'v0.6',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `prod-${course.slug}-qa`,
+      title: 'Rúbrica de validación del curso',
+      stage: 'qa',
+      format: 'Rúbrica',
+      owner: 'Analista QA',
+      status: course.stageId === 'calidad' ? 'En revisión' : 'Borrador',
+      summary: 'Checklist y criterio de validación para revisión pedagógica y control de calidad.',
+      body: [
+        '1. Coherencia pedagógica',
+        '2. Calidad de actividades y recursos',
+        '3. Accesibilidad y legibilidad',
+        '4. Preparación para cierre',
+      ].join('\n'),
+      tags: ['qa', 'rúbrica', 'quality-matters'],
+      version: 'v1.0',
+      updatedAt: course.updatedAt,
+    },
+  ];
 }
 
 export const roles: Role[] = [
@@ -818,6 +935,7 @@ export const courses: Course[] = courseCatalog.map((course) => ({
   metadata: makeCourseMetadata(course),
   auditLog: makeCourseAuditLog(course),
   stageNotes: makeCourseStageNotes(course),
+  products: makeCourseProducts(course),
 }));
 
 export const tasks: Task[] = [

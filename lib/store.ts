@@ -8,6 +8,9 @@ import type {
   CourseAuditEntry,
   CourseMetadata,
   CourseMetadataMutationInput,
+  CourseProduct,
+  CourseProductMutationInput,
+  CourseProductStage,
   CourseMutationInput,
   CourseStageNoteMutationInput,
   CourseStageNoteKey,
@@ -65,6 +68,7 @@ interface CourseRow {
   metadata: JsonValue;
   auditLog: JsonValue;
   stageNotes: JsonValue;
+  products: JsonValue;
 }
 
 interface UserRow {
@@ -161,6 +165,15 @@ const stageNoteDefinitions: Record<
     owner: 'Analista QA',
     heading: 'QA y validación',
   },
+};
+
+const productStageOwners: Record<CourseProductStage, Role> = {
+  general: 'Coordinador',
+  architecture: 'Diseñador instruccional',
+  production: 'Experto',
+  curation: 'Experto',
+  multimedia: 'Diseñador multimedia',
+  qa: 'Analista QA',
 };
 
 function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
@@ -373,6 +386,128 @@ function buildDefaultCourseStageNotes(
   };
 }
 
+function buildDefaultCourseProducts(
+  course: Pick<
+    Course,
+    | 'slug'
+    | 'title'
+    | 'code'
+    | 'program'
+    | 'modality'
+    | 'summary'
+    | 'updatedAt'
+    | 'stageId'
+    | 'team'
+    | 'modules'
+    | 'deliverables'
+  >,
+): CourseProduct[] {
+  return [
+    {
+      id: `product-${course.slug}-general`,
+      title: 'Sílabus base del curso',
+      stage: 'general',
+      format: 'Sílabus',
+      owner: productStageOwners.general,
+      status: 'Aprobado',
+      summary: 'Documento base con la configuración académica y curricular del curso.',
+      body: [
+        `Curso: ${course.title} (${course.code})`,
+        `Programa: ${course.program}`,
+        `Modalidad: ${course.modality}`,
+        `Resumen: ${course.summary}`,
+      ].join('\n'),
+      tags: ['sílabus', 'base'],
+      version: 'v1.0',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-architecture`,
+      title: 'Lineamiento pedagógico',
+      stage: 'architecture',
+      format: 'Lineamiento',
+      owner: productStageOwners.architecture,
+      status: course.stageId === 'arquitectura' ? 'En revisión' : 'Aprobado',
+      summary: 'Criterio pedagógico, módulos y ruta de experiencia del curso.',
+      body: course.modules
+        .map(
+          (module, index) =>
+            `Unidad ${index + 1}: ${module.title}\nObjetivo: ${module.learningGoal}\nActividades: ${module.activities}`,
+        )
+        .join('\n\n'),
+      tags: ['pedagogía', 'módulos'],
+      version: 'v1.1',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-production`,
+      title: 'Guía de actividades y recursos',
+      stage: 'production',
+      format: 'Actividad',
+      owner: productStageOwners.production,
+      status: course.stageId === 'produccion' ? 'En revisión' : 'Borrador',
+      summary: 'Documento vivo con actividades, instrucciones y recursos propios del curso.',
+      body: course.deliverables
+        .map(
+          (item) =>
+            `${item.title}\nResponsable: ${item.owner}\nEstado: ${item.status}\nNota: ${item.note}`,
+        )
+        .join('\n\n'),
+      tags: ['autoría', 'actividades'],
+      version: 'v0.9',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-curation`,
+      title: 'Inventario de recursos curados',
+      stage: 'curation',
+      format: 'Documento',
+      owner: productStageOwners.curation,
+      status: 'En revisión',
+      summary: 'Consolida fuentes externas y justificación de uso por unidad.',
+      body: course.modules
+        .map(
+          (module) =>
+            `${module.title}\nRecursos curados: ${module.curatedResources}\nJustificación: apoyo a ${module.learningGoal.toLowerCase()}.`,
+        )
+        .join('\n\n'),
+      tags: ['curación', 'fuentes'],
+      version: 'v0.8',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-multimedia`,
+      title: 'Paquete multimedia',
+      stage: 'multimedia',
+      format: 'HTML',
+      owner: productStageOwners.multimedia,
+      status: course.team.some((member) => member.role === 'Diseñador multimedia')
+        ? 'En revisión'
+        : 'Borrador',
+      summary: 'Agrupa piezas multimedia propias del curso listas para iteración.',
+      body: ['HTML interactivo', 'Pódcast', 'Lectura extendida', 'Infografía'].join('\n'),
+      tags: ['multimedia', 'html', 'propio'],
+      version: 'v0.6',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-qa`,
+      title: 'Rúbrica de validación',
+      stage: 'qa',
+      format: 'Rúbrica',
+      owner: productStageOwners.qa,
+      status: course.stageId === 'calidad' ? 'En revisión' : 'Borrador',
+      summary: 'Checklist y criterio de cierre para revisión pedagógica y calidad.',
+      body: ['Coherencia pedagógica', 'Calidad de recursos', 'Accesibilidad', 'Preparación para cierre'].join(
+        '\n',
+      ),
+      tags: ['qa', 'quality-matters'],
+      version: 'v1.0',
+      updatedAt: course.updatedAt,
+    },
+  ];
+}
+
 function normalizeCourse(course: Course): Course {
   const normalizedMetadata = {
     ...buildDefaultCourseMetadata(course),
@@ -391,6 +526,13 @@ function normalizeCourse(course: Course): Course {
     }),
     {} as Course['stageNotes'],
   );
+  const defaultProducts = buildDefaultCourseProducts(course);
+  const normalizedProducts =
+    course.products.length > 0
+      ? course.products
+          .slice()
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      : defaultProducts;
 
   const normalizedAuditLog =
     course.auditLog.length > 0
@@ -408,6 +550,7 @@ function normalizeCourse(course: Course): Course {
     metadata: normalizedMetadata,
     auditLog: normalizedAuditLog,
     stageNotes: normalizedStageNotes,
+    products: normalizedProducts,
   };
 }
 
@@ -498,6 +641,19 @@ function makeCourseRecord(input: CourseMutationInput): Course {
       team: [],
       stageChecklist: buildStageChecklist(input.stageId),
     }),
+    products: buildDefaultCourseProducts({
+      slug: slugBase,
+      title: input.title,
+      code: input.code,
+      program: input.program,
+      modality: input.modality,
+      summary: input.summary,
+      updatedAt: getTodayLabel(),
+      stageId: input.stageId,
+      team: [],
+      modules: [],
+      deliverables: [],
+    }),
   });
 }
 
@@ -566,6 +722,44 @@ function makeLearningModuleRecord(input: LearningModuleMutationInput): LearningM
     curatedResources: input.curatedResources,
     completion: input.completion,
   };
+}
+
+function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
+  return {
+    id: crypto.randomUUID(),
+    title: input.title,
+    stage: input.stage,
+    format: input.format,
+    owner: input.owner,
+    status: input.status,
+    summary: input.summary,
+    body: input.body,
+    tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
+    version: input.version,
+    updatedAt: getTodayLabel(),
+  };
+}
+
+function findCourseProduct(course: Course, productId: string) {
+  return course.products.find((product) => product.id === productId) ?? null;
+}
+
+function mapProductStageToAuditType(stage: CourseProductStage): CourseAuditEntry['type'] {
+  switch (stage) {
+    case 'general':
+      return 'course';
+    case 'architecture':
+      return 'planning';
+    case 'production':
+      return 'production';
+    case 'curation':
+    case 'multimedia':
+      return 'resource';
+    case 'qa':
+      return 'qa';
+    default:
+      return 'history';
+  }
 }
 
 function makeLibraryResourceRecord(input: LibraryResourceMutationInput): LibraryResource {
@@ -672,7 +866,8 @@ async function ensureSchema() {
         assistants JSONB NOT NULL,
         metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
         audit_log JSONB NOT NULL DEFAULT '[]'::jsonb,
-        stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb
+        stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb,
+        products JSONB NOT NULL DEFAULT '[]'::jsonb
       )
     `;
 
@@ -689,6 +884,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_courses
       ADD COLUMN IF NOT EXISTS stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS products JSONB NOT NULL DEFAULT '[]'::jsonb
     `;
 
     await sql`
@@ -819,6 +1019,7 @@ function serializeCourseRow(row: CourseRow): Course {
     metadata: parseJson<Course['metadata']>(row.metadata),
     auditLog: parseJson<Course['auditLog']>(row.auditLog),
     stageNotes: parseJson<Course['stageNotes']>(row.stageNotes),
+    products: parseJson<Course['products']>(row.products),
   });
 }
 
@@ -851,7 +1052,8 @@ async function persistCourse(course: Course) {
       assistants,
       metadata,
       audit_log,
-      stage_notes
+      stage_notes,
+      products
     )
     VALUES (
       ${course.id},
@@ -878,7 +1080,8 @@ async function persistCourse(course: Course) {
       ${JSON.stringify(course.assistants)}::jsonb,
       ${JSON.stringify(course.metadata)}::jsonb,
       ${JSON.stringify(course.auditLog)}::jsonb,
-      ${JSON.stringify(course.stageNotes)}::jsonb
+      ${JSON.stringify(course.stageNotes)}::jsonb,
+      ${JSON.stringify(course.products)}::jsonb
     )
     ON CONFLICT (id) DO UPDATE
     SET
@@ -905,7 +1108,8 @@ async function persistCourse(course: Course) {
       assistants = EXCLUDED.assistants,
       metadata = EXCLUDED.metadata,
       audit_log = EXCLUDED.audit_log,
-      stage_notes = EXCLUDED.stage_notes
+      stage_notes = EXCLUDED.stage_notes,
+      products = EXCLUDED.products
   `;
 }
 
@@ -1044,7 +1248,8 @@ async function readCourseBySlug(slug: string) {
       assistants,
       metadata,
       audit_log AS "auditLog",
-      stage_notes AS "stageNotes"
+      stage_notes AS "stageNotes",
+      products
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
@@ -1303,7 +1508,8 @@ async function readCourses() {
       assistants,
       metadata,
       audit_log AS "auditLog",
-      stage_notes AS "stageNotes"
+      stage_notes AS "stageNotes",
+      products
     FROM maturity_courses
     ORDER BY title ASC
   `) as CourseRow[];
@@ -1591,7 +1797,8 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
       assistants,
       metadata,
       audit_log AS "auditLog",
-      stage_notes AS "stageNotes"
+      stage_notes AS "stageNotes",
+      products
     FROM maturity_courses
     WHERE slug = ${slug}
     LIMIT 1
@@ -2025,6 +2232,122 @@ export async function deleteLearningModuleRecord(courseSlug: string, moduleId: s
     'Módulo retirado',
     `Se retiró "${deletedModule.title}" de la arquitectura visible del curso.`,
     'production',
+  );
+
+  await persistCourse(nextCourse);
+  return true;
+}
+
+export async function findCourseProductById(courseSlug: string, productId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+  return course ? findCourseProduct(course, productId) : null;
+}
+
+export async function createCourseProductRecord(
+  courseSlug: string,
+  input: CourseProductMutationInput,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const product = makeCourseProductRecord(input);
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      products: [product, ...course.products],
+    },
+    'Producto creado',
+    `Se creó "${product.title}" como ${product.format.toLowerCase()} dentro de ${product.stage}.`,
+    mapProductStageToAuditType(product.stage),
+  );
+
+  await persistCourse(nextCourse);
+  return product;
+}
+
+export async function updateCourseProductRecord(
+  courseSlug: string,
+  productId: string,
+  input: Partial<CourseProductMutationInput>,
+) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  let updatedProduct: CourseProduct | null = null;
+  const nextProducts = course.products.map((product) => {
+    if (product.id !== productId) {
+      return product;
+    }
+
+    updatedProduct = {
+      ...product,
+      ...input,
+      tags: input.tags ? input.tags.map((tag) => tag.trim()).filter(Boolean) : product.tags,
+      updatedAt: getTodayLabel(),
+    };
+
+    return updatedProduct;
+  });
+
+  if (!updatedProduct) {
+    return null;
+  }
+
+  const finalProduct = updatedProduct as CourseProduct;
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      products: nextProducts,
+    },
+    'Producto actualizado',
+    `Se actualizó "${finalProduct.title}" y quedó en estado ${finalProduct.status}.`,
+    mapProductStageToAuditType(finalProduct.stage),
+  );
+
+  await persistCourse(nextCourse);
+  return finalProduct;
+}
+
+export async function deleteCourseProductRecord(courseSlug: string, productId: string) {
+  await ensureSchema();
+  await ensureSeedData();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return false;
+  }
+
+  const deletedProduct = findCourseProduct(course, productId);
+  const nextProducts = course.products.filter((product) => product.id !== productId);
+
+  if (!deletedProduct || nextProducts.length === course.products.length) {
+    return false;
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      products: nextProducts,
+    },
+    'Producto retirado',
+    `Se retiró "${deletedProduct.title}" del expediente editable del curso.`,
+    mapProductStageToAuditType(deletedProduct.stage),
   );
 
   await persistCourse(nextCourse);

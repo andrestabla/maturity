@@ -34,6 +34,25 @@ export type CourseStageNoteKey =
   | 'multimedia'
   | 'lms'
   | 'qa';
+export type CourseProductStage =
+  | 'general'
+  | 'architecture'
+  | 'production'
+  | 'curation'
+  | 'multimedia'
+  | 'qa';
+export type CourseProductFormat =
+  | 'Sílabus'
+  | 'Lineamiento'
+  | 'Actividad'
+  | 'Recurso'
+  | 'Documento'
+  | 'HTML'
+  | 'Pódcast'
+  | 'Lectura'
+  | 'Infografía'
+  | 'Rúbrica';
+export type CourseProductStatus = 'Borrador' | 'En revisión' | 'Aprobado';
 
 export interface StageDefinition {
   id: string;
@@ -145,6 +164,20 @@ export interface CourseStageNotes {
   qa: CourseStageNote;
 }
 
+export interface CourseProduct {
+  id: string;
+  title: string;
+  stage: CourseProductStage;
+  format: CourseProductFormat;
+  owner: Role;
+  status: CourseProductStatus;
+  summary: string;
+  body: string;
+  tags: string[];
+  version: string;
+  updatedAt: string;
+}
+
 export interface AssistantCard {
   id: string;
   name: string;
@@ -182,6 +215,7 @@ export interface Course {
   metadata: CourseMetadata;
   auditLog: CourseAuditEntry[];
   stageNotes: CourseStageNotes;
+  products: CourseProduct[];
 }
 
 export interface Task {
@@ -326,6 +360,18 @@ export interface CourseStageNoteMutationInput {
   summary: string;
   evidence: string[];
   blockers: string[];
+}
+
+export interface CourseProductMutationInput {
+  title: string;
+  stage: CourseProductStage;
+  format: CourseProductFormat;
+  owner: Role;
+  status: CourseProductStatus;
+  summary: string;
+  body: string;
+  tags: string[];
+  version: string;
 }
 
 export interface DeliverableMutationInput {
