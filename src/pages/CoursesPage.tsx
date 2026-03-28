@@ -483,6 +483,7 @@ export function CoursesPage({
   const folderEntries = buildFolderEntries(repositoryCourses, selectedNode);
   const folderPath = getNodePath(selectedNode);
   const parentNode = getParentNode(selectedNode);
+  const isRootEntry = selectedNode === 'root';
   const openCount = currentFolderCourses.filter((course) => course.status !== 'Listo').length;
   const blockedCount = currentFolderCourses.filter((course) => course.status === 'Bloqueado').length;
   const stageCount = new Set(currentFolderCourses.map((course) => course.stageId)).size;
@@ -675,46 +676,50 @@ export function CoursesPage({
           </div>
 
           <div className="courses-toolbar__meta">
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={
-                  view === 'cards'
-                    ? 'segmented-control__button is-active'
-                    : 'segmented-control__button'
-                }
-                onClick={() => setView('cards')}
-              >
-                <LayoutGrid size={16} />
-                <span>Tarjetas</span>
-              </button>
-              <button
-                type="button"
-                className={
-                  view === 'list'
-                    ? 'segmented-control__button is-active'
-                    : 'segmented-control__button'
-                }
-                onClick={() => setView('list')}
-              >
-                <List size={16} />
-                <span>Listado</span>
-              </button>
-            </div>
+            {!isRootEntry ? (
+              <>
+                <div className="segmented-control">
+                  <button
+                    type="button"
+                    className={
+                      view === 'cards'
+                        ? 'segmented-control__button is-active'
+                        : 'segmented-control__button'
+                    }
+                    onClick={() => setView('cards')}
+                  >
+                    <LayoutGrid size={16} />
+                    <span>Tarjetas</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      view === 'list'
+                        ? 'segmented-control__button is-active'
+                        : 'segmented-control__button'
+                    }
+                    onClick={() => setView('list')}
+                  >
+                    <List size={16} />
+                    <span>Listado</span>
+                  </button>
+                </div>
 
-            <label className="field courses-toolbar__sort">
-              <span>Ordenar</span>
-              <div className="field__control">
-                <select
-                  value={sortMode}
-                  onChange={(event) => setSortMode(event.target.value as SortMode)}
-                >
-                  <option value="recent">Actualizados</option>
-                  <option value="progress">Avance</option>
-                  <option value="name">Nombre</option>
-                </select>
-              </div>
-            </label>
+                <label className="field courses-toolbar__sort">
+                  <span>Ordenar</span>
+                  <div className="field__control">
+                    <select
+                      value={sortMode}
+                      onChange={(event) => setSortMode(event.target.value as SortMode)}
+                    >
+                      <option value="recent">Actualizados</option>
+                      <option value="progress">Avance</option>
+                      <option value="name">Nombre</option>
+                    </select>
+                  </div>
+                </label>
+              </>
+            ) : null}
 
             <button type="button" className="ghost-button" onClick={clearFilters}>
               <span>Limpiar filtros</span>
@@ -883,8 +888,12 @@ export function CoursesPage({
         <div className="folder-browser__head">
           <div>
             <span className="eyebrow">Carpetas y subcarpetas</span>
-            <h3>{getNodeLabel(selectedNode)}</h3>
-            <p className="section-lead">{getFolderSectionCopy(selectedNode)}</p>
+            <h3>{isRootEntry ? 'Carpetas de nivel 1' : getNodeLabel(selectedNode)}</h3>
+            <p className="section-lead">
+              {isRootEntry
+                ? 'Selecciona una institución para entrar a sus subcarpetas académicas.'
+                : getFolderSectionCopy(selectedNode)}
+            </p>
           </div>
 
           <div className="folder-browser__actions">
@@ -901,40 +910,44 @@ export function CoursesPage({
           </div>
         </div>
 
-        <div className="breadcrumb-row folder-path">
-          {folderPath.map((segment, index) => (
-            <span key={segment.key} className="breadcrumb-row__item">
-              {index > 0 ? <ChevronRight size={14} /> : null}
-              <button
-                type="button"
-                className={
-                  index === folderPath.length - 1
-                    ? 'folder-breadcrumb folder-breadcrumb--current'
-                    : 'folder-breadcrumb'
-                }
-                onClick={() => setSelectedNode(segment.key)}
-                disabled={index === folderPath.length - 1}
-              >
-                {segment.label}
-              </button>
-            </span>
-          ))}
-        </div>
+        {!isRootEntry ? (
+          <>
+            <div className="breadcrumb-row folder-path">
+              {folderPath.map((segment, index) => (
+                <span key={segment.key} className="breadcrumb-row__item">
+                  {index > 0 ? <ChevronRight size={14} /> : null}
+                  <button
+                    type="button"
+                    className={
+                      index === folderPath.length - 1
+                        ? 'folder-breadcrumb folder-breadcrumb--current'
+                        : 'folder-breadcrumb'
+                    }
+                    onClick={() => setSelectedNode(segment.key)}
+                    disabled={index === folderPath.length - 1}
+                  >
+                    {segment.label}
+                  </button>
+                </span>
+              ))}
+            </div>
 
-        <div className="metrics-grid metrics-grid--three">
-          <div className="mini-metric">
-            <span>Subcarpetas</span>
-            <strong>{folderEntries.length}</strong>
-          </div>
-          <div className="mini-metric">
-            <span>Cursos visibles</span>
-            <strong>{currentFolderCourses.length}</strong>
-          </div>
-          <div className="mini-metric">
-            <span>Filtros activos</span>
-            <strong>{activeFilterCount}</strong>
-          </div>
-        </div>
+            <div className="metrics-grid metrics-grid--three">
+              <div className="mini-metric">
+                <span>Subcarpetas</span>
+                <strong>{folderEntries.length}</strong>
+              </div>
+              <div className="mini-metric">
+                <span>Cursos visibles</span>
+                <strong>{currentFolderCourses.length}</strong>
+              </div>
+              <div className="mini-metric">
+                <span>Filtros activos</span>
+                <strong>{activeFilterCount}</strong>
+              </div>
+            </div>
+          </>
+        ) : null}
 
         {folderEntries.length > 0 ? (
           <div className="folder-grid">
@@ -964,98 +977,100 @@ export function CoursesPage({
         )}
       </section>
 
-      <section className="surface section-card explorer-content">
-        <div className="explorer-content__head">
-          <div>
-            <span className="eyebrow">Cursos</span>
-            <h3>Cursos dentro de {getNodeLabel(selectedNode)}</h3>
-            <p className="courses-results__summary">
-              Busca, filtra y ordena los cursos visibles de esta carpeta sin perder la ruta
-              institucional.
-            </p>
+      {!isRootEntry ? (
+        <section className="surface section-card explorer-content">
+          <div className="explorer-content__head">
+            <div>
+              <span className="eyebrow">Cursos</span>
+              <h3>Cursos dentro de {getNodeLabel(selectedNode)}</h3>
+              <p className="courses-results__summary">
+                Busca, filtra y ordena los cursos visibles de esta carpeta sin perder la ruta
+                institucional.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flow-glance flow-glance--compact">
-          <div className="flow-glance__item">
-            <strong>{openCount}</strong>
-            <span>cursos abiertos</span>
-            <p>Incluye todos los expedientes que aún están en operación o revisión.</p>
+          <div className="flow-glance flow-glance--compact">
+            <div className="flow-glance__item">
+              <strong>{openCount}</strong>
+              <span>cursos abiertos</span>
+              <p>Incluye todos los expedientes que aún están en operación o revisión.</p>
+            </div>
+            <div className="flow-glance__item">
+              <strong>{blockedCount === 0 ? 'Sin bloqueos' : blockedCount}</strong>
+              <span>estado crítico</span>
+              <p>
+                {blockedCount === 0
+                  ? 'No hay bloqueos visibles en esta carpeta.'
+                  : 'Conviene intervenir estos cursos primero para recuperar ritmo.'}
+              </p>
+            </div>
+            <div className="flow-glance__item">
+              <strong>{stageCount}</strong>
+              <span>etapas activas</span>
+              <p>Te muestra cuánta dispersión operativa hay en la carpeta seleccionada.</p>
+            </div>
           </div>
-          <div className="flow-glance__item">
-            <strong>{blockedCount === 0 ? 'Sin bloqueos' : blockedCount}</strong>
-            <span>estado crítico</span>
-            <p>
-              {blockedCount === 0
-                ? 'No hay bloqueos visibles en esta carpeta.'
-                : 'Conviene intervenir estos cursos primero para recuperar ritmo.'}
-            </p>
-          </div>
-          <div className="flow-glance__item">
-            <strong>{stageCount}</strong>
-            <span>etapas activas</span>
-            <p>Te muestra cuánta dispersión operativa hay en la carpeta seleccionada.</p>
-          </div>
-        </div>
 
-        {currentFolderCourses.length === 0 ? (
-          <div className="empty-state">
-            <strong>No encontramos cursos en esta vista</strong>
-            <p>Ajusta la búsqueda, limpia filtros o navega a otra carpeta del repositorio.</p>
-          </div>
-        ) : view === 'cards' ? (
-          <section className="courses-grid courses-grid--explorer">
-            {currentFolderCourses.map((course) => {
-              const stageMeta = getStageMeta(appData, course.stageId);
-              const alertCount = appData.alerts.filter((alert) => alert.courseSlug === course.slug).length;
-              const pendingObservations = course.observations.filter(
-                (observation) => observation.status !== 'Resuelta',
-              ).length;
+          {currentFolderCourses.length === 0 ? (
+            <div className="empty-state">
+              <strong>No encontramos cursos en esta vista</strong>
+              <p>Ajusta la búsqueda, limpia filtros o navega a otra carpeta del repositorio.</p>
+            </div>
+          ) : view === 'cards' ? (
+            <section className="courses-grid courses-grid--explorer">
+              {currentFolderCourses.map((course) => {
+                const stageMeta = getStageMeta(appData, course.stageId);
+                const alertCount = appData.alerts.filter((alert) => alert.courseSlug === course.slug).length;
+                const pendingObservations = course.observations.filter(
+                  (observation) => observation.status !== 'Resuelta',
+                ).length;
 
-              return (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  stageName={stageMeta?.name ?? course.stageId}
-                  routeLabel={buildRouteLabel(course)}
-                  ownerLabel={stageMeta?.owner}
-                  alertCount={alertCount}
-                  pendingObservations={pendingObservations}
-                />
-              );
-            })}
-          </section>
-        ) : (
-          <div className="list-stack">
-            {currentFolderCourses.map((course) => {
-              const stageMeta = getStageMeta(appData, course.stageId);
-              const alertCount = appData.alerts.filter((alert) => alert.courseSlug === course.slug).length;
-              const pendingObservations = course.observations.filter(
-                (observation) => observation.status !== 'Resuelta',
-              ).length;
+                return (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    stageName={stageMeta?.name ?? course.stageId}
+                    routeLabel={buildRouteLabel(course)}
+                    ownerLabel={stageMeta?.owner}
+                    alertCount={alertCount}
+                    pendingObservations={pendingObservations}
+                  />
+                );
+              })}
+            </section>
+          ) : (
+            <div className="list-stack">
+              {currentFolderCourses.map((course) => {
+                const stageMeta = getStageMeta(appData, course.stageId);
+                const alertCount = appData.alerts.filter((alert) => alert.courseSlug === course.slug).length;
+                const pendingObservations = course.observations.filter(
+                  (observation) => observation.status !== 'Resuelta',
+                ).length;
 
-              return (
-                <Link key={course.id} to={`/courses/${course.slug}`} className="task-item explorer-result">
-                  <div>
-                    <span className="badge badge--outline">{course.code}</span>
-                    <strong>{course.title}</strong>
-                    <p>{buildRouteLabel(course)}</p>
-                  </div>
+                return (
+                  <Link key={course.id} to={`/courses/${course.slug}`} className="task-item explorer-result">
+                    <div>
+                      <span className="badge badge--outline">{course.code}</span>
+                      <strong>{course.title}</strong>
+                      <p>{buildRouteLabel(course)}</p>
+                    </div>
 
-                  <div className="task-item__meta">
-                    <span>{course.metadata.courseType}</span>
-                    <span>{course.metadata.academicPeriod}</span>
-                    <span>{stageMeta?.name ?? course.stageId}</span>
-                    <span>{course.progress}%</span>
-                    <span>{alertCount} alertas</span>
-                    <span>{pendingObservations} observaciones</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                    <div className="task-item__meta">
+                      <span>{course.metadata.courseType}</span>
+                      <span>{course.metadata.academicPeriod}</span>
+                      <span>{stageMeta?.name ?? course.stageId}</span>
+                      <span>{course.progress}%</span>
+                      <span>{alertCount} alertas</span>
+                      <span>{pendingObservations} observaciones</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
