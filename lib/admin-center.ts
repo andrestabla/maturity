@@ -6,6 +6,7 @@ import type {
   AdminIntegration,
   AdminIntegrationCategory,
   AdminIntegrationMutationInput,
+  AdminIntegrationSource,
   AdminIntegrationStatus,
   AdminLogCategory,
   AdminLogEntry,
@@ -138,7 +139,13 @@ function sanitizeBrandingSettings(input: BrandingSettings): BrandingSettings {
 
 type IntegrationPreset = Omit<
   AdminIntegration,
-  'envReady' | 'runtimeSummary' | 'status' | 'assistantTitle' | 'assistantSummary' | 'assistantSteps'
+  | 'envReady'
+  | 'runtimeSource'
+  | 'runtimeSummary'
+  | 'status'
+  | 'assistantTitle'
+  | 'assistantSummary'
+  | 'assistantSteps'
 > & {
   status: AdminIntegrationStatus;
 };
@@ -245,6 +252,9 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     requiredEnvKeys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     scopes: ['Acceso', 'Aprovisionamiento'],
     config: {
+      googleClientId: '',
+      googleClientSecret: '',
+      googleRedirectUri: 'https://maturity360.co/api/auth/google/callback',
       mode: 'Opcional',
       domainPolicy: inferDefaultDomain(),
       provisioning: 'Pendiente de aprobación',
@@ -265,9 +275,13 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     requiredEnvKeys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     scopes: ['Planeación', 'Hitos'],
     config: {
+      googleClientId: '',
+      googleClientSecret: '',
       calendarName: 'Producción académica',
+      calendarId: 'primary',
       syncMode: 'Hitos y reuniones',
       timezone: 'America/Bogota',
+      eventVisibility: 'Equipo del curso',
     },
     lastTestAt: null,
     lastError: null,
@@ -285,9 +299,13 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     requiredEnvKeys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
     scopes: ['Reuniones', 'Hitos'],
     config: {
+      googleClientId: '',
+      googleClientSecret: '',
       attachTo: 'Hitos del flujo',
       allowCreation: 'Sí',
       visibility: 'Equipo del curso',
+      calendarId: 'primary',
+      defaultDuration: '30 min',
     },
     lastTestAt: null,
     lastError: null,
@@ -325,9 +343,12 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     requiredEnvKeys: ['YOUTUBE_API_KEY'],
     scopes: ['Curación', 'Multimedia'],
     config: {
+      youtubeApiKey: '',
       allowedModules: 'Curación, Multimedia',
       defaultRegion: 'CO',
       safeSearch: 'Moderado',
+      queryFilter: '',
+      editorialRule: 'Usar con validación editorial antes de incorporar al curso.',
     },
     lastTestAt: null,
     lastError: null,
@@ -672,6 +693,7 @@ function evaluateIntegrationRuntime(
   config: Record<string, string>,
 ): {
   ready: boolean;
+  source: AdminIntegrationSource;
   summary: string;
 } {
   const getVal = (envKey: string, configKey?: string) => {
@@ -686,6 +708,7 @@ function evaluateIntegrationRuntime(
         const ready = Boolean(key);
         return {
           ready,
+          source: config.resendApiKey ? 'governance' : ready ? 'runtime' : 'none',
           summary: ready
             ? 'Resend configurado mediante ' + (config.resendApiKey ? 'base de datos.' : 'runtime.')
             : 'Falta RESEND_API_KEY.',
@@ -698,6 +721,12 @@ function evaluateIntegrationRuntime(
         const ready = Boolean(access && secret && region);
         return {
           ready,
+          source:
+            config.sesAccessKey || config.sesSecretKey || config.sesRegion
+              ? 'governance'
+              : ready
+                ? 'runtime'
+                : 'none',
           summary: ready
             ? `Amazon SES activo en ${region}.`
             : 'Faltan credenciales de AWS SES (Access Key, Secret Key o Región).',
@@ -711,6 +740,12 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(host && port && user && pass);
       return {
         ready,
+        source:
+          config.smtpHost || config.smtpPort || config.smtpUser || config.smtpPassword
+            ? 'governance'
+            : ready
+              ? 'runtime'
+              : 'none',
         summary: ready
           ? `SMTP listo (${host}:${port}).`
           : `Faltan parámetros de SMTP para ${type}.`,
@@ -721,6 +756,7 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(key);
       return {
         ready,
+        source: config.openaiApiKey ? 'governance' : ready ? 'runtime' : 'none',
         summary: ready
           ? `OpenAI listo (${config.defaultModel || 'modelo por defecto'}).`
           : 'Falta OPENAI_API_KEY.',
@@ -731,6 +767,7 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(key);
       return {
         ready,
+        source: config.geminiApiKey ? 'governance' : ready ? 'runtime' : 'none',
         summary: ready
           ? `Gemini listo (${config.defaultModel || 'flash'}).`
           : 'Falta API Key de Gemini.',
@@ -740,6 +777,7 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(process.env.ACADEMIC_DATABASE_ENDPOINT?.trim() || config.endpoint?.trim());
       return {
         ready,
+        source: config.endpoint?.trim() ? 'governance' : ready ? 'runtime' : 'none',
         summary: ready
           ? `Fuente académica lista desde ${config.endpoint || 'runtime configurado'}.`
           : 'No hay endpoint académico configurado.',
@@ -748,14 +786,23 @@ function evaluateIntegrationRuntime(
     case 'google-sso':
     case 'google-calendar':
     case 'google-meet': {
+      const clientId = getVal('GOOGLE_CLIENT_ID', 'googleClientId');
+      const clientSecret = getVal('GOOGLE_CLIENT_SECRET', 'googleClientSecret');
       const ready = Boolean(
-        process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim(),
+        clientId && clientSecret,
       );
+      const source: AdminIntegrationSource =
+        config.googleClientId?.trim() || config.googleClientSecret?.trim()
+          ? 'governance'
+          : ready
+            ? 'runtime'
+            : 'none';
       return {
         ready,
+        source,
         summary: ready
-          ? 'Credenciales Google detectadas en runtime.'
-          : 'Faltan GOOGLE_CLIENT_ID y/o GOOGLE_CLIENT_SECRET.',
+          ? `Credenciales Google listas desde ${source === 'governance' ? 'Gobierno' : 'runtime'}.`
+          : 'Faltan Google Client ID y/o Google Client Secret.',
       };
     }
     case 'cloudflare-r2': {
@@ -766,24 +813,40 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(acc && key && sec && buck);
       return {
         ready,
+        source:
+          config.r2AccountId ||
+          config.r2AccessKeyId ||
+          config.r2SecretAccessKey ||
+          config.r2BucketName
+            ? 'governance'
+            : ready
+              ? 'runtime'
+              : 'none',
         summary: ready
           ? `R2 listo en bucket ${buck}.`
           : 'Faltan credenciales o bucket de Cloudflare R2.',
       };
     }
     case 'youtube-data-api': {
-      const ready = Boolean(process.env.YOUTUBE_API_KEY?.trim());
+      const ready = Boolean(getVal('YOUTUBE_API_KEY', 'youtubeApiKey'));
+      const source: AdminIntegrationSource = config.youtubeApiKey?.trim()
+        ? 'governance'
+        : ready
+          ? 'runtime'
+          : 'none';
       return {
         ready,
+        source,
         summary: ready
-          ? 'YouTube Data API lista para consultas de curación.'
-          : 'YOUTUBE_API_KEY no está disponible en runtime.',
+          ? `YouTube Data API lista desde ${source === 'governance' ? 'Gobierno' : 'runtime'}.`
+          : 'Falta YouTube API Key en runtime o en configuración guardada.',
       };
     }
     case 'neon-database': {
       const ready = Boolean(process.env.DATABASE_URL?.trim());
       return {
         ready,
+        source: ready ? 'runtime' : 'none',
         summary: ready
           ? 'DATABASE_URL detectada; lista para validación operativa.'
           : 'DATABASE_URL no está configurada.',
@@ -793,6 +856,7 @@ function evaluateIntegrationRuntime(
       const ready = Boolean(process.env.VERCEL_URL?.trim() || process.env.VERCEL_ENV?.trim());
       return {
         ready,
+        source: ready ? 'runtime' : 'none',
         summary: ready
           ? `Runtime ${process.env.VERCEL_ENV || 'desconocido'} para proyecto ${process.env.VERCEL_GIT_REPO_SLUG || config.project || 'maturity'}.`
           : 'No se detectaron variables de Vercel en runtime.',
@@ -801,6 +865,7 @@ function evaluateIntegrationRuntime(
     default:
       return {
         ready: false,
+        source: 'none',
         summary: 'No hay diagnóstico definido para esta integración.',
       };
   }
@@ -812,7 +877,7 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
   const config = parseJson<Record<string, string>>(row.config);
   const scopes = parseJson<string[]>(row.scopes);
   const runtime = evaluateIntegrationRuntime(row.id, config);
-  const effectiveEnabled = row.enabled || runtime.ready;
+  const effectiveEnabled = row.enabled || runtime.source === 'runtime';
   const effectiveStatus: AdminIntegrationStatus = !effectiveEnabled
     ? 'Inactiva'
     : runtime.ready
@@ -833,6 +898,7 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
     status: effectiveStatus,
     requiredEnvKeys: preset?.requiredEnvKeys ?? [],
     envReady: runtime.ready,
+    runtimeSource: runtime.source,
     runtimeSummary: runtime.summary,
     scopes,
     config,

@@ -2,6 +2,8 @@ import type { AdminIntegration } from '../../types';
 import { MailAssistant } from './assistants/MailAssistant';
 import { AiAssistant } from './assistants/AiAssistant';
 import { StorageAssistant } from './assistants/StorageAssistant';
+import { GoogleAssistant } from './assistants/GoogleAssistant';
+import { YouTubeAssistant } from './assistants/YouTubeAssistant';
 
 interface IntegrationAssistantProps {
   integration: AdminIntegration;
@@ -41,6 +43,24 @@ export function IntegrationAssistant({
         onConfigChange={onConfigChange}
       />
     );
+  }
+
+  if (
+    integration.id === 'google-sso' ||
+    integration.id === 'google-calendar' ||
+    integration.id === 'google-meet'
+  ) {
+    return (
+      <GoogleAssistant
+        integrationId={integration.id}
+        config={config}
+        onConfigChange={onConfigChange}
+      />
+    );
+  }
+
+  if (integration.id === 'youtube-data-api') {
+    return <YouTubeAssistant config={config} onConfigChange={onConfigChange} />;
   }
 
   // Fallback para asistente genérico basado en pasos

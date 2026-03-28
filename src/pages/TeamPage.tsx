@@ -2483,7 +2483,9 @@ export function TeamPage({
 
       return left.name.localeCompare(right.name, 'es');
     });
-    const readyIntegrations = integrations.filter((integration) => integration.envReady);
+    const readyIntegrations = integrations.filter(
+      (integration) => integration.envReady && integration.enabled,
+    );
     const pendingIntegrations = integrations.filter((integration) => !integration.envReady);
 
     return (
@@ -2497,15 +2499,16 @@ export function TeamPage({
             <Cable size={18} />
           </div>
           <p className="section-lead">
-            Las que ya están configuradas en Vercel aparecen activas en la interfaz. Desde aquí
-            terminas de ajustar alcance, fallback y prueba técnica con un asistente por servicio.
+            Desde aquí puedes dejar listas las integraciones usando variables del entorno o
+            configuración protegida guardada desde Gobierno. Cada servicio tiene su propio
+            asistente.
           </p>
 
           <div className="admin-kpi-grid">
             <div className="admin-kpi">
-              <span>Activas por runtime</span>
+              <span>Listas para operación</span>
               <strong>{readyIntegrations.length}</strong>
-              <p>Configuradas ya en variables del entorno.</p>
+              <p>Disponibles por entorno o configuración protegida.</p>
             </div>
             <div className="admin-kpi">
               <span>Por configurar</span>
@@ -2554,7 +2557,11 @@ export function TeamPage({
                   <div className="admin-service-card__meta">
                     <span className={getBadgeClass(integration.status)}>{integration.status}</span>
                     <span className="badge badge--outline">
-                      {integration.envReady ? 'Activa por runtime' : integration.category}
+                      {integration.envReady
+                        ? integration.runtimeSource === 'runtime'
+                          ? 'Lista por entorno'
+                          : 'Lista por Gobierno'
+                        : integration.category}
                     </span>
                   </div>
                   <small>{integration.assistantSummary}</small>
@@ -2581,7 +2588,11 @@ export function TeamPage({
                     </span>
                     <span className="badge badge--outline">{selectedIntegration.category}</span>
                     <span className="badge badge--outline">
-                      Runtime {selectedIntegration.envReady ? 'listo' : 'incompleto'}
+                      {selectedIntegration.envReady
+                        ? selectedIntegration.runtimeSource === 'runtime'
+                          ? 'Lista por entorno'
+                          : 'Lista por Gobierno'
+                        : 'Configuración pendiente'}
                     </span>
                   </div>
                   <p>{selectedIntegration.description}</p>
@@ -2670,7 +2681,16 @@ export function TeamPage({
                 </label>
 
                 {/* Notas - Ocultar en especializados por redundancia */}
-                {!['outbound-mail', 'openai', 'gemini', 'cloudflare-r2'].includes(selectedIntegration.id) && (
+                {![
+                  'outbound-mail',
+                  'openai',
+                  'gemini',
+                  'cloudflare-r2',
+                  'google-sso',
+                  'google-calendar',
+                  'google-meet',
+                  'youtube-data-api',
+                ].includes(selectedIntegration.id) && (
                   <label className="field">
                     <span>Notas del asistente</span>
                     <div className="field__control">
@@ -2688,7 +2708,16 @@ export function TeamPage({
                 )}
 
                 {/* Campos Crudos - Ocultar en asistentes especializados para reducir ruido */}
-                {!['outbound-mail', 'openai', 'gemini', 'cloudflare-r2'].includes(selectedIntegration.id) && (
+                {![
+                  'outbound-mail',
+                  'openai',
+                  'gemini',
+                  'cloudflare-r2',
+                  'google-sso',
+                  'google-calendar',
+                  'google-meet',
+                  'youtube-data-api',
+                ].includes(selectedIntegration.id) && (
                   <div className="form-grid">
                     {Object.entries(integrationDraft.config).map(([key, value]) => (
                       <label key={`${selectedIntegration.id}-${key}`} className="field">
@@ -2733,8 +2762,8 @@ export function TeamPage({
                   </p>
                   <p>
                     {selectedIntegration.envReady
-                      ? 'El runtime ya detecta las variables necesarias.'
-                      : 'Completa variables en Vercel para que se active automáticamente en el front.'}
+                      ? 'La integración ya tiene configuración suficiente para operar.'
+                      : 'Completa la configuración desde Gobierno o usa variables de entorno compatibles.'}
                   </p>
                   {selectedIntegration.lastError ? (
                     <p className="form-error">{selectedIntegration.lastError}</p>

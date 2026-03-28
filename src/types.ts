@@ -34,6 +34,7 @@ export type AdminIntegrationStatus =
   | 'Pendiente'
   | 'En prueba'
   | 'Con error';
+export type AdminIntegrationSource = 'runtime' | 'governance' | 'none';
 export type AdminIntegrationCategory =
   | 'Correo'
   | 'IA'
@@ -418,6 +419,7 @@ export interface AdminIntegration {
   status: AdminIntegrationStatus;
   requiredEnvKeys: string[];
   envReady: boolean;
+  runtimeSource: AdminIntegrationSource;
   runtimeSummary: string;
   scopes: string[];
   config: Record<string, string>;
