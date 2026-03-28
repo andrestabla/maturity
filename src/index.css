@@ -393,7 +393,7 @@ button {
 .handoff-step,
 .flow-glance__item {
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.56);
+  background: var(--panel);
   border-radius: 24px;
 }
 
@@ -431,7 +431,7 @@ button {
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.56);
+  background: var(--panel);
 }
 
 .metric-card__icon {
@@ -448,7 +448,7 @@ button {
 }
 
 .metric-card__copy span:first-child {
-  color: rgba(19, 33, 38, 0.62);
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -547,7 +547,7 @@ button {
 .stage-summary span {
   display: inline-flex;
   margin-bottom: 12px;
-  color: rgba(19, 33, 38, 0.56);
+  color: var(--text-muted);
   font-weight: 700;
 }
 
@@ -568,31 +568,31 @@ button {
 .stage-summary--coral,
 .assistant-card--coral,
 .handoff-step--coral {
-  background: linear-gradient(160deg, rgba(255, 139, 105, 0.18), rgba(255, 255, 255, 0.72));
+  background: linear-gradient(160deg, var(--coral-soft), var(--panel));
 }
 
 .stage-summary--sage,
 .assistant-card--sage,
 .handoff-step--sage {
-  background: linear-gradient(160deg, rgba(141, 184, 155, 0.2), rgba(255, 255, 255, 0.74));
+  background: linear-gradient(160deg, var(--sage-soft), var(--panel));
 }
 
 .stage-summary--ocean,
 .assistant-card--ocean,
 .handoff-step--ocean {
-  background: linear-gradient(160deg, rgba(92, 159, 179, 0.18), rgba(255, 255, 255, 0.74));
+  background: linear-gradient(160deg, var(--ocean-soft), var(--panel));
 }
 
 .stage-summary--gold,
 .assistant-card--gold,
 .handoff-step--gold {
-  background: linear-gradient(160deg, rgba(239, 196, 106, 0.18), rgba(255, 255, 255, 0.74));
+  background: linear-gradient(160deg, var(--gold-soft), var(--panel));
 }
 
 .stage-summary--ink,
 .assistant-card--ink,
 .handoff-step--ink {
-  background: linear-gradient(160deg, rgba(19, 33, 38, 0.12), rgba(255, 255, 255, 0.74));
+  background: linear-gradient(160deg, var(--ink-soft), var(--panel));
 }
 
 .list-stack,
@@ -615,7 +615,7 @@ button {
   padding: 18px;
   border-radius: 24px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.54);
+  background: var(--panel);
 }
 
 .list-item strong,

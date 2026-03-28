@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   BellDot,
-  ChevronDown,
   ChevronRight,
   CircleUserRound,
   Command,
@@ -111,12 +110,6 @@ export function AppShell({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const deferredCommandQuery = useDeferredValue(commandQuery);
-
-  const userInitials = user.name
-    .split(' ')
-    .map((segment) => segment[0])
-    .slice(0, 2)
-    .join('');
   const visibleCourses = useMemo(() => getVisibleCourses(appData, role), [appData, role]);
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
@@ -471,10 +464,7 @@ export function AppShell({
                 </label>
               ) : null}
 
-              <button type="button" className="user-chip user-chip--compact" title={user.name} aria-label="Mi perfil" onClick={() => navigate('/profile')}>
-                <div className="topbar-float__avatar">{userInitials}</div>
-                <ChevronDown size={14} />
-              </button>
+
 
               <button type="button" className="ghost-button" title="Salir" aria-label="Salir" onClick={() => void onLogout()}>
                 <LogOut size={16} />
