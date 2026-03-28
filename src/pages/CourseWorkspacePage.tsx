@@ -1094,6 +1094,103 @@ export function CourseWorkspacePage({
     return currentCourse.products.filter((product) => product.stage === stageId).length;
   }
 
+  const planningStatus =
+    currentCourse.team.length === 0
+      ? 'Pendiente'
+      : upcomingMilestones.length === 0
+        ? 'En curso'
+        : teamCoverage.length >= 3
+          ? 'Listo'
+          : 'En curso';
+  const notificationStatus =
+    currentCourse.status === 'Listo'
+      ? 'Listo'
+      : isHandoffReady
+        ? 'En curso'
+        : blockingCheckpoints.length > 0 || criticalObservations.length > 0
+          ? 'Pendiente'
+          : 'En curso';
+  const workflowStages = [
+    {
+      key: 'architecture',
+      stageId: 'arquitectura',
+      section: 'architecture' as CourseSection,
+      title: 'Crear arquitectura',
+      owner: 'Diseñador instruccional',
+      status: currentCourse.stageNotes.architecture.status,
+      summary: `${currentCourse.modules.length} módulos y ${countProductsByStage('architecture')} artefactos instruccionales`,
+      description:
+        'Define la estructura pedagógica del curso, el mapa de módulos, las actividades y la secuencia didáctica.',
+      checklist: ['Mapa modular', 'Actividades y rúbricas', 'Blueprint instruccional'],
+      actionLabel: 'Abrir arquitectura',
+    },
+    {
+      key: 'planning',
+      stageId: 'planeacion',
+      section: 'planning' as CourseSection,
+      title: 'Asignar equipo',
+      owner: 'Coordinador',
+      status: planningStatus,
+      summary: `${currentCourse.team.length} miembros y ${upcomingMilestones.length} hitos visibles`,
+      description:
+        'Asigna responsables, distribuye carga operativa y deja listo el cronograma con dependencias y fechas.',
+      checklist: ['Cobertura de roles', 'Cronograma', 'Tareas críticas'],
+      actionLabel: 'Abrir planeación',
+    },
+    {
+      key: 'production',
+      stageId: 'produccion',
+      section: 'production' as CourseSection,
+      title: 'Producir curso',
+      owner: 'Experto y equipo de producción',
+      status: currentCourse.stageNotes.production.status,
+      summary: `${countProductsByStage('production') + countProductsByStage('curation') + countProductsByStage('multimedia')} productos entre autoría, validación y multimedia`,
+      description:
+        'Aquí vive la producción real del curso: escribir actividades, validar recursos y desarrollar piezas multimedia.',
+      checklist: ['Escribir', 'Validar', 'Desarrollar multimedia'],
+      actionLabel: 'Abrir producción',
+    },
+    {
+      key: 'lms',
+      stageId: 'lms',
+      section: 'lms' as CourseSection,
+      title: 'Realizar montaje',
+      owner: 'Gestor LMS',
+      status: currentCourse.stageNotes.lms.status,
+      summary: `${currentCourse.stageNotes.lms.evidence.length} evidencias y ${currentCourse.stageNotes.lms.blockers.length} bloqueos`,
+      description:
+        'Implementa la navegación, los recursos y el comportamiento técnico del curso dentro del LMS.',
+      checklist: ['Montaje técnico', 'Validación de navegación', 'Ajustes de plataforma'],
+      actionLabel: 'Abrir montaje',
+    },
+    {
+      key: 'qa',
+      stageId: 'calidad',
+      section: 'qa' as CourseSection,
+      title: 'Realizar QA',
+      owner: 'Analista QA',
+      status: currentCourse.stageNotes.qa.status,
+      summary: `${pendingObservationsCount} observaciones pendientes y ${resolvedObservationsCount} resueltas`,
+      description:
+        'Revisa integridad, calidad y coherencia final del curso antes de habilitar el cierre operativo.',
+      checklist: ['Checklist final', 'Hallazgos', 'Aprobación o devolución'],
+      actionLabel: 'Abrir QA',
+    },
+    {
+      key: 'notify',
+      stageId: null,
+      section: 'history' as CourseSection,
+      title: 'Notificar',
+      owner: 'Coordinador',
+      status: notificationStatus,
+      summary: `${relatedAlerts.length} alertas y ${historyFeed.length} eventos auditados`,
+      description:
+        'Cierra handoffs, deja trazabilidad y notifica al siguiente responsable o al coordinador del cierre.',
+      checklist: ['Transferencia', 'Auditoría', 'Notificación'],
+      actionLabel: 'Abrir historial',
+    },
+  ];
+
   function cleanPreviewLine(line: string) {
     return line
       .replace(/^#+\s*/, '')
@@ -3886,14 +3983,14 @@ export function CourseWorkspacePage({
       <section className="surface section-card section-card--compact course-sections">
         <div className="section-heading section-heading--compact">
           <div>
-            <span className="eyebrow">Expediente</span>
-            <h3>Secciones funcionales del curso</h3>
+            <span className="eyebrow">Workflow</span>
+            <h3>Ruta operativa y expediente del curso</h3>
           </div>
         </div>
 
         <div className="segmented-control segmented-control--wide">
           {[
-            ['summary', 'Resumen'],
+            ['summary', 'Workflow'],
             ['general', 'Información general'],
             ['architecture', 'Arquitectura'],
             ['planning', 'Planeación'],
@@ -4366,10 +4463,70 @@ export function CourseWorkspacePage({
         <section className="surface section-card section-card--compact">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Resumen</span>
-              <h3>Lectura ejecutiva del expediente</h3>
+              <span className="eyebrow">Workflow del curso</span>
+              <h3>Etapas operativas desde arquitectura hasta notificación</h3>
             </div>
           </div>
+
+          <p className="section-lead">
+            Entra al flujo de trabajo real del curso y avanza por etapas: arquitectura, equipo,
+            producción, montaje, QA y cierre con notificación.
+          </p>
+
+          <div className="workflow-stage-grid">
+            {workflowStages.map((item) => {
+              const isCurrentStage = item.stageId ? currentCourse.stageId === item.stageId : false;
+
+              return (
+                <article
+                  key={item.key}
+                  className={
+                    activeSection === item.section
+                      ? 'surface-muted workflow-stage-card workflow-stage-card--active'
+                      : 'surface-muted workflow-stage-card'
+                  }
+                >
+                  <div className="workflow-stage-card__top">
+                    <div>
+                      <span className="eyebrow">{item.owner}</span>
+                      <h4>{item.title}</h4>
+                    </div>
+
+                    <div className="workflow-stage-card__badges">
+                      <span className={badgeClass(item.status)}>{item.status}</span>
+                      {isCurrentStage ? <span className="badge badge--outline">Actual</span> : null}
+                    </div>
+                  </div>
+
+                  <p>{item.description}</p>
+
+                  <div className="workflow-stage-card__meta">
+                    <span>{item.summary}</span>
+                    <span>{item.owner}</span>
+                  </div>
+
+                  <ul className="workflow-stage-card__list">
+                    {item.checklist.map((checkpoint) => (
+                      <li key={checkpoint}>{checkpoint}</li>
+                    ))}
+                  </ul>
+
+                  <div className="workflow-stage-card__actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => setActiveSection(item.section)}
+                    >
+                      <span>{item.actionLabel}</span>
+                      <MoveRight size={16} />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <StageRail items={currentCourse.stageChecklist} />
 
           <div className="module-grid module-grid--summary">
             <div className="module-card">
@@ -4658,7 +4815,7 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
-      {(activeSection === 'summary' || activeSection === 'qa' || activeSection === 'history') ? (
+      {(activeSection === 'qa' || activeSection === 'history') ? (
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>

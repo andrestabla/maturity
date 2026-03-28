@@ -483,7 +483,9 @@ export function CoursesPage({
   const folderEntries = buildFolderEntries(repositoryCourses, selectedNode);
   const folderPath = getNodePath(selectedNode);
   const parentNode = getParentNode(selectedNode);
+  const currentNode = parseNode(selectedNode);
   const isRootEntry = selectedNode === 'root';
+  const isProgramEntry = currentNode.type === 'program';
   const openCount = currentFolderCourses.filter((course) => course.status !== 'Listo').length;
   const blockedCount = currentFolderCourses.filter((course) => course.status === 'Bloqueado').length;
   const stageCount = new Set(currentFolderCourses.map((course) => course.stageId)).size;
@@ -676,7 +678,7 @@ export function CoursesPage({
           </div>
 
           <div className="courses-toolbar__meta">
-            {!isRootEntry ? (
+            {isProgramEntry ? (
               <>
                 <div className="segmented-control">
                   <button
@@ -938,8 +940,8 @@ export function CoursesPage({
                 <strong>{folderEntries.length}</strong>
               </div>
               <div className="mini-metric">
-                <span>Cursos visibles</span>
-                <strong>{currentFolderCourses.length}</strong>
+                <span>{isProgramEntry ? 'Cursos visibles' : 'Siguiente nivel'}</span>
+                <strong>{isProgramEntry ? currentFolderCourses.length : folderEntries.length}</strong>
               </div>
               <div className="mini-metric">
                 <span>Filtros activos</span>
@@ -971,13 +973,21 @@ export function CoursesPage({
           </div>
         ) : (
           <div className="empty-state empty-state--embedded folder-browser__empty">
-            <strong>No hay más subcarpetas en esta ruta</strong>
-            <p>Ya estás en el nivel más específico de navegación. Debajo verás los cursos disponibles.</p>
+            <strong>
+              {isProgramEntry
+                ? 'Llegaste al último nivel de carpetas'
+                : 'No hay más subcarpetas en esta ruta'}
+            </strong>
+            <p>
+              {isProgramEntry
+                ? 'Esta carpeta ya corresponde a un programa. Debajo verás únicamente los cursos disponibles.'
+                : 'Ajusta los filtros o vuelve un nivel para encontrar más rutas académicas.'}
+            </p>
           </div>
         )}
       </section>
 
-      {!isRootEntry ? (
+      {isProgramEntry ? (
         <section className="surface section-card explorer-content">
           <div className="explorer-content__head">
             <div>

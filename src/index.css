@@ -5967,6 +5967,72 @@ body::after {
   max-width: 72ch;
 }
 
+.workflow-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.workflow-stage-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.workflow-stage-card--active {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line) 68%);
+  box-shadow: var(--elevation-2);
+}
+
+.workflow-stage-card__top,
+.workflow-stage-card__badges,
+.workflow-stage-card__meta,
+.workflow-stage-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-stage-card__top {
+  align-items: flex-start;
+}
+
+.workflow-stage-card__top h4 {
+  margin: 6px 0 0;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  line-height: 1.1;
+}
+
+.workflow-stage-card > p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.workflow-stage-card__meta {
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.workflow-stage-card__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-strong);
+}
+
+.workflow-stage-card__list li::marker {
+  color: var(--accent);
+}
+
 .courses-explorer {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -6673,6 +6739,10 @@ body::after {
 
   .folder-browser__head {
     flex-direction: column;
+  }
+
+  .workflow-stage-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .structured-module-card__head,
