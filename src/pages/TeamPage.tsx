@@ -2606,7 +2606,8 @@ export function TeamPage({
                   }
                 />
 
-                <div className="form-grid">
+                {/* Configuración Administrativa Adicional - Consolidada */}
+                <div className="form-grid" style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
                   <label className="field field--toggle">
                     <span>Estado visible en front</span>
                     <div className="field__toggle">
@@ -2619,10 +2620,7 @@ export function TeamPage({
                           )
                         }
                       />
-                      <p>
-                        Si el runtime ya está completo, esta integración se mostrará activa aunque
-                        aún estés afinando el asistente.
-                      </p>
+                      <p>Mostrar activa en la plataforma.</p>
                     </div>
                   </label>
 
@@ -2636,23 +2634,22 @@ export function TeamPage({
                             current ? { ...current, fallbackTo: event.target.value } : current,
                           )
                         }
+                        placeholder="ID de fallback (opcional)"
                       />
                     </div>
                   </label>
                 </div>
 
                 <label className="field">
-                  <span>Alcances habilitados por el asistente</span>
+                  <span>Alcances habilitados</span>
                   <div className="role-pill-group">
                     {selectedIntegration.scopes.map((scope) => (
                       <button
                         key={`${selectedIntegration.id}-${scope}`}
                         type="button"
-                        className={
-                          integrationDraft.scopes.includes(scope)
-                            ? 'filter-chip filter-chip--active'
-                            : 'filter-chip'
-                        }
+                        className={`role-pill ${
+                          integrationDraft.scopes.includes(scope) ? 'role-pill--active' : ''
+                        }`}
                         onClick={() =>
                           setIntegrationDraft((current) =>
                             current
@@ -2672,46 +2669,52 @@ export function TeamPage({
                   </div>
                 </label>
 
-                <div className="form-grid">
-                  {Object.entries(integrationDraft.config).map(([key, value]) => (
-                    <label key={`${selectedIntegration.id}-${key}`} className="field">
-                      <span>{key}</span>
-                      <div className="field__control">
-                        <input
-                          value={value}
-                          onChange={(event) =>
-                            setIntegrationDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    config: {
-                                      ...current.config,
-                                      [key]: event.target.value,
-                                    },
-                                  }
-                                : current,
-                            )
-                          }
-                        />
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                {/* Notas - Ocultar en especializados por redundancia */}
+                {!['outbound-mail', 'openai', 'gemini', 'cloudflare-r2'].includes(selectedIntegration.id) && (
+                  <label className="field">
+                    <span>Notas del asistente</span>
+                    <div className="field__control">
+                      <textarea
+                        rows={4}
+                        value={integrationDraft.notes}
+                        onChange={(event) =>
+                          setIntegrationDraft((current) =>
+                            current ? { ...current, notes: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+                )}
 
-                <label className="field">
-                  <span>Notas del asistente</span>
-                  <div className="field__control">
-                    <textarea
-                      rows={4}
-                      value={integrationDraft.notes}
-                      onChange={(event) =>
-                        setIntegrationDraft((current) =>
-                          current ? { ...current, notes: event.target.value } : current,
-                        )
-                      }
-                    />
+                {/* Campos Crudos - Ocultar en asistentes especializados para reducir ruido */}
+                {!['outbound-mail', 'openai', 'gemini', 'cloudflare-r2'].includes(selectedIntegration.id) && (
+                  <div className="form-grid">
+                    {Object.entries(integrationDraft.config).map(([key, value]) => (
+                      <label key={`${selectedIntegration.id}-${key}`} className="field">
+                        <span>{key}</span>
+                        <div className="field__control">
+                          <input
+                            value={value}
+                            onChange={(event) =>
+                              setIntegrationDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      config: {
+                                        ...current.config,
+                                        [key]: event.target.value,
+                                      },
+                                    }
+                                  : current,
+                              )
+                            }
+                          />
+                        </div>
+                      </label>
+                    ))}
                   </div>
-                </label>
+                )}
 
                 <div className="integration-runtime">
                   <strong>Variables esperadas</strong>
