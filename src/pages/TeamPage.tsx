@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { IntegrationAssistant } from '../components/admin/IntegrationAssistant.js';
 import type {
   AdminCenterData,
   AdminIntegration,
@@ -2587,18 +2588,23 @@ export function TeamPage({
                   <small>{selectedIntegration.runtimeSummary}</small>
                 </div>
 
-                <div className="integration-assistant">
-                  <strong>{selectedIntegration.assistantTitle}</strong>
-                  <p>{selectedIntegration.assistantSummary}</p>
-                  <div className="integration-assistant__steps">
-                    {selectedIntegration.assistantSteps.map((step, index) => (
-                      <div key={`${selectedIntegration.id}-step-${index}`} className="integration-assistant__step">
-                        <span>{index + 1}</span>
-                        <p>{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <IntegrationAssistant
+                  integration={selectedIntegration}
+                  config={integrationDraft.config}
+                  onConfigChange={(key, value) =>
+                    setIntegrationDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            config: {
+                              ...current.config,
+                              [key]: value,
+                            },
+                          }
+                        : current,
+                    )
+                  }
+                />
 
                 <div className="form-grid">
                   <label className="field field--toggle">

@@ -148,13 +148,22 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     id: 'outbound-mail',
     name: 'Correo saliente',
     category: 'Correo',
-    provider: 'SMTP / Resend',
+    provider: 'SMTP / Resend / SES',
     description: 'Notificaciones transaccionales, activaciones de cuenta y alertas del flujo.',
     enabled: true,
     status: 'Pendiente',
-    requiredEnvKeys: ['RESEND_API_KEY', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'],
+    requiredEnvKeys: [
+      'RESEND_API_KEY',
+      'SMTP_HOST',
+      'SMTP_PORT',
+      'SMTP_USER',
+      'SMTP_PASSWORD',
+      'AWS_SES_ACCESS_KEY',
+      'AWS_SES_SECRET_KEY',
+    ],
     scopes: ['Activación de cuenta', 'Recuperación de contraseña', 'Alertas operativas'],
     config: {
+      providerType: 'Resend',
       senderName: 'Maturity',
       senderEmail: `no-reply@${inferDefaultDomain()}`,
       senderDomain: inferDefaultDomain(),
@@ -162,7 +171,7 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     },
     lastTestAt: null,
     lastError: null,
-    notes: 'Las credenciales viven en runtime; aquí solo se ajusta la operación visible.',
+    notes: 'Configura el proveedor específico (Gmail, Outlook, SES, etc.) desde el asistente modular.',
     fallbackTo: 'Desactivar envío automático',
   },
   {
@@ -377,11 +386,11 @@ const integrationAssistantMap: Record<
 > = {
   'outbound-mail': {
     assistantTitle: 'Asistente de correo saliente',
-    assistantSummary: 'Define remitente, tipo de proveedor y prueba inicial sin exponer secretos del runtime.',
+    assistantSummary: 'Configuración modular por proveedor (Gmail, Outlook, Amazon SES, Resend, SMTP).',
     assistantSteps: [
-      'Confirma proveedor visible y dominio remitente.',
-      'Ajusta plantillas, remitente y fallback operativo.',
-      'Ejecuta prueba de conectividad para validar el servicio.',
+      'Selecciona tu proveedor de correo preferido.',
+      'Sigue las instrucciones específicas de configuración y seguridad.',
+      'Valida la conectividad con una prueba de envío real.',
     ],
   },
   openai: {
@@ -665,38 +674,66 @@ function evaluateIntegrationRuntime(
   ready: boolean;
   summary: string;
 } {
-  const present = (keys: string[]) => keys.filter((key) => Boolean(process.env[key]?.trim()));
+  const getVal = (envKey: string, configKey?: string) => {
+    return (config[configKey || '']?.trim() || process.env[envKey]?.trim() || '');
+  };
 
   switch (integrationId) {
     case 'outbound-mail': {
-      const smtpKeys = present(['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD']);
-      const resendKeys = present(['RESEND_API_KEY']);
-      const ready = smtpKeys.length === 4 || resendKeys.length === 1;
-      const summary = ready
-        ? smtpKeys.length === 4
-          ? 'SMTP completo detectado en runtime.'
-          : 'Proveedor transaccional detectado por API key en runtime.'
-        : 'Faltan variables para SMTP o proveedor transaccional.';
-      return { ready, summary };
-    }
-    case 'openai': {
-      const ready = Boolean(process.env.OPENAI_API_KEY?.trim());
+      const type = config.providerType || 'Resend';
+      if (type === 'Resend') {
+        const key = getVal('RESEND_API_KEY', 'resendApiKey');
+        const ready = Boolean(key);
+        return {
+          ready,
+          summary: ready
+            ? 'Resend configurado mediante ' + (config.resendApiKey ? 'base de datos.' : 'runtime.')
+            : 'Falta RESEND_API_KEY.',
+        };
+      }
+      if (type === 'Amazon SES') {
+        const access = getVal('AWS_SES_ACCESS_KEY', 'sesAccessKey');
+        const secret = getVal('AWS_SES_SECRET_KEY', 'sesSecretKey');
+        const region = getVal('AWS_SES_REGION', 'sesRegion');
+        const ready = Boolean(access && secret && region);
+        return {
+          ready,
+          summary: ready
+            ? `Amazon SES activo en ${region}.`
+            : 'Faltan credenciales de AWS SES (Access Key, Secret Key o Región).',
+        };
+      }
+      // Gmail, Outlook, SMTP
+      const host = getVal('SMTP_HOST', 'smtpHost');
+      const port = getVal('SMTP_PORT', 'smtpPort');
+      const user = getVal('SMTP_USER', 'smtpUser');
+      const pass = getVal('SMTP_PASSWORD', 'smtpPassword');
+      const ready = Boolean(host && port && user && pass);
       return {
         ready,
         summary: ready
-          ? `OpenAI habilitado para ${config.allowedModules || 'los módulos configurados'}.`
-          : 'OPENAI_API_KEY no está disponible en runtime.',
+          ? `SMTP listo (${host}:${port}).`
+          : `Faltan parámetros de SMTP para ${type}.`,
+      };
+    }
+    case 'openai': {
+      const key = getVal('OPENAI_API_KEY', 'openaiApiKey');
+      const ready = Boolean(key);
+      return {
+        ready,
+        summary: ready
+          ? `OpenAI listo (${config.defaultModel || 'modelo por defecto'}).`
+          : 'Falta OPENAI_API_KEY.',
       };
     }
     case 'gemini': {
-      const ready = Boolean(
-        process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim(),
-      );
+      const key = getVal('GEMINI_API_KEY', 'geminiApiKey') || getVal('GOOGLE_GENERATIVE_AI_API_KEY', 'geminiApiKey');
+      const ready = Boolean(key);
       return {
         ready,
         summary: ready
-          ? `Gemini disponible para ${config.allowedModules || 'los módulos configurados'}.`
-          : 'No se detectó credencial de Gemini en runtime.',
+          ? `Gemini listo (${config.defaultModel || 'flash'}).`
+          : 'Falta API Key de Gemini.',
       };
     }
     case 'academic-databases': {
@@ -722,17 +759,16 @@ function evaluateIntegrationRuntime(
       };
     }
     case 'cloudflare-r2': {
-      const ready = Boolean(
-        process.env.R2_ACCOUNT_ID?.trim() &&
-          process.env.R2_ACCESS_KEY_ID?.trim() &&
-          process.env.R2_SECRET_ACCESS_KEY?.trim() &&
-          process.env.R2_BUCKET_NAME?.trim(),
-      );
+      const acc = getVal('R2_ACCOUNT_ID', 'r2AccountId');
+      const key = getVal('R2_ACCESS_KEY_ID', 'r2AccessKeyId');
+      const sec = getVal('R2_SECRET_ACCESS_KEY', 'r2SecretAccessKey');
+      const buck = getVal('R2_BUCKET_NAME', 'r2BucketName');
+      const ready = Boolean(acc && key && sec && buck);
       return {
         ready,
         summary: ready
-          ? `R2 listo sobre bucket ${process.env.R2_BUCKET_NAME}.`
-          : 'Faltan variables de Cloudflare R2 para operar almacenamiento.',
+          ? `R2 listo en bucket ${buck}.`
+          : 'Faltan credenciales o bucket de Cloudflare R2.',
       };
     }
     case 'youtube-data-api': {
