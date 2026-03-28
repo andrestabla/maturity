@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   BellDot,
-  CalendarClock,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
@@ -24,7 +23,6 @@ import {
 } from 'lucide-react';
 import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import type { AppData, AuthUser, BrandingSettings, Role } from '../types.js';
-import { formatPageDate } from '../utils/format.js';
 import { getVisibleCourses } from '../utils/domain.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
 import { ThemeToggle } from './ThemeToggle.js';
@@ -443,27 +441,22 @@ export function AppShell({
                 type="button"
                 className="command-trigger ghost-button"
                 onClick={() => setIsCommandOpen(true)}
+                title="Buscar o saltar"
+                aria-label="Buscar o saltar"
               >
                 <Search size={16} />
-                <span>Buscar o saltar</span>
                 <kbd>Ctrl K</kbd>
               </button>
 
               <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 
-              <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'}>
+              <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'} title={dataSource === 'neon' ? 'Live Sync' : 'Demo Mode'}>
                 <span className="status-chip__dot" />
-                <span>{isLoading ? 'SYNCING' : dataSource === 'neon' ? 'LIVE SYNC' : 'DEMO MODE'}</span>
-              </div>
-
-              <div className="date-chip">
-                <CalendarClock size={16} />
-                <span>{formatPageDate()}</span>
+                <span>{isLoading ? 'SYNC' : dataSource === 'neon' ? 'LIVE' : 'DEMO'}</span>
               </div>
 
               {availableRoles.length > 1 ? (
-                <label className="role-switch">
-                  <span>VIEW</span>
+                <label className="role-switch" title="Vista de rol actual">
                   <select
                     aria-label="Seleccionar rol"
                     value={role}
@@ -478,18 +471,13 @@ export function AppShell({
                 </label>
               ) : null}
 
-              <button type="button" className="user-chip" onClick={() => navigate('/profile')}>
+              <button type="button" className="user-chip user-chip--compact" title={user.name} aria-label="Mi perfil" onClick={() => navigate('/profile')}>
                 <div className="topbar-float__avatar">{userInitials}</div>
-                <div>
-                  <strong>{user.name}</strong>
-                  <span>{user.role}</span>
-                </div>
                 <ChevronDown size={14} />
               </button>
 
-              <button type="button" className="ghost-button" onClick={() => void onLogout()}>
+              <button type="button" className="ghost-button" title="Salir" aria-label="Salir" onClick={() => void onLogout()}>
                 <LogOut size={16} />
-                <span>Salir</span>
               </button>
             </div>
           </header>
