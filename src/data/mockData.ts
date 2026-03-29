@@ -16,6 +16,7 @@ import type {
   Task,
   WorkflowSettings,
 } from '../types.js';
+import { buildInstitutionStructureId } from '../utils/institutions.js';
 
 type BaseCourse = Omit<Course, 'metadata' | 'auditLog' | 'stageNotes' | 'products'>;
 
@@ -1253,7 +1254,7 @@ export const defaultInstitutionSettings: InstitutionSettings = {
   displayName: 'Maturity University',
   structures: [
     {
-      id: 'institution-structure-maturity-university',
+      id: buildInstitutionStructureId('Maturity University'),
       institution: 'Maturity University',
       faculties: uniqueValues(courses.map((course) => course.faculty)),
       programs: uniqueValues(courses.map((course) => course.program)),

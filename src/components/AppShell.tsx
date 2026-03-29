@@ -22,6 +22,11 @@ import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import type { AppData, AuthUser, BrandingSettings, Role } from '../types.js';
 import { getVisibleCourses } from '../utils/domain.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
+import {
+  buildInstitutionStructureEditPath,
+  buildInstitutionStructurePath,
+  findInstitutionStructureByRouteId,
+} from '../utils/institutions.js';
 
 interface AppShellProps {
   user: AuthUser;
@@ -128,8 +133,7 @@ export function AppShell({
     null;
   const activeInstitutionStructure =
     activeInstitutionStructureId
-      ? appData.institution.structures.find((structure) => structure.id === activeInstitutionStructureId) ??
-        null
+      ? findInstitutionStructureByRouteId(appData.institution, activeInstitutionStructureId)
       : null;
   const activeCourseSection = courseSectionMatch?.params.section ?? 'summary';
   const shellNavigation = isGovernmentEnabled
@@ -205,14 +209,14 @@ export function AppShell({
         { label: 'Institución', path: '/admin/institution' },
         {
           label: activeInstitutionStructure.institution,
-          path: `/admin/institution/${activeInstitutionStructure.id}`,
+          path: buildInstitutionStructurePath(activeInstitutionStructure.id),
         },
       ];
 
       if (institutionStructureEditMatch) {
         items.push({
           label: 'Editar',
-          path: `/admin/institution/${activeInstitutionStructure.id}/edit`,
+          path: buildInstitutionStructureEditPath(activeInstitutionStructure.id),
         });
       }
 

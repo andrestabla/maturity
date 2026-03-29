@@ -41,7 +41,13 @@ import type {
   WorkflowSettings,
 } from '../types.js';
 import { formatDate, formatDateTime, formatLongDate } from '../utils/format.js';
-import { countCoursesForStructure } from '../utils/institutions.js';
+import {
+  buildInstitutionStructureEditPath,
+  buildInstitutionStructureId,
+  buildInstitutionStructurePath,
+  countCoursesForStructure,
+  findInstitutionStructureByRouteId,
+} from '../utils/institutions.js';
 import { canManageUsers } from '../utils/permissions.js';
 
 interface TeamPageProps {
@@ -130,18 +136,6 @@ function uniqueListValues(values: string[]) {
   );
 }
 
-function buildInstitutionStructureId(name: string, fallbackId?: string) {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return fallbackId || `institution-structure-${slug || crypto.randomUUID().slice(0, 8)}`;
-}
-
 function normalizeStructureDraft(structure: InstitutionStructure): InstitutionStructure {
   return {
     id: buildInstitutionStructureId(structure.institution, structure.id),
@@ -172,7 +166,7 @@ function buildStructureDraft(
   }
 
   return {
-    id: '',
+    id: buildInstitutionStructureId('', crypto.randomUUID()),
     institution: '',
     faculties: [''],
     programs: [''],
@@ -224,14 +218,6 @@ function cloneInstitutionSettings(settings: InstitutionSettings): InstitutionSet
 
 function buildInstitutionSettingsPath() {
   return '/admin/institution/settings';
-}
-
-function buildInstitutionStructurePath(structureId: string) {
-  return `/admin/institution/${structureId}`;
-}
-
-function buildInstitutionStructureEditPath(structureId: string) {
-  return `/admin/institution/${structureId}/edit`;
 }
 
 function buildInstitutionStructureCreatePath() {
@@ -412,7 +398,7 @@ export function TeamPage({
   const selectedInstitutionStructure = useMemo(
     () =>
       activeStructureRouteId && institutionDraft
-        ? institutionDraft.structures.find((structure) => structure.id === activeStructureRouteId) ?? null
+        ? findInstitutionStructureByRouteId(institutionDraft, activeStructureRouteId)
         : null,
     [activeStructureRouteId, institutionDraft],
   );
@@ -526,6 +512,26 @@ export function TeamPage({
     institutionDraft,
     isInstitutionCreateRoute,
     isInstitutionStructureEditRoute,
+    selectedInstitutionStructure,
+  ]);
+
+  useEffect(() => {
+    if (!activeStructureRouteId || !selectedInstitutionStructure) {
+      return;
+    }
+
+    const canonicalPath = institutionStructureEditMatch
+      ? buildInstitutionStructureEditPath(selectedInstitutionStructure.id)
+      : buildInstitutionStructurePath(selectedInstitutionStructure.id);
+
+    if (location.pathname !== canonicalPath) {
+      navigate(canonicalPath, { replace: true });
+    }
+  }, [
+    activeStructureRouteId,
+    institutionStructureEditMatch,
+    location.pathname,
+    navigate,
     selectedInstitutionStructure,
   ]);
 
@@ -2336,7 +2342,7 @@ export function TeamPage({
     );
     const autoProvisioningCount = structures.filter((structure) => structure.allowAutoProvisioning).length;
     const structureDraftId = structureDraft
-      ? buildInstitutionStructureId(structureDraft.institution, editingStructureId ?? undefined)
+      ? buildInstitutionStructureId(structureDraft.institution, structureDraft.id)
       : '';
     const structureDraftRoute = structureDraftId
       ? buildInstitutionStructurePath(structureDraftId)

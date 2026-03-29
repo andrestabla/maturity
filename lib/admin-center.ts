@@ -89,21 +89,50 @@ function inferDefaultDomain() {
   return domain || 'maturity360.co';
 }
 
-function buildStructureId(name: string) {
-  const slug = name
+function slugifyStructureValue(value: string) {
+  return value
     .trim()
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
 
-  return `institution-structure-${slug || crypto.randomUUID().slice(0, 8)}`;
+function hashStructureValue(value: string) {
+  let hash = 2166136261;
+
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(8, '0').slice(0, 8);
+}
+
+function buildLegacyStructureId(name: string) {
+  const slug = slugifyStructureValue(name);
+  return `institution-structure-${slug || 'structure'}`;
+}
+
+function isCanonicalStructureId(value: string | null | undefined) {
+  return /^inst-[a-z0-9]{8}$/.test(value?.trim().toLowerCase() ?? '');
+}
+
+function buildStructureId(name: string, existingId?: string | null) {
+  const normalizedExistingId = existingId?.trim().toLowerCase() ?? '';
+
+  if (isCanonicalStructureId(normalizedExistingId)) {
+    return normalizedExistingId;
+  }
+
+  const seed = normalizedExistingId || name.trim() || crypto.randomUUID();
+  return `inst-${hashStructureValue(seed)}`;
 }
 
 function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionStructure {
   return {
-    id: input.id?.trim() || buildStructureId(input.institution),
+    id: buildStructureId(input.institution, input.id),
     institution: input.institution.trim() || 'Institución sin definir',
     faculties: uniqueValues(input.faculties),
     programs: uniqueValues(input.programs),
@@ -153,7 +182,7 @@ function buildLegacyInstitutionStructures(input: InstitutionSettings): Instituti
 
   return institutionNames.map((institutionName) =>
     sanitizeInstitutionStructure({
-      id: buildStructureId(institutionName),
+      id: buildLegacyStructureId(institutionName),
       institution: institutionName,
       faculties: input.faculties,
       programs: input.programs,
