@@ -1,16 +1,16 @@
 import { startTransition, useEffect, useState } from 'react';
-import { mockAppData } from '../data/mockData.js';
+import { createEmptyAppData } from '../data/platformDefaults.js';
 import type { AppData } from '../types.js';
 
-type DataSource = 'demo' | 'neon';
+type DataSource = 'bootstrap' | 'neon';
 
 interface BootstrapResponse {
   data: AppData;
 }
 
 export function useAppData(enabled: boolean) {
-  const [appData, setAppData] = useState<AppData>(mockAppData);
-  const [source, setSource] = useState<DataSource>('demo');
+  const [appData, setAppData] = useState<AppData>(() => createEmptyAppData());
+  const [source, setSource] = useState<DataSource>('bootstrap');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -56,7 +56,8 @@ export function useAppData(enabled: boolean) {
             ? requestError.message
             : 'No fue posible leer la API de datos.';
         setError(message);
-        setSource('demo');
+        setAppData(createEmptyAppData());
+        setSource('bootstrap');
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);

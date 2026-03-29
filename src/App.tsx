@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
-import { defaultBranding } from './data/mockData.js';
+import { defaultBranding } from './data/platformDefaults.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';

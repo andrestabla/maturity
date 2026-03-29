@@ -218,6 +218,7 @@ export interface Course {
   slug: string;
   title: string;
   code: string;
+  institutionStructureId?: string;
   faculty: string;
   program: string;
   modality: string;
@@ -304,6 +305,17 @@ export interface AppData {
   workflow: WorkflowSettings;
 }
 
+export interface UserInstitutionMembership {
+  id: string;
+  institutionId: string;
+  institution: string;
+  role: Role;
+  faculty?: string;
+  program?: string;
+  scope?: string;
+  primary: boolean;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -315,14 +327,18 @@ export interface AuthUser {
   phone?: string;
   location?: string;
   bio?: string;
+  institutionId?: string;
   institution?: string;
+  facultyId?: string;
   faculty?: string;
+  programId?: string;
   program?: string;
   scope?: string;
   createdAt?: string;
   createdBy?: string | null;
   lastAccessAt?: string | null;
   statusReason?: string | null;
+  memberships?: UserInstitutionMembership[];
 }
 
 export interface AuthSession {

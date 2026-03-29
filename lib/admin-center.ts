@@ -2,8 +2,8 @@ import {
   defaultBranding,
   defaultExperienceSettings,
   defaultWorkflowSettings,
-  mockAppData,
-} from '../src/data/mockData.js';
+  defaultInstitutionSettings,
+} from '../src/data/platformDefaults.js';
 import type {
   AdminAuditClassification,
   AdminAuditEntry,
@@ -26,7 +26,12 @@ import type {
 } from '../src/types.js';
 import { getSql } from './db.js';
 import { probeR2Connectivity } from './r2.js';
-import { getUserDirectory, prepareDatabase } from './store.js';
+import {
+  getInstitutionSettingsRecord,
+  getUserDirectory,
+  prepareDatabase,
+  syncInstitutionSettingsRecord,
+} from './store.js';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -144,35 +149,14 @@ function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionS
 }
 
 function buildDefaultInstitutionStructures(): InstitutionStructure[] {
-  const structureMap = new Map<string, InstitutionStructure>();
-
-  for (const course of mockAppData.courses) {
-    const institutionName = course.metadata.institution || 'Maturity University';
-    const current =
-      structureMap.get(institutionName) ?? {
-        id: buildStructureId(institutionName),
-        institution: institutionName,
-        faculties: [],
-        programs: [],
-        academicPeriods: [],
-        courseTypes: [],
-        pedagogicalGuidelines: [
-          'Todo curso debe definir resultados de aprendizaje, metodología y evaluación antes de pasar a producción.',
-          'Cada handoff debe conservar trazabilidad de cambios, evidencias y responsables dentro de la plataforma.',
-        ],
-        allowAutoProvisioning: false,
-      };
-
-    current.faculties.push(course.faculty);
-    current.programs.push(course.program);
-    current.academicPeriods.push(course.metadata.academicPeriod || '2026-1');
-    current.courseTypes.push(course.metadata.courseType || 'Curso');
-    structureMap.set(institutionName, current);
-  }
-
-  return Array.from(structureMap.values())
-    .map(sanitizeInstitutionStructure)
-    .sort((left, right) => left.institution.localeCompare(right.institution, 'es'));
+  return defaultInstitutionSettings.structures.map((structure) => ({
+    ...structure,
+    faculties: [...structure.faculties],
+    programs: [...structure.programs],
+    academicPeriods: [...structure.academicPeriods],
+    courseTypes: [...structure.courseTypes],
+    pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+  }));
 }
 
 function buildLegacyInstitutionStructures(input: InstitutionSettings): InstitutionStructure[] {
@@ -207,20 +191,18 @@ function collectStructureValues(
 }
 
 function buildDefaultInstitutionSettings(): InstitutionSettings {
-  const structures = buildDefaultInstitutionStructures();
-
   return {
-    displayName: 'Maturity University',
-    structures,
-    institutions: uniqueValues(structures.map((structure) => structure.institution)),
-    faculties: collectStructureValues(structures, 'faculties'),
-    programs: collectStructureValues(structures, 'programs'),
-    academicPeriods: collectStructureValues(structures, 'academicPeriods'),
-    courseTypes: collectStructureValues(structures, 'courseTypes'),
+    displayName: defaultInstitutionSettings.displayName,
+    structures: buildDefaultInstitutionStructures(),
+    institutions: [...defaultInstitutionSettings.institutions],
+    faculties: [...defaultInstitutionSettings.faculties],
+    programs: [...defaultInstitutionSettings.programs],
+    academicPeriods: [...defaultInstitutionSettings.academicPeriods],
+    courseTypes: [...defaultInstitutionSettings.courseTypes],
     supportEmail: `soporte@${inferDefaultDomain()}`,
     defaultDomain: inferDefaultDomain(),
-    defaultUserState: 'Pendiente',
-    allowAutoProvisioning: structures.some((structure) => structure.allowAutoProvisioning),
+    defaultUserState: defaultInstitutionSettings.defaultUserState,
+    allowAutoProvisioning: defaultInstitutionSettings.allowAutoProvisioning,
   };
 }
 
@@ -993,7 +975,14 @@ async function seedAdminCenterDefaults() {
   await ensureAdminCenterSchema();
   const sql = getSql();
   const timestamp = new Date().toISOString();
-  const institution = buildDefaultInstitutionSettings();
+  const baseInstitution = buildDefaultInstitutionSettings();
+  const institution = {
+    displayName: baseInstitution.displayName,
+    supportEmail: baseInstitution.supportEmail,
+    defaultDomain: baseInstitution.defaultDomain,
+    defaultUserState: baseInstitution.defaultUserState,
+    allowAutoProvisioning: baseInstitution.allowAutoProvisioning,
+  };
 
   await sql`
     INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
@@ -1564,7 +1553,13 @@ export async function getInstitutionSettings() {
     'institution',
     buildDefaultInstitutionSettings(),
   );
-  return sanitizeInstitutionSettings(settings);
+  const relationalSettings = await getInstitutionSettingsRecord({
+    displayName: settings.displayName,
+    supportEmail: settings.supportEmail,
+    defaultDomain: settings.defaultDomain,
+    defaultUserState: settings.defaultUserState,
+  });
+  return sanitizeInstitutionSettings(relationalSettings);
 }
 
 export async function getWorkflowSettings() {
@@ -1602,8 +1597,19 @@ export async function getAdminCenterData(): Promise<AdminCenterData> {
 export async function updateInstitutionSettings(input: InstitutionSettings, actor: AdminActor) {
   const before = await getInstitutionSettings();
   const next = sanitizeInstitutionSettings(input);
+  const synced = await syncInstitutionSettingsRecord(next);
 
-  await writeSetting('institution', next, actor);
+  await writeSetting(
+    'institution',
+    {
+      displayName: next.displayName,
+      supportEmail: next.supportEmail,
+      defaultDomain: next.defaultDomain,
+      defaultUserState: next.defaultUserState,
+      allowAutoProvisioning: next.allowAutoProvisioning,
+    },
+    actor,
+  );
   await recordAdminAudit({
     classification: 'Administrativa',
     entityType: 'institution-settings',
@@ -1613,7 +1619,7 @@ export async function updateInstitutionSettings(input: InstitutionSettings, acto
     actorName: actor.name,
     detail: 'Se actualizaron parámetros institucionales y catálogos operativos.',
     beforeValue: JSON.stringify(before),
-    afterValue: JSON.stringify(next),
+    afterValue: JSON.stringify(synced),
   });
   await recordAdminLog({
     category: 'Administración',
@@ -1627,7 +1633,7 @@ export async function updateInstitutionSettings(input: InstitutionSettings, acto
     userName: actor.name,
   });
 
-  return next;
+  return synced;
 }
 
 export async function updateBrandingSettings(input: BrandingSettings, actor: AdminActor) {

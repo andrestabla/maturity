@@ -55,6 +55,22 @@ function parseSecondaryRoles(value: unknown) {
   return [] as Role[];
 }
 
+function parseMemberships(value: unknown) {
+  if (Array.isArray(value)) {
+    return value as NonNullable<AuthUser['memberships']>;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return JSON.parse(value) as NonNullable<AuthUser['memberships']>;
+    } catch {
+      return [];
+    }
+  }
+
+  return [] as NonNullable<AuthUser['memberships']>;
+}
+
 function mapToAuthUser(user: {
   id: string;
   name: string;
@@ -66,14 +82,18 @@ function mapToAuthUser(user: {
   phone?: string | null;
   location?: string | null;
   bio?: string | null;
+  institutionId?: string | null;
   institution?: string | null;
+  facultyId?: string | null;
   faculty?: string | null;
+  programId?: string | null;
   program?: string | null;
   scope?: string | null;
   createdAt?: string;
   createdBy?: string | null;
   lastAccessAt?: string | null;
   statusReason?: string | null;
+  memberships?: unknown;
 }) {
   return {
     id: user.id,
@@ -86,14 +106,18 @@ function mapToAuthUser(user: {
     phone: user.phone ?? '',
     location: user.location ?? '',
     bio: user.bio ?? '',
+    institutionId: user.institutionId ?? '',
     institution: user.institution ?? '',
+    facultyId: user.facultyId ?? '',
     faculty: user.faculty ?? '',
+    programId: user.programId ?? '',
     program: user.program ?? '',
     scope: user.scope ?? '',
     createdAt: user.createdAt,
     createdBy: user.createdBy ?? null,
     lastAccessAt: user.lastAccessAt ?? null,
     statusReason: user.statusReason ?? null,
+    memberships: parseMemberships(user.memberships),
   } satisfies AuthUser;
 }
 

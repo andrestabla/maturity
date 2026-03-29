@@ -3,8 +3,10 @@ import {
   defaultExperienceSettings,
   defaultInstitutionSettings,
   defaultWorkflowSettings,
-  mockAppData,
-} from '../src/data/mockData.js';
+  defaultRoleProfiles,
+  platformRoles,
+  platformStages,
+} from '../src/data/platformDefaults.js';
 import type {
   Alert,
   AlertMutationInput,
@@ -24,6 +26,8 @@ import type {
   DeliverableMutationInput,
   LearningModule,
   LearningModuleMutationInput,
+  InstitutionSettings,
+  InstitutionStructure,
   LibraryResource,
   LibraryResourceMutationInput,
   Observation,
@@ -41,10 +45,12 @@ import type {
   TimelineItem,
   TimelineItemMutationInput,
   UserAccountStatus,
+  UserInstitutionMembership,
   UserMutationInput,
   UserProfileUpdateInput,
   UserUpdateInput,
 } from '../src/types.js';
+import { buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
 
@@ -55,6 +61,7 @@ interface CourseRow {
   slug: string;
   title: string;
   code: string;
+  institutionStructureId: string | null;
   faculty: string;
   program: string;
   modality: string;
@@ -90,8 +97,11 @@ interface UserRow {
   phone: string | null;
   location: string | null;
   bio: string | null;
+  institutionId: string | null;
   institution: string | null;
+  facultyId: string | null;
   faculty: string | null;
+  programId: string | null;
   program: string | null;
   scope: string | null;
   statusReason: string | null;
@@ -99,6 +109,7 @@ interface UserRow {
   createdBy: string | null;
   updatedAt: string | null;
   lastAccessAt: string | null;
+  memberships: JsonValue | null;
   passwordHash: string;
 }
 
@@ -113,8 +124,11 @@ interface PublicUserRow {
   phone: string | null;
   location: string | null;
   bio: string | null;
+  institutionId: string | null;
   institution: string | null;
+  facultyId: string | null;
   faculty: string | null;
+  programId: string | null;
   program: string | null;
   scope: string | null;
   statusReason: string | null;
@@ -122,6 +136,7 @@ interface PublicUserRow {
   createdBy: string | null;
   updatedAt: string | null;
   lastAccessAt: string | null;
+  memberships: JsonValue | null;
 }
 
 interface SessionLookupRow {
@@ -135,8 +150,11 @@ interface SessionLookupRow {
   phone: string | null;
   location: string | null;
   bio: string | null;
+  institutionId: string | null;
   institution: string | null;
+  facultyId: string | null;
   faculty: string | null;
+  programId: string | null;
   program: string | null;
   scope: string | null;
   statusReason: string | null;
@@ -144,11 +162,13 @@ interface SessionLookupRow {
   createdBy: string | null;
   updatedAt: string | null;
   lastAccessAt: string | null;
+  memberships: JsonValue | null;
   expiresAt: string;
 }
 
 function serializeUserRow(row: PublicUserRow | UserRow | SessionLookupRow): AuthUser {
   const secondaryRoles = parseJson<Role[]>(row.secondaryRoles ?? []);
+  const memberships = parseJson<UserInstitutionMembership[]>(row.memberships ?? []);
 
   return {
     id: row.id,
@@ -161,14 +181,18 @@ function serializeUserRow(row: PublicUserRow | UserRow | SessionLookupRow): Auth
     phone: row.phone ?? '',
     location: row.location ?? '',
     bio: row.bio ?? '',
+    institutionId: row.institutionId ?? '',
     institution: row.institution ?? '',
+    facultyId: row.facultyId ?? '',
     faculty: row.faculty ?? '',
+    programId: row.programId ?? '',
     program: row.program ?? '',
     scope: row.scope ?? '',
     createdAt: row.createdAt,
     createdBy: row.createdBy,
     lastAccessAt: row.lastAccessAt,
     statusReason: row.statusReason,
+    memberships,
   };
 }
 
@@ -184,6 +208,28 @@ function normalizeUserScopeValue(value: string | undefined) {
   return value?.trim() ?? '';
 }
 
+function assertCourseContextInput(input: CourseMutationInput) {
+  if (!input.institution.trim()) {
+    throw new Error('El curso debe pertenecer a una institución.');
+  }
+
+  if (!input.faculty.trim()) {
+    throw new Error('El curso debe pertenecer a una facultad.');
+  }
+
+  if (!input.program.trim()) {
+    throw new Error('El curso debe pertenecer a un programa.');
+  }
+
+  if (!input.academicPeriod.trim()) {
+    throw new Error('El curso debe pertenecer a un periodo académico.');
+  }
+
+  if (!input.courseType.trim()) {
+    throw new Error('El curso debe tener una tipología definida.');
+  }
+}
+
 function getTodayLabel() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -192,6 +238,74 @@ function addDays(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, 'es'),
+  );
+}
+
+function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionStructure {
+  return {
+    id: buildInstitutionStructureId(input.institution, input.id),
+    institution: input.institution.trim() || 'Institución sin definir',
+    faculties: uniqueValues(input.faculties),
+    programs: uniqueValues(input.programs),
+    academicPeriods: uniqueValues(input.academicPeriods),
+    courseTypes: uniqueValues(input.courseTypes),
+    pedagogicalGuidelines: uniqueValues(input.pedagogicalGuidelines),
+    allowAutoProvisioning: Boolean(input.allowAutoProvisioning),
+  };
+}
+
+function collectStructureValues(
+  structures: InstitutionStructure[],
+  key: 'faculties' | 'programs' | 'academicPeriods' | 'courseTypes',
+) {
+  return uniqueValues(
+    structures.reduce<string[]>((accumulator, structure) => {
+      accumulator.push(...structure[key]);
+      return accumulator;
+    }, []),
+  );
+}
+
+function normalizeInstitutionSettingsFromStructures(
+  structures: InstitutionStructure[],
+  overrides?: Partial<
+    Pick<InstitutionSettings, 'displayName' | 'supportEmail' | 'defaultDomain' | 'defaultUserState'>
+  >,
+): InstitutionSettings {
+  const normalizedStructures = structures.length > 0
+    ? structures
+        .map(sanitizeInstitutionStructure)
+        .sort((left, right) => left.institution.localeCompare(right.institution, 'es'))
+    : defaultInstitutionSettings.structures.map((structure) => ({
+        ...structure,
+        faculties: [...structure.faculties],
+        programs: [...structure.programs],
+        academicPeriods: [...structure.academicPeriods],
+        courseTypes: [...structure.courseTypes],
+        pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+      }));
+
+  return {
+    displayName:
+      overrides?.displayName?.trim() ||
+      normalizedStructures[0]?.institution ||
+      defaultInstitutionSettings.displayName,
+    structures: normalizedStructures,
+    institutions: uniqueValues(normalizedStructures.map((structure) => structure.institution)),
+    faculties: collectStructureValues(normalizedStructures, 'faculties'),
+    programs: collectStructureValues(normalizedStructures, 'programs'),
+    academicPeriods: collectStructureValues(normalizedStructures, 'academicPeriods'),
+    courseTypes: collectStructureValues(normalizedStructures, 'courseTypes'),
+    supportEmail: overrides?.supportEmail?.trim().toLowerCase() || defaultInstitutionSettings.supportEmail,
+    defaultDomain: overrides?.defaultDomain?.trim().toLowerCase() || defaultInstitutionSettings.defaultDomain,
+    defaultUserState: overrides?.defaultUserState ?? defaultInstitutionSettings.defaultUserState,
+    allowAutoProvisioning: normalizedStructures.some((structure) => structure.allowAutoProvisioning),
+  };
 }
 
 function slugify(value: string) {
@@ -205,9 +319,9 @@ function slugify(value: string) {
 }
 
 function buildStageChecklist(stageId: string): Course['stageChecklist'] {
-  const stageIndex = mockAppData.stages.findIndex((stage) => stage.id === stageId);
+  const stageIndex = platformStages.findIndex((stage) => stage.id === stageId);
 
-  return mockAppData.stages.map((stage, index) => ({
+  return platformStages.map((stage, index) => ({
     id: `ck-${stage.id}`,
     label: stage.name,
     owner: stage.owner,
@@ -345,7 +459,7 @@ function buildInitialAuditLog(course: Course): CourseAuditEntry[] {
   return [
     makeAuditEntry(
       'Expediente activo',
-      `El curso mantiene una ficha consolidada en ${mockAppData.stages.find((stage) => stage.id === course.stageId)?.name ?? course.stageId}.`,
+      `El curso mantiene una ficha consolidada en ${platformStages.find((stage) => stage.id === course.stageId)?.name ?? course.stageId}.`,
       'history',
       course.updatedAt,
     ),
@@ -885,7 +999,7 @@ function makeAlertRecord(input: AlertMutationInput): Alert {
 }
 
 function getStageIndex(stageId: string) {
-  return mockAppData.stages.findIndex((stage) => stage.id === stageId);
+  return platformStages.findIndex((stage) => stage.id === stageId);
 }
 
 function deriveCourseStatusFromChecklist(
@@ -913,6 +1027,907 @@ function parseJson<T>(value: JsonValue): T {
   }
 
   return value as T;
+}
+
+function hashValue(value: string) {
+  let hash = 2166136261;
+
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(8, '0').slice(0, 8);
+}
+
+function buildScopedEntityId(prefix: string, scope: string, value: string) {
+  const seed = `${scope}:${value.trim().toLowerCase()}`;
+  return `${prefix}-${hashValue(seed)}`;
+}
+
+async function tableExists(tableName: string) {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ${tableName}
+    ) AS "exists"
+  `) as Array<{ exists: boolean }>;
+
+  return Boolean(rows[0]?.exists);
+}
+
+async function readLegacyInstitutionSettings(): Promise<InstitutionSettings | null> {
+  if (!(await tableExists('maturity_admin_settings'))) {
+    return null;
+  }
+
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT value
+    FROM maturity_admin_settings
+    WHERE key = ${'institution'}
+    LIMIT 1
+  `) as Array<{ value: JsonValue }>;
+
+  if (!rows[0]?.value) {
+    return null;
+  }
+
+  const parsed = parseJson<Partial<InstitutionSettings>>(rows[0].value);
+  const structures =
+    parsed.structures && parsed.structures.length > 0
+      ? parsed.structures.map(sanitizeInstitutionStructure)
+      : defaultInstitutionSettings.structures.map((structure) => ({
+          ...structure,
+          faculties: [...structure.faculties],
+          programs: [...structure.programs],
+          academicPeriods: [...structure.academicPeriods],
+          courseTypes: [...structure.courseTypes],
+          pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+        }));
+
+  return normalizeInstitutionSettingsFromStructures(structures, {
+    displayName: parsed.displayName,
+    supportEmail: parsed.supportEmail,
+    defaultDomain: parsed.defaultDomain,
+    defaultUserState: parsed.defaultUserState,
+  });
+}
+
+async function readInstitutionStructuresRecord() {
+  const sql = getSql();
+  const institutions = (await sql`
+    SELECT
+      id,
+      name,
+      allow_auto_provisioning AS "allowAutoProvisioning"
+    FROM maturity_institutions
+    ORDER BY name ASC
+  `) as Array<{
+    id: string;
+    name: string;
+    allowAutoProvisioning: boolean;
+  }>;
+
+  if (institutions.length === 0) {
+    return [] as InstitutionStructure[];
+  }
+
+  const faculties = (await sql`
+    SELECT institution_id AS "institutionId", name
+    FROM maturity_institution_faculties
+    ORDER BY sort_order ASC, name ASC
+  `) as Array<{ institutionId: string; name: string }>;
+
+  const programs = (await sql`
+    SELECT institution_id AS "institutionId", name
+    FROM maturity_institution_programs
+    ORDER BY sort_order ASC, name ASC
+  `) as Array<{ institutionId: string; name: string }>;
+
+  const academicPeriods = (await sql`
+    SELECT institution_id AS "institutionId", name
+    FROM maturity_institution_academic_periods
+    ORDER BY sort_order ASC, name ASC
+  `) as Array<{ institutionId: string; name: string }>;
+
+  const courseTypes = (await sql`
+    SELECT institution_id AS "institutionId", name
+    FROM maturity_institution_course_types
+    ORDER BY sort_order ASC, name ASC
+  `) as Array<{ institutionId: string; name: string }>;
+
+  const guidelines = (await sql`
+    SELECT institution_id AS "institutionId", guideline
+    FROM maturity_institution_guidelines
+    ORDER BY sort_order ASC, guideline ASC
+  `) as Array<{ institutionId: string; guideline: string }>;
+
+  return institutions.map((institution) =>
+    sanitizeInstitutionStructure({
+      id: institution.id,
+      institution: institution.name,
+      faculties: faculties
+        .filter((item) => item.institutionId === institution.id)
+        .map((item) => item.name),
+      programs: programs
+        .filter((item) => item.institutionId === institution.id)
+        .map((item) => item.name),
+      academicPeriods: academicPeriods
+        .filter((item) => item.institutionId === institution.id)
+        .map((item) => item.name),
+      courseTypes: courseTypes
+        .filter((item) => item.institutionId === institution.id)
+        .map((item) => item.name),
+      pedagogicalGuidelines: guidelines
+        .filter((item) => item.institutionId === institution.id)
+        .map((item) => item.guideline),
+      allowAutoProvisioning: institution.allowAutoProvisioning,
+    }),
+  );
+}
+
+async function readInstitutionSettingsRecord(
+  overrides?: Partial<
+    Pick<InstitutionSettings, 'displayName' | 'supportEmail' | 'defaultDomain' | 'defaultUserState'>
+  >,
+) {
+  const structures = await readInstitutionStructuresRecord();
+  return normalizeInstitutionSettingsFromStructures(structures, overrides);
+}
+
+async function syncInstitutionCatalogValues(
+  kind: 'faculty' | 'program' | 'academicPeriod' | 'courseType' | 'guideline',
+  institutionId: string,
+  values: string[],
+) {
+  const sql = getSql();
+  const normalizedValues = uniqueValues(values);
+
+  if (kind === 'faculty') {
+    const existing = (await sql`
+      SELECT id, name
+      FROM maturity_institution_faculties
+      WHERE institution_id = ${institutionId}
+    `) as Array<{ id: string; name: string }>;
+    const nextIds = new Set(normalizedValues.map((value) => buildScopedEntityId('fac', institutionId, value)));
+
+    for (const [index, value] of normalizedValues.entries()) {
+      await sql`
+        INSERT INTO maturity_institution_faculties (id, institution_id, name, sort_order)
+        VALUES (${buildScopedEntityId('fac', institutionId, value)}, ${institutionId}, ${value}, ${index})
+        ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order
+      `;
+    }
+
+    for (const row of existing.filter((item) => !nextIds.has(item.id))) {
+      const dependency = (await sql`
+        SELECT
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_courses
+            WHERE faculty_id = ${row.id}
+          ) AS "courseCount",
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_users
+            WHERE faculty_id = ${row.id}
+          ) AS "userCount",
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_user_institution_roles
+            WHERE faculty_id = ${row.id}
+          ) AS "membershipCount"
+      `) as Array<{ courseCount: number; userCount: number; membershipCount: number }>;
+
+      const counts = dependency[0] ?? { courseCount: 0, userCount: 0, membershipCount: 0 };
+
+      if (counts.courseCount > 0 || counts.userCount > 0 || counts.membershipCount > 0) {
+        throw new Error(`No puedes eliminar la facultad "${row.name}" porque ya tiene dependencias activas.`);
+      }
+
+      await sql`DELETE FROM maturity_institution_faculties WHERE id = ${row.id}`;
+    }
+
+    return;
+  }
+
+  if (kind === 'program') {
+    const existing = (await sql`
+      SELECT id, name
+      FROM maturity_institution_programs
+      WHERE institution_id = ${institutionId}
+    `) as Array<{ id: string; name: string }>;
+    const nextIds = new Set(normalizedValues.map((value) => buildScopedEntityId('prg', institutionId, value)));
+
+    for (const [index, value] of normalizedValues.entries()) {
+      await sql`
+        INSERT INTO maturity_institution_programs (id, institution_id, name, sort_order)
+        VALUES (${buildScopedEntityId('prg', institutionId, value)}, ${institutionId}, ${value}, ${index})
+        ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order
+      `;
+    }
+
+    for (const row of existing.filter((item) => !nextIds.has(item.id))) {
+      const dependency = (await sql`
+        SELECT
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_courses
+            WHERE program_id = ${row.id}
+          ) AS "courseCount",
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_users
+            WHERE program_id = ${row.id}
+          ) AS "userCount",
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_user_institution_roles
+            WHERE program_id = ${row.id}
+          ) AS "membershipCount"
+      `) as Array<{ courseCount: number; userCount: number; membershipCount: number }>;
+
+      const counts = dependency[0] ?? { courseCount: 0, userCount: 0, membershipCount: 0 };
+
+      if (counts.courseCount > 0 || counts.userCount > 0 || counts.membershipCount > 0) {
+        throw new Error(`No puedes eliminar el programa "${row.name}" porque ya tiene dependencias activas.`);
+      }
+
+      await sql`DELETE FROM maturity_institution_programs WHERE id = ${row.id}`;
+    }
+
+    return;
+  }
+
+  if (kind === 'academicPeriod') {
+    const existing = (await sql`
+      SELECT id, name
+      FROM maturity_institution_academic_periods
+      WHERE institution_id = ${institutionId}
+    `) as Array<{ id: string; name: string }>;
+    const nextIds = new Set(normalizedValues.map((value) => buildScopedEntityId('prd', institutionId, value)));
+
+    for (const [index, value] of normalizedValues.entries()) {
+      await sql`
+        INSERT INTO maturity_institution_academic_periods (id, institution_id, name, sort_order)
+        VALUES (${buildScopedEntityId('prd', institutionId, value)}, ${institutionId}, ${value}, ${index})
+        ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order
+      `;
+    }
+
+    for (const row of existing.filter((item) => !nextIds.has(item.id))) {
+      const dependency = (await sql`
+        SELECT COUNT(*)::INT AS count
+        FROM maturity_courses
+        WHERE academic_period_id = ${row.id}
+      `) as Array<{ count: number }>;
+
+      if ((dependency[0]?.count ?? 0) > 0) {
+        throw new Error(`No puedes eliminar el periodo "${row.name}" porque ya tiene cursos vinculados.`);
+      }
+
+      await sql`DELETE FROM maturity_institution_academic_periods WHERE id = ${row.id}`;
+    }
+
+    return;
+  }
+
+  if (kind === 'courseType') {
+    const existing = (await sql`
+      SELECT id, name
+      FROM maturity_institution_course_types
+      WHERE institution_id = ${institutionId}
+    `) as Array<{ id: string; name: string }>;
+    const nextIds = new Set(normalizedValues.map((value) => buildScopedEntityId('typ', institutionId, value)));
+
+    for (const [index, value] of normalizedValues.entries()) {
+      await sql`
+        INSERT INTO maturity_institution_course_types (id, institution_id, name, sort_order)
+        VALUES (${buildScopedEntityId('typ', institutionId, value)}, ${institutionId}, ${value}, ${index})
+        ON CONFLICT (id) DO UPDATE
+        SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order
+      `;
+    }
+
+    for (const row of existing.filter((item) => !nextIds.has(item.id))) {
+      const dependency = (await sql`
+        SELECT COUNT(*)::INT AS count
+        FROM maturity_courses
+        WHERE course_type_id = ${row.id}
+      `) as Array<{ count: number }>;
+
+      if ((dependency[0]?.count ?? 0) > 0) {
+        throw new Error(`No puedes eliminar la tipología "${row.name}" porque ya tiene cursos vinculados.`);
+      }
+
+      await sql`DELETE FROM maturity_institution_course_types WHERE id = ${row.id}`;
+    }
+
+    return;
+  }
+
+  const existing = (await sql`
+    SELECT id, guideline
+    FROM maturity_institution_guidelines
+    WHERE institution_id = ${institutionId}
+  `) as Array<{ id: string; guideline: string }>;
+  const nextIds = new Set(normalizedValues.map((value) => buildScopedEntityId('gdl', institutionId, value)));
+
+  for (const [index, value] of normalizedValues.entries()) {
+    await sql`
+      INSERT INTO maturity_institution_guidelines (id, institution_id, guideline, sort_order)
+      VALUES (${buildScopedEntityId('gdl', institutionId, value)}, ${institutionId}, ${value}, ${index})
+      ON CONFLICT (id) DO UPDATE
+      SET guideline = EXCLUDED.guideline, sort_order = EXCLUDED.sort_order
+    `;
+  }
+
+  for (const row of existing.filter((item) => !nextIds.has(item.id))) {
+    await sql`DELETE FROM maturity_institution_guidelines WHERE id = ${row.id}`;
+  }
+}
+
+async function syncInstitutionDirectoryRecords(
+  structures: InstitutionStructure[],
+  options: {
+    pruneMissing?: boolean;
+  } = {},
+) {
+  const sql = getSql();
+  const normalizedStructures = (structures.length > 0 ? structures : defaultInstitutionSettings.structures)
+    .map(sanitizeInstitutionStructure)
+    .sort((left, right) => left.institution.localeCompare(right.institution, 'es'));
+  const nextInstitutionIds = new Set(normalizedStructures.map((structure) => structure.id));
+
+  const existingRows = (await sql`
+    SELECT id
+    FROM maturity_institutions
+  `) as Array<{ id: string }>;
+
+  if (options.pruneMissing) {
+    const removableIds = existingRows
+      .map((row) => row.id)
+      .filter((institutionId) => !nextInstitutionIds.has(institutionId));
+
+    for (const institutionId of removableIds) {
+      const dependentRows = (await sql`
+        SELECT
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_courses
+            WHERE institution_structure_id = ${institutionId}
+          ) AS "courseCount",
+          (
+            SELECT COUNT(*)::INT
+            FROM maturity_user_institution_roles
+            WHERE institution_id = ${institutionId}
+          ) AS "membershipCount"
+      `) as Array<{ courseCount: number; membershipCount: number }>;
+
+      const dependency = dependentRows[0] ?? { courseCount: 0, membershipCount: 0 };
+
+      if (dependency.courseCount > 0 || dependency.membershipCount > 0) {
+        throw new Error('No puedes eliminar una estructura que ya tiene cursos o usuarios vinculados.');
+      }
+
+      await sql`
+        DELETE FROM maturity_institutions
+        WHERE id = ${institutionId}
+      `;
+    }
+  }
+
+  for (const structure of normalizedStructures) {
+    const timestamp = new Date().toISOString();
+    await sql`
+      INSERT INTO maturity_institutions (
+        id,
+        name,
+        allow_auto_provisioning,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${structure.id},
+        ${structure.institution},
+        ${structure.allowAutoProvisioning},
+        ${timestamp},
+        ${timestamp}
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET
+        name = EXCLUDED.name,
+        allow_auto_provisioning = EXCLUDED.allow_auto_provisioning,
+        updated_at = EXCLUDED.updated_at
+    `;
+
+    await syncInstitutionCatalogValues('faculty', structure.id, structure.faculties);
+    await syncInstitutionCatalogValues('program', structure.id, structure.programs);
+    await syncInstitutionCatalogValues('academicPeriod', structure.id, structure.academicPeriods);
+    await syncInstitutionCatalogValues('courseType', structure.id, structure.courseTypes);
+    await syncInstitutionCatalogValues('guideline', structure.id, structure.pedagogicalGuidelines);
+  }
+}
+
+async function ensureInstitutionDirectoryFromLegacySources() {
+  const sql = getSql();
+  const currentStructures = await readInstitutionStructuresRecord();
+  const structureMap = new Map<string, InstitutionStructure>();
+
+  for (const structure of currentStructures) {
+    structureMap.set(structure.id, {
+      ...structure,
+      faculties: [...structure.faculties],
+      programs: [...structure.programs],
+      academicPeriods: [...structure.academicPeriods],
+      courseTypes: [...structure.courseTypes],
+      pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+    });
+  }
+
+  const legacySettings = await readLegacyInstitutionSettings();
+  for (const structure of legacySettings?.structures ?? []) {
+    structureMap.set(structure.id, {
+      ...structure,
+      faculties: [...structure.faculties],
+      programs: [...structure.programs],
+      academicPeriods: [...structure.academicPeriods],
+      courseTypes: [...structure.courseTypes],
+      pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+    });
+  }
+
+  const courseRows = (await sql`
+    SELECT
+      faculty,
+      program,
+      metadata
+    FROM maturity_courses
+  `) as Array<{
+    faculty: string;
+    program: string;
+    metadata: JsonValue;
+  }>;
+
+  for (const row of courseRows) {
+    const metadata = parseJson<Partial<CourseMetadata>>(row.metadata ?? {});
+    const institutionName = metadata.institution?.trim() || legacySettings?.displayName || defaultInstitutionSettings.displayName;
+    const structureId = buildInstitutionStructureId(institutionName);
+    const current =
+      structureMap.get(structureId) ??
+      sanitizeInstitutionStructure({
+        id: structureId,
+        institution: institutionName,
+        faculties: [],
+        programs: [],
+        academicPeriods: [],
+        courseTypes: [],
+        pedagogicalGuidelines:
+          legacySettings?.structures.find((structure) => structure.id === structureId)?.pedagogicalGuidelines ??
+          defaultInstitutionSettings.structures[0]?.pedagogicalGuidelines ??
+          [],
+        allowAutoProvisioning:
+          legacySettings?.structures.find((structure) => structure.id === structureId)?.allowAutoProvisioning ?? false,
+      });
+
+    current.faculties = uniqueValues([...current.faculties, row.faculty]);
+    current.programs = uniqueValues([...current.programs, row.program]);
+    current.academicPeriods = uniqueValues([
+      ...current.academicPeriods,
+      metadata.academicPeriod?.trim() || '2026-1',
+    ]);
+    current.courseTypes = uniqueValues([
+      ...current.courseTypes,
+      metadata.courseType?.trim() || 'Curso',
+    ]);
+    structureMap.set(structureId, current);
+  }
+
+  const userRows = (await sql`
+    SELECT institution, faculty, program
+    FROM maturity_users
+  `) as Array<{
+    institution: string | null;
+    faculty: string | null;
+    program: string | null;
+  }>;
+
+  for (const row of userRows) {
+    const institutionName = row.institution?.trim();
+
+    if (!institutionName) {
+      continue;
+    }
+
+    const structureId = buildInstitutionStructureId(institutionName);
+    const current =
+      structureMap.get(structureId) ??
+      sanitizeInstitutionStructure({
+        id: structureId,
+        institution: institutionName,
+        faculties: [],
+        programs: [],
+        academicPeriods: [],
+        courseTypes: [],
+        pedagogicalGuidelines:
+          legacySettings?.structures.find((structure) => structure.id === structureId)?.pedagogicalGuidelines ??
+          defaultInstitutionSettings.structures[0]?.pedagogicalGuidelines ??
+          [],
+        allowAutoProvisioning:
+          legacySettings?.structures.find((structure) => structure.id === structureId)?.allowAutoProvisioning ?? false,
+      });
+
+    if (row.faculty?.trim()) {
+      current.faculties = uniqueValues([...current.faculties, row.faculty]);
+    }
+
+    if (row.program?.trim()) {
+      current.programs = uniqueValues([...current.programs, row.program]);
+    }
+
+    structureMap.set(structureId, current);
+  }
+
+  const structures = Array.from(structureMap.values());
+  await syncInstitutionDirectoryRecords(
+    structures.length > 0 ? structures : defaultInstitutionSettings.structures,
+    { pruneMissing: false },
+  );
+}
+
+async function resolveInstitutionReferenceContext(input: {
+  institutionId?: string | null;
+  institution: string;
+  faculty?: string;
+  program?: string;
+  academicPeriod?: string;
+  courseType?: string;
+}) {
+  const institutionName = input.institution.trim() || defaultInstitutionSettings.displayName;
+  let structures = await readInstitutionStructuresRecord();
+  let structure =
+    structures.find((item) => item.id === input.institutionId) ??
+    structures.find(
+      (item) => item.institution.trim().toLowerCase() === institutionName.trim().toLowerCase(),
+    ) ?? null;
+
+  if (!structure) {
+    await syncInstitutionDirectoryRecords(
+      [
+        ...structures,
+        sanitizeInstitutionStructure({
+          id: buildInstitutionStructureId(institutionName),
+          institution: institutionName,
+          faculties: input.faculty?.trim() ? [input.faculty] : [],
+          programs: input.program?.trim() ? [input.program] : [],
+          academicPeriods: input.academicPeriod?.trim() ? [input.academicPeriod] : [],
+          courseTypes: input.courseType?.trim() ? [input.courseType] : [],
+          pedagogicalGuidelines:
+            defaultInstitutionSettings.structures[0]?.pedagogicalGuidelines ?? [],
+          allowAutoProvisioning: false,
+        }),
+      ],
+      { pruneMissing: false },
+    );
+    structures = await readInstitutionStructuresRecord();
+    structure =
+      structures.find((item) => item.id === input.institutionId) ??
+      structures.find(
+        (item) => item.institution.trim().toLowerCase() === institutionName.trim().toLowerCase(),
+      ) ?? null;
+  }
+
+  if (!structure) {
+    throw new Error('No fue posible resolver la estructura institucional del contexto.');
+  }
+
+  let changed = false;
+  const nextStructure: InstitutionStructure = {
+    ...structure,
+    faculties: [...structure.faculties],
+    programs: [...structure.programs],
+    academicPeriods: [...structure.academicPeriods],
+    courseTypes: [...structure.courseTypes],
+    pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+  };
+
+  if (input.faculty?.trim() && !nextStructure.faculties.includes(input.faculty.trim())) {
+    nextStructure.faculties = uniqueValues([...nextStructure.faculties, input.faculty]);
+    changed = true;
+  }
+
+  if (input.program?.trim() && !nextStructure.programs.includes(input.program.trim())) {
+    nextStructure.programs = uniqueValues([...nextStructure.programs, input.program]);
+    changed = true;
+  }
+
+  if (input.academicPeriod?.trim() && !nextStructure.academicPeriods.includes(input.academicPeriod.trim())) {
+    nextStructure.academicPeriods = uniqueValues([...nextStructure.academicPeriods, input.academicPeriod]);
+    changed = true;
+  }
+
+  if (input.courseType?.trim() && !nextStructure.courseTypes.includes(input.courseType.trim())) {
+    nextStructure.courseTypes = uniqueValues([...nextStructure.courseTypes, input.courseType]);
+    changed = true;
+  }
+
+  if (changed) {
+    await syncInstitutionDirectoryRecords(
+      structures.map((item) => (item.id === nextStructure.id ? nextStructure : item)),
+      { pruneMissing: false },
+    );
+    structure = nextStructure;
+  }
+
+  const sql = getSql();
+  const institutionRows = (await sql`
+    SELECT id, name
+    FROM maturity_institutions
+    WHERE id = ${structure.id}
+    LIMIT 1
+  `) as Array<{ id: string; name: string }>;
+
+  const facultyName = input.faculty?.trim() || structure.faculties[0] || '';
+  const programName = input.program?.trim() || structure.programs[0] || '';
+  const academicPeriodName = input.academicPeriod?.trim() || structure.academicPeriods[0] || '';
+  const courseTypeName = input.courseType?.trim() || structure.courseTypes[0] || '';
+
+  const facultyRows = facultyName
+    ? ((await sql`
+        SELECT id
+        FROM maturity_institution_faculties
+        WHERE institution_id = ${structure.id}
+          AND name = ${facultyName}
+        LIMIT 1
+      `) as Array<{ id: string }>)
+    : [];
+  const programRows = programName
+    ? ((await sql`
+        SELECT id
+        FROM maturity_institution_programs
+        WHERE institution_id = ${structure.id}
+          AND name = ${programName}
+        LIMIT 1
+      `) as Array<{ id: string }>)
+    : [];
+  const academicPeriodRows = academicPeriodName
+    ? ((await sql`
+        SELECT id
+        FROM maturity_institution_academic_periods
+        WHERE institution_id = ${structure.id}
+          AND name = ${academicPeriodName}
+        LIMIT 1
+      `) as Array<{ id: string }>)
+    : [];
+  const courseTypeRows = courseTypeName
+    ? ((await sql`
+        SELECT id
+        FROM maturity_institution_course_types
+        WHERE institution_id = ${structure.id}
+          AND name = ${courseTypeName}
+        LIMIT 1
+      `) as Array<{ id: string }>)
+    : [];
+
+  return {
+    institutionId: institutionRows[0]?.id ?? structure.id,
+    institutionName: institutionRows[0]?.name ?? structure.institution,
+    facultyId: facultyRows[0]?.id ?? null,
+    facultyName,
+    programId: programRows[0]?.id ?? null,
+    programName,
+    academicPeriodId: academicPeriodRows[0]?.id ?? null,
+    academicPeriodName,
+    courseTypeId: courseTypeRows[0]?.id ?? null,
+    courseTypeName,
+  };
+}
+
+async function backfillCourseInstitutionRelations() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      institution_structure_id AS "institutionStructureId",
+      faculty,
+      program,
+      metadata
+    FROM maturity_courses
+  `) as Array<{
+    id: string;
+    title: string;
+    institutionStructureId: string | null;
+    faculty: string;
+    program: string;
+    metadata: JsonValue;
+  }>;
+
+  for (const row of rows) {
+    const metadata = parseJson<Partial<CourseMetadata>>(row.metadata ?? {});
+    const context = await resolveInstitutionReferenceContext({
+      institutionId: row.institutionStructureId,
+      institution: metadata.institution || defaultInstitutionSettings.displayName,
+      faculty: row.faculty,
+      program: row.program,
+      academicPeriod: metadata.academicPeriod || '2026-1',
+      courseType: metadata.courseType || 'Curso',
+    });
+
+    const nextMetadata = {
+      ...metadata,
+      institution: context.institutionName,
+      academicPeriod: context.academicPeriodName,
+      courseType: context.courseTypeName,
+      route: buildCourseRoute({
+        faculty: context.facultyName || row.faculty,
+        program: context.programName || row.program,
+        title: row.title,
+      }),
+    };
+
+    await sql`
+      UPDATE maturity_courses
+      SET
+        institution_structure_id = ${context.institutionId},
+        faculty_id = ${context.facultyId},
+        program_id = ${context.programId},
+        academic_period_id = ${context.academicPeriodId},
+        course_type_id = ${context.courseTypeId},
+        faculty = ${context.facultyName || row.faculty},
+        program = ${context.programName || row.program},
+        metadata = ${JSON.stringify(nextMetadata)}::jsonb
+      WHERE id = ${row.id}
+    `;
+  }
+}
+
+async function rebuildUserInstitutionMemberships() {
+  const sql = getSql();
+  const users = (await sql`
+    SELECT
+      id,
+      role,
+      secondary_roles AS "secondaryRoles",
+      institution_id AS "institutionId",
+      institution,
+      faculty,
+      program,
+      scope
+    FROM maturity_users
+  `) as Array<{
+    id: string;
+    role: Role;
+    secondaryRoles: JsonValue;
+    institutionId: string | null;
+    institution: string | null;
+    faculty: string | null;
+    program: string | null;
+    scope: string | null;
+  }>;
+
+  for (const user of users) {
+    const secondaryRoles = parseJson<Role[]>(user.secondaryRoles ?? []);
+    const context = await resolveInstitutionReferenceContext({
+      institutionId: user.institutionId,
+      institution: user.institution?.trim() || defaultInstitutionSettings.displayName,
+      faculty: user.faculty?.trim() || '',
+      program: user.program?.trim() || '',
+    });
+
+    const memberships: Array<{
+      id: string;
+      role: Role;
+      primary: boolean;
+    }> = [
+      {
+        id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, user.role),
+        role: user.role,
+        primary: true,
+      },
+      ...secondaryRoles
+        .filter((role) => role && role !== user.role)
+        .map((role) => ({
+          id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, role),
+          role,
+          primary: false,
+        })),
+    ];
+
+    await sql`
+      UPDATE maturity_user_institution_roles
+      SET
+        is_primary = false,
+        updated_at = ${new Date().toISOString()}
+      WHERE user_id = ${user.id}
+    `;
+
+    await sql`
+      DELETE FROM maturity_user_institution_roles
+      WHERE user_id = ${user.id}
+        AND institution_id = ${context.institutionId}
+    `;
+
+    for (const membership of memberships) {
+      await sql`
+        INSERT INTO maturity_user_institution_roles (
+          id,
+          user_id,
+          institution_id,
+          faculty_id,
+          program_id,
+          role,
+          scope,
+          is_primary,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${membership.id},
+          ${user.id},
+          ${context.institutionId},
+          ${context.facultyId},
+          ${context.programId},
+          ${membership.role},
+          ${user.scope?.trim() || null},
+          ${membership.primary},
+          ${new Date().toISOString()},
+          ${new Date().toISOString()}
+        )
+        ON CONFLICT (id) DO UPDATE
+        SET
+          faculty_id = EXCLUDED.faculty_id,
+          program_id = EXCLUDED.program_id,
+          role = EXCLUDED.role,
+          scope = EXCLUDED.scope,
+          is_primary = EXCLUDED.is_primary,
+          updated_at = EXCLUDED.updated_at
+      `;
+    }
+
+    await sql`
+      UPDATE maturity_users
+      SET
+        institution_id = ${context.institutionId},
+        faculty_id = ${context.facultyId},
+        program_id = ${context.programId},
+        institution = ${context.institutionName},
+        faculty = ${context.facultyName || null},
+        program = ${context.programName || null}
+      WHERE id = ${user.id}
+    `;
+  }
+}
+
+async function cleanupOrphanOperationalRows() {
+  const sql = getSql();
+
+  await sql`
+    DELETE FROM maturity_tasks
+    WHERE course_slug NOT IN (SELECT slug FROM maturity_courses)
+  `;
+
+  await sql`
+    DELETE FROM maturity_alerts
+    WHERE course_slug NOT IN (SELECT slug FROM maturity_courses)
+  `;
+
+  await sql`
+    DELETE FROM maturity_library_resources
+    WHERE course_slug NOT IN (SELECT slug FROM maturity_courses)
+  `;
+
+  await sql`
+    DELETE FROM maturity_sessions
+    WHERE user_id NOT IN (SELECT id FROM maturity_users)
+  `;
 }
 
 async function ensureSchema() {
@@ -943,6 +1958,11 @@ async function ensureSchema() {
         slug TEXT UNIQUE NOT NULL,
         title TEXT NOT NULL,
         code TEXT NOT NULL,
+        institution_structure_id TEXT,
+        faculty_id TEXT,
+        program_id TEXT,
+        academic_period_id TEXT,
+        course_type_id TEXT,
         faculty TEXT NOT NULL,
         program TEXT NOT NULL,
         modality TEXT NOT NULL,
@@ -966,6 +1986,31 @@ async function ensureSchema() {
         stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb,
         products JSONB NOT NULL DEFAULT '[]'::jsonb
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS institution_structure_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS faculty_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS program_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS academic_period_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_courses
+      ADD COLUMN IF NOT EXISTS course_type_id TEXT
     `;
 
     await sql`
@@ -1049,8 +2094,11 @@ async function ensureSchema() {
         phone TEXT,
         location TEXT,
         bio TEXT,
+        institution_id TEXT,
         institution TEXT,
+        faculty_id TEXT,
         faculty TEXT,
+        program_id TEXT,
         program TEXT,
         scope TEXT,
         status_reason TEXT,
@@ -1093,12 +2141,27 @@ async function ensureSchema() {
 
     await sql`
       ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS institution_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
       ADD COLUMN IF NOT EXISTS institution TEXT
     `;
 
     await sql`
       ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS faculty_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
       ADD COLUMN IF NOT EXISTS faculty TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS program_id TEXT
     `;
 
     await sql`
@@ -1140,6 +2203,508 @@ async function ensureSchema() {
         created_at TEXT NOT NULL
       )
     `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institutions (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        allow_auto_provisioning BOOLEAN NOT NULL DEFAULT false,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_faculties (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (institution_id, name)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_programs (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (institution_id, name)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_academic_periods (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (institution_id, name)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_course_types (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (institution_id, name)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_guidelines (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        guideline TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (institution_id, guideline)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_user_institution_roles (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        institution_id TEXT NOT NULL,
+        faculty_id TEXT,
+        program_id TEXT,
+        role TEXT NOT NULL,
+        scope TEXT,
+        is_primary BOOLEAN NOT NULL DEFAULT false,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `;
+
+    for (const [position, role] of platformRoles.entries()) {
+      await sql`
+        INSERT INTO maturity_roles (role, position)
+        VALUES (${role}, ${position})
+        ON CONFLICT (role) DO UPDATE
+        SET position = EXCLUDED.position
+      `;
+    }
+
+    for (const stage of platformStages) {
+      await sql`
+        INSERT INTO maturity_stages (id, name, description, owner, tone)
+        VALUES (${stage.id}, ${stage.name}, ${stage.description}, ${stage.owner}, ${stage.tone})
+        ON CONFLICT (id) DO UPDATE
+        SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          owner = EXCLUDED.owner,
+          tone = EXCLUDED.tone
+      `;
+    }
+
+    for (const profile of defaultRoleProfiles) {
+      await sql`
+        INSERT INTO maturity_role_profiles (role, overview, focus, modules)
+        VALUES (
+          ${profile.role},
+          ${profile.overview},
+          ${profile.focus},
+          ${JSON.stringify(profile.modules)}::jsonb
+        )
+        ON CONFLICT (role) DO UPDATE
+        SET
+          overview = EXCLUDED.overview,
+          focus = EXCLUDED.focus,
+          modules = EXCLUDED.modules
+      `;
+    }
+
+    await ensureInstitutionDirectoryFromLegacySources();
+    await backfillCourseInstitutionRelations();
+    await rebuildUserInstitutionMemberships();
+    await cleanupOrphanOperationalRows();
+
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS maturity_user_primary_membership_idx
+      ON maturity_user_institution_roles (user_id)
+      WHERE is_primary = true
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_stages_owner_role_fk'
+        ) THEN
+          ALTER TABLE maturity_stages
+          ADD CONSTRAINT maturity_stages_owner_role_fk
+          FOREIGN KEY (owner) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_role_profiles_role_fk'
+        ) THEN
+          ALTER TABLE maturity_role_profiles
+          ADD CONSTRAINT maturity_role_profiles_role_fk
+          FOREIGN KEY (role) REFERENCES maturity_roles(role) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_stage_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_stage_fk
+          FOREIGN KEY (stage_id) REFERENCES maturity_stages(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_institution_fk
+          FOREIGN KEY (institution_structure_id) REFERENCES maturity_institutions(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_faculty_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_faculty_fk
+          FOREIGN KEY (faculty_id) REFERENCES maturity_institution_faculties(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_program_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_program_fk
+          FOREIGN KEY (program_id) REFERENCES maturity_institution_programs(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_academic_period_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_academic_period_fk
+          FOREIGN KEY (academic_period_id) REFERENCES maturity_institution_academic_periods(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_courses_course_type_fk'
+        ) THEN
+          ALTER TABLE maturity_courses
+          ADD CONSTRAINT maturity_courses_course_type_fk
+          FOREIGN KEY (course_type_id) REFERENCES maturity_institution_course_types(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_tasks_course_fk'
+        ) THEN
+          ALTER TABLE maturity_tasks
+          ADD CONSTRAINT maturity_tasks_course_fk
+          FOREIGN KEY (course_slug) REFERENCES maturity_courses(slug) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_tasks_role_fk'
+        ) THEN
+          ALTER TABLE maturity_tasks
+          ADD CONSTRAINT maturity_tasks_role_fk
+          FOREIGN KEY (role) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_tasks_stage_fk'
+        ) THEN
+          ALTER TABLE maturity_tasks
+          ADD CONSTRAINT maturity_tasks_stage_fk
+          FOREIGN KEY (stage_id) REFERENCES maturity_stages(id) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_alerts_course_fk'
+        ) THEN
+          ALTER TABLE maturity_alerts
+          ADD CONSTRAINT maturity_alerts_course_fk
+          FOREIGN KEY (course_slug) REFERENCES maturity_courses(slug) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_alerts_owner_fk'
+        ) THEN
+          ALTER TABLE maturity_alerts
+          ADD CONSTRAINT maturity_alerts_owner_fk
+          FOREIGN KEY (owner) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_resources_course_fk'
+        ) THEN
+          ALTER TABLE maturity_library_resources
+          ADD CONSTRAINT maturity_resources_course_fk
+          FOREIGN KEY (course_slug) REFERENCES maturity_courses(slug) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_users_role_fk'
+        ) THEN
+          ALTER TABLE maturity_users
+          ADD CONSTRAINT maturity_users_role_fk
+          FOREIGN KEY (role) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_users_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_users
+          ADD CONSTRAINT maturity_users_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_users_faculty_fk'
+        ) THEN
+          ALTER TABLE maturity_users
+          ADD CONSTRAINT maturity_users_faculty_fk
+          FOREIGN KEY (faculty_id) REFERENCES maturity_institution_faculties(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_users_program_fk'
+        ) THEN
+          ALTER TABLE maturity_users
+          ADD CONSTRAINT maturity_users_program_fk
+          FOREIGN KEY (program_id) REFERENCES maturity_institution_programs(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_sessions_user_fk'
+        ) THEN
+          ALTER TABLE maturity_sessions
+          ADD CONSTRAINT maturity_sessions_user_fk
+          FOREIGN KEY (user_id) REFERENCES maturity_users(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_faculties_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_institution_faculties
+          ADD CONSTRAINT maturity_faculties_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_programs_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_institution_programs
+          ADD CONSTRAINT maturity_programs_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_periods_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_institution_academic_periods
+          ADD CONSTRAINT maturity_periods_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_course_types_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_institution_course_types
+          ADD CONSTRAINT maturity_course_types_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_guidelines_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_institution_guidelines
+          ADD CONSTRAINT maturity_guidelines_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_user_memberships_user_fk'
+        ) THEN
+          ALTER TABLE maturity_user_institution_roles
+          ADD CONSTRAINT maturity_user_memberships_user_fk
+          FOREIGN KEY (user_id) REFERENCES maturity_users(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_user_memberships_institution_fk'
+        ) THEN
+          ALTER TABLE maturity_user_institution_roles
+          ADD CONSTRAINT maturity_user_memberships_institution_fk
+          FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_user_memberships_faculty_fk'
+        ) THEN
+          ALTER TABLE maturity_user_institution_roles
+          ADD CONSTRAINT maturity_user_memberships_faculty_fk
+          FOREIGN KEY (faculty_id) REFERENCES maturity_institution_faculties(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_user_memberships_program_fk'
+        ) THEN
+          ALTER TABLE maturity_user_institution_roles
+          ADD CONSTRAINT maturity_user_memberships_program_fk
+          FOREIGN KEY (program_id) REFERENCES maturity_institution_programs(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_user_memberships_role_fk'
+        ) THEN
+          ALTER TABLE maturity_user_institution_roles
+          ADD CONSTRAINT maturity_user_memberships_role_fk
+          FOREIGN KEY (role) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
   } finally {
     await sql`SELECT pg_advisory_unlock(3602026)`;
   }
@@ -1180,6 +2745,7 @@ async function ensureAdminUserSeed() {
         updated_at = ${new Date().toISOString()}
       WHERE id = ${existingRows[0].id}
     `;
+    await rebuildUserInstitutionMemberships();
     return;
   }
 
@@ -1229,11 +2795,14 @@ async function ensureAdminUserSeed() {
       ${createdAt}
     )
   `;
+
+  await rebuildUserInstitutionMemberships();
 }
 
 function serializeCourseRow(row: CourseRow): Course {
   return normalizeCourse({
     ...row,
+    institutionStructureId: row.institutionStructureId ?? undefined,
     pulse: parseJson<Course['pulse']>(row.pulse),
     team: parseJson<Course['team']>(row.team),
     deliverables: parseJson<Course['deliverables']>(row.deliverables),
@@ -1249,8 +2818,45 @@ function serializeCourseRow(row: CourseRow): Course {
   });
 }
 
+async function prepareCourseForPersistence(course: Course) {
+  const context = await resolveInstitutionReferenceContext({
+    institutionId: course.institutionStructureId,
+    institution: course.metadata.institution || defaultInstitutionSettings.displayName,
+    faculty: course.faculty,
+    program: course.program,
+    academicPeriod: course.metadata.academicPeriod || '2026-1',
+    courseType: course.metadata.courseType || 'Curso',
+  });
+
+  const nextCourse = normalizeCourse({
+    ...course,
+    institutionStructureId: context.institutionId,
+    faculty: context.facultyName || course.faculty,
+    program: context.programName || course.program,
+    metadata: {
+      ...course.metadata,
+      institution: context.institutionName,
+      academicPeriod: context.academicPeriodName,
+      courseType: context.courseTypeName,
+      route: buildCourseRoute({
+        faculty: context.facultyName || course.faculty,
+        program: context.programName || course.program,
+        title: course.title,
+      }),
+    },
+  });
+
+  return {
+    course: nextCourse,
+    context,
+  };
+}
+
 async function persistCourse(course: Course) {
   const sql = getSql();
+  const prepared = await prepareCourseForPersistence(course);
+  const nextCourse = prepared.course;
+  const context = prepared.context;
 
   await sql`
     INSERT INTO maturity_courses (
@@ -1258,6 +2864,11 @@ async function persistCourse(course: Course) {
       slug,
       title,
       code,
+      institution_structure_id,
+      faculty_id,
+      program_id,
+      academic_period_id,
+      course_type_id,
       faculty,
       program,
       modality,
@@ -1282,38 +2893,48 @@ async function persistCourse(course: Course) {
       products
     )
     VALUES (
-      ${course.id},
-      ${course.slug},
-      ${course.title},
-      ${course.code},
-      ${course.faculty},
-      ${course.program},
-      ${course.modality},
-      ${course.credits},
-      ${course.stageId},
-      ${course.status},
-      ${course.progress},
-      ${course.summary},
-      ${course.nextMilestone},
-      ${course.updatedAt},
-      ${JSON.stringify(course.pulse)}::jsonb,
-      ${JSON.stringify(course.team)}::jsonb,
-      ${JSON.stringify(course.deliverables)}::jsonb,
-      ${JSON.stringify(course.modules)}::jsonb,
-      ${JSON.stringify(course.observations)}::jsonb,
-      ${JSON.stringify(course.schedule)}::jsonb,
-      ${JSON.stringify(course.stageChecklist)}::jsonb,
-      ${JSON.stringify(course.assistants)}::jsonb,
-      ${JSON.stringify(course.metadata)}::jsonb,
-      ${JSON.stringify(course.auditLog)}::jsonb,
-      ${JSON.stringify(course.stageNotes)}::jsonb,
-      ${JSON.stringify(course.products)}::jsonb
+      ${nextCourse.id},
+      ${nextCourse.slug},
+      ${nextCourse.title},
+      ${nextCourse.code},
+      ${context.institutionId},
+      ${context.facultyId},
+      ${context.programId},
+      ${context.academicPeriodId},
+      ${context.courseTypeId},
+      ${nextCourse.faculty},
+      ${nextCourse.program},
+      ${nextCourse.modality},
+      ${nextCourse.credits},
+      ${nextCourse.stageId},
+      ${nextCourse.status},
+      ${nextCourse.progress},
+      ${nextCourse.summary},
+      ${nextCourse.nextMilestone},
+      ${nextCourse.updatedAt},
+      ${JSON.stringify(nextCourse.pulse)}::jsonb,
+      ${JSON.stringify(nextCourse.team)}::jsonb,
+      ${JSON.stringify(nextCourse.deliverables)}::jsonb,
+      ${JSON.stringify(nextCourse.modules)}::jsonb,
+      ${JSON.stringify(nextCourse.observations)}::jsonb,
+      ${JSON.stringify(nextCourse.schedule)}::jsonb,
+      ${JSON.stringify(nextCourse.stageChecklist)}::jsonb,
+      ${JSON.stringify(nextCourse.assistants)}::jsonb,
+      ${JSON.stringify(nextCourse.metadata)}::jsonb,
+      ${JSON.stringify(nextCourse.auditLog)}::jsonb,
+      ${JSON.stringify(nextCourse.stageNotes)}::jsonb,
+      ${JSON.stringify(nextCourse.products)}::jsonb
     )
     ON CONFLICT (id) DO UPDATE
     SET
       slug = EXCLUDED.slug,
       title = EXCLUDED.title,
       code = EXCLUDED.code,
+      institution_structure_id = EXCLUDED.institution_structure_id,
+      faculty_id = EXCLUDED.faculty_id,
+      program_id = EXCLUDED.program_id,
+      academic_period_id = EXCLUDED.academic_period_id,
+      course_type_id = EXCLUDED.course_type_id,
       faculty = EXCLUDED.faculty,
       program = EXCLUDED.program,
       modality = EXCLUDED.modality,
@@ -1337,6 +2958,8 @@ async function persistCourse(course: Course) {
       stage_notes = EXCLUDED.stage_notes,
       products = EXCLUDED.products
   `;
+
+  return nextCourse;
 }
 
 async function persistTask(task: Task) {
@@ -1454,6 +3077,7 @@ async function readCourseBySlug(slug: string) {
       slug,
       title,
       code,
+      institution_structure_id AS "institutionStructureId",
       faculty,
       program,
       modality,
@@ -1565,121 +3189,9 @@ async function ensureSeedData() {
     FROM maturity_courses
   `) as Array<{ count: number }>;
 
-  if ((countRows[0]?.count ?? 0) > 0) {
-    return {
-      seeded: false,
-      courses: countRows[0].count,
-    };
-  }
-
-  for (const [position, role] of mockAppData.roles.entries()) {
-    await sql`
-      INSERT INTO maturity_roles (role, position)
-      VALUES (${role}, ${position})
-      ON CONFLICT (role) DO UPDATE
-      SET position = EXCLUDED.position
-    `;
-  }
-
-  for (const stage of mockAppData.stages) {
-    await sql`
-      INSERT INTO maturity_stages (id, name, description, owner, tone)
-      VALUES (${stage.id}, ${stage.name}, ${stage.description}, ${stage.owner}, ${stage.tone})
-      ON CONFLICT (id) DO UPDATE
-      SET
-        name = EXCLUDED.name,
-        description = EXCLUDED.description,
-        owner = EXCLUDED.owner,
-        tone = EXCLUDED.tone
-    `;
-  }
-
-  for (const course of mockAppData.courses) {
-    await persistCourse(course);
-  }
-
-  for (const task of mockAppData.tasks) {
-    await persistTask(task);
-  }
-
-  for (const alert of mockAppData.alerts) {
-    await sql`
-      INSERT INTO maturity_alerts (id, title, course_slug, tone, owner, detail)
-      VALUES (
-        ${alert.id},
-        ${alert.title},
-        ${alert.courseSlug},
-        ${alert.tone},
-        ${alert.owner},
-        ${alert.detail}
-      )
-      ON CONFLICT (id) DO UPDATE
-      SET
-        title = EXCLUDED.title,
-        course_slug = EXCLUDED.course_slug,
-        tone = EXCLUDED.tone,
-        owner = EXCLUDED.owner,
-        detail = EXCLUDED.detail
-    `;
-  }
-
-  for (const resource of mockAppData.libraryResources) {
-    await sql`
-      INSERT INTO maturity_library_resources (
-        id,
-        title,
-        kind,
-        course_slug,
-        unit,
-        source,
-        status,
-        tags,
-        summary
-      )
-      VALUES (
-        ${resource.id},
-        ${resource.title},
-        ${resource.kind},
-        ${resource.courseSlug},
-        ${resource.unit},
-        ${resource.source},
-        ${resource.status},
-        ${JSON.stringify(resource.tags)}::jsonb,
-        ${resource.summary}
-      )
-      ON CONFLICT (id) DO UPDATE
-      SET
-        title = EXCLUDED.title,
-        kind = EXCLUDED.kind,
-        course_slug = EXCLUDED.course_slug,
-        unit = EXCLUDED.unit,
-        source = EXCLUDED.source,
-        status = EXCLUDED.status,
-        tags = EXCLUDED.tags,
-        summary = EXCLUDED.summary
-    `;
-  }
-
-  for (const profile of mockAppData.roleProfiles) {
-    await sql`
-      INSERT INTO maturity_role_profiles (role, overview, focus, modules)
-      VALUES (
-        ${profile.role},
-        ${profile.overview},
-        ${profile.focus},
-        ${JSON.stringify(profile.modules)}::jsonb
-      )
-      ON CONFLICT (role) DO UPDATE
-      SET
-        overview = EXCLUDED.overview,
-        focus = EXCLUDED.focus,
-        modules = EXCLUDED.modules
-    `;
-  }
-
   return {
-    seeded: true,
-    courses: mockAppData.courses.length,
+    seeded: false,
+    courses: countRows[0]?.count ?? 0,
   };
 }
 
@@ -1718,6 +3230,7 @@ async function readCourses() {
       slug,
       title,
       code,
+      institution_structure_id AS "institutionStructureId",
       faculty,
       program,
       modality,
@@ -1833,27 +3346,56 @@ async function readUsers() {
   const sql = getSql();
   const rows = (await sql`
     SELECT
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt"
-    FROM maturity_users
-    ORDER BY role ASC, name ASC
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.secondary_roles AS "secondaryRoles",
+      u.status,
+      u.headline,
+      u.phone,
+      u.location,
+      u.bio,
+      u.institution_id AS "institutionId",
+      u.institution,
+      u.faculty_id AS "facultyId",
+      u.faculty,
+      u.program_id AS "programId",
+      u.program,
+      u.scope,
+      u.status_reason AS "statusReason",
+      u.created_by AS "createdBy",
+      u.created_at AS "createdAt",
+      u.updated_at AS "updatedAt",
+      u.last_access_at AS "lastAccessAt",
+      (
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', membership.id,
+              'institutionId', membership.institution_id,
+              'institution', institution.name,
+              'role', membership.role,
+              'faculty', COALESCE(faculty.name, ''),
+              'program', COALESCE(program.name, ''),
+              'scope', COALESCE(membership.scope, ''),
+              'primary', membership.is_primary
+            )
+            ORDER BY membership.is_primary DESC, membership.created_at ASC
+          ),
+          '[]'::jsonb
+        )
+        FROM maturity_user_institution_roles membership
+        INNER JOIN maturity_institutions institution
+          ON institution.id = membership.institution_id
+        LEFT JOIN maturity_institution_faculties faculty
+          ON faculty.id = membership.faculty_id
+        LEFT JOIN maturity_institution_programs program
+          ON program.id = membership.program_id
+        WHERE membership.user_id = u.id
+      ) AS memberships
+    FROM maturity_users u
+    ORDER BY u.role ASC, u.name ASC
   `) as PublicUserRow[];
 
   return rows.map(serializeUserRow);
@@ -1862,6 +3404,28 @@ async function readUsers() {
 export async function prepareDatabase() {
   await ensureSchema();
   return ensureSeedData();
+}
+
+export async function getInstitutionSettingsRecord(
+  overrides?: Partial<
+    Pick<InstitutionSettings, 'displayName' | 'supportEmail' | 'defaultDomain' | 'defaultUserState'>
+  >,
+) {
+  await ensureSchema();
+  return readInstitutionSettingsRecord(overrides);
+}
+
+export async function syncInstitutionSettingsRecord(settings: InstitutionSettings) {
+  await ensureSchema();
+  await syncInstitutionDirectoryRecords(settings.structures, { pruneMissing: true });
+  await backfillCourseInstitutionRelations();
+  await rebuildUserInstitutionMemberships();
+  return readInstitutionSettingsRecord({
+    displayName: settings.displayName,
+    supportEmail: settings.supportEmail,
+    defaultDomain: settings.defaultDomain,
+    defaultUserState: settings.defaultUserState,
+  });
 }
 
 export async function loadAppData(): Promise<AppData> {
@@ -1949,28 +3513,57 @@ export async function findUserByEmail(email: string) {
   const sql = getSql();
   const rows = (await sql`
     SELECT
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt",
-      password_hash AS "passwordHash"
-    FROM maturity_users
-    WHERE email = ${email.trim().toLowerCase()}
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.secondary_roles AS "secondaryRoles",
+      u.status,
+      u.headline,
+      u.phone,
+      u.location,
+      u.bio,
+      u.institution_id AS "institutionId",
+      u.institution,
+      u.faculty_id AS "facultyId",
+      u.faculty,
+      u.program_id AS "programId",
+      u.program,
+      u.scope,
+      u.status_reason AS "statusReason",
+      u.created_by AS "createdBy",
+      u.created_at AS "createdAt",
+      u.updated_at AS "updatedAt",
+      u.last_access_at AS "lastAccessAt",
+      (
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', membership.id,
+              'institutionId', membership.institution_id,
+              'institution', institution.name,
+              'role', membership.role,
+              'faculty', COALESCE(faculty.name, ''),
+              'program', COALESCE(program.name, ''),
+              'scope', COALESCE(membership.scope, ''),
+              'primary', membership.is_primary
+            )
+            ORDER BY membership.is_primary DESC, membership.created_at ASC
+          ),
+          '[]'::jsonb
+        )
+        FROM maturity_user_institution_roles membership
+        INNER JOIN maturity_institutions institution
+          ON institution.id = membership.institution_id
+        LEFT JOIN maturity_institution_faculties faculty
+          ON faculty.id = membership.faculty_id
+        LEFT JOIN maturity_institution_programs program
+          ON program.id = membership.program_id
+        WHERE membership.user_id = u.id
+      ) AS memberships,
+      u.password_hash AS "passwordHash"
+    FROM maturity_users u
+    WHERE u.email = ${email.trim().toLowerCase()}
     LIMIT 1
   `) as UserRow[];
 
@@ -2008,8 +3601,11 @@ export async function findSessionByTokenHash(tokenHash: string) {
       u.phone,
       u.location,
       u.bio,
+      u.institution_id AS "institutionId",
       u.institution,
+      u.faculty_id AS "facultyId",
       u.faculty,
+      u.program_id AS "programId",
       u.program,
       u.scope,
       u.status_reason AS "statusReason",
@@ -2017,6 +3613,32 @@ export async function findSessionByTokenHash(tokenHash: string) {
       u.created_at AS "createdAt",
       u.updated_at AS "updatedAt",
       u.last_access_at AS "lastAccessAt",
+      (
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', membership.id,
+              'institutionId', membership.institution_id,
+              'institution', institution.name,
+              'role', membership.role,
+              'faculty', COALESCE(faculty.name, ''),
+              'program', COALESCE(program.name, ''),
+              'scope', COALESCE(membership.scope, ''),
+              'primary', membership.is_primary
+            )
+            ORDER BY membership.is_primary DESC, membership.created_at ASC
+          ),
+          '[]'::jsonb
+        )
+        FROM maturity_user_institution_roles membership
+        INNER JOIN maturity_institutions institution
+          ON institution.id = membership.institution_id
+        LEFT JOIN maturity_institution_faculties faculty
+          ON faculty.id = membership.faculty_id
+        LEFT JOIN maturity_institution_programs program
+          ON program.id = membership.program_id
+        WHERE membership.user_id = u.id
+      ) AS memberships,
       s.expires_at AS "expiresAt"
     FROM maturity_sessions s
     INNER JOIN maturity_users u
@@ -2055,15 +3677,16 @@ export async function deleteSessionByTokenHash(tokenHash: string) {
 export async function createCourseRecord(input: CourseMutationInput) {
   await ensureSchema();
   await ensureSeedData();
+  assertCourseContextInput(input);
 
   const course = makeCourseRecord(input);
-  await persistCourse(course);
-  return course;
+  return persistCourse(course);
 }
 
 export async function updateCourseRecord(slug: string, input: CourseMutationInput) {
   await ensureSchema();
   await ensureSeedData();
+  assertCourseContextInput(input);
 
   const sql = getSql();
   const rows = (await sql`
@@ -2072,6 +3695,7 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
       slug,
       title,
       code,
+      institution_structure_id AS "institutionStructureId",
       faculty,
       program,
       modality,
@@ -2148,8 +3772,7 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
     ),
   };
 
-  await persistCourse(nextCourse);
-  return nextCourse;
+  return persistCourse(nextCourse);
 }
 
 export async function updateCourseMetadataRecord(
@@ -2175,8 +3798,7 @@ export async function updateCourseMetadataRecord(
     'course',
   );
 
-  await persistCourse(nextCourse);
-  return nextCourse;
+  return persistCourse(nextCourse);
 }
 
 export async function createTimelineItemRecord(courseSlug: string, input: TimelineItemMutationInput) {
@@ -2919,8 +4541,8 @@ export async function advanceCourseStageRecord(courseSlug: string) {
     };
   }
 
-  const isLastStage = currentStageIndex >= mockAppData.stages.length - 1;
-  const nextStage = isLastStage ? null : mockAppData.stages[currentStageIndex + 1];
+  const isLastStage = currentStageIndex >= platformStages.length - 1;
+  const nextStage = isLastStage ? null : platformStages[currentStageIndex + 1];
   const nextStageChecklist = course.stageChecklist.map((checkpoint, index) => {
     if (index < currentStageIndex) {
       return {
@@ -2955,14 +4577,14 @@ export async function advanceCourseStageRecord(courseSlug: string) {
       isLastStage ? 'Curso cerrado' : 'Handoff ejecutado',
       isLastStage
         ? 'Todas las etapas quedaron completadas y el curso pasó a cierre o publicación.'
-        : `El curso pasó desde ${mockAppData.stages[currentStageIndex]?.name ?? 'la etapa actual'} hacia ${nextStage?.name ?? 'la siguiente etapa'}.`,
+        : `El curso pasó desde ${platformStages[currentStageIndex]?.name ?? 'la etapa actual'} hacia ${nextStage?.name ?? 'la siguiente etapa'}.`,
       'handoff',
     ),
     stageId: nextStage?.id ?? course.stageId,
     updatedAt: getTodayLabel(),
     progress: isLastStage
       ? 100
-      : Math.max(course.progress, Math.round(((currentStageIndex + 2) / mockAppData.stages.length) * 100)),
+      : Math.max(course.progress, Math.round(((currentStageIndex + 2) / platformStages.length) * 100)),
     status: isLastStage ? 'Listo' : 'En revisión',
     nextMilestone: isLastStage
       ? `Curso listo para publicación · ${getTodayLabel()}`
@@ -2981,7 +4603,7 @@ export async function advanceCourseStageRecord(courseSlug: string) {
     owner: isLastStage ? 'Coordinador' : nextStage?.owner ?? 'Coordinador',
     detail: isLastStage
       ? 'Todas las etapas quedaron completadas y el proyecto puede pasar a publicación o activación.'
-      : `Se liberó el handoff desde ${mockAppData.stages[currentStageIndex]?.name ?? 'la etapa anterior'} y el siguiente responsable ya puede iniciar trabajo.`,
+      : `Se liberó el handoff desde ${platformStages[currentStageIndex]?.name ?? 'la etapa anterior'} y el siguiente responsable ya puede iniciar trabajo.`,
   });
 
   let task: Task | null = null;
@@ -3341,28 +4963,57 @@ export async function findUserById(id: string) {
   const sql = getSql();
   const rows = (await sql`
     SELECT
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt",
-      password_hash AS "passwordHash"
-    FROM maturity_users
-    WHERE id = ${id}
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.secondary_roles AS "secondaryRoles",
+      u.status,
+      u.headline,
+      u.phone,
+      u.location,
+      u.bio,
+      u.institution_id AS "institutionId",
+      u.institution,
+      u.faculty_id AS "facultyId",
+      u.faculty,
+      u.program_id AS "programId",
+      u.program,
+      u.scope,
+      u.status_reason AS "statusReason",
+      u.created_by AS "createdBy",
+      u.created_at AS "createdAt",
+      u.updated_at AS "updatedAt",
+      u.last_access_at AS "lastAccessAt",
+      (
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', membership.id,
+              'institutionId', membership.institution_id,
+              'institution', institution.name,
+              'role', membership.role,
+              'faculty', COALESCE(faculty.name, ''),
+              'program', COALESCE(program.name, ''),
+              'scope', COALESCE(membership.scope, ''),
+              'primary', membership.is_primary
+            )
+            ORDER BY membership.is_primary DESC, membership.created_at ASC
+          ),
+          '[]'::jsonb
+        )
+        FROM maturity_user_institution_roles membership
+        INNER JOIN maturity_institutions institution
+          ON institution.id = membership.institution_id
+        LEFT JOIN maturity_institution_faculties faculty
+          ON faculty.id = membership.faculty_id
+        LEFT JOIN maturity_institution_programs program
+          ON program.id = membership.program_id
+        WHERE membership.user_id = u.id
+      ) AS memberships,
+      u.password_hash AS "passwordHash"
+    FROM maturity_users u
+    WHERE u.id = ${id}
     LIMIT 1
   `) as UserRow[];
 
@@ -3372,6 +5023,10 @@ export async function findUserById(id: string) {
 export async function createUserRecord(input: UserMutationInput, actorId?: string | null) {
   await ensureSchema();
   await ensureSeedData();
+
+  if (!normalizeUserScopeValue(input.institution)) {
+    throw new Error('El usuario debe quedar vinculado a una institución.');
+  }
 
   const sql = getSql();
   const normalizedEmail = input.email.trim().toLowerCase();
@@ -3391,7 +5046,7 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
   const timestamp = new Date().toISOString();
   const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
 
-  const rows = (await sql`
+  await sql`
     INSERT INTO maturity_users (
       id,
       name,
@@ -3434,34 +5089,27 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       ${timestamp},
       ${timestamp}
     )
-    RETURNING
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt"
-  `) as PublicUserRow[];
+  `;
 
-  return serializeUserRow(rows[0]);
+  await rebuildUserInstitutionMemberships();
+
+  const created = await findUserById(id);
+
+  if (!created) {
+    throw new Error('No fue posible leer el usuario recién creado.');
+  }
+
+  return serializeUserRow(created);
 }
 
 export async function updateUserRecord(input: UserUpdateInput) {
   await ensureSchema();
   await ensureSeedData();
+
+  if (!normalizeUserScopeValue(input.institution)) {
+    throw new Error('El usuario debe quedar vinculado a una institución.');
+  }
+
   const sql = getSql();
   const normalizedEmail = input.email.trim().toLowerCase();
   const current = await findUserById(input.id);
@@ -3488,7 +5136,7 @@ export async function updateUserRecord(input: UserUpdateInput) {
   const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
   const nextStatus = normalizeUserStatus(input.status);
 
-  const rows = (await sql`
+  await sql`
     UPDATE maturity_users
     SET
       name = ${input.name.trim()},
@@ -3508,27 +5156,7 @@ export async function updateUserRecord(input: UserUpdateInput) {
       status_reason = ${input.statusReason.trim() || null},
       updated_at = ${new Date().toISOString()}
     WHERE id = ${input.id}
-    RETURNING
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt"
-  `) as PublicUserRow[];
+  `;
 
   if (nextStatus !== 'Activo') {
     await sql`
@@ -3537,7 +5165,10 @@ export async function updateUserRecord(input: UserUpdateInput) {
     `;
   }
 
-  return rows[0] ? serializeUserRow(rows[0]) : null;
+  await rebuildUserInstitutionMemberships();
+
+  const updated = await findUserById(input.id);
+  return updated ? serializeUserRow(updated) : null;
 }
 
 export async function updateOwnProfileRecord(userId: string, input: UserProfileUpdateInput) {
@@ -3563,7 +5194,7 @@ export async function updateOwnProfileRecord(userId: string, input: UserProfileU
     throw new Error('Ese correo ya está en uso por otro usuario.');
   }
 
-  const rows = (await sql`
+  await sql`
     UPDATE maturity_users
     SET
       name = ${input.name.trim()},
@@ -3574,29 +5205,10 @@ export async function updateOwnProfileRecord(userId: string, input: UserProfileU
       bio = ${input.bio.trim() || null},
       updated_at = ${new Date().toISOString()}
     WHERE id = ${userId}
-    RETURNING
-      id,
-      name,
-      email,
-      role,
-      secondary_roles AS "secondaryRoles",
-      status,
-      headline,
-      phone,
-      location,
-      bio,
-      institution,
-      faculty,
-      program,
-      scope,
-      status_reason AS "statusReason",
-      created_by AS "createdBy",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt",
-      last_access_at AS "lastAccessAt"
-  `) as PublicUserRow[];
+  `;
 
-  return rows[0] ? serializeUserRow(rows[0]) : null;
+  const updated = await findUserById(userId);
+  return updated ? serializeUserRow(updated) : null;
 }
 
 export async function deleteUserRecord(id: string) {
