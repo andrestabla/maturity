@@ -7520,8 +7520,14 @@ body::after {
 .sidebar.sidebar--rail {
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: clamp(18px, 2vw, 32px);
+  align-self: start;
   gap: 12px;
-  min-height: 100vh;
+  height: calc(100dvh - clamp(36px, 4vw, 64px));
+  min-height: calc(100dvh - clamp(36px, 4vw, 64px));
+  max-height: calc(100dvh - clamp(36px, 4vw, 64px));
+  overflow-y: auto;
   padding: 14px 12px 12px;
   border-radius: 0;
 }
