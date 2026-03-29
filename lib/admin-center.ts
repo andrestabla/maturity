@@ -1210,6 +1210,16 @@ async function readIntegrationRowById(id: string) {
   return rows[0] ?? null;
 }
 
+export async function getIntegrationConfig(id: string) {
+  const row = await readIntegrationRowById(id);
+
+  if (!row) {
+    return {} as Record<string, string>;
+  }
+
+  return parseJson<Record<string, string>>(row.config);
+}
+
 async function readLogs() {
   await seedAdminCenterDefaults();
   const sql = getSql();

@@ -1,3 +1,4 @@
+import { getIntegrationConfig } from '../lib/admin-center.js';
 import { canManageUsers } from '../lib/permissions.js';
 import { buildR2FileUrl, uploadToR2, type UploadScope } from '../lib/r2.js';
 import { errorResponse, jsonResponse } from '../lib/http.js';
@@ -56,13 +57,14 @@ export default async function handler(request: Request) {
   }
 
   try {
+    const r2Config = await getIntegrationConfig('cloudflare-r2');
     const result = await uploadToR2({
       scope,
       folder,
       fileName: file.name || 'archivo',
       contentType: file.type || 'application/octet-stream',
       body: await file.arrayBuffer(),
-    });
+    }, r2Config);
 
     return jsonResponse(
       {

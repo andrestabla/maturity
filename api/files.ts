@@ -1,3 +1,4 @@
+import { getIntegrationConfig } from '../lib/admin-center.js';
 import { getR2Object, isPublicR2Key } from '../lib/r2.js';
 import { errorResponse } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
@@ -31,7 +32,8 @@ export default async function handler(request: Request) {
   }
 
   try {
-    const upstream = await getR2Object(key);
+    const r2Config = await getIntegrationConfig('cloudflare-r2');
+    const upstream = await getR2Object(key, r2Config);
 
     if (upstream.status === 404) {
       return errorResponse(404, 'Archivo no encontrado.');
