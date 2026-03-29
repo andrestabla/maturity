@@ -1,23 +1,17 @@
 import { useState } from 'react';
 import { ArrowRight, LockKeyhole, Mail } from 'lucide-react';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
-import { ThemeToggle } from '../components/ThemeToggle.js';
-import type { ThemeMode } from '../hooks/useTheme.js';
 import type { BrandingSettings } from '../types.js';
 
 interface LoginPageProps {
   isLoading: boolean;
   onLogin: (payload: { email: string; password: string }) => Promise<void>;
-  theme: ThemeMode;
-  onToggleTheme: () => void;
   branding: BrandingSettings;
 }
 
 export function LoginPage({
   isLoading,
   onLogin,
-  theme,
-  onToggleTheme,
   branding,
 }: LoginPageProps) {
   const [email, setEmail] = useState('');
@@ -79,8 +73,6 @@ export function LoginPage({
               <strong>Control Center</strong>
             </div>
           </div>
-
-          <ThemeToggle theme={theme} onToggle={onToggleTheme} className="theme-switch--panel" />
         </div>
 
         <div className="access-screen__copy">

@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  BellDot,
   ChevronRight,
   CircleUserRound,
   Command,
@@ -16,7 +15,6 @@ import {
   LayoutDashboard,
   LibraryBig,
   LogOut,
-  Menu,
   Search,
   ShieldCheck,
 } from 'lucide-react';
@@ -24,19 +22,11 @@ import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import type { AppData, AuthUser, BrandingSettings, Role } from '../types.js';
 import { getVisibleCourses } from '../utils/domain.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
-import { ThemeToggle } from './ThemeToggle.js';
-import type { ThemeMode } from '../hooks/useTheme.js';
 
 interface AppShellProps {
   user: AuthUser;
   role: Role;
-  availableRoles: Role[];
-  onRoleChange: (role: Role) => void;
   onLogout: () => Promise<void>;
-  dataSource: 'demo' | 'neon';
-  isLoading: boolean;
-  theme: ThemeMode;
-  onToggleTheme: () => void;
   branding: BrandingSettings;
   appData: AppData;
   children: ReactNode;
@@ -58,13 +48,14 @@ const commandKindLabel: Record<CommandItem['kind'], string> = {
   admin: 'Ajuste',
 };
 
-const navigation = [
+const primaryNavigation = [
   { to: '/', label: 'Pulse', icon: LayoutDashboard },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
-  { to: '/profile', label: 'Mi perfil', icon: CircleUserRound },
   { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
 ];
+
+const secondaryNavigation = [{ to: '/profile', label: 'Mi perfil', icon: CircleUserRound }];
 
 const governmentTabLabels = {
   users: 'Usuarios',
@@ -91,13 +82,7 @@ const courseSectionLabels = {
 export function AppShell({
   user,
   role,
-  availableRoles,
-  onRoleChange,
   onLogout,
-  dataSource,
-  isLoading,
-  theme,
-  onToggleTheme,
   branding,
   appData,
   children,
@@ -127,6 +112,10 @@ export function AppShell({
       ? appData.users.find((member) => member.id === userDetailMatch.params.userId)
       : null;
   const activeCourseSection = courseSectionMatch?.params.section ?? 'summary';
+  const shellNavigation = isGovernmentEnabled
+    ? primaryNavigation
+    : primaryNavigation.filter((item) => item.to !== '/admin');
+  const mobileNavigation = [...shellNavigation, ...secondaryNavigation];
 
   const breadcrumbs = useMemo(() => {
     if (location.pathname === '/') {
@@ -199,6 +188,81 @@ export function AppShell({
     location.pathname,
     userDetailMatch,
   ]);
+
+  const pageHeader = useMemo(() => {
+    if (courseMatch && activeCourse) {
+      if (activeCourseSection !== 'summary') {
+        return {
+          kicker: activeCourse.title,
+          title:
+            courseSectionLabels[activeCourseSection as keyof typeof courseSectionLabels] ??
+            activeCourse.title,
+        };
+      }
+
+      return {
+        kicker: activeCourse.code,
+        title: activeCourse.title,
+      };
+    }
+
+    if (userDetailMatch && activeUserDetail) {
+      return {
+        kicker: 'Gobierno',
+        title: activeUserDetail.name,
+      };
+    }
+
+    if (location.pathname === '/courses') {
+      return {
+        kicker: 'Repositorio operativo',
+        title: 'Cursos',
+      };
+    }
+
+    if (location.pathname === '/library') {
+      return {
+        kicker: 'Recursos y producción',
+        title: 'Biblioteca',
+      };
+    }
+
+    if (location.pathname === '/profile') {
+      return {
+        kicker: 'Preferencias y cuenta',
+        title: 'Mi perfil',
+      };
+    }
+
+    if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
+      return {
+        kicker: 'Centro de gobierno',
+        title:
+          activeGovernmentSection && governmentTabLabels[activeGovernmentSection as keyof typeof governmentTabLabels]
+            ? governmentTabLabels[activeGovernmentSection as keyof typeof governmentTabLabels]
+            : 'Gobierno',
+      };
+    }
+
+    return {
+      kicker: 'Vista principal',
+      title: 'Pulse',
+    };
+  }, [
+    activeCourse,
+    activeCourseSection,
+    activeGovernmentSection,
+    activeUserDetail,
+    courseMatch,
+    location.pathname,
+    userDetailMatch,
+  ]);
+
+  const userInitials = user.name
+    .split(/\s+/)
+    .map((item) => item[0]?.toUpperCase() ?? '')
+    .slice(0, 2)
+    .join('');
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
@@ -365,24 +429,14 @@ export function AppShell({
       <div className="ambient-orb ambient-orb--left" aria-hidden />
       <div className="ambient-orb ambient-orb--right" aria-hidden />
 
-      <header className="control-header">
-        <NavLink to="/" className="brand-card brand-card--inline">
-          {renderBrandMark()}
-          <div>
-            <p className="eyebrow">{branding.institutionName}</p>
-            <h1>{branding.logoText}</h1>
-          </div>
-        </NavLink>
-        <span className="control-header__label">CONTROL CENTER</span>
-      </header>
-
       <div className="control-layout">
         <aside className="sidebar sidebar--rail surface">
-          <div className="rail-toggle" aria-hidden>
-            <Menu size={18} />
-          </div>
+          <NavLink to="/" className="sidebar-brand" aria-label={branding.logoText}>
+            {renderBrandMark()}
+          </NavLink>
+
           <nav className="sidebar-nav" aria-label="Navegación principal">
-            {navigation.map(({ to, label, icon: Icon }) => (
+            {shellNavigation.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -395,6 +449,40 @@ export function AppShell({
               </NavLink>
             ))}
           </nav>
+
+          <div className="sidebar-footer">
+            {secondaryNavigation.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  isActive ? 'nav-link nav-link--footer nav-link--active' : 'nav-link nav-link--footer'
+                }
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+
+            <NavLink to="/profile" className="sidebar-user">
+              <div className="sidebar-user__avatar">{userInitials}</div>
+              <div>
+                <strong>{user.name}</strong>
+                <span>{role}</span>
+              </div>
+            </NavLink>
+
+            <button
+              type="button"
+              className="ghost-button sidebar-logout"
+              title="Salir"
+              aria-label="Salir"
+              onClick={() => void onLogout()}
+            >
+              <LogOut size={16} />
+              <span>Salir</span>
+            </button>
+          </div>
         </aside>
 
         <main className="main-panel">
@@ -420,17 +508,11 @@ export function AppShell({
                   ))}
                 </div>
               ) : null}
-              <span className="topbar-kicker">LIVE OPERATING LAYER</span>
-              <p>
-                Portafolio, tareas, biblioteca y gobierno sincronizados en una misma capa.
-              </p>
+              <span className="topbar-kicker">{pageHeader.kicker}</span>
+              <h2>{pageHeader.title}</h2>
             </div>
 
             <div className="topbar-actions">
-              <div className="topbar-icon" aria-hidden>
-                <BellDot size={16} />
-              </div>
-
               <button
                 type="button"
                 className="command-trigger ghost-button"
@@ -439,36 +521,8 @@ export function AppShell({
                 aria-label="Buscar o saltar"
               >
                 <Search size={16} />
+                <span>Buscar</span>
                 <kbd>Ctrl K</kbd>
-              </button>
-
-              <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-
-              <div className={dataSource === 'neon' ? 'status-chip status-chip--live' : 'status-chip'} title={dataSource === 'neon' ? 'Live Sync' : 'Demo Mode'}>
-                <span className="status-chip__dot" />
-                <span>{isLoading ? 'SYNC' : dataSource === 'neon' ? 'LIVE' : 'DEMO'}</span>
-              </div>
-
-              {availableRoles.length > 1 ? (
-                <label className="role-switch" title="Vista de rol actual">
-                  <select
-                    aria-label="Seleccionar rol"
-                    value={role}
-                    onChange={(event) => onRoleChange(event.target.value as Role)}
-                  >
-                    {availableRoles.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-
-
-              <button type="button" className="ghost-button" title="Salir" aria-label="Salir" onClick={() => void onLogout()}>
-                <LogOut size={16} />
               </button>
             </div>
           </header>
@@ -478,7 +532,7 @@ export function AppShell({
       </div>
 
       <nav className="mobile-nav" aria-label="Navegación móvil">
-        {navigation.map(({ to, label, icon: Icon }) => (
+        {mobileNavigation.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

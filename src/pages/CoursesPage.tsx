@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ChevronRight,
   FolderClosed,
-  FolderKanban,
   FolderOpen,
   LayoutGrid,
   List,
@@ -301,6 +300,7 @@ export function CoursesPage({
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [search, setSearch] = useState('');
   const [selectedNode, setSelectedNode] = useState('root');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [projectFilter, setProjectFilter] = useState('Todos');
   const [institutionFilter, setInstitutionFilter] = useState('Todas');
   const [facultyFilter, setFacultyFilter] = useState('Todas');
@@ -500,25 +500,24 @@ export function CoursesPage({
     statusFilter !== 'Todos',
     search.trim().length > 0,
   ].filter(Boolean).length;
+  const hasAdvancedFiltersActive =
+    periodFilter !== 'Todos' ||
+    typeFilter !== 'Todos' ||
+    stageFilter !== 'Todas' ||
+    statusFilter !== 'Todos';
+  const shouldShowAdvancedFilters = showAdvancedFilters || hasAdvancedFiltersActive || !isRootEntry;
 
   return (
     <div className="page-stack courses-page courses-page--folders">
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Mis cursos</span>
-            <h3>Repositorio central de cursos</h3>
+      <section className="surface section-card section-card--compact courses-entry-shell">
+        <div className="toolbar toolbar--compact">
+          <div className="courses-toolbar__intro">
+            <span className="eyebrow">
+              {isRootEntry ? 'Buscar y filtrar' : `Carpeta activa · ${getNodeLabel(selectedNode)}`}
+            </span>
           </div>
-          <FolderKanban size={18} />
-        </div>
 
-        <p className="section-lead">
-          Entra al repositorio institucional, navega por carpetas y subcarpetas académicas, y llega
-          al curso correcto sin pasar por un árbol lateral.
-        </p>
-
-        <div className="toolbar">
-          <div className="toolbar-header">
+          <div className="toolbar-header toolbar-header--compact">
             <label className="field field--search courses-toolbar__search">
               <span>Buscar curso</span>
               <div className="field__control">
@@ -526,7 +525,7 @@ export function CoursesPage({
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Nombre, código, facultad, programa o metadato"
+                  placeholder="Buscar curso, código o carpeta"
                 />
               </div>
             </label>
@@ -543,24 +542,7 @@ export function CoursesPage({
             ) : null}
           </div>
 
-          <div className="courses-filter-grid">
-            <label className="field field--compact">
-              <span>Proyecto / curso</span>
-              <div className="field__control">
-                <select
-                  value={projectFilter}
-                  onChange={(event) => setProjectFilter(event.target.value)}
-                >
-                  <option value="Todos">Todos</option>
-                  {projectOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
+          <div className="courses-filter-grid courses-filter-grid--compact">
             <label className="field field--compact">
               <span>Institución</span>
               <div className="field__control">
@@ -613,63 +595,16 @@ export function CoursesPage({
             </label>
 
             <label className="field field--compact">
-              <span>Periodo</span>
+              <span>Proyecto / curso</span>
               <div className="field__control">
                 <select
-                  value={periodFilter}
-                  onChange={(event) => setPeriodFilter(event.target.value)}
+                  value={projectFilter}
+                  onChange={(event) => setProjectFilter(event.target.value)}
                 >
                   <option value="Todos">Todos</option>
-                  {periodOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field field--compact">
-              <span>Tipo</span>
-              <div className="field__control">
-                <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
-                  <option value="Todos">Todos</option>
-                  {typeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field field--compact">
-              <span>Etapa</span>
-              <div className="field__control">
-                <select
-                  value={stageFilter}
-                  onChange={(event) => setStageFilter(event.target.value)}
-                >
-                  <option value="Todas">Todas</option>
-                  {appData.stages.map((stage) => (
-                    <option key={stage.id} value={stage.id}>
-                      {stage.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-
-            <label className="field field--compact">
-              <span>Estado</span>
-              <div className="field__control">
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-                >
-                  {statusFilters.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {projectOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -677,7 +612,75 @@ export function CoursesPage({
             </label>
           </div>
 
-          <div className="courses-toolbar__meta">
+          {shouldShowAdvancedFilters ? (
+            <div className="courses-filter-grid courses-filter-grid--advanced">
+              <label className="field field--compact">
+                <span>Periodo</span>
+                <div className="field__control">
+                  <select
+                    value={periodFilter}
+                    onChange={(event) => setPeriodFilter(event.target.value)}
+                  >
+                    <option value="Todos">Todos</option>
+                    {periodOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--compact">
+                <span>Tipo</span>
+                <div className="field__control">
+                  <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+                    <option value="Todos">Todos</option>
+                    {typeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--compact">
+                <span>Etapa</span>
+                <div className="field__control">
+                  <select
+                    value={stageFilter}
+                    onChange={(event) => setStageFilter(event.target.value)}
+                  >
+                    <option value="Todas">Todas</option>
+                    {appData.stages.map((stage) => (
+                      <option key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--compact">
+                <span>Estado</span>
+                <div className="field__control">
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                  >
+                    {statusFilters.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+            </div>
+          ) : null}
+
+          <div className="courses-toolbar__meta courses-toolbar__meta--compact">
             {isProgramEntry ? (
               <>
                 <div className="segmented-control">
@@ -722,6 +725,14 @@ export function CoursesPage({
                 </label>
               </>
             ) : null}
+
+            <button
+              type="button"
+              className={shouldShowAdvancedFilters ? 'filter-chip filter-chip--active' : 'filter-chip'}
+              onClick={() => setShowAdvancedFilters((current) => !current)}
+            >
+              <span>{shouldShowAdvancedFilters ? 'Ocultar filtros avanzados' : 'Más filtros'}</span>
+            </button>
 
             <button type="button" className="ghost-button" onClick={clearFilters}>
               <span>Limpiar filtros</span>
@@ -886,16 +897,12 @@ export function CoursesPage({
         </div>
       </section>
 
-      <section className="surface section-card folder-browser">
+      <section className="surface section-card section-card--compact folder-browser folder-browser--compact">
         <div className="folder-browser__head">
           <div>
-            <span className="eyebrow">Carpetas y subcarpetas</span>
-            <h3>{isRootEntry ? 'Carpetas de nivel 1' : getNodeLabel(selectedNode)}</h3>
-            <p className="section-lead">
-              {isRootEntry
-                ? 'Selecciona una institución para entrar a sus subcarpetas académicas.'
-                : getFolderSectionCopy(selectedNode)}
-            </p>
+            <span className="eyebrow">{isRootEntry ? 'Nivel 1' : 'Subcarpetas'}</span>
+            <h3>{isRootEntry ? 'Carpetas' : getNodeLabel(selectedNode)}</h3>
+            {!isRootEntry ? <p className="courses-results__summary">{getFolderSectionCopy(selectedNode)}</p> : null}
           </div>
 
           <div className="folder-browser__actions">
@@ -934,19 +941,10 @@ export function CoursesPage({
               ))}
             </div>
 
-            <div className="metrics-grid metrics-grid--three">
-              <div className="mini-metric">
-                <span>Subcarpetas</span>
-                <strong>{folderEntries.length}</strong>
-              </div>
-              <div className="mini-metric">
-                <span>{isProgramEntry ? 'Cursos visibles' : 'Siguiente nivel'}</span>
-                <strong>{isProgramEntry ? currentFolderCourses.length : folderEntries.length}</strong>
-              </div>
-              <div className="mini-metric">
-                <span>Filtros activos</span>
-                <strong>{activeFilterCount}</strong>
-              </div>
+            <div className="courses-inline-meta">
+              <span>{folderEntries.length} subcarpetas</span>
+              <span>{activeFilterCount} filtros activos</span>
+              {isProgramEntry ? <span>{currentFolderCourses.length} cursos visibles</span> : null}
             </div>
           </>
         ) : null}
@@ -994,32 +992,15 @@ export function CoursesPage({
               <span className="eyebrow">Cursos</span>
               <h3>Cursos dentro de {getNodeLabel(selectedNode)}</h3>
               <p className="courses-results__summary">
-                Busca, filtra y ordena los cursos visibles de esta carpeta sin perder la ruta
-                institucional.
+                {currentFolderCourses.length} visibles en esta carpeta.
               </p>
             </div>
           </div>
 
-          <div className="flow-glance flow-glance--compact">
-            <div className="flow-glance__item">
-              <strong>{openCount}</strong>
-              <span>cursos abiertos</span>
-              <p>Incluye todos los expedientes que aún están en operación o revisión.</p>
-            </div>
-            <div className="flow-glance__item">
-              <strong>{blockedCount === 0 ? 'Sin bloqueos' : blockedCount}</strong>
-              <span>estado crítico</span>
-              <p>
-                {blockedCount === 0
-                  ? 'No hay bloqueos visibles en esta carpeta.'
-                  : 'Conviene intervenir estos cursos primero para recuperar ritmo.'}
-              </p>
-            </div>
-            <div className="flow-glance__item">
-              <strong>{stageCount}</strong>
-              <span>etapas activas</span>
-              <p>Te muestra cuánta dispersión operativa hay en la carpeta seleccionada.</p>
-            </div>
+          <div className="courses-inline-meta">
+            <span>{openCount} abiertos</span>
+            <span>{blockedCount === 0 ? 'Sin bloqueos' : `${blockedCount} bloqueados`}</span>
+            <span>{stageCount} etapas activas</span>
           </div>
 
           {currentFolderCourses.length === 0 ? (

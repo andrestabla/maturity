@@ -5,8 +5,10 @@ import {
   KeyRound,
   Mail,
   MapPin,
+  MoonStar,
   Phone,
   ShieldCheck,
+  SunMedium,
   Trash2,
   UserRound,
   Waypoints,
@@ -14,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
+import type { ThemeMode } from '../hooks/useTheme.js';
 import type {
   AppData,
   AuthUser,
@@ -30,6 +33,11 @@ interface UserProfilePageProps {
   appData: AppData;
   refreshAppData: () => void;
   refreshSession: () => Promise<void>;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+  activeRole: Role;
+  availableRoles: Role[];
+  onRoleChange: (role: Role) => void;
 }
 
 function buildProfileDraft(user: AuthUser): UserProfileUpdateInput {
@@ -115,6 +123,11 @@ export function UserProfilePage({
   appData,
   refreshAppData,
   refreshSession,
+  theme,
+  onThemeChange,
+  activeRole,
+  availableRoles,
+  onRoleChange,
 }: UserProfilePageProps) {
   const { userId } = useParams<{ userId?: string }>();
   const location = useLocation();
@@ -811,6 +824,65 @@ export function UserProfilePage({
         </section>
 
         <aside className="page-stack">
+          {isSelfProfile && !isAdminDirectoryView ? (
+            <article className="surface section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Preferencias</span>
+                  <h3>Espacio de trabajo</h3>
+                </div>
+                <ShieldCheck size={18} />
+              </div>
+
+              <div className="checklist">
+                <div className="checklist__item">
+                  <strong>Apariencia</strong>
+                  <p>Elige cómo quieres ver la plataforma en este dispositivo.</p>
+                  <div className="preference-chip-row">
+                    <button
+                      type="button"
+                      className={theme === 'light' ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                      onClick={() => onThemeChange('light')}
+                    >
+                      <SunMedium size={16} />
+                      <span>Modo claro</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={theme === 'dark' ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                      onClick={() => onThemeChange('dark')}
+                    >
+                      <MoonStar size={16} />
+                      <span>Modo oscuro</span>
+                    </button>
+                  </div>
+                </div>
+
+                {availableRoles.length > 1 ? (
+                  <div className="checklist__item">
+                    <strong>Vista operativa</strong>
+                    <p>Define con qué rol quieres recorrer la plataforma.</p>
+                    <label className="field field--compact">
+                      <span>Rol activo</span>
+                      <div className="field__control">
+                        <select
+                          value={activeRole}
+                          onChange={(event) => onRoleChange(event.target.value as Role)}
+                        >
+                          {availableRoles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          ) : null}
+
           <article className="surface section-card">
             <div className="section-heading">
               <div>

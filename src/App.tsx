@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
-import { ThemeToggle } from './components/ThemeToggle.js';
 import { defaultBranding } from './data/mockData.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
@@ -78,12 +77,11 @@ function LegacyAdminRedirect() {
 
 export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [role, setRole] = useState<Role>('Coordinador');
   const [branding, setBranding] = useState(defaultBranding);
   const {
     appData,
-    source,
     isLoading,
     refreshAppData,
   } = useAppData(status === 'authenticated');
@@ -195,8 +193,6 @@ export default function App() {
                   <strong>Control Center</strong>
                 </div>
               </div>
-
-              <ThemeToggle theme={theme} onToggle={toggleTheme} className="theme-switch--panel" />
             </div>
 
             <div className="access-screen__copy">
@@ -220,21 +216,13 @@ export default function App() {
         <LoginPage
           isLoading={false}
           onLogin={login}
-          theme={theme}
-          onToggleTheme={toggleTheme}
           branding={branding}
         />
       ) : (
         <AppShell
           user={session.user}
           role={activeRole}
-          availableRoles={availableRoles}
-          onRoleChange={setRole}
           onLogout={logout}
-          dataSource={source}
-          isLoading={isLoading}
-          theme={theme}
-          onToggleTheme={toggleTheme}
           branding={branding}
           appData={appData}
         >
@@ -327,6 +315,11 @@ export default function App() {
                 appData={appData}
                 refreshAppData={refreshAppData}
                 refreshSession={refreshSession}
+                theme={theme}
+                onThemeChange={setTheme}
+                activeRole={activeRole}
+                availableRoles={availableRoles}
+                onRoleChange={setRole}
               />
             }
           />
@@ -338,6 +331,11 @@ export default function App() {
                 appData={appData}
                 refreshAppData={refreshAppData}
                 refreshSession={refreshSession}
+                theme={theme}
+                onThemeChange={setTheme}
+                activeRole={activeRole}
+                availableRoles={availableRoles}
+                onRoleChange={setRole}
               />
             }
           />
