@@ -103,6 +103,15 @@ export function AppShell({
   const courseSectionMatch = matchPath('/courses/:slug/:section', location.pathname);
   const courseMatch = courseSectionMatch ?? matchPath('/courses/:slug', location.pathname);
   const userDetailMatch = matchPath('/admin/users/:userId', location.pathname);
+  const institutionStructureEditMatch = matchPath(
+    '/admin/institution/:structureId/edit',
+    location.pathname,
+  );
+  const institutionStructureDetailMatch =
+    location.pathname !== '/admin/institution/new' &&
+    location.pathname !== '/admin/institution/settings'
+      ? matchPath('/admin/institution/:structureId', location.pathname)
+      : null;
   const teamMatch = matchPath('/admin/:section', location.pathname);
   const activeCourse =
     courseMatch?.params.slug
@@ -112,6 +121,15 @@ export function AppShell({
   const activeUserDetail =
     userDetailMatch?.params.userId
       ? appData.users.find((member) => member.id === userDetailMatch.params.userId)
+      : null;
+  const activeInstitutionStructureId =
+    institutionStructureEditMatch?.params.structureId ??
+    institutionStructureDetailMatch?.params.structureId ??
+    null;
+  const activeInstitutionStructure =
+    activeInstitutionStructureId
+      ? appData.institution.structures.find((structure) => structure.id === activeInstitutionStructureId) ??
+        null
       : null;
   const activeCourseSection = courseSectionMatch?.params.section ?? 'summary';
   const shellNavigation = isGovernmentEnabled
@@ -165,6 +183,42 @@ export function AppShell({
       ];
     }
 
+    if (location.pathname === '/admin/institution/settings') {
+      return [
+        { label: 'Gobierno', path: '/admin' },
+        { label: 'Institución', path: '/admin/institution' },
+        { label: 'Configuración', path: '/admin/institution/settings' },
+      ];
+    }
+
+    if (location.pathname === '/admin/institution/new') {
+      return [
+        { label: 'Gobierno', path: '/admin' },
+        { label: 'Institución', path: '/admin/institution' },
+        { label: 'Nueva estructura', path: '/admin/institution/new' },
+      ];
+    }
+
+    if (activeInstitutionStructure) {
+      const items = [
+        { label: 'Gobierno', path: '/admin' },
+        { label: 'Institución', path: '/admin/institution' },
+        {
+          label: activeInstitutionStructure.institution,
+          path: `/admin/institution/${activeInstitutionStructure.id}`,
+        },
+      ];
+
+      if (institutionStructureEditMatch) {
+        items.push({
+          label: 'Editar',
+          path: `/admin/institution/${activeInstitutionStructure.id}/edit`,
+        });
+      }
+
+      return items;
+    }
+
     if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
       const items = [{ label: 'Gobierno', path: '/admin' }];
       const sectionLabel =
@@ -185,8 +239,10 @@ export function AppShell({
     activeCourse,
     activeCourseSection,
     activeGovernmentSection,
+    activeInstitutionStructure,
     activeUserDetail,
     courseMatch,
+    institutionStructureEditMatch,
     location.pathname,
     userDetailMatch,
   ]);
@@ -212,6 +268,27 @@ export function AppShell({
       return {
         kicker: 'Gobierno',
         title: activeUserDetail.name,
+      };
+    }
+
+    if (location.pathname === '/admin/institution/settings') {
+      return {
+        kicker: 'Institución',
+        title: 'Configuración institucional',
+      };
+    }
+
+    if (location.pathname === '/admin/institution/new') {
+      return {
+        kicker: 'Institución',
+        title: 'Nueva estructura',
+      };
+    }
+
+    if (activeInstitutionStructure) {
+      return {
+        kicker: 'Institución',
+        title: institutionStructureEditMatch ? 'Editar estructura' : activeInstitutionStructure.institution,
       };
     }
 
@@ -254,8 +331,10 @@ export function AppShell({
     activeCourse,
     activeCourseSection,
     activeGovernmentSection,
+    activeInstitutionStructure,
     activeUserDetail,
     courseMatch,
+    institutionStructureEditMatch,
     location.pathname,
     userDetailMatch,
   ]);

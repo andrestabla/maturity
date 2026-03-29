@@ -10,6 +10,7 @@ import {
   Search,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
@@ -630,10 +631,10 @@ export function CoursesPage({
               <button
                 type="button"
                 className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsComposerOpen((current) => !current)}
+                onClick={() => setIsComposerOpen(true)}
               >
                 <Plus size={16} />
-                <span>{isComposerOpen ? 'Cerrar formulario' : 'Nuevo curso'}</span>
+                <span>Nuevo curso</span>
               </button>
             ) : null}
           </div>
@@ -836,7 +837,14 @@ export function CoursesPage({
           </div>
 
           {isComposerOpen ? (
-            <form className="editor-card" onSubmit={handleCreateCourse}>
+            <ModalFrame
+              eyebrow="Cursos"
+              title="Crear curso"
+              description="El alta se abre en modal para mantener el directorio y los filtros siempre despejados."
+              width="xl"
+              onClose={() => setIsComposerOpen(false)}
+            >
+              <form className="editor-card" onSubmit={handleCreateCourse}>
               <div className="editor-card__header">
                 <div>
                   <span className="eyebrow">Alta rápida</span>
@@ -1048,8 +1056,12 @@ export function CoursesPage({
                 <button type="submit" className="cta-button" disabled={isSaving}>
                   <span>{isSaving ? 'Creando…' : 'Crear curso'}</span>
                 </button>
+                <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
+                  <span>Cancelar</span>
+                </button>
               </div>
-            </form>
+              </form>
+            </ModalFrame>
           ) : null}
         </div>
       </section>

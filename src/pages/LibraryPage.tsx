@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { LibraryBig, NotebookTabs, PackageCheck, Plus, Save, Trash2 } from 'lucide-react';
+import { LibraryBig, NotebookTabs, PackageCheck, PencilLine, Plus, Trash2 } from 'lucide-react';
+import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
@@ -103,6 +104,7 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
   const [resourceForm, setResourceForm] = useState<LibraryResourceMutationInput>(() =>
     buildResourceForm(defaultCourseSlug),
   );
+  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [resourceDrafts, setResourceDrafts] = useState<Record<string, LibraryResourceMutationInput>>(
     () => makeResourceDrafts(resources),
   );
@@ -126,6 +128,37 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
       Object.fromEntries(resources.map((resource) => [resource.id, tagsToInput(resource.tags)])),
     );
   }, [appData, role]);
+
+  const editingResource =
+    editingResourceId !== null
+      ? resources.find((resource) => resource.id === editingResourceId) ?? null
+      : null;
+  const editingResourceDraft =
+    editingResourceId !== null ? resourceDrafts[editingResourceId] ?? null : null;
+
+  function closeResourceEditor() {
+    if (editingResource) {
+      setResourceDrafts((current) => ({
+        ...current,
+        [editingResource.id]: {
+          title: editingResource.title,
+          kind: editingResource.kind,
+          courseSlug: editingResource.courseSlug,
+          unit: editingResource.unit,
+          source: editingResource.source,
+          status: editingResource.status,
+          tags: editingResource.tags,
+          summary: editingResource.summary,
+        },
+      }));
+      setTagInputs((current) => ({
+        ...current,
+        [editingResource.id]: tagsToInput(editingResource.tags),
+      }));
+    }
+
+    setEditingResourceId(null);
+  }
 
   async function handleCreateResource(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,6 +228,7 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
     }
 
     refreshAppData();
+    setEditingResourceId(null);
   }
 
   async function handleDeleteResource(resourceId: string) {
@@ -235,6 +269,9 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
     }
 
     refreshAppData();
+    if (editingResourceId === resourceId) {
+      setEditingResourceId(null);
+    }
   }
 
   function updateResourceField<Key extends keyof LibraryResourceMutationInput>(
@@ -302,10 +339,10 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
               <button
                 type="button"
                 className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsComposerOpen((current) => !current)}
+                onClick={() => setIsComposerOpen(true)}
               >
                 <Plus size={16} />
-                <span>{isComposerOpen ? 'Cerrar formulario' : 'Nuevo recurso'}</span>
+                <span>Nuevo recurso</span>
               </button>
             </div>
           ) : null}
@@ -325,7 +362,14 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
         </div>
 
         {isComposerOpen ? (
-          <form className="editor-card" onSubmit={handleCreateResource}>
+          <ModalFrame
+            eyebrow="Biblioteca"
+            title="Registrar recurso"
+            description="La creación se abre en modal para conservar la biblioteca como catálogo limpio y navegable."
+            width="xl"
+            onClose={() => setIsComposerOpen(false)}
+          >
+            <form className="editor-card" onSubmit={handleCreateResource}>
             <div className="editor-card__header">
               <div>
                 <span className="eyebrow">Alta rápida</span>
@@ -463,8 +507,12 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
               >
                 <span>{isSaving ? 'Creando…' : 'Guardar recurso'}</span>
               </button>
+              <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
+                <span>Cancelar</span>
+              </button>
             </div>
-          </form>
+            </form>
+          </ModalFrame>
         ) : null}
       </section>
 
@@ -540,189 +588,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
               <strong>No hay recursos en esta vista</strong>
               <p>Cuando se registren piezas nuevas o cambies de filtro, aparecerán aquí.</p>
             </div>
-          ) : canEdit ? (
-            <div className="list-stack">
-              {filteredResources.map((resource) => {
-                const draft = resourceDrafts[resource.id];
-
-                if (!draft) {
-                  return null;
-                }
-
-                return (
-                  <div key={resource.id} className="task-editor">
-                    <div>
-                      <div className="task-editor__header">
-                        <span className={resource.kind === 'Curado' ? 'badge badge--ocean' : 'badge badge--sage'}>
-                          {resource.kind}
-                        </span>
-                        <strong>{resource.title}</strong>
-                      </div>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Título</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.title}
-                              onChange={(event) =>
-                                updateResourceDraft(resource.id, 'title', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Tipo</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.kind}
-                              onChange={(event) =>
-                                updateResourceDraft(
-                                  resource.id,
-                                  'kind',
-                                  event.target.value as LibraryResourceMutationInput['kind'],
-                                )
-                              }
-                            >
-                              {['Curado', 'Propio'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Curso</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.courseSlug}
-                              onChange={(event) =>
-                                updateResourceDraft(resource.id, 'courseSlug', event.target.value)
-                              }
-                            >
-                              {courseOptions.map((course) => (
-                                <option key={course.value} value={course.value}>
-                                  {course.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Unidad</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.unit}
-                              onChange={(event) =>
-                                updateResourceDraft(resource.id, 'unit', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Fuente</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.source}
-                              onChange={(event) =>
-                                updateResourceDraft(resource.id, 'source', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateResourceDraft(
-                                  resource.id,
-                                  'status',
-                                  event.target.value as LibraryResourceMutationInput['status'],
-                                )
-                              }
-                            >
-                              {['Pendiente', 'En revisión', 'Listo'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Tags</span>
-                          <div className="field__control">
-                            <input
-                              value={tagInputs[resource.id] ?? tagsToInput(draft.tags)}
-                              onChange={(event) => {
-                                setTagInputs((current) => ({
-                                  ...current,
-                                  [resource.id]: event.target.value,
-                                }));
-                                updateResourceDraft(
-                                  resource.id,
-                                  'tags',
-                                  inputToTags(event.target.value),
-                                );
-                              }}
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Resumen</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={3}
-                              value={draft.summary}
-                              onChange={(event) =>
-                                updateResourceDraft(resource.id, 'summary', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{draft.source}</span>
-                        <span>{draft.unit}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => void handleSaveResource(resource.id)}
-                      >
-                        <Save size={16} />
-                        <span>Guardar</span>
-                      </button>
-
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          onClick={() => void handleDeleteResource(resource.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           ) : (
             <div className="resource-grid">
               {filteredResources.map((resource) => (
@@ -746,6 +611,29 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
                       </span>
                     ))}
                   </div>
+                  {canEdit ? (
+                    <div className="action-row">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setEditingResourceId(resource.id)}
+                      >
+                        <PencilLine size={16} />
+                        <span>Editar</span>
+                      </button>
+
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          onClick={() => void handleDeleteResource(resource.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -781,6 +669,176 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
           </div>
         </article>
       </section>
+
+      {editingResource && editingResourceDraft ? (
+        <ModalFrame
+          eyebrow="Biblioteca"
+          title={`Editar recurso · ${editingResource.title}`}
+          description="La edición del recurso se abre en modal para no saturar el inventario."
+          width="xl"
+          onClose={closeResourceEditor}
+        >
+          <form
+            className="editor-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSaveResource(editingResource.id);
+            }}
+          >
+            <div className="form-grid">
+              <label className="field">
+                <span>Título</span>
+                <div className="field__control">
+                  <input
+                    value={editingResourceDraft.title}
+                    onChange={(event) =>
+                      updateResourceDraft(editingResource.id, 'title', event.target.value)
+                    }
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Tipo</span>
+                <div className="field__control">
+                  <select
+                    value={editingResourceDraft.kind}
+                    onChange={(event) =>
+                      updateResourceDraft(
+                        editingResource.id,
+                        'kind',
+                        event.target.value as LibraryResourceMutationInput['kind'],
+                      )
+                    }
+                  >
+                    {['Curado', 'Propio'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Curso</span>
+                <div className="field__control">
+                  <select
+                    value={editingResourceDraft.courseSlug}
+                    onChange={(event) =>
+                      updateResourceDraft(editingResource.id, 'courseSlug', event.target.value)
+                    }
+                  >
+                    {courseOptions.map((course) => (
+                      <option key={course.value} value={course.value}>
+                        {course.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Unidad</span>
+                <div className="field__control">
+                  <input
+                    value={editingResourceDraft.unit}
+                    onChange={(event) =>
+                      updateResourceDraft(editingResource.id, 'unit', event.target.value)
+                    }
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Fuente</span>
+                <div className="field__control">
+                  <input
+                    value={editingResourceDraft.source}
+                    onChange={(event) =>
+                      updateResourceDraft(editingResource.id, 'source', event.target.value)
+                    }
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Estado</span>
+                <div className="field__control">
+                  <select
+                    value={editingResourceDraft.status}
+                    onChange={(event) =>
+                      updateResourceDraft(
+                        editingResource.id,
+                        'status',
+                        event.target.value as LibraryResourceMutationInput['status'],
+                      )
+                    }
+                  >
+                    {['Pendiente', 'En revisión', 'Listo'].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Tags</span>
+                <div className="field__control">
+                  <input
+                    value={tagInputs[editingResource.id] ?? tagsToInput(editingResourceDraft.tags)}
+                    onChange={(event) => {
+                      setTagInputs((current) => ({
+                        ...current,
+                        [editingResource.id]: event.target.value,
+                      }));
+                      updateResourceDraft(
+                        editingResource.id,
+                        'tags',
+                        inputToTags(event.target.value),
+                      );
+                    }}
+                  />
+                </div>
+              </label>
+
+              <label className="field field--full">
+                <span>Resumen</span>
+                <div className="field__control field__control--textarea">
+                  <textarea
+                    rows={3}
+                    value={editingResourceDraft.summary}
+                    onChange={(event) =>
+                      updateResourceDraft(editingResource.id, 'summary', event.target.value)
+                    }
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div className="action-row">
+              <button type="submit" className="cta-button" disabled={isSaving}>
+                <span>{isSaving ? 'Guardando…' : 'Guardar recurso'}</span>
+              </button>
+              <button type="button" className="filter-chip" onClick={closeResourceEditor}>
+                <span>Cancelar</span>
+              </button>
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="danger-button danger-button--ghost"
+                  onClick={() => void handleDeleteResource(editingResource.id)}
+                >
+                  <Trash2 size={16} />
+                  <span>Eliminar</span>
+                </button>
+              ) : null}
+            </div>
+          </form>
+        </ModalFrame>
+      ) : null}
     </div>
   );
 }

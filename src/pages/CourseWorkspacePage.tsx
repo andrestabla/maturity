@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
@@ -677,6 +678,7 @@ export function CourseWorkspacePage({
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
   const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
+  const [activeWorkspaceOverlay, setActiveWorkspaceOverlay] = useState<string | null>(null);
   const [courseError, setCourseError] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -927,6 +929,17 @@ export function CourseWorkspacePage({
     setProductComposerStage(stageId);
   }
 
+  function closeWorkspaceOverlay() {
+    setActiveWorkspaceOverlay(null);
+    setIsTaskComposerOpen(false);
+    setIsTeamComposerOpen(false);
+    setIsModuleComposerOpen(false);
+    setProductComposerStage(null);
+    setIsDeliverableComposerOpen(false);
+    setIsObservationComposerOpen(false);
+    setIsTimelineComposerOpen(false);
+  }
+
   useEffect(() => {
     if (!course) {
       const fallbackInstitution =
@@ -965,6 +978,7 @@ export function CourseWorkspacePage({
       setModuleDrafts({});
       setProductDrafts({});
       setProductComposerStage(null);
+      setActiveWorkspaceOverlay(null);
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
       setTimelineDrafts({});
       setDeliverableDrafts({});
@@ -987,6 +1001,7 @@ export function CourseWorkspacePage({
     setModuleDrafts(makeLearningModuleDrafts(course.modules));
     setProductDrafts(makeCourseProductDrafts(course.products));
     setProductComposerStage(null);
+    setActiveWorkspaceOverlay(null);
     setStageNoteDrafts(makeStageNoteDrafts(course));
     setTimelineDrafts(makeTimelineDrafts(course.schedule));
     setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
@@ -3544,126 +3559,54 @@ export function CourseWorkspacePage({
     const note = currentCourse.stageNotes[noteKey];
     const draft = stageNoteDrafts[noteKey];
     const canEdit = canEditStageNote(userRole, note.owner);
+    const isEditorOpen = activeWorkspaceOverlay === `stage-note:${noteKey}`;
 
     return (
-      <article className="surface section-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{eyebrow}</span>
-            <h3>{title}</h3>
-          </div>
-          <span className={badgeClass(draft.status)}>{draft.status}</span>
-        </div>
-
-        <div className="list-stack">
-          <div className="list-item">
+      <>
+        <article className="surface section-card">
+          <div className="section-heading">
             <div>
-              <strong>Responsable de etapa</strong>
-              <p>{note.owner}</p>
+              <span className="eyebrow">{eyebrow}</span>
+              <h3>{title}</h3>
             </div>
-            <div className="list-item__meta">
-              <span>Último ajuste {formatDate(note.updatedAt)}</span>
-              <span>{note.heading}</span>
-            </div>
-          </div>
-
-          <div className="list-item">
-            <div>
-              <strong>Lectura operativa</strong>
-              <p>{description}</p>
-            </div>
-            <div className="list-item__meta">
-              <span>{draft.evidence.length} evidencias</span>
-              <span>{draft.blockers.length} bloqueos</span>
-            </div>
-          </div>
-        </div>
-
-        {canEdit ? (
-          <div className="editor-card editor-card--task">
-            <div className="form-grid">
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={draft.status}
-                    onChange={(event) =>
-                      updateStageNoteDraft(
-                        noteKey,
-                        'status',
-                        event.target.value as CourseStageNoteMutationInput['status'],
-                      )
-                    }
-                  >
-                    {['Pendiente', 'En curso', 'Listo'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={draft.summary}
-                    onChange={(event) =>
-                      updateStageNoteDraft(noteKey, 'summary', event.target.value)
-                    }
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Evidencias</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={joinLines(draft.evidence)}
-                    onChange={(event) =>
-                      updateStageNoteDraft(noteKey, 'evidence', splitLines(event.target.value))
-                    }
-                    placeholder="Una evidencia por línea"
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Bloqueos o dependencias</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={joinLines(draft.blockers)}
-                    onChange={(event) =>
-                      updateStageNoteDraft(noteKey, 'blockers', splitLines(event.target.value))
-                    }
-                    placeholder="Un bloqueo por línea"
-                  />
-                </div>
-              </label>
-            </div>
-
-            {stageNoteError && isStageNoteSaving === null ? (
-              <p className="form-error">{stageNoteError}</p>
-            ) : null}
-
             <div className="action-row">
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={isStageNoteSaving === noteKey}
-                onClick={() => void handleStageNoteSave(noteKey)}
-              >
-                <Save size={16} />
-                <span>{isStageNoteSaving === noteKey ? 'Guardando…' : 'Guardar bitácora'}</span>
-              </button>
+              <span className={badgeClass(draft.status)}>{draft.status}</span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setActiveWorkspaceOverlay(`stage-note:${noteKey}`)}
+                >
+                  <PencilLine size={16} />
+                  <span>Editar bitácora</span>
+                </button>
+              ) : null}
             </div>
           </div>
-        ) : (
+
           <div className="list-stack">
+            <div className="list-item">
+              <div>
+                <strong>Responsable de etapa</strong>
+                <p>{note.owner}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>Último ajuste {formatDate(note.updatedAt)}</span>
+                <span>{note.heading}</span>
+              </div>
+            </div>
+
+            <div className="list-item">
+              <div>
+                <strong>Lectura operativa</strong>
+                <p>{description}</p>
+              </div>
+              <div className="list-item__meta">
+                <span>{draft.evidence.length} evidencias</span>
+                <span>{draft.blockers.length} bloqueos</span>
+              </div>
+            </div>
+
             <div className="list-item">
               <div>
                 <strong>Resumen vigente</strong>
@@ -3685,8 +3628,102 @@ export function CourseWorkspacePage({
               </div>
             </div>
           </div>
-        )}
-      </article>
+        </article>
+
+        {canEdit && isEditorOpen ? (
+          <ModalFrame
+            eyebrow={eyebrow}
+            title={title}
+            description="La bitácora se edita en modal para preservar el foco de la página principal."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="editor-card editor-card--task">
+              <div className="form-grid">
+                <label className="field">
+                  <span>Estado</span>
+                  <div className="field__control">
+                    <select
+                      value={draft.status}
+                      onChange={(event) =>
+                        updateStageNoteDraft(
+                          noteKey,
+                          'status',
+                          event.target.value as CourseStageNoteMutationInput['status'],
+                        )
+                      }
+                    >
+                      {['Pendiente', 'En curso', 'Listo'].map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Resumen</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={4}
+                      value={draft.summary}
+                      onChange={(event) => updateStageNoteDraft(noteKey, 'summary', event.target.value)}
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Evidencias</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={4}
+                      value={joinLines(draft.evidence)}
+                      onChange={(event) =>
+                        updateStageNoteDraft(noteKey, 'evidence', splitLines(event.target.value))
+                      }
+                      placeholder="Una evidencia por línea"
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--full">
+                  <span>Bloqueos o dependencias</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={3}
+                      value={joinLines(draft.blockers)}
+                      onChange={(event) =>
+                        updateStageNoteDraft(noteKey, 'blockers', splitLines(event.target.value))
+                      }
+                      placeholder="Un bloqueo por línea"
+                    />
+                  </div>
+                </label>
+              </div>
+
+              {stageNoteError && isStageNoteSaving === null ? (
+                <p className="form-error">{stageNoteError}</p>
+              ) : null}
+
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isStageNoteSaving === noteKey}
+                  onClick={() => void handleStageNoteSave(noteKey)}
+                >
+                  <Save size={16} />
+                  <span>{isStageNoteSaving === noteKey ? 'Guardando…' : 'Guardar bitácora'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeWorkspaceOverlay}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+      </>
     );
   }
 
@@ -3698,475 +3735,531 @@ export function CourseWorkspacePage({
   ) {
     const stageProducts = currentCourse.products.filter((product) => product.stage === productStage);
     const stageFormats = productFormatsForStage(productStage);
-    const isComposerOpen = productComposerStage === productStage;
+    const overlayId = `products:${productStage}`;
+    const isOverlayOpen = activeWorkspaceOverlay === overlayId;
+    const isComposerOpen = isOverlayOpen && productComposerStage === productStage;
     const stageApprovedCount = stageProducts.filter((product) => product.status === 'Aprobado').length;
 
     return (
-      <article className="surface section-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{eyebrow}</span>
-            <h3>{title}</h3>
-          </div>
-          <span className="badge badge--outline">
-            {stageApprovedCount}/{stageProducts.length} aprobados
-          </span>
-        </div>
-
-        <p className="handoff-copy">{description}</p>
-
-        <div className="module-grid module-grid--summary">
-          <div className="module-card">
-            <div className="module-card__top">
-              <strong>{stageProducts.length}</strong>
-              <span>productos</span>
+      <>
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">{eyebrow}</span>
+              <h3>{title}</h3>
             </div>
-            <p>Esta etapa ya produce artefactos editables dentro del expediente, no solo seguimiento.</p>
-          </div>
-
-          <div className="module-card">
-            <div className="module-card__top">
-              <strong>{stageApprovedCount}</strong>
-              <span>aprobados</span>
-            </div>
-            <p>La validación queda trazada por versión, estado y responsable del artefacto.</p>
-          </div>
-        </div>
-
-        {canCreateCourseProducts(userRole) ? (
-          <div className="toolbar-header">
-            <button
-              type="button"
-              className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-              onClick={() => toggleProductComposer(productStage)}
-            >
-              <Plus size={16} />
-              <span>{isComposerOpen ? 'Cerrar formulario' : 'Nuevo producto'}</span>
-            </button>
-          </div>
-        ) : null}
-
-        {isComposerOpen ? (
-          <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
-            {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
-            {renderStructuredProductEditor(newProductForm, (patch) =>
-              setNewProductForm((current) => ({
-                ...current,
-                stage: productStage,
-                ...patch,
-              }))
-            )}
-
-            <div className="form-grid">
-              <label className="field">
-                <span>Título</span>
-                <div className="field__control">
-                  <input
-                    value={newProductForm.title}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Formato</span>
-                <div className="field__control">
-                  <select
-                    value={newProductForm.format}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        format: event.target.value as CourseProductMutationInput['format'],
-                      }))
-                    }
-                  >
-                    {stageFormats.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Responsable</span>
-                <div className="field__control">
-                  <select
-                    value={newProductForm.owner}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        owner: event.target.value as Role,
-                      }))
-                    }
-                  >
-                    {appData.roles.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={newProductForm.status}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        status: event.target.value as CourseProductMutationInput['status'],
-                      }))
-                    }
-                  >
-                    {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Versión</span>
-                <div className="field__control">
-                  <input
-                    value={newProductForm.version}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        version: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Etiquetas</span>
-                <div className="field__control">
-                  <input
-                    value={joinTags(newProductForm.tags)}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        tags: splitTags(event.target.value),
-                      }))
-                    }
-                    placeholder="sílabus, currículo, recursos"
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={newProductForm.summary}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        summary: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Contenido del producto</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={10}
-                    value={newProductForm.body}
-                    onChange={(event) =>
-                      setNewProductForm((current) => ({
-                        ...current,
-                        stage: productStage,
-                        body: event.target.value,
-                      }))
-                    }
-                    placeholder="Desarrolla aquí el contenido base del producto."
-                    required
-                  />
-                </div>
-              </label>
-            </div>
-
             <div className="action-row">
-              <button type="submit" className="cta-button" disabled={isProductSaving === 'new'}>
-                <span>{isProductSaving === 'new' ? 'Creando…' : 'Crear producto'}</span>
-              </button>
+              {canCreateCourseProducts(userRole) ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setProductError(null);
+                    setProductComposerStage(null);
+                    setActiveWorkspaceOverlay(overlayId);
+                  }}
+                >
+                  <PencilLine size={16} />
+                  <span>Gestionar productos</span>
+                </button>
+              ) : null}
+              <span className="badge badge--outline">
+                {stageApprovedCount}/{stageProducts.length} aprobados
+              </span>
             </div>
-          </form>
-        ) : null}
+          </div>
 
-        {productError && isProductSaving !== 'new' ? <p className="form-error">{productError}</p> : null}
+          <p className="handoff-copy">{description}</p>
 
-        <div className="list-stack">
-          {stageProducts.length === 0 ? (
-            <div className="empty-state">
-              <strong>Sin productos registrados en esta etapa</strong>
-              <p>Cuando el equipo empiece a producir artefactos, aparecerán aquí como contenido editable.</p>
+          <div className="module-grid module-grid--summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{stageProducts.length}</strong>
+                <span>productos</span>
+              </div>
+              <p>Esta etapa produce artefactos editables y trazables dentro del expediente del curso.</p>
             </div>
-          ) : (
-            stageProducts.map((product) => {
-              const draft = productDrafts[product.id];
-              const isEditable = canEditCourseProduct(userRole, product.owner);
 
-              if (!draft || !isEditable) {
-                return (
-                  <div key={product.id} className="task-editor">
-                    <div>
-                      <div className="task-editor__header">
-                        <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
-                        <strong>{product.title}</strong>
-                      </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{stageApprovedCount}</strong>
+                <span>aprobados</span>
+              </div>
+              <p>La validación queda registrada por versión, responsable y estado del contenido.</p>
+            </div>
+          </div>
 
-                      {renderProductSupportPanel(product)}
-
-                      <div className="list-stack">
-                        <div className="list-item">
-                          <div>
-                            <strong>Resumen</strong>
-                            <p>{product.summary}</p>
-                          </div>
-                          <div className="list-item__meta">
-                            <span>{product.format}</span>
-                            <span>{product.version}</span>
-                          </div>
-                        </div>
-
-                        <div className="list-item">
-                          <div>
-                            <strong>Contenido</strong>
-                            <p style={{ whiteSpace: 'pre-wrap' }}>{product.body}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{product.owner}</span>
-                        <span>{formatDate(product.updatedAt)}</span>
-                      </div>
-                      <div className="task-item__meta">
-                        <span>{productStageLabel(product.stage)}</span>
-                        <span>{joinTags(product.tags) || 'Sin tags'}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div key={product.id} className="task-editor">
+          <div className="list-stack">
+            {stageProducts.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin productos registrados en esta etapa</strong>
+                <p>Cuando el equipo empiece a producir artefactos, aparecerán aquí como resumen compacto.</p>
+              </div>
+            ) : (
+              stageProducts.map((product) => (
+                <div key={product.id} className="list-item">
                   <div>
-                    <div className="task-editor__header">
-                      <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
-                      <strong>{product.title}</strong>
-                    </div>
-
-                    {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
-                    {renderStructuredProductEditor(draft, (patch) =>
-                      setProductDrafts((current) => ({
-                        ...current,
-                        [product.id]: {
-                          ...current[product.id],
-                          ...patch,
-                        },
-                      }))
-                    )}
-
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Título</span>
-                        <div className="field__control">
-                          <input
-                            value={draft.title}
-                            onChange={(event) =>
-                              updateProductDraft(product.id, 'title', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Formato</span>
-                        <div className="field__control">
-                          <select
-                            value={draft.format}
-                            onChange={(event) =>
-                              updateProductDraft(
-                                product.id,
-                                'format',
-                                event.target.value as CourseProductMutationInput['format'],
-                              )
-                            }
-                          >
-                            {stageFormats.map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Responsable</span>
-                        <div className="field__control">
-                          <select
-                            value={draft.owner}
-                            onChange={(event) =>
-                              updateProductDraft(
-                                product.id,
-                                'owner',
-                                event.target.value as Role,
-                              )
-                            }
-                          >
-                            {appData.roles.map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Estado</span>
-                        <div className="field__control">
-                          <select
-                            value={draft.status}
-                            onChange={(event) =>
-                              updateProductDraft(
-                                product.id,
-                                'status',
-                                event.target.value as CourseProductMutationInput['status'],
-                              )
-                            }
-                          >
-                            {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
-                              <option key={item} value={item}>
-                                {item}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Versión</span>
-                        <div className="field__control">
-                          <input
-                            value={draft.version}
-                            onChange={(event) =>
-                              updateProductDraft(product.id, 'version', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field field--full">
-                        <span>Etiquetas</span>
-                        <div className="field__control">
-                          <input
-                            value={joinTags(draft.tags)}
-                            onChange={(event) =>
-                              updateProductDraft(product.id, 'tags', splitTags(event.target.value))
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field field--full">
-                        <span>Resumen</span>
-                        <div className="field__control field__control--textarea">
-                          <textarea
-                            rows={3}
-                            value={draft.summary}
-                            onChange={(event) =>
-                              updateProductDraft(product.id, 'summary', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field field--full">
-                        <span>Contenido del producto</span>
-                        <div className="field__control field__control--textarea">
-                          <textarea
-                            rows={10}
-                            value={draft.body}
-                            onChange={(event) =>
-                              updateProductDraft(product.id, 'body', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-                    </div>
+                    <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                    <strong>{product.title}</strong>
+                    <p>{product.summary}</p>
                   </div>
-
-                  <div className="task-editor__sidebar">
-                    <div className="task-item__meta">
-                      <span>{draft.owner}</span>
-                      <span>{formatDate(product.updatedAt)}</span>
-                    </div>
-                    <div className="task-item__meta">
-                      <span>{productStageLabel(draft.stage)}</span>
-                      <span>{draft.format}</span>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      disabled={isProductSaving === product.id}
-                      onClick={() => void handleProductSave(product.id)}
-                    >
-                      <Save size={16} />
-                      <span>{isProductSaving === product.id ? 'Guardando…' : 'Guardar'}</span>
-                    </button>
-
-                    {canDeleteCourseProducts(userRole) ? (
-                      <button
-                        type="button"
-                        className="danger-button danger-button--ghost"
-                        disabled={isProductSaving === product.id}
-                        onClick={() => void handleProductDelete(product.id)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Eliminar</span>
-                      </button>
-                    ) : null}
+                  <div className="list-item__meta">
+                    <span>{product.owner}</span>
+                    <span>{product.version}</span>
+                    <span>{product.format}</span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-      </article>
+              ))
+            )}
+          </div>
+        </article>
+
+        {isOverlayOpen ? (
+          <ModalFrame
+            eyebrow={eyebrow}
+            title={title}
+            description="La edición detallada de productos vive en modal para mantener limpia la vista operativa."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="page-stack">
+              {canCreateCourseProducts(userRole) ? (
+                <div className="toolbar-header">
+                  <button
+                    type="button"
+                    className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                    onClick={() => toggleProductComposer(productStage)}
+                  >
+                    <Plus size={16} />
+                    <span>{isComposerOpen ? 'Cerrar formulario' : 'Nuevo producto'}</span>
+                  </button>
+                </div>
+              ) : null}
+
+              {isComposerOpen ? (
+                <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
+                  {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
+                  {renderStructuredProductEditor(newProductForm, (patch) =>
+                    setNewProductForm((current) => ({
+                      ...current,
+                      stage: productStage,
+                      ...patch,
+                    }))
+                  )}
+
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Título</span>
+                      <div className="field__control">
+                        <input
+                          value={newProductForm.title}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Formato</span>
+                      <div className="field__control">
+                        <select
+                          value={newProductForm.format}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              format: event.target.value as CourseProductMutationInput['format'],
+                            }))
+                          }
+                        >
+                          {stageFormats.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Responsable</span>
+                      <div className="field__control">
+                        <select
+                          value={newProductForm.owner}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              owner: event.target.value as Role,
+                            }))
+                          }
+                        >
+                          {appData.roles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={newProductForm.status}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              status: event.target.value as CourseProductMutationInput['status'],
+                            }))
+                          }
+                        >
+                          {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Versión</span>
+                      <div className="field__control">
+                        <input
+                          value={newProductForm.version}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              version: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Etiquetas</span>
+                      <div className="field__control">
+                        <input
+                          value={joinTags(newProductForm.tags)}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              tags: splitTags(event.target.value),
+                            }))
+                          }
+                          placeholder="sílabus, currículo, recursos"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Resumen</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={newProductForm.summary}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              summary: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Contenido del producto</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={10}
+                          value={newProductForm.body}
+                          onChange={(event) =>
+                            setNewProductForm((current) => ({
+                              ...current,
+                              stage: productStage,
+                              body: event.target.value,
+                            }))
+                          }
+                          placeholder="Desarrolla aquí el contenido base del producto."
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isProductSaving === 'new'}>
+                      <span>{isProductSaving === 'new' ? 'Creando…' : 'Crear producto'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {productError && isProductSaving !== 'new' ? <p className="form-error">{productError}</p> : null}
+
+              <div className="list-stack">
+                {stageProducts.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>Sin productos registrados en esta etapa</strong>
+                    <p>Cuando el equipo empiece a producir artefactos, aparecerán aquí como contenido editable.</p>
+                  </div>
+                ) : (
+                  stageProducts.map((product) => {
+                    const draft = productDrafts[product.id];
+                    const isEditable = canEditCourseProduct(userRole, product.owner);
+
+                    if (!draft || !isEditable) {
+                      return (
+                        <div key={product.id} className="task-editor">
+                          <div>
+                            <div className="task-editor__header">
+                              <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                              <strong>{product.title}</strong>
+                            </div>
+
+                            {renderProductSupportPanel(product)}
+
+                            <div className="list-stack">
+                              <div className="list-item">
+                                <div>
+                                  <strong>Resumen</strong>
+                                  <p>{product.summary}</p>
+                                </div>
+                                <div className="list-item__meta">
+                                  <span>{product.format}</span>
+                                  <span>{product.version}</span>
+                                </div>
+                              </div>
+
+                              <div className="list-item">
+                                <div>
+                                  <strong>Contenido</strong>
+                                  <p style={{ whiteSpace: 'pre-wrap' }}>{product.body}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="task-editor__sidebar">
+                            <div className="task-item__meta">
+                              <span>{product.owner}</span>
+                              <span>{formatDate(product.updatedAt)}</span>
+                            </div>
+                            <div className="task-item__meta">
+                              <span>{productStageLabel(product.stage)}</span>
+                              <span>{joinTags(product.tags) || 'Sin tags'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={product.id} className="task-editor">
+                        <div>
+                          <div className="task-editor__header">
+                            <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
+                            <strong>{product.title}</strong>
+                          </div>
+
+                          {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
+                          {renderStructuredProductEditor(draft, (patch) =>
+                            setProductDrafts((current) => ({
+                              ...current,
+                              [product.id]: {
+                                ...current[product.id],
+                                ...patch,
+                              },
+                            }))
+                          )}
+
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Título</span>
+                              <div className="field__control">
+                                <input
+                                  value={draft.title}
+                                  onChange={(event) =>
+                                    updateProductDraft(product.id, 'title', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Formato</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.format}
+                                  onChange={(event) =>
+                                    updateProductDraft(
+                                      product.id,
+                                      'format',
+                                      event.target.value as CourseProductMutationInput['format'],
+                                    )
+                                  }
+                                >
+                                  {stageFormats.map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Responsable</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.owner}
+                                  onChange={(event) =>
+                                    updateProductDraft(
+                                      product.id,
+                                      'owner',
+                                      event.target.value as Role,
+                                    )
+                                  }
+                                >
+                                  {appData.roles.map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Estado</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.status}
+                                  onChange={(event) =>
+                                    updateProductDraft(
+                                      product.id,
+                                      'status',
+                                      event.target.value as CourseProductMutationInput['status'],
+                                    )
+                                  }
+                                >
+                                  {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Versión</span>
+                              <div className="field__control">
+                                <input
+                                  value={draft.version}
+                                  onChange={(event) =>
+                                    updateProductDraft(product.id, 'version', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Etiquetas</span>
+                              <div className="field__control">
+                                <input
+                                  value={joinTags(draft.tags)}
+                                  onChange={(event) =>
+                                    updateProductDraft(product.id, 'tags', splitTags(event.target.value))
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Resumen</span>
+                              <div className="field__control field__control--textarea">
+                                <textarea
+                                  rows={3}
+                                  value={draft.summary}
+                                  onChange={(event) =>
+                                    updateProductDraft(product.id, 'summary', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Contenido del producto</span>
+                              <div className="field__control field__control--textarea">
+                                <textarea
+                                  rows={10}
+                                  value={draft.body}
+                                  onChange={(event) =>
+                                    updateProductDraft(product.id, 'body', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="task-editor__sidebar">
+                          <div className="task-item__meta">
+                            <span>{draft.owner}</span>
+                            <span>{formatDate(product.updatedAt)}</span>
+                          </div>
+                          <div className="task-item__meta">
+                            <span>{productStageLabel(draft.stage)}</span>
+                            <span>{draft.format}</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isProductSaving === product.id}
+                            onClick={() => void handleProductSave(product.id)}
+                          >
+                            <Save size={16} />
+                            <span>{isProductSaving === product.id ? 'Guardando…' : 'Guardar'}</span>
+                          </button>
+
+                          {canDeleteCourseProducts(userRole) ? (
+                            <button
+                              type="button"
+                              className="danger-button danger-button--ghost"
+                              disabled={isProductSaving === product.id}
+                              onClick={() => void handleProductDelete(product.id)}
+                            >
+                              <Trash2 size={16} />
+                              <span>Eliminar</span>
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+      </>
     );
   }
 
@@ -4211,10 +4304,10 @@ export function CourseWorkspacePage({
               <button
                 type="button"
                 className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsCourseEditorOpen((current) => !current)}
+                onClick={() => setIsCourseEditorOpen(true)}
               >
                 <PencilLine size={16} />
-                <span>{isCourseEditorOpen ? 'Cerrar edición' : 'Editar curso'}</span>
+                <span>Editar curso</span>
               </button>
             </div>
           ) : null}
@@ -4300,10 +4393,10 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsCourseEditorOpen((current) => !current)}
+                  onClick={() => setIsCourseEditorOpen(true)}
                 >
                   <PencilLine size={16} />
-                  <span>{isCourseEditorOpen ? 'Cerrar edición' : 'Editar microcurrículo'}</span>
+                  <span>Editar microcurrículo</span>
                 </button>
               ) : null}
 
@@ -4328,7 +4421,14 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'general' && isCourseEditorOpen ? (
-        <section className="surface section-card">
+        <ModalFrame
+          eyebrow="Curso"
+          title={`Editar microcurrículo · ${currentCourse.title}`}
+          description="La edición se resuelve en modal para mantener la página como zona de trabajo enfocada."
+          width="xl"
+          onClose={() => setIsCourseEditorOpen(false)}
+        >
+          <div className="page-stack">
           <form className="editor-card" onSubmit={handleCourseSave}>
             <div className="editor-card__header">
               <div>
@@ -4541,6 +4641,9 @@ export function CourseWorkspacePage({
             <div className="action-row">
               <button type="submit" className="cta-button" disabled={isCourseSaving}>
                 <span>{isCourseSaving ? 'Guardando…' : 'Guardar cambios'}</span>
+              </button>
+              <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
+                <span>Cancelar</span>
               </button>
 
               <button type="button" className="danger-button" onClick={() => void handleCourseDelete()}>
@@ -4847,9 +4950,13 @@ export function CourseWorkspacePage({
               <button type="submit" className="cta-button" disabled={isMetadataSaving}>
                 <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
               </button>
+              <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
+                <span>Cerrar</span>
+              </button>
             </div>
           </form>
-        </section>
+          </div>
+        </ModalFrame>
       ) : null}
 
       {activeSection === 'summary' ? (
@@ -5150,75 +5257,42 @@ export function CourseWorkspacePage({
             ) : null}
           </article>
 
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Checkpoints</span>
+              <h3>Control por etapa</h3>
+            </div>
+            {currentCourse.stageChecklist.some((checkpoint) =>
+              canOperateStageCheckpoint(userRole, checkpoint.owner),
+            ) ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setActiveWorkspaceOverlay('checkpoints')}
+              >
+                <PencilLine size={16} />
+                <span>Gestionar checkpoints</span>
+              </button>
+            ) : null}
+          </div>
+
           <div className="list-stack checkpoint-stack">
             {currentCourse.stageChecklist.map((checkpoint, index) => {
               const draftStatus = checkpointDrafts[index] ?? checkpoint.status;
-              const isEditable = canOperateStageCheckpoint(userRole, checkpoint.owner);
               const stageMeta = appData.stages[index];
 
               return (
-                <div key={checkpoint.id} className="task-editor checkpoint-editor">
+                <div key={checkpoint.id} className="list-item">
                   <div>
-                    <div className="task-editor__header">
-                      <span className={checkpointBadgeClass(draftStatus)}>
-                        {checkpointStatusLabel(draftStatus)}
-                      </span>
-                      <strong>{checkpoint.label}</strong>
-                    </div>
-
+                    <span className={checkpointBadgeClass(draftStatus)}>
+                      {checkpointStatusLabel(draftStatus)}
+                    </span>
+                    <strong>{checkpoint.label}</strong>
                     <p>{stageMeta?.description ?? 'Punto de control de la etapa actual del curso.'}</p>
-
-                    <div className="list-item__meta">
-                      <span>{checkpoint.owner}</span>
-                      <span>Fase {index + 1}</span>
-                    </div>
                   </div>
-
-                  <div className="task-editor__sidebar">
-                    {isEditable ? (
-                      <>
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draftStatus}
-                              onChange={(event) =>
-                                updateCheckpointDraft(
-                                  index,
-                                  event.target.value as StageCheckpointStatus,
-                                )
-                              }
-                            >
-                              {[
-                                ['pending', 'Pendiente'],
-                                ['active', 'Activa'],
-                                ['done', 'Completada'],
-                                ['blocked', 'Bloqueada'],
-                              ].map(([value, label]) => (
-                                <option key={value} value={value}>
-                                  {label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          disabled={isCheckpointSaving === index}
-                          onClick={() => void handleCheckpointSave(index)}
-                        >
-                          <Save size={16} />
-                          <span>{isCheckpointSaving === index ? 'Guardando…' : 'Guardar'}</span>
-                        </button>
-                      </>
-                    ) : (
-                      <div className="task-item__meta">
-                        <span>{checkpoint.owner}</span>
-                        <span>{checkpointStatusLabel(draftStatus)}</span>
-                      </div>
-                    )}
+                  <div className="list-item__meta">
+                    <span>{checkpoint.owner}</span>
+                    <span>Fase {index + 1}</span>
                   </div>
                 </div>
               );
@@ -5227,141 +5301,118 @@ export function CourseWorkspacePage({
         </div>
 
         {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
+
+        {activeWorkspaceOverlay === 'checkpoints' ? (
+          <ModalFrame
+            eyebrow="Workflow"
+            title="Gestionar checkpoints"
+            description="Los puntos de control se administran en modal para no recargar la vista principal del curso."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="list-stack checkpoint-stack">
+              {currentCourse.stageChecklist.map((checkpoint, index) => {
+                const draftStatus = checkpointDrafts[index] ?? checkpoint.status;
+                const isEditable = canOperateStageCheckpoint(userRole, checkpoint.owner);
+                const stageMeta = appData.stages[index];
+
+                return (
+                  <div key={checkpoint.id} className="task-editor checkpoint-editor">
+                    <div>
+                      <div className="task-editor__header">
+                        <span className={checkpointBadgeClass(draftStatus)}>
+                          {checkpointStatusLabel(draftStatus)}
+                        </span>
+                        <strong>{checkpoint.label}</strong>
+                      </div>
+
+                      <p>{stageMeta?.description ?? 'Punto de control de la etapa actual del curso.'}</p>
+
+                      <div className="list-item__meta">
+                        <span>{checkpoint.owner}</span>
+                        <span>Fase {index + 1}</span>
+                      </div>
+                    </div>
+
+                    <div className="task-editor__sidebar">
+                      {isEditable ? (
+                        <>
+                          <label className="field">
+                            <span>Estado</span>
+                            <div className="field__control">
+                              <select
+                                value={draftStatus}
+                                onChange={(event) =>
+                                  updateCheckpointDraft(
+                                    index,
+                                    event.target.value as StageCheckpointStatus,
+                                  )
+                                }
+                              >
+                                {[
+                                  ['pending', 'Pendiente'],
+                                  ['active', 'Activa'],
+                                  ['done', 'Completada'],
+                                  ['blocked', 'Bloqueada'],
+                                ].map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </label>
+
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isCheckpointSaving === index}
+                            onClick={() => void handleCheckpointSave(index)}
+                          >
+                            <Save size={16} />
+                            <span>{isCheckpointSaving === index ? 'Guardando…' : 'Guardar'}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="task-item__meta">
+                          <span>{checkpoint.owner}</span>
+                          <span>{checkpointStatusLabel(draftStatus)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ModalFrame>
+        ) : null}
       </section>
       ) : null}
 
       {['architecture', 'planning', 'production', 'resources', 'lms', 'qa'].includes(activeSection) ? (
       <section className="workspace-grid">
         {activeSection === 'production' ? (
+        <>
         <article className="surface section-card">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Entrega</span>
               <h3>Entregables activos</h3>
             </div>
-            <Flag size={18} />
-          </div>
-
-          {canCreateDeliverables(userRole) ? (
-            <div className="toolbar-header">
-              <button
-                type="button"
-                className={
-                  isDeliverableComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
-                }
-                onClick={() => setIsDeliverableComposerOpen((current) => !current)}
-              >
-                <Plus size={16} />
-                <span>{isDeliverableComposerOpen ? 'Cerrar formulario' : 'Nuevo entregable'}</span>
-              </button>
-            </div>
-          ) : null}
-
-          {isDeliverableComposerOpen ? (
-            <form className="editor-card editor-card--task" onSubmit={handleDeliverableCreate}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Título</span>
-                  <div className="field__control">
-                    <input
-                      value={newDeliverableForm.title}
-                      onChange={(event) =>
-                        setNewDeliverableForm((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Responsable</span>
-                  <div className="field__control">
-                    <select
-                      value={newDeliverableForm.owner}
-                      onChange={(event) =>
-                        setNewDeliverableForm((current) => ({
-                          ...current,
-                          owner: event.target.value as Role,
-                        }))
-                      }
-                    >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={newDeliverableForm.status}
-                      onChange={(event) =>
-                        setNewDeliverableForm((current) => ({
-                          ...current,
-                          status: event.target.value as DeliverableMutationInput['status'],
-                        }))
-                      }
-                    >
-                      {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Vence</span>
-                  <div className="field__control">
-                    <input
-                      type="date"
-                      value={newDeliverableForm.dueDate}
-                      onChange={(event) =>
-                        setNewDeliverableForm((current) => ({
-                          ...current,
-                          dueDate: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field field--full">
-                  <span>Nota operativa</span>
-                  <div className="field__control field__control--textarea">
-                    <textarea
-                      rows={3}
-                      value={newDeliverableForm.note}
-                      onChange={(event) =>
-                        setNewDeliverableForm((current) => ({
-                          ...current,
-                          note: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isDeliverableSaving}>
-                  <span>{isDeliverableSaving ? 'Creando…' : 'Crear entregable'}</span>
+            <div className="action-row">
+              {canCreateDeliverables(userRole) ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setActiveWorkspaceOverlay('deliverables')}
+                >
+                  <PencilLine size={16} />
+                  <span>Gestionar entregables</span>
                 </button>
-              </div>
-            </form>
-          ) : null}
-
-          {deliverableError ? <p className="form-error">{deliverableError}</p> : null}
+              ) : null}
+              <Flag size={18} />
+            </div>
+          </div>
 
           <div className="list-stack">
             {course.deliverables.length === 0 ? (
@@ -5371,147 +5422,16 @@ export function CourseWorkspacePage({
               </div>
             ) : (
               course.deliverables.map((deliverable) => {
-                const draft = deliverableDrafts[deliverable.id];
-                const isEditable = canEditDeliverable(userRole, deliverable.owner);
-
-                if (!isEditable || !draft) {
-                  return (
-                    <div key={deliverable.id} className="list-item">
-                      <div>
-                        <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
-                        <strong>{deliverable.title}</strong>
-                        <p>{deliverable.note}</p>
-                      </div>
-                      <div className="list-item__meta">
-                        <span>{deliverable.owner}</span>
-                        <span>Vence {formatDate(deliverable.dueDate)}</span>
-                      </div>
-                    </div>
-                  );
-                }
-
                 return (
-                  <div key={deliverable.id} className="task-editor">
+                  <div key={deliverable.id} className="list-item">
                     <div>
-                      <div className="task-editor__header">
-                        <span className={badgeClass(draft.status)}>{draft.status}</span>
-                        <strong>{deliverable.title}</strong>
-                      </div>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Título</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.title}
-                              onChange={(event) =>
-                                updateDeliverableDraft(deliverable.id, 'title', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Responsable</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.owner}
-                              onChange={(event) =>
-                                updateDeliverableDraft(
-                                  deliverable.id,
-                                  'owner',
-                                  event.target.value as Role,
-                                )
-                              }
-                            >
-                              {appData.roles.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateDeliverableDraft(
-                                  deliverable.id,
-                                  'status',
-                                  event.target.value as DeliverableMutationInput['status'],
-                                )
-                              }
-                            >
-                              {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Vence</span>
-                          <div className="field__control">
-                            <input
-                              type="date"
-                              value={draft.dueDate}
-                              onChange={(event) =>
-                                updateDeliverableDraft(
-                                  deliverable.id,
-                                  'dueDate',
-                                  event.target.value,
-                                )
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Nota operativa</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={3}
-                              value={draft.note}
-                              onChange={(event) =>
-                                updateDeliverableDraft(deliverable.id, 'note', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-                      </div>
+                      <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
+                      <strong>{deliverable.title}</strong>
+                      <p>{deliverable.note}</p>
                     </div>
-
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{draft.owner}</span>
-                        <span>Vence {formatDate(draft.dueDate)}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => void handleDeliverableSave(deliverable.id)}
-                      >
-                        <Save size={16} />
-                        <span>Guardar</span>
-                      </button>
-
-                      {canDeleteDeliverables(userRole) ? (
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          onClick={() => void handleDeliverableDelete(deliverable.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      ) : null}
+                    <div className="list-item__meta">
+                      <span>{deliverable.owner}</span>
+                      <span>Vence {formatDate(deliverable.dueDate)}</span>
                     </div>
                   </div>
                 );
@@ -5519,6 +5439,287 @@ export function CourseWorkspacePage({
             )}
           </div>
         </article>
+
+        {activeWorkspaceOverlay === 'deliverables' ? (
+          <ModalFrame
+            eyebrow="Producción"
+            title="Gestionar entregables"
+            description="Los entregables se crean y editan en modal para no saturar la vista operativa."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="page-stack">
+              <div className="toolbar-header">
+                <button
+                  type="button"
+                  className={
+                    isDeliverableComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
+                  }
+                  onClick={() => setIsDeliverableComposerOpen((current) => !current)}
+                >
+                  <Plus size={16} />
+                  <span>{isDeliverableComposerOpen ? 'Ocultar formulario' : 'Nuevo entregable'}</span>
+                </button>
+              </div>
+
+              {isDeliverableComposerOpen ? (
+                <form className="editor-card editor-card--task" onSubmit={handleDeliverableCreate}>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Título</span>
+                      <div className="field__control">
+                        <input
+                          value={newDeliverableForm.title}
+                          onChange={(event) =>
+                            setNewDeliverableForm((current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Responsable</span>
+                      <div className="field__control">
+                        <select
+                          value={newDeliverableForm.owner}
+                          onChange={(event) =>
+                            setNewDeliverableForm((current) => ({
+                              ...current,
+                              owner: event.target.value as Role,
+                            }))
+                          }
+                        >
+                          {appData.roles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={newDeliverableForm.status}
+                          onChange={(event) =>
+                            setNewDeliverableForm((current) => ({
+                              ...current,
+                              status: event.target.value as DeliverableMutationInput['status'],
+                            }))
+                          }
+                        >
+                          {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Vence</span>
+                      <div className="field__control">
+                        <input
+                          type="date"
+                          value={newDeliverableForm.dueDate}
+                          onChange={(event) =>
+                            setNewDeliverableForm((current) => ({
+                              ...current,
+                              dueDate: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Nota operativa</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={newDeliverableForm.note}
+                          onChange={(event) =>
+                            setNewDeliverableForm((current) => ({
+                              ...current,
+                              note: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isDeliverableSaving}>
+                      <span>{isDeliverableSaving ? 'Creando…' : 'Crear entregable'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {deliverableError ? <p className="form-error">{deliverableError}</p> : null}
+
+              <div className="list-stack">
+                {course.deliverables.map((deliverable) => {
+                  const draft = deliverableDrafts[deliverable.id];
+                  const isEditable = canEditDeliverable(userRole, deliverable.owner);
+
+                  if (!isEditable || !draft) {
+                    return (
+                      <div key={deliverable.id} className="list-item">
+                        <div>
+                          <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
+                          <strong>{deliverable.title}</strong>
+                          <p>{deliverable.note}</p>
+                        </div>
+                        <div className="list-item__meta">
+                          <span>{deliverable.owner}</span>
+                          <span>Vence {formatDate(deliverable.dueDate)}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={deliverable.id} className="task-editor">
+                      <div>
+                        <div className="task-editor__header">
+                          <span className={badgeClass(draft.status)}>{draft.status}</span>
+                          <strong>{deliverable.title}</strong>
+                        </div>
+
+                        <div className="form-grid">
+                          <label className="field">
+                            <span>Título</span>
+                            <div className="field__control">
+                              <input
+                                value={draft.title}
+                                onChange={(event) =>
+                                  updateDeliverableDraft(deliverable.id, 'title', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Responsable</span>
+                            <div className="field__control">
+                              <select
+                                value={draft.owner}
+                                onChange={(event) =>
+                                  updateDeliverableDraft(
+                                    deliverable.id,
+                                    'owner',
+                                    event.target.value as Role,
+                                  )
+                                }
+                              >
+                                {appData.roles.map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Estado</span>
+                            <div className="field__control">
+                              <select
+                                value={draft.status}
+                                onChange={(event) =>
+                                  updateDeliverableDraft(
+                                    deliverable.id,
+                                    'status',
+                                    event.target.value as DeliverableMutationInput['status'],
+                                  )
+                                }
+                              >
+                                {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Vence</span>
+                            <div className="field__control">
+                              <input
+                                type="date"
+                                value={draft.dueDate}
+                                onChange={(event) =>
+                                  updateDeliverableDraft(
+                                    deliverable.id,
+                                    'dueDate',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field field--full">
+                            <span>Nota operativa</span>
+                            <div className="field__control field__control--textarea">
+                              <textarea
+                                rows={3}
+                                value={draft.note}
+                                onChange={(event) =>
+                                  updateDeliverableDraft(deliverable.id, 'note', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="task-editor__sidebar">
+                        <div className="task-item__meta">
+                          <span>{draft.owner}</span>
+                          <span>Vence {formatDate(draft.dueDate)}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => void handleDeliverableSave(deliverable.id)}
+                        >
+                          <Save size={16} />
+                          <span>Guardar</span>
+                        </button>
+
+                        {canDeleteDeliverables(userRole) ? (
+                          <button
+                            type="button"
+                            className="danger-button danger-button--ghost"
+                            onClick={() => void handleDeliverableDelete(deliverable.id)}
+                          >
+                            <Trash2 size={16} />
+                            <span>Eliminar</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+        </>
         ) : null}
 
         {activeSection === 'qa'
@@ -5566,99 +5767,27 @@ export function CourseWorkspacePage({
         ) : null}
 
         {activeSection === 'planning' ? (
+        <div className="page-stack">
         <article className="surface section-card">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Agenda</span>
               <h3>Cronograma operativo</h3>
             </div>
-            <Compass size={18} />
-          </div>
-
-          {canCreateTasks(userRole) ? (
-            <div className="toolbar-header">
-              <button
-                type="button"
-                className={isTimelineComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsTimelineComposerOpen((current) => !current)}
-              >
-                <Plus size={16} />
-                <span>{isTimelineComposerOpen ? 'Cerrar formulario' : 'Nuevo hito'}</span>
-              </button>
-            </div>
-          ) : null}
-
-          {isTimelineComposerOpen ? (
-            <form className="editor-card editor-card--task" onSubmit={handleTimelineCreate}>
-              <div className="form-grid">
-                <label className="field field--full">
-                  <span>Nombre del hito</span>
-                  <div className="field__control">
-                    <input
-                      value={newTimelineForm.label}
-                      onChange={(event) =>
-                        setNewTimelineForm((current) => ({
-                          ...current,
-                          label: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Fecha objetivo</span>
-                  <div className="field__control">
-                    <input
-                      type="date"
-                      value={newTimelineForm.dueDate}
-                      onChange={(event) =>
-                        setNewTimelineForm((current) => ({
-                          ...current,
-                          dueDate: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={newTimelineForm.status}
-                      onChange={(event) =>
-                        setNewTimelineForm((current) => ({
-                          ...current,
-                          status: event.target.value as TimelineItemMutationInput['status'],
-                        }))
-                      }
-                    >
-                      {[
-                        ['pending', 'Pendiente'],
-                        ['active', 'Activo'],
-                        ['done', 'Completado'],
-                      ].map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-              </div>
-
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isTimelineSaving === 'new'}>
-                  <span>{isTimelineSaving === 'new' ? 'Creando…' : 'Agregar hito'}</span>
+            <div className="action-row">
+              {canCreateTasks(userRole) ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setActiveWorkspaceOverlay('timeline')}
+                >
+                  <PencilLine size={16} />
+                  <span>Gestionar cronograma</span>
                 </button>
-              </div>
-            </form>
-          ) : null}
-
-          {timelineError ? <p className="form-error">{timelineError}</p> : null}
+              ) : null}
+              <Compass size={18} />
+            </div>
+          </div>
 
           <div className="timeline-stack">
             {course.schedule.length === 0 ? (
@@ -5668,104 +5797,12 @@ export function CourseWorkspacePage({
               </div>
             ) : (
               course.schedule.map((item) => {
-                const draft = timelineDrafts[item.id];
-
-                if (!draft) {
-                  return null;
-                }
-
-                if (!canCreateTasks(userRole)) {
-                  return (
-                    <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
-                      <span className="timeline-item__dot" />
-                      <div>
-                        <strong>{item.label}</strong>
-                        <p>{formatLongDate(item.dueDate)}</p>
-                      </div>
-                    </div>
-                  );
-                }
-
                 return (
-                  <div key={item.id} className="task-editor task-editor--timeline">
-                    <div className="form-grid">
-                      <label className="field field--full">
-                        <span>Hito</span>
-                        <div className="field__control">
-                          <input
-                            value={draft.label}
-                            onChange={(event) =>
-                              updateTimelineDraft(item.id, 'label', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Fecha</span>
-                        <div className="field__control">
-                          <input
-                            type="date"
-                            value={draft.dueDate}
-                            onChange={(event) =>
-                              updateTimelineDraft(item.id, 'dueDate', event.target.value)
-                            }
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Estado</span>
-                        <div className="field__control">
-                          <select
-                            value={draft.status}
-                            onChange={(event) =>
-                              updateTimelineDraft(
-                                item.id,
-                                'status',
-                                event.target.value as TimelineItemMutationInput['status'],
-                              )
-                            }
-                          >
-                            {[
-                              ['pending', 'Pendiente'],
-                              ['active', 'Activo'],
-                              ['done', 'Completado'],
-                            ].map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </label>
-                    </div>
-
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{formatDate(draft.dueDate)}</span>
-                        <span>{draft.status}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        disabled={isTimelineSaving === item.id}
-                        onClick={() => void handleTimelineSave(item.id)}
-                      >
-                        <Save size={16} />
-                        <span>{isTimelineSaving === item.id ? 'Guardando…' : 'Guardar'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="danger-button danger-button--ghost"
-                        disabled={isTimelineSaving === item.id}
-                        onClick={() => void handleTimelineDelete(item.id)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Eliminar</span>
-                      </button>
+                  <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
+                    <span className="timeline-item__dot" />
+                    <div>
+                      <strong>{item.label}</strong>
+                      <p>{formatLongDate(item.dueDate)}</p>
                     </div>
                   </div>
                 );
@@ -5773,6 +5810,208 @@ export function CourseWorkspacePage({
             )}
           </div>
         </article>
+
+        {activeWorkspaceOverlay === 'timeline' ? (
+          <ModalFrame
+            eyebrow="Planeación"
+            title="Gestionar cronograma operativo"
+            description="Los hitos y fechas objetivo se administran en un modal dedicado."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="page-stack">
+              <div className="toolbar-header">
+                <button
+                  type="button"
+                  className={isTimelineComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsTimelineComposerOpen((current) => !current)}
+                >
+                  <Plus size={16} />
+                  <span>{isTimelineComposerOpen ? 'Ocultar formulario' : 'Nuevo hito'}</span>
+                </button>
+              </div>
+
+              {isTimelineComposerOpen ? (
+                <form className="editor-card editor-card--task" onSubmit={handleTimelineCreate}>
+                  <div className="form-grid">
+                    <label className="field field--full">
+                      <span>Nombre del hito</span>
+                      <div className="field__control">
+                        <input
+                          value={newTimelineForm.label}
+                          onChange={(event) =>
+                            setNewTimelineForm((current) => ({
+                              ...current,
+                              label: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Fecha objetivo</span>
+                      <div className="field__control">
+                        <input
+                          type="date"
+                          value={newTimelineForm.dueDate}
+                          onChange={(event) =>
+                            setNewTimelineForm((current) => ({
+                              ...current,
+                              dueDate: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={newTimelineForm.status}
+                          onChange={(event) =>
+                            setNewTimelineForm((current) => ({
+                              ...current,
+                              status: event.target.value as TimelineItemMutationInput['status'],
+                            }))
+                          }
+                        >
+                          {[
+                            ['pending', 'Pendiente'],
+                            ['active', 'Activo'],
+                            ['done', 'Completado'],
+                          ].map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isTimelineSaving === 'new'}>
+                      <span>{isTimelineSaving === 'new' ? 'Creando…' : 'Agregar hito'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {timelineError ? <p className="form-error">{timelineError}</p> : null}
+
+              <div className="timeline-stack">
+                {course.schedule.map((item) => {
+                  const draft = timelineDrafts[item.id];
+
+                  if (!draft) {
+                    return null;
+                  }
+
+                  if (!canCreateTasks(userRole)) {
+                    return (
+                      <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
+                        <span className="timeline-item__dot" />
+                        <div>
+                          <strong>{item.label}</strong>
+                          <p>{formatLongDate(item.dueDate)}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={item.id} className="task-editor task-editor--timeline">
+                      <div className="form-grid">
+                        <label className="field field--full">
+                          <span>Hito</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.label}
+                              onChange={(event) =>
+                                updateTimelineDraft(item.id, 'label', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Fecha</span>
+                          <div className="field__control">
+                            <input
+                              type="date"
+                              value={draft.dueDate}
+                              onChange={(event) =>
+                                updateTimelineDraft(item.id, 'dueDate', event.target.value)
+                              }
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateTimelineDraft(
+                                  item.id,
+                                  'status',
+                                  event.target.value as TimelineItemMutationInput['status'],
+                                )
+                              }
+                            >
+                              {[
+                                ['pending', 'Pendiente'],
+                                ['active', 'Activo'],
+                                ['done', 'Completado'],
+                              ].map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+                      </div>
+
+                      <div className="task-editor__sidebar">
+                        <div className="task-item__meta">
+                          <span>{formatDate(draft.dueDate)}</span>
+                          <span>{draft.status}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isTimelineSaving === item.id}
+                          onClick={() => void handleTimelineSave(item.id)}
+                        >
+                          <Save size={16} />
+                          <span>{isTimelineSaving === item.id ? 'Guardando…' : 'Guardar'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          disabled={isTimelineSaving === item.id}
+                          onClick={() => void handleTimelineDelete(item.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+        </div>
         ) : null}
 
         {activeSection === 'architecture' ? (
@@ -5797,141 +6036,20 @@ export function CourseWorkspacePage({
                 <span className="eyebrow">Módulos</span>
                 <h3>Mapa de experiencia</h3>
               </div>
-              <Layers3 size={18} />
-            </div>
-
-            {canEditCourseModules(userRole) ? (
-              <div className="toolbar-header">
-                <button
-                  type="button"
-                  className={isModuleComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsModuleComposerOpen((current) => !current)}
-                >
-                  <Plus size={16} />
-                  <span>{isModuleComposerOpen ? 'Cerrar formulario' : 'Nuevo módulo'}</span>
-                </button>
-              </div>
-            ) : null}
-
-            {isModuleComposerOpen ? (
-              <form className="editor-card editor-card--task" onSubmit={handleModuleCreate}>
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Título</span>
-                    <div className="field__control">
-                      <input
-                        value={newLearningModuleForm.title}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            title: event.target.value,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Avance</span>
-                    <div className="field__control">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={newLearningModuleForm.completion}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            completion: Number.parseInt(event.target.value, 10) || 0,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field field--full">
-                    <span>Objetivo de aprendizaje</span>
-                    <div className="field__control field__control--textarea">
-                      <textarea
-                        rows={3}
-                        value={newLearningModuleForm.learningGoal}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            learningGoal: event.target.value,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Actividades</span>
-                    <div className="field__control">
-                      <input
-                        type="number"
-                        min={0}
-                        value={newLearningModuleForm.activities}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            activities: Number.parseInt(event.target.value, 10) || 0,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Recursos propios</span>
-                    <div className="field__control">
-                      <input
-                        type="number"
-                        min={0}
-                        value={newLearningModuleForm.ownResources}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            ownResources: Number.parseInt(event.target.value, 10) || 0,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Recursos curados</span>
-                    <div className="field__control">
-                      <input
-                        type="number"
-                        min={0}
-                        value={newLearningModuleForm.curatedResources}
-                        onChange={(event) =>
-                          setNewLearningModuleForm((current) => ({
-                            ...current,
-                            curatedResources: Number.parseInt(event.target.value, 10) || 0,
-                          }))
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-                </div>
-
-                <div className="action-row">
-                  <button type="submit" className="cta-button" disabled={isModuleSaving === 'new'}>
-                    <span>{isModuleSaving === 'new' ? 'Creando…' : 'Crear módulo'}</span>
+              <div className="action-row">
+                {canEditCourseModules(userRole) ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setActiveWorkspaceOverlay('modules')}
+                  >
+                    <PencilLine size={16} />
+                    <span>Gestionar módulos</span>
                   </button>
-                </div>
-              </form>
-            ) : null}
-
-            {moduleError ? <p className="form-error">{moduleError}</p> : null}
+                ) : null}
+                <Layers3 size={18} />
+              </div>
+            </div>
 
             <div className="list-stack">
               {currentCourse.modules.length === 0 ? (
@@ -5941,166 +6059,20 @@ export function CourseWorkspacePage({
                 </div>
               ) : (
                 currentCourse.modules.map((module) => {
-                  const draft = moduleDrafts[module.id];
-
-                  if (!draft) {
-                    return null;
-                  }
-
-                  if (!canEditCourseModules(userRole)) {
-                    return (
-                      <div key={module.id} className="module-card">
-                        <div className="module-card__top">
-                          <strong>{module.title}</strong>
-                          <span>{module.completion}%</span>
-                        </div>
-                        <p>{module.learningGoal}</p>
-                        <div className="module-card__meta">
-                          <span>{module.activities} actividades</span>
-                          <span>{module.ownResources} propios</span>
-                          <span>{module.curatedResources} curados</span>
-                        </div>
-                        <div className="progress-bar">
-                          <span style={{ width: `${module.completion}%` }} />
-                        </div>
-                      </div>
-                    );
-                  }
-
                   return (
-                    <div key={module.id} className="task-editor">
-                      <div>
-                        <div className="task-editor__header">
-                          <span className="badge badge--outline">{draft.completion}%</span>
-                          <strong>{module.title}</strong>
-                        </div>
-
-                        <div className="form-grid">
-                          <label className="field">
-                            <span>Título</span>
-                            <div className="field__control">
-                              <input
-                                value={draft.title}
-                                onChange={(event) =>
-                                  updateModuleDraft(module.id, 'title', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Avance</span>
-                            <div className="field__control">
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={draft.completion}
-                                onChange={(event) =>
-                                  updateModuleDraft(
-                                    module.id,
-                                    'completion',
-                                    Number.parseInt(event.target.value, 10) || 0,
-                                  )
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field field--full">
-                            <span>Objetivo de aprendizaje</span>
-                            <div className="field__control field__control--textarea">
-                              <textarea
-                                rows={3}
-                                value={draft.learningGoal}
-                                onChange={(event) =>
-                                  updateModuleDraft(module.id, 'learningGoal', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Actividades</span>
-                            <div className="field__control">
-                              <input
-                                type="number"
-                                min={0}
-                                value={draft.activities}
-                                onChange={(event) =>
-                                  updateModuleDraft(
-                                    module.id,
-                                    'activities',
-                                    Number.parseInt(event.target.value, 10) || 0,
-                                  )
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Propios</span>
-                            <div className="field__control">
-                              <input
-                                type="number"
-                                min={0}
-                                value={draft.ownResources}
-                                onChange={(event) =>
-                                  updateModuleDraft(
-                                    module.id,
-                                    'ownResources',
-                                    Number.parseInt(event.target.value, 10) || 0,
-                                  )
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Curados</span>
-                            <div className="field__control">
-                              <input
-                                type="number"
-                                min={0}
-                                value={draft.curatedResources}
-                                onChange={(event) =>
-                                  updateModuleDraft(
-                                    module.id,
-                                    'curatedResources',
-                                    Number.parseInt(event.target.value, 10) || 0,
-                                  )
-                                }
-                              />
-                            </div>
-                          </label>
-                        </div>
+                    <div key={module.id} className="module-card">
+                      <div className="module-card__top">
+                        <strong>{module.title}</strong>
+                        <span>{module.completion}%</span>
                       </div>
-
-                      <div className="task-editor__sidebar">
-                        <div className="task-item__meta">
-                          <span>{draft.activities} actividades</span>
-                          <span>{draft.ownResources + draft.curatedResources} recursos</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          disabled={isModuleSaving === module.id}
-                          onClick={() => void handleModuleSave(module.id)}
-                        >
-                          <Save size={16} />
-                          <span>{isModuleSaving === module.id ? 'Guardando…' : 'Guardar'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          disabled={isModuleSaving === module.id}
-                          onClick={() => void handleModuleDelete(module.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
+                      <p>{module.learningGoal}</p>
+                      <div className="module-card__meta">
+                        <span>{module.activities} actividades</span>
+                        <span>{module.ownResources} propios</span>
+                        <span>{module.curatedResources} curados</span>
+                      </div>
+                      <div className="progress-bar">
+                        <span style={{ width: `${module.completion}%` }} />
                       </div>
                     </div>
                   );
@@ -6108,6 +6080,297 @@ export function CourseWorkspacePage({
               )}
             </div>
           </article>
+
+          {activeWorkspaceOverlay === 'modules' ? (
+            <ModalFrame
+              eyebrow="Arquitectura"
+              title="Gestionar módulos"
+              description="La edición detallada de módulos se resuelve en modal."
+              width="xl"
+              onClose={closeWorkspaceOverlay}
+            >
+              <div className="page-stack">
+                <div className="toolbar-header">
+                  <button
+                    type="button"
+                    className={isModuleComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                    onClick={() => setIsModuleComposerOpen((current) => !current)}
+                  >
+                    <Plus size={16} />
+                    <span>{isModuleComposerOpen ? 'Ocultar formulario' : 'Nuevo módulo'}</span>
+                  </button>
+                </div>
+
+                {isModuleComposerOpen ? (
+                  <form className="editor-card editor-card--task" onSubmit={handleModuleCreate}>
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Título</span>
+                        <div className="field__control">
+                          <input
+                            value={newLearningModuleForm.title}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                title: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Avance</span>
+                        <div className="field__control">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={newLearningModuleForm.completion}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                completion: Number.parseInt(event.target.value, 10) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field field--full">
+                        <span>Objetivo de aprendizaje</span>
+                        <div className="field__control field__control--textarea">
+                          <textarea
+                            rows={3}
+                            value={newLearningModuleForm.learningGoal}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                learningGoal: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Actividades</span>
+                        <div className="field__control">
+                          <input
+                            type="number"
+                            min={0}
+                            value={newLearningModuleForm.activities}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                activities: Number.parseInt(event.target.value, 10) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Recursos propios</span>
+                        <div className="field__control">
+                          <input
+                            type="number"
+                            min={0}
+                            value={newLearningModuleForm.ownResources}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                ownResources: Number.parseInt(event.target.value, 10) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Recursos curados</span>
+                        <div className="field__control">
+                          <input
+                            type="number"
+                            min={0}
+                            value={newLearningModuleForm.curatedResources}
+                            onChange={(event) =>
+                              setNewLearningModuleForm((current) => ({
+                                ...current,
+                                curatedResources: Number.parseInt(event.target.value, 10) || 0,
+                              }))
+                            }
+                            required
+                          />
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="action-row">
+                      <button type="submit" className="cta-button" disabled={isModuleSaving === 'new'}>
+                        <span>{isModuleSaving === 'new' ? 'Creando…' : 'Crear módulo'}</span>
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+
+                {moduleError ? <p className="form-error">{moduleError}</p> : null}
+
+                <div className="list-stack">
+                  {currentCourse.modules.map((module) => {
+                    const draft = moduleDrafts[module.id];
+
+                    if (!draft) {
+                      return null;
+                    }
+
+                    return (
+                      <div key={module.id} className="task-editor">
+                        <div>
+                          <div className="task-editor__header">
+                            <span className="badge badge--outline">{draft.completion}%</span>
+                            <strong>{module.title}</strong>
+                          </div>
+
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Título</span>
+                              <div className="field__control">
+                                <input
+                                  value={draft.title}
+                                  onChange={(event) =>
+                                    updateModuleDraft(module.id, 'title', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Avance</span>
+                              <div className="field__control">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={draft.completion}
+                                  onChange={(event) =>
+                                    updateModuleDraft(
+                                      module.id,
+                                      'completion',
+                                      Number.parseInt(event.target.value, 10) || 0,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Objetivo de aprendizaje</span>
+                              <div className="field__control field__control--textarea">
+                                <textarea
+                                  rows={3}
+                                  value={draft.learningGoal}
+                                  onChange={(event) =>
+                                    updateModuleDraft(module.id, 'learningGoal', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Actividades</span>
+                              <div className="field__control">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={draft.activities}
+                                  onChange={(event) =>
+                                    updateModuleDraft(
+                                      module.id,
+                                      'activities',
+                                      Number.parseInt(event.target.value, 10) || 0,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Propios</span>
+                              <div className="field__control">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={draft.ownResources}
+                                  onChange={(event) =>
+                                    updateModuleDraft(
+                                      module.id,
+                                      'ownResources',
+                                      Number.parseInt(event.target.value, 10) || 0,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Curados</span>
+                              <div className="field__control">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={draft.curatedResources}
+                                  onChange={(event) =>
+                                    updateModuleDraft(
+                                      module.id,
+                                      'curatedResources',
+                                      Number.parseInt(event.target.value, 10) || 0,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="task-editor__sidebar">
+                          <div className="task-item__meta">
+                            <span>{draft.activities} actividades</span>
+                            <span>{draft.ownResources + draft.curatedResources} recursos</span>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={isModuleSaving === module.id}
+                            onClick={() => void handleModuleSave(module.id)}
+                          >
+                            <Save size={16} />
+                            <span>{isModuleSaving === module.id ? 'Guardando…' : 'Guardar'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="danger-button danger-button--ghost"
+                            disabled={isModuleSaving === module.id}
+                            onClick={() => void handleModuleDelete(module.id)}
+                          >
+                            <Trash2 size={16} />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </ModalFrame>
+          ) : null}
         </>
         ) : null}
 
@@ -6130,153 +6393,58 @@ export function CourseWorkspacePage({
           : null}
 
         {activeSection === 'qa' ? (
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Observaciones</span>
-              <h3>Puntos abiertos</h3>
-            </div>
-            <CircleAlert size={18} />
-          </div>
-
-          {canCreateObservations(userRole) ? (
-            <div className="toolbar-header">
-              <button
-                type="button"
-                className={
-                  isObservationComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
-                }
-                onClick={() => setIsObservationComposerOpen((current) => !current)}
-              >
-                <Plus size={16} />
-                <span>{isObservationComposerOpen ? 'Cerrar formulario' : 'Nueva observación'}</span>
-              </button>
-            </div>
-          ) : null}
-
-          {isObservationComposerOpen ? (
-            <form className="editor-card editor-card--task" onSubmit={handleObservationCreate}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Título</span>
-                  <div className="field__control">
-                    <input
-                      value={newObservationForm.title}
-                      onChange={(event) =>
-                        setNewObservationForm((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Rol emisor</span>
-                  <div className="field__control">
-                    <select
-                      value={newObservationForm.role}
-                      onChange={(event) =>
-                        setNewObservationForm((current) => ({
-                          ...current,
-                          role: event.target.value as Role,
-                        }))
-                      }
+          <>
+            <article className="surface section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Observaciones</span>
+                  <h3>Puntos abiertos</h3>
+                </div>
+                <div className="action-row">
+                  {canCreateObservations(userRole) ? (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setObservationError(null);
+                        setIsObservationComposerOpen(false);
+                        setActiveWorkspaceOverlay('observations');
+                      }}
                     >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Severidad</span>
-                  <div className="field__control">
-                    <select
-                      value={newObservationForm.severity}
-                      onChange={(event) =>
-                        setNewObservationForm((current) => ({
-                          ...current,
-                          severity: event.target.value as ObservationMutationInput['severity'],
-                        }))
-                      }
-                    >
-                      {['Alta', 'Media', 'Baja'].map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={newObservationForm.status}
-                      onChange={(event) =>
-                        setNewObservationForm((current) => ({
-                          ...current,
-                          status: event.target.value as ObservationMutationInput['status'],
-                        }))
-                      }
-                    >
-                      {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field field--full">
-                  <span>Detalle</span>
-                  <div className="field__control field__control--textarea">
-                    <textarea
-                      rows={3}
-                      value={newObservationForm.detail}
-                      onChange={(event) =>
-                        setNewObservationForm((current) => ({
-                          ...current,
-                          detail: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
+                      <PencilLine size={16} />
+                      <span>Gestionar observaciones</span>
+                    </button>
+                  ) : null}
+                  <CircleAlert size={18} />
+                </div>
               </div>
 
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isObservationSaving}>
-                  <span>{isObservationSaving ? 'Registrando…' : 'Registrar observación'}</span>
-                </button>
+              <div className="module-grid module-grid--summary">
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{pendingObservationsCount}</strong>
+                    <span>pendientes</span>
+                  </div>
+                  <p>QA y equipo visualizan aquí los puntos abiertos sin entrar al detalle de edición.</p>
+                </div>
+
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{resolvedObservationsCount}</strong>
+                    <span>resueltas</span>
+                  </div>
+                  <p>El cierre queda trazado por severidad, emisor y estado de la observación.</p>
+                </div>
               </div>
-            </form>
-          ) : null}
 
-          {observationError ? <p className="form-error">{observationError}</p> : null}
-
-          <div className="list-stack">
-            {course.observations.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin observaciones abiertas</strong>
-                <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
-              </div>
-            ) : (
-              course.observations.map((observation) => {
-                const draft = observationDrafts[observation.id];
-                const isEditable = canEditObservation(userRole, observation.role);
-
-                if (!isEditable || !draft) {
-                  return (
+              <div className="list-stack">
+                {course.observations.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>Sin observaciones abiertas</strong>
+                    <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
+                  </div>
+                ) : (
+                  course.observations.map((observation) => (
                     <div key={observation.id} className="list-item">
                       <div>
                         <span className={badgeClass(observation.status)}>{observation.status}</span>
@@ -6288,26 +6456,50 @@ export function CourseWorkspacePage({
                         <span>{observation.severity}</span>
                       </div>
                     </div>
-                  );
-                }
+                  ))
+                )}
+              </div>
+            </article>
 
-                return (
-                  <div key={observation.id} className="task-editor">
-                    <div>
-                      <div className="task-editor__header">
-                        <span className={badgeClass(draft.status)}>{draft.status}</span>
-                        <strong>{observation.title}</strong>
-                      </div>
+            {activeWorkspaceOverlay === 'observations' ? (
+              <ModalFrame
+                eyebrow="QA"
+                title="Gestionar observaciones"
+                description="Las observaciones y devoluciones se editan fuera de la página principal."
+                width="xl"
+                onClose={closeWorkspaceOverlay}
+              >
+                <div className="page-stack">
+                  {canCreateObservations(userRole) ? (
+                    <div className="toolbar-header">
+                      <button
+                        type="button"
+                        className={
+                          isObservationComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
+                        }
+                        onClick={() => setIsObservationComposerOpen((current) => !current)}
+                      >
+                        <Plus size={16} />
+                        <span>{isObservationComposerOpen ? 'Cerrar formulario' : 'Nueva observación'}</span>
+                      </button>
+                    </div>
+                  ) : null}
 
+                  {isObservationComposerOpen ? (
+                    <form className="editor-card editor-card--task" onSubmit={handleObservationCreate}>
                       <div className="form-grid">
                         <label className="field">
                           <span>Título</span>
                           <div className="field__control">
                             <input
-                              value={draft.title}
+                              value={newObservationForm.title}
                               onChange={(event) =>
-                                updateObservationDraft(observation.id, 'title', event.target.value)
+                                setNewObservationForm((current) => ({
+                                  ...current,
+                                  title: event.target.value,
+                                }))
                               }
+                              required
                             />
                           </div>
                         </label>
@@ -6316,13 +6508,12 @@ export function CourseWorkspacePage({
                           <span>Rol emisor</span>
                           <div className="field__control">
                             <select
-                              value={draft.role}
+                              value={newObservationForm.role}
                               onChange={(event) =>
-                                updateObservationDraft(
-                                  observation.id,
-                                  'role',
-                                  event.target.value as Role,
-                                )
+                                setNewObservationForm((current) => ({
+                                  ...current,
+                                  role: event.target.value as Role,
+                                }))
                               }
                             >
                               {appData.roles.map((item) => (
@@ -6338,13 +6529,12 @@ export function CourseWorkspacePage({
                           <span>Severidad</span>
                           <div className="field__control">
                             <select
-                              value={draft.severity}
+                              value={newObservationForm.severity}
                               onChange={(event) =>
-                                updateObservationDraft(
-                                  observation.id,
-                                  'severity',
-                                  event.target.value as ObservationMutationInput['severity'],
-                                )
+                                setNewObservationForm((current) => ({
+                                  ...current,
+                                  severity: event.target.value as ObservationMutationInput['severity'],
+                                }))
                               }
                             >
                               {['Alta', 'Media', 'Baja'].map((item) => (
@@ -6360,13 +6550,12 @@ export function CourseWorkspacePage({
                           <span>Estado</span>
                           <div className="field__control">
                             <select
-                              value={draft.status}
+                              value={newObservationForm.status}
                               onChange={(event) =>
-                                updateObservationDraft(
-                                  observation.id,
-                                  'status',
-                                  event.target.value as ObservationMutationInput['status'],
-                                )
+                                setNewObservationForm((current) => ({
+                                  ...current,
+                                  status: event.target.value as ObservationMutationInput['status'],
+                                }))
                               }
                             >
                               {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
@@ -6383,159 +6572,221 @@ export function CourseWorkspacePage({
                           <div className="field__control field__control--textarea">
                             <textarea
                               rows={3}
-                              value={draft.detail}
+                              value={newObservationForm.detail}
                               onChange={(event) =>
-                                updateObservationDraft(
-                                  observation.id,
-                                  'detail',
-                                  event.target.value,
-                                )
+                                setNewObservationForm((current) => ({
+                                  ...current,
+                                  detail: event.target.value,
+                                }))
                               }
+                              required
                             />
                           </div>
                         </label>
                       </div>
-                    </div>
 
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{draft.role}</span>
-                        <span>{draft.severity}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => void handleObservationSave(observation.id)}
-                      >
-                        <Save size={16} />
-                        <span>Guardar</span>
-                      </button>
-
-                      {canDeleteObservations(userRole) ? (
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          onClick={() => void handleObservationDelete(observation.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
+                      <div className="action-row">
+                        <button type="submit" className="cta-button" disabled={isObservationSaving}>
+                          <span>{isObservationSaving ? 'Registrando…' : 'Registrar observación'}</span>
                         </button>
-                      ) : null}
-                    </div>
+                      </div>
+                    </form>
+                  ) : null}
+
+                  {observationError ? <p className="form-error">{observationError}</p> : null}
+
+                  <div className="list-stack">
+                    {course.observations.length === 0 ? (
+                      <div className="empty-state">
+                        <strong>Sin observaciones abiertas</strong>
+                        <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
+                      </div>
+                    ) : (
+                      course.observations.map((observation) => {
+                        const draft = observationDrafts[observation.id];
+                        const isEditable = canEditObservation(userRole, observation.role);
+
+                        if (!isEditable || !draft) {
+                          return (
+                            <div key={observation.id} className="list-item">
+                              <div>
+                                <span className={badgeClass(observation.status)}>{observation.status}</span>
+                                <strong>{observation.title}</strong>
+                                <p>{observation.detail}</p>
+                              </div>
+                              <div className="list-item__meta">
+                                <span>{observation.role}</span>
+                                <span>{observation.severity}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={observation.id} className="task-editor">
+                            <div>
+                              <div className="task-editor__header">
+                                <span className={badgeClass(draft.status)}>{draft.status}</span>
+                                <strong>{observation.title}</strong>
+                              </div>
+
+                              <div className="form-grid">
+                                <label className="field">
+                                  <span>Título</span>
+                                  <div className="field__control">
+                                    <input
+                                      value={draft.title}
+                                      onChange={(event) =>
+                                        updateObservationDraft(observation.id, 'title', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
+
+                                <label className="field">
+                                  <span>Rol emisor</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.role}
+                                      onChange={(event) =>
+                                        updateObservationDraft(
+                                          observation.id,
+                                          'role',
+                                          event.target.value as Role,
+                                        )
+                                      }
+                                    >
+                                      {appData.roles.map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
+
+                                <label className="field">
+                                  <span>Severidad</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.severity}
+                                      onChange={(event) =>
+                                        updateObservationDraft(
+                                          observation.id,
+                                          'severity',
+                                          event.target.value as ObservationMutationInput['severity'],
+                                        )
+                                      }
+                                    >
+                                      {['Alta', 'Media', 'Baja'].map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
+
+                                <label className="field">
+                                  <span>Estado</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.status}
+                                      onChange={(event) =>
+                                        updateObservationDraft(
+                                          observation.id,
+                                          'status',
+                                          event.target.value as ObservationMutationInput['status'],
+                                        )
+                                      }
+                                    >
+                                      {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
+
+                                <label className="field field--full">
+                                  <span>Detalle</span>
+                                  <div className="field__control field__control--textarea">
+                                    <textarea
+                                      rows={3}
+                                      value={draft.detail}
+                                      onChange={(event) =>
+                                        updateObservationDraft(
+                                          observation.id,
+                                          'detail',
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="task-editor__sidebar">
+                              <div className="task-item__meta">
+                                <span>{draft.role}</span>
+                                <span>{draft.severity}</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => void handleObservationSave(observation.id)}
+                              >
+                                <Save size={16} />
+                                <span>Guardar</span>
+                              </button>
+
+                              {canDeleteObservations(userRole) ? (
+                                <button
+                                  type="button"
+                                  className="danger-button danger-button--ghost"
+                                  onClick={() => void handleObservationDelete(observation.id)}
+                                >
+                                  <Trash2 size={16} />
+                                  <span>Eliminar</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
-        </article>
+                </div>
+              </ModalFrame>
+            ) : null}
+          </>
         ) : null}
 
         {activeSection === 'planning' ? (
+        <div className="page-stack">
         <article className="surface section-card">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Equipo</span>
               <h3>Núcleo del proyecto</h3>
             </div>
-            <UsersRound size={18} />
-          </div>
-
-          {canManageCourseTeam(userRole) ? (
-            <div className="toolbar-header">
-              <button
-                type="button"
-                className={isTeamComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsTeamComposerOpen((current) => !current)}
-              >
-                <Plus size={16} />
-                <span>{isTeamComposerOpen ? 'Cerrar formulario' : 'Agregar responsable'}</span>
-              </button>
-            </div>
-          ) : null}
-
-          {isTeamComposerOpen ? (
-            <form className="editor-card editor-card--task" onSubmit={handleTeamMemberCreate}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Nombre</span>
-                  <div className="field__control">
-                    <input
-                      value={newTeamMemberForm.name}
-                      onChange={(event) =>
-                        setNewTeamMemberForm((current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Rol</span>
-                  <div className="field__control">
-                    <select
-                      value={newTeamMemberForm.role}
-                      onChange={(event) =>
-                        setNewTeamMemberForm((current) => ({
-                          ...current,
-                          role: event.target.value as Role,
-                        }))
-                      }
-                    >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Iniciales</span>
-                  <div className="field__control">
-                    <input
-                      value={newTeamMemberForm.initials}
-                      onChange={(event) =>
-                        setNewTeamMemberForm((current) => ({
-                          ...current,
-                          initials: event.target.value,
-                        }))
-                      }
-                      placeholder="Ej. AT"
-                    />
-                  </div>
-                </label>
-
-                <label className="field field--full">
-                  <span>Foco de trabajo</span>
-                  <div className="field__control">
-                    <input
-                      value={newTeamMemberForm.focus}
-                      onChange={(event) =>
-                        setNewTeamMemberForm((current) => ({
-                          ...current,
-                          focus: event.target.value,
-                        }))
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isTeamSaving === 'new'}>
-                  <span>{isTeamSaving === 'new' ? 'Agregando…' : 'Agregar responsable'}</span>
+            <div className="action-row">
+              {canManageCourseTeam(userRole) ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setActiveWorkspaceOverlay('team')}
+                >
+                  <PencilLine size={16} />
+                  <span>Gestionar equipo</span>
                 </button>
-              </div>
-            </form>
-          ) : null}
-
-          {teamError ? <p className="form-error">{teamError}</p> : null}
+              ) : null}
+              <UsersRound size={18} />
+            </div>
+          </div>
 
           <div className="list-stack">
             {course.team.length === 0 ? (
@@ -6545,122 +6796,231 @@ export function CourseWorkspacePage({
               </div>
             ) : (
               course.team.map((member) => {
-                const draft = teamDrafts[member.id];
-
-                if (!draft) {
-                  return null;
-                }
-
-                if (!canManageCourseTeam(userRole)) {
-                  return (
-                    <div key={member.id} className="team-list__item">
-                      <span className="avatar-pill">{member.initials}</span>
-                      <div>
-                        <strong>{member.name}</strong>
-                        <p>{member.role}</p>
-                      </div>
-                      <span>{member.focus}</span>
-                    </div>
-                  );
-                }
-
                 return (
-                  <div key={member.id} className="task-editor">
+                  <div key={member.id} className="team-list__item">
+                    <span className="avatar-pill">{member.initials}</span>
                     <div>
-                      <div className="task-editor__header">
-                        <span className="avatar-pill">{draft.initials || member.initials}</span>
-                        <strong>{member.name}</strong>
-                      </div>
-
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Nombre</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.name}
-                              onChange={(event) =>
-                                updateTeamDraft(member.id, 'name', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Rol</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.role}
-                              onChange={(event) =>
-                                updateTeamDraft(member.id, 'role', event.target.value as Role)
-                              }
-                            >
-                              {appData.roles.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Iniciales</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.initials}
-                              onChange={(event) =>
-                                updateTeamDraft(member.id, 'initials', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Foco</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.focus}
-                              onChange={(event) =>
-                                updateTeamDraft(member.id, 'focus', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-                      </div>
+                      <strong>{member.name}</strong>
+                      <p>{member.role}</p>
                     </div>
-
-                    <div className="task-editor__sidebar">
-                      <div className="task-item__meta">
-                        <span>{draft.role}</span>
-                        <span>{draft.focus}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        disabled={isTeamSaving === member.id}
-                        onClick={() => void handleTeamMemberSave(member.id)}
-                      >
-                        <Save size={16} />
-                        <span>{isTeamSaving === member.id ? 'Guardando…' : 'Guardar'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="danger-button danger-button--ghost"
-                        disabled={isTeamSaving === member.id}
-                        onClick={() => void handleTeamMemberDelete(member.id)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Eliminar</span>
-                      </button>
-                    </div>
+                    <span>{member.focus}</span>
                   </div>
                 );
               })
             )}
           </div>
         </article>
+
+        {activeWorkspaceOverlay === 'team' ? (
+          <ModalFrame
+            eyebrow="Planeación"
+            title="Gestionar equipo del curso"
+            description="La asignación y edición de responsables se resuelve en modal para mantener la vista principal limpia."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="page-stack">
+              <div className="toolbar-header">
+                <button
+                  type="button"
+                  className={isTeamComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsTeamComposerOpen((current) => !current)}
+                >
+                  <Plus size={16} />
+                  <span>{isTeamComposerOpen ? 'Ocultar formulario' : 'Agregar responsable'}</span>
+                </button>
+              </div>
+
+              {isTeamComposerOpen ? (
+                <form className="editor-card editor-card--task" onSubmit={handleTeamMemberCreate}>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Nombre</span>
+                      <div className="field__control">
+                        <input
+                          value={newTeamMemberForm.name}
+                          onChange={(event) =>
+                            setNewTeamMemberForm((current) => ({
+                              ...current,
+                              name: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Rol</span>
+                      <div className="field__control">
+                        <select
+                          value={newTeamMemberForm.role}
+                          onChange={(event) =>
+                            setNewTeamMemberForm((current) => ({
+                              ...current,
+                              role: event.target.value as Role,
+                            }))
+                          }
+                        >
+                          {appData.roles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Iniciales</span>
+                      <div className="field__control">
+                        <input
+                          value={newTeamMemberForm.initials}
+                          onChange={(event) =>
+                            setNewTeamMemberForm((current) => ({
+                              ...current,
+                              initials: event.target.value,
+                            }))
+                          }
+                          placeholder="Ej. AT"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Foco de trabajo</span>
+                      <div className="field__control">
+                        <input
+                          value={newTeamMemberForm.focus}
+                          onChange={(event) =>
+                            setNewTeamMemberForm((current) => ({
+                              ...current,
+                              focus: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isTeamSaving === 'new'}>
+                      <span>{isTeamSaving === 'new' ? 'Agregando…' : 'Agregar responsable'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {teamError ? <p className="form-error">{teamError}</p> : null}
+
+              <div className="list-stack">
+                {course.team.map((member) => {
+                  const draft = teamDrafts[member.id];
+
+                  if (!draft) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={member.id} className="task-editor">
+                      <div>
+                        <div className="task-editor__header">
+                          <span className="avatar-pill">{draft.initials || member.initials}</span>
+                          <strong>{member.name}</strong>
+                        </div>
+
+                        <div className="form-grid">
+                          <label className="field">
+                            <span>Nombre</span>
+                            <div className="field__control">
+                              <input
+                                value={draft.name}
+                                onChange={(event) =>
+                                  updateTeamDraft(member.id, 'name', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Rol</span>
+                            <div className="field__control">
+                              <select
+                                value={draft.role}
+                                onChange={(event) =>
+                                  updateTeamDraft(member.id, 'role', event.target.value as Role)
+                                }
+                              >
+                                {appData.roles.map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </label>
+
+                          <label className="field">
+                            <span>Iniciales</span>
+                            <div className="field__control">
+                              <input
+                                value={draft.initials}
+                                onChange={(event) =>
+                                  updateTeamDraft(member.id, 'initials', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+
+                          <label className="field field--full">
+                            <span>Foco</span>
+                            <div className="field__control">
+                              <input
+                                value={draft.focus}
+                                onChange={(event) =>
+                                  updateTeamDraft(member.id, 'focus', event.target.value)
+                                }
+                              />
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="task-editor__sidebar">
+                        <div className="task-item__meta">
+                          <span>{draft.role}</span>
+                          <span>{draft.focus}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          disabled={isTeamSaving === member.id}
+                          onClick={() => void handleTeamMemberSave(member.id)}
+                        >
+                          <Save size={16} />
+                          <span>{isTeamSaving === member.id ? 'Guardando…' : 'Guardar'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="danger-button danger-button--ghost"
+                          disabled={isTeamSaving === member.id}
+                          onClick={() => void handleTeamMemberDelete(member.id)}
+                        >
+                          <Trash2 size={16} />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+        </div>
         ) : null}
 
         {activeSection === 'resources' ? (
@@ -6816,156 +7176,19 @@ export function CourseWorkspacePage({
             <span className="eyebrow">Tareas</span>
             <h3>Tablero operativo del curso</h3>
           </div>
-        </div>
-
-        {canCreateTasks(userRole) ? (
-          <div className="toolbar-header">
-            <button
-              type="button"
-              className={isTaskComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-              onClick={() => setIsTaskComposerOpen((current) => !current)}
-            >
-              <Plus size={16} />
-              <span>{isTaskComposerOpen ? 'Cerrar formulario' : 'Nueva tarea'}</span>
-            </button>
-          </div>
-        ) : null}
-
-        {isTaskComposerOpen ? (
-          <form className="editor-card editor-card--task" onSubmit={handleTaskCreate}>
-            <div className="form-grid">
-              <label className="field">
-                <span>Título</span>
-                <div className="field__control">
-                  <input
-                    value={newTaskForm.title}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Rol responsable</span>
-                <div className="field__control">
-                  <select
-                    value={newTaskForm.role}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({
-                        ...current,
-                        role: event.target.value as Role,
-                      }))
-                    }
-                  >
-                    {appData.roles.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Etapa</span>
-                <div className="field__control">
-                  <select
-                    value={newTaskForm.stageId}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({ ...current, stageId: event.target.value }))
-                    }
-                  >
-                    {appData.stages.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Vence</span>
-                <div className="field__control">
-                  <input
-                    type="date"
-                    value={newTaskForm.dueDate}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({ ...current, dueDate: event.target.value }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Prioridad</span>
-                <div className="field__control">
-                  <select
-                    value={newTaskForm.priority}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({
-                        ...current,
-                        priority: event.target.value as TaskMutationInput['priority'],
-                      }))
-                    }
-                  >
-                    {['Alta', 'Media', 'Baja'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={newTaskForm.status}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({
-                        ...current,
-                        status: event.target.value as TaskMutationInput['status'],
-                      }))
-                    }
-                  >
-                    {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={newTaskForm.summary}
-                    onChange={(event) =>
-                      setNewTaskForm((current) => ({ ...current, summary: event.target.value }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className="action-row">
-              <button type="submit" className="cta-button" disabled={isTaskSaving}>
-                <span>{isTaskSaving ? 'Creando…' : 'Crear tarea'}</span>
+          <div className="action-row">
+            {canCreateTasks(userRole) ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setActiveWorkspaceOverlay('tasks')}
+              >
+                <PencilLine size={16} />
+                <span>Gestionar tareas</span>
               </button>
-            </div>
-          </form>
-        ) : null}
-
-        {taskError ? <p className="form-error">{taskError}</p> : null}
+            ) : null}
+          </div>
+        </div>
 
         <div className="list-stack">
           {visibleTasks.length === 0 ? (
@@ -6983,206 +7206,392 @@ export function CourseWorkspacePage({
               }
 
               return (
-                <div key={task.id} className="task-editor">
+                <div key={task.id} className="list-item">
                   <div>
-                    <div className="task-editor__header">
-                      <span className={badgeClass(draft.status)}>{draft.status}</span>
-                      <strong>{task.title}</strong>
-                    </div>
-
-                    {canCreateTasks(userRole) ? (
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Título</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.title}
-                              onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Rol</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.role}
-                              onChange={(event) =>
-                                updateTaskDraft(task.id, 'role', event.target.value as Role)
-                              }
-                            >
-                              {appData.roles.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Etapa</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.stageId}
-                              onChange={(event) =>
-                                updateTaskDraft(task.id, 'stageId', event.target.value)
-                              }
-                            >
-                              {appData.stages.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Vence</span>
-                          <div className="field__control">
-                            <input
-                              type="date"
-                              value={draft.dueDate}
-                              onChange={(event) =>
-                                updateTaskDraft(task.id, 'dueDate', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Prioridad</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.priority}
-                              onChange={(event) =>
-                                updateTaskDraft(
-                                  task.id,
-                                  'priority',
-                                  event.target.value as TaskMutationInput['priority'],
-                                )
-                              }
-                            >
-                              {['Alta', 'Media', 'Baja'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateTaskDraft(
-                                  task.id,
-                                  'status',
-                                  event.target.value as TaskMutationInput['status'],
-                                )
-                              }
-                            >
-                              {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Resumen</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={3}
-                              value={draft.summary}
-                              onChange={(event) =>
-                                updateTaskDraft(task.id, 'summary', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-                      </div>
-                    ) : (
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateTaskDraft(
-                                  task.id,
-                                  'status',
-                                  event.target.value as TaskMutationInput['status'],
-                                )
-                              }
-                              disabled={!isEditable}
-                            >
-                              {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Resumen</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={3}
-                              value={draft.summary}
-                              onChange={(event) =>
-                                updateTaskDraft(task.id, 'summary', event.target.value)
-                              }
-                              disabled={!isEditable}
-                            />
-                          </div>
-                        </label>
-                      </div>
-                    )}
+                    <span className={badgeClass(draft.status)}>{draft.status}</span>
+                    <strong>{task.title}</strong>
+                    <p>{draft.summary}</p>
                   </div>
-
-                  <div className="task-editor__sidebar">
-                    <div className="task-item__meta">
-                      <span>{task.role}</span>
-                      <span>Vence {formatDate(task.dueDate)}</span>
-                    </div>
-
-                    {isEditable ? (
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => void handleTaskSave(task.id)}
-                      >
-                        <Save size={16} />
-                        <span>Guardar</span>
-                      </button>
-                    ) : null}
-
-                    {canDeleteTasks(userRole) ? (
-                      <button
-                        type="button"
-                        className="danger-button danger-button--ghost"
-                        onClick={() => void handleTaskDelete(task.id)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Eliminar</span>
-                      </button>
-                    ) : null}
+                  <div className="list-item__meta">
+                    <span>{task.role}</span>
+                    <span>{draft.priority}</span>
+                    <span>Vence {formatDate(task.dueDate)}</span>
+                    {!canCreateTasks(userRole) ? <span>{isEditable ? 'Editable' : 'Solo seguimiento'}</span> : null}
                   </div>
                 </div>
               );
             })
           )}
         </div>
+
+        {activeWorkspaceOverlay === 'tasks' ? (
+          <ModalFrame
+            eyebrow="Planeación"
+            title="Gestionar tareas"
+            description="Las tareas se crean y editan fuera de la página principal para reducir la carga cognitiva."
+            width="xl"
+            onClose={closeWorkspaceOverlay}
+          >
+            <div className="page-stack">
+              <div className="toolbar-header">
+                <button
+                  type="button"
+                  className={isTaskComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsTaskComposerOpen((current) => !current)}
+                >
+                  <Plus size={16} />
+                  <span>{isTaskComposerOpen ? 'Ocultar formulario' : 'Nueva tarea'}</span>
+                </button>
+              </div>
+
+              {isTaskComposerOpen ? (
+                <form className="editor-card editor-card--task" onSubmit={handleTaskCreate}>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Título</span>
+                      <div className="field__control">
+                        <input
+                          value={newTaskForm.title}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({ ...current, title: event.target.value }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Rol responsable</span>
+                      <div className="field__control">
+                        <select
+                          value={newTaskForm.role}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({
+                              ...current,
+                              role: event.target.value as Role,
+                            }))
+                          }
+                        >
+                          {appData.roles.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Etapa</span>
+                      <div className="field__control">
+                        <select
+                          value={newTaskForm.stageId}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({ ...current, stageId: event.target.value }))
+                          }
+                        >
+                          {appData.stages.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Vence</span>
+                      <div className="field__control">
+                        <input
+                          type="date"
+                          value={newTaskForm.dueDate}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({ ...current, dueDate: event.target.value }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Prioridad</span>
+                      <div className="field__control">
+                        <select
+                          value={newTaskForm.priority}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({
+                              ...current,
+                              priority: event.target.value as TaskMutationInput['priority'],
+                            }))
+                          }
+                        >
+                          {['Alta', 'Media', 'Baja'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={newTaskForm.status}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({
+                              ...current,
+                              status: event.target.value as TaskMutationInput['status'],
+                            }))
+                          }
+                        >
+                          {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Resumen</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={newTaskForm.summary}
+                          onChange={(event) =>
+                            setNewTaskForm((current) => ({ ...current, summary: event.target.value }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isTaskSaving}>
+                      <span>{isTaskSaving ? 'Creando…' : 'Crear tarea'}</span>
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {taskError ? <p className="form-error">{taskError}</p> : null}
+
+              <div className="list-stack">
+                {visibleTasks.map((task) => {
+                  const draft = taskDrafts[task.id];
+                  const isEditable = canEditTask(userRole, task.role);
+
+                  if (!draft) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={task.id} className="task-editor">
+                      <div>
+                        <div className="task-editor__header">
+                          <span className={badgeClass(draft.status)}>{draft.status}</span>
+                          <strong>{task.title}</strong>
+                        </div>
+
+                        {canCreateTasks(userRole) ? (
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Título</span>
+                              <div className="field__control">
+                                <input
+                                  value={draft.title}
+                                  onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Rol</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.role}
+                                  onChange={(event) =>
+                                    updateTaskDraft(task.id, 'role', event.target.value as Role)
+                                  }
+                                >
+                                  {appData.roles.map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Etapa</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.stageId}
+                                  onChange={(event) =>
+                                    updateTaskDraft(task.id, 'stageId', event.target.value)
+                                  }
+                                >
+                                  {appData.stages.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Vence</span>
+                              <div className="field__control">
+                                <input
+                                  type="date"
+                                  value={draft.dueDate}
+                                  onChange={(event) =>
+                                    updateTaskDraft(task.id, 'dueDate', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Prioridad</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.priority}
+                                  onChange={(event) =>
+                                    updateTaskDraft(
+                                      task.id,
+                                      'priority',
+                                      event.target.value as TaskMutationInput['priority'],
+                                    )
+                                  }
+                                >
+                                  {['Alta', 'Media', 'Baja'].map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field">
+                              <span>Estado</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.status}
+                                  onChange={(event) =>
+                                    updateTaskDraft(
+                                      task.id,
+                                      'status',
+                                      event.target.value as TaskMutationInput['status'],
+                                    )
+                                  }
+                                >
+                                  {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Resumen</span>
+                              <div className="field__control field__control--textarea">
+                                <textarea
+                                  rows={3}
+                                  value={draft.summary}
+                                  onChange={(event) =>
+                                    updateTaskDraft(task.id, 'summary', event.target.value)
+                                  }
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        ) : (
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Estado</span>
+                              <div className="field__control">
+                                <select
+                                  value={draft.status}
+                                  onChange={(event) =>
+                                    updateTaskDraft(
+                                      task.id,
+                                      'status',
+                                      event.target.value as TaskMutationInput['status'],
+                                    )
+                                  }
+                                  disabled={!isEditable}
+                                >
+                                  {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </label>
+
+                            <label className="field field--full">
+                              <span>Resumen</span>
+                              <div className="field__control field__control--textarea">
+                                <textarea
+                                  rows={3}
+                                  value={draft.summary}
+                                  onChange={(event) =>
+                                    updateTaskDraft(task.id, 'summary', event.target.value)
+                                  }
+                                  disabled={!isEditable}
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="task-editor__sidebar">
+                        <div className="task-item__meta">
+                          <span>{task.role}</span>
+                          <span>Vence {formatDate(task.dueDate)}</span>
+                        </div>
+
+                        {isEditable ? (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => void handleTaskSave(task.id)}
+                          >
+                            <Save size={16} />
+                            <span>Guardar</span>
+                          </button>
+                        ) : null}
+
+                        {canDeleteTasks(userRole) ? (
+                          <button
+                            type="button"
+                            className="danger-button danger-button--ghost"
+                            onClick={() => void handleTaskDelete(task.id)}
+                          >
+                            <Trash2 size={16} />
+                            <span>Eliminar</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
       </section>
       ) : null}
 

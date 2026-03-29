@@ -297,6 +297,50 @@ export default function App() {
             }
           />
           <Route
+            path="/admin/institution/settings"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
+            path="/admin/institution/new"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
+            path="/admin/institution/:structureId/edit"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
+            path="/admin/institution/:structureId"
+            element={
+              <TeamPage
+                user={session.user}
+                appData={appData}
+                refreshAppData={refreshAppData}
+                refreshSession={refreshSession}
+              />
+            }
+          />
+          <Route
             path="/admin/:section"
             element={
               <TeamPage

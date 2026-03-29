@@ -7216,7 +7216,9 @@ body::after {
 }
 
 .modal-panel--xl {
-  width: min(1120px, 100%);
+  width: calc(100vw - 32px);
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
 }
 
 .modal-panel__head,
@@ -7799,16 +7801,64 @@ body::after {
   margin-top: 10px;
 }
 
-.institution-structure-grid {
+.institution-summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
-.institution-structure-card__header {
+.institution-structure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.institution-directory-card {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  min-height: 224px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.institution-directory-card:hover {
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.institution-directory-card__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
+}
+
+.institution-directory-card__header strong {
+  display: block;
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
+.institution-directory-card__meta {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.institution-directory-card__stats,
+.institution-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -7840,6 +7890,11 @@ body::after {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .institution-summary-grid,
+  .institution-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .institution-structure-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -7868,6 +7923,12 @@ body::after {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .institution-summary-grid,
+  .institution-directory-card__stats,
+  .institution-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .institution-list-editor__row {
     flex-direction: column;
     align-items: stretch;
@@ -7892,6 +7953,12 @@ body::after {
   .courses-filter-grid--compact,
   .courses-filter-grid--advanced,
   .folder-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .institution-summary-grid,
+  .institution-directory-card__stats,
+  .institution-detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

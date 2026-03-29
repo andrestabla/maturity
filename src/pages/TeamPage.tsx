@@ -5,7 +5,6 @@ import {
   Building2,
   Cable,
   Clock3,
-  Database,
   Eye,
   KeyRound,
   Logs,
@@ -23,7 +22,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationAssistant } from '../components/admin/IntegrationAssistant.js';
 import type {
   AdminCenterData,
@@ -204,6 +203,41 @@ function syncInstitutionSettingsStructures(
   };
 }
 
+function cloneInstitutionSettings(settings: InstitutionSettings): InstitutionSettings {
+  return {
+    ...settings,
+    institutions: [...settings.institutions],
+    faculties: [...settings.faculties],
+    programs: [...settings.programs],
+    academicPeriods: [...settings.academicPeriods],
+    courseTypes: [...settings.courseTypes],
+    structures: settings.structures.map((structure) => ({
+      ...structure,
+      faculties: [...structure.faculties],
+      programs: [...structure.programs],
+      academicPeriods: [...structure.academicPeriods],
+      courseTypes: [...structure.courseTypes],
+      pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
+    })),
+  };
+}
+
+function buildInstitutionSettingsPath() {
+  return '/admin/institution/settings';
+}
+
+function buildInstitutionStructurePath(structureId: string) {
+  return `/admin/institution/${structureId}`;
+}
+
+function buildInstitutionStructureEditPath(structureId: string) {
+  return `/admin/institution/${structureId}/edit`;
+}
+
+function buildInstitutionStructureCreatePath() {
+  return '/admin/institution/new';
+}
+
 function getBadgeClass(status: string) {
   if (
     status === 'Activo' ||
@@ -310,6 +344,16 @@ export function TeamPage({
   const location = useLocation();
   const navigate = useNavigate();
   const activeTab = useMemo(() => getAdminTabFromPath(location.pathname), [location.pathname]);
+  const isInstitutionSettingsRoute = location.pathname === buildInstitutionSettingsPath();
+  const isInstitutionCreateRoute = location.pathname === buildInstitutionStructureCreatePath();
+  const institutionStructureEditMatch = matchPath(
+    '/admin/institution/:structureId/edit',
+    location.pathname,
+  );
+  const institutionStructureDetailMatch =
+    !isInstitutionSettingsRoute && !isInstitutionCreateRoute
+      ? matchPath('/admin/institution/:structureId', location.pathname)
+      : null;
   const [adminData, setAdminData] = useState<AdminCenterData | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
@@ -335,13 +379,19 @@ export function TeamPage({
   const [userForm, setUserForm] = useState<UserMutationInput>(() => buildUserForm());
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionSettings | null>(null);
+  const [institutionSettingsDraft, setInstitutionSettingsDraft] = useState<InstitutionSettings | null>(
+    null,
+  );
   const [structureDraft, setStructureDraft] = useState<InstitutionStructure | null>(null);
   const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
-  const [isStructureComposerOpen, setIsStructureComposerOpen] = useState(false);
   const [brandingDraft, setBrandingDraft] = useState<BrandingSettings | null>(null);
+  const [isBrandingEditorOpen, setIsBrandingEditorOpen] = useState(false);
   const [experienceDraft, setExperienceDraft] = useState<ExperienceSettings | null>(null);
+  const [isExperienceEditorOpen, setIsExperienceEditorOpen] = useState(false);
   const [workflowDraft, setWorkflowDraft] = useState<WorkflowSettings | null>(null);
+  const [isWorkflowEditorOpen, setIsWorkflowEditorOpen] = useState(false);
   const [integrationDraft, setIntegrationDraft] = useState<AdminIntegrationMutationInput | null>(null);
+  const [isIntegrationEditorOpen, setIsIntegrationEditorOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState<PasswordChangeInput>(() => buildPasswordForm());
   const [serviceStatusFilter, setServiceStatusFilter] = useState<string>('Todas');
   const [serviceCategoryFilter, setServiceCategoryFilter] = useState<string>('Todas');
@@ -355,6 +405,25 @@ export function TeamPage({
   );
   const logoFileInputRef = useRef<HTMLInputElement | null>(null);
   const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeStructureRouteId =
+    institutionStructureEditMatch?.params.structureId ??
+    institutionStructureDetailMatch?.params.structureId ??
+    null;
+  const selectedInstitutionStructure = useMemo(
+    () =>
+      activeStructureRouteId && institutionDraft
+        ? institutionDraft.structures.find((structure) => structure.id === activeStructureRouteId) ?? null
+        : null,
+    [activeStructureRouteId, institutionDraft],
+  );
+  const isInstitutionStructureEditRoute = Boolean(
+    institutionStructureEditMatch && selectedInstitutionStructure,
+  );
+  const isInstitutionStructureDetailRoute = Boolean(
+    institutionStructureDetailMatch &&
+      !institutionStructureEditMatch &&
+      selectedInstitutionStructure,
+  );
 
   async function loadAdminCenter() {
     if (!isAdmin) {
@@ -417,6 +486,48 @@ export function TeamPage({
 
     navigate(`/admin/users/${userId}`, { replace: true });
   }, [location.search, navigate]);
+
+  useEffect(() => {
+    if (!institutionDraft) {
+      setInstitutionSettingsDraft(null);
+      return;
+    }
+
+    if (isInstitutionSettingsRoute) {
+      setInstitutionSettingsDraft(cloneInstitutionSettings(institutionDraft));
+      return;
+    }
+
+    setInstitutionSettingsDraft(null);
+  }, [institutionDraft, isInstitutionSettingsRoute]);
+
+  useEffect(() => {
+    if (!institutionDraft) {
+      setStructureDraft(null);
+      setEditingStructureId(null);
+      return;
+    }
+
+    if (isInstitutionCreateRoute) {
+      setStructureDraft(buildStructureDraft(institutionDraft));
+      setEditingStructureId(null);
+      return;
+    }
+
+    if (isInstitutionStructureEditRoute && selectedInstitutionStructure) {
+      setStructureDraft(buildStructureDraft(institutionDraft, selectedInstitutionStructure));
+      setEditingStructureId(selectedInstitutionStructure.id);
+      return;
+    }
+
+    setStructureDraft(null);
+    setEditingStructureId(null);
+  }, [
+    institutionDraft,
+    isInstitutionCreateRoute,
+    isInstitutionStructureEditRoute,
+    selectedInstitutionStructure,
+  ]);
 
   useEffect(() => {
     if (!adminData || !selectedIntegrationId) {
@@ -658,24 +769,91 @@ export function TeamPage({
     navigate(`/admin/users/${target.id}`);
   }
 
+  function openInstitutionSettings() {
+    setSettingsError(null);
+    navigate(buildInstitutionSettingsPath());
+  }
+
+  function openBrandingEditor() {
+    if (!brandingDraft) {
+      return;
+    }
+
+    setSettingsError(null);
+    setIsBrandingEditorOpen(true);
+  }
+
+  function closeBrandingEditor() {
+    setBrandingDraft(adminData?.branding ?? brandingDraft);
+    setIsBrandingEditorOpen(false);
+  }
+
+  function openExperienceEditor() {
+    if (!experienceDraft) {
+      return;
+    }
+
+    setSettingsError(null);
+    setIsExperienceEditorOpen(true);
+  }
+
+  function closeExperienceEditor() {
+    setExperienceDraft(adminData?.experience ?? experienceDraft);
+    setIsExperienceEditorOpen(false);
+  }
+
+  function openWorkflowEditor() {
+    if (!workflowDraft) {
+      return;
+    }
+
+    setSettingsError(null);
+    setIsWorkflowEditorOpen(true);
+  }
+
+  function closeWorkflowEditor() {
+    setWorkflowDraft(adminData?.workflow ?? workflowDraft);
+    setIsWorkflowEditorOpen(false);
+  }
+
+  function openIntegrationEditor() {
+    if (!selectedIntegration) {
+      return;
+    }
+
+    setIntegrationError(null);
+    setSelectedIntegrationId(selectedIntegration.id);
+    setIntegrationDraft(createIntegrationDraft(selectedIntegration));
+    setIsIntegrationEditorOpen(true);
+  }
+
+  function closeIntegrationEditor() {
+    setIntegrationError(null);
+    setIsIntegrationEditorOpen(false);
+    if (selectedIntegration) {
+      setIntegrationDraft(createIntegrationDraft(selectedIntegration));
+    }
+  }
+
   function openCreateStructureComposer() {
     setSettingsError(null);
-    setEditingStructureId(null);
-    setStructureDraft(buildStructureDraft(institutionDraft));
-    setIsStructureComposerOpen(true);
+    navigate(buildInstitutionStructureCreatePath());
+  }
+
+  function openStructureDetail(structure: InstitutionStructure) {
+    navigate(buildInstitutionStructurePath(structure.id));
   }
 
   function openEditStructureComposer(structure: InstitutionStructure) {
     setSettingsError(null);
-    setEditingStructureId(structure.id);
-    setStructureDraft(buildStructureDraft(institutionDraft, structure));
-    setIsStructureComposerOpen(true);
+    navigate(buildInstitutionStructureEditPath(structure.id));
   }
 
-  function closeStructureComposer() {
+  function closeInstitutionOverlay() {
     setEditingStructureId(null);
     setStructureDraft(null);
-    setIsStructureComposerOpen(false);
+    setInstitutionSettingsDraft(null);
+    navigate('/admin/institution');
   }
 
   function updateStructureDraftField<Key extends keyof InstitutionStructure>(
@@ -743,39 +921,6 @@ export function TeamPage({
     });
   }
 
-  function commitStructureDraft() {
-    if (!institutionDraft || !structureDraft) {
-      return;
-    }
-
-    if (!structureDraft.institution.trim()) {
-      setSettingsError('Cada estructura debe tener un nombre de institución.');
-      return;
-    }
-
-    const normalizedInstitutionName = structureDraft.institution.trim().toLowerCase();
-    const duplicateStructure = institutionDraft.structures.find(
-      (structure) =>
-        structure.id !== editingStructureId &&
-        structure.institution.trim().toLowerCase() === normalizedInstitutionName,
-    );
-
-    if (duplicateStructure) {
-      setSettingsError('Ya existe una estructura registrada para esa institución.');
-      return;
-    }
-
-    const normalizedStructure = normalizeStructureDraft(structureDraft);
-    const nextStructures = editingStructureId
-      ? institutionDraft.structures.map((structure) =>
-          structure.id === editingStructureId ? normalizedStructure : structure,
-        )
-      : [...institutionDraft.structures, normalizedStructure];
-
-    setInstitutionDraft(syncInstitutionSettingsStructures(institutionDraft, nextStructures));
-    closeStructureComposer();
-  }
-
   async function handleDeleteStructure(structure: InstitutionStructure) {
     if (!institutionDraft) {
       return;
@@ -794,11 +939,12 @@ export function TeamPage({
     }
 
     const nextStructures = institutionDraft.structures.filter((item) => item.id !== structure.id);
-    setInstitutionDraft(syncInstitutionSettingsStructures(institutionDraft, nextStructures));
-
-    if (editingStructureId === structure.id) {
-      closeStructureComposer();
-    }
+    await persistInstitutionSettings(
+      syncInstitutionSettingsStructures(institutionDraft, nextStructures),
+      {
+        onSuccess: () => closeInstitutionOverlay(),
+      },
+    );
   }
 
   async function handleUpdateUser() {
@@ -909,13 +1055,12 @@ export function TeamPage({
     }
   }
 
-  async function handleSaveInstitution(event?: React.FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-
-    if (!institutionDraft) {
-      return;
-    }
-
+  async function persistInstitutionSettings(
+    nextInstitution: InstitutionSettings,
+    options?: {
+      onSuccess?: (institution: InstitutionSettings) => void;
+    },
+  ) {
     setSettingsError(null);
     setIsSavingInstitution(true);
 
@@ -928,7 +1073,7 @@ export function TeamPage({
         },
         body: JSON.stringify({
           section: 'institution',
-          data: institutionDraft,
+          data: nextInstitution,
         }),
       });
 
@@ -938,26 +1083,87 @@ export function TeamPage({
         throw new Error((payload as { error?: string }).error ?? 'No fue posible guardar la configuración institucional.');
       }
 
-      const nextInstitution = (payload as AdminCenterPatchResponse).institution ?? institutionDraft;
-      setInstitutionDraft(nextInstitution);
+      const savedInstitution = (payload as AdminCenterPatchResponse).institution ?? nextInstitution;
+      setInstitutionDraft(savedInstitution);
       setUserForm((current) => ({
         ...current,
-        institution: current.institution || nextInstitution.institutions[0] || nextInstitution.displayName,
-        faculty: current.faculty || nextInstitution.faculties[0] || '',
-        program: current.program || nextInstitution.programs[0] || '',
-        status: current.status || nextInstitution.defaultUserState,
+        institution:
+          current.institution || savedInstitution.institutions[0] || savedInstitution.displayName,
+        faculty: current.faculty || savedInstitution.faculties[0] || '',
+        program: current.program || savedInstitution.programs[0] || '',
+        status: current.status || savedInstitution.defaultUserState,
       }));
       await loadAdminCenter();
       refreshAppData();
+      options?.onSuccess?.(savedInstitution);
+      return savedInstitution;
     } catch (error) {
       setSettingsError(
         error instanceof Error
           ? error.message
           : 'No fue posible guardar la configuración institucional.',
       );
+      return null;
     } finally {
       setIsSavingInstitution(false);
     }
+  }
+
+  async function handleSaveInstitutionSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!institutionDraft || !institutionSettingsDraft) {
+      return;
+    }
+
+    const nextInstitution = {
+      ...institutionDraft,
+      displayName: institutionSettingsDraft.displayName.trim(),
+      supportEmail: institutionSettingsDraft.supportEmail.trim(),
+      defaultDomain: institutionSettingsDraft.defaultDomain.trim(),
+      defaultUserState: institutionSettingsDraft.defaultUserState,
+    };
+
+    await persistInstitutionSettings(nextInstitution, {
+      onSuccess: () => closeInstitutionOverlay(),
+    });
+  }
+
+  async function handleSaveStructure(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!institutionDraft || !structureDraft) {
+      return;
+    }
+
+    if (!structureDraft.institution.trim()) {
+      setSettingsError('Cada estructura debe tener un nombre de institución.');
+      return;
+    }
+
+    const normalizedInstitutionName = structureDraft.institution.trim().toLowerCase();
+    const duplicateStructure = institutionDraft.structures.find(
+      (structure) =>
+        structure.id !== editingStructureId &&
+        structure.institution.trim().toLowerCase() === normalizedInstitutionName,
+    );
+
+    if (duplicateStructure) {
+      setSettingsError('Ya existe una estructura registrada para esa institución.');
+      return;
+    }
+
+    const normalizedStructure = normalizeStructureDraft(structureDraft);
+    const nextStructures = editingStructureId
+      ? institutionDraft.structures.map((structure) =>
+          structure.id === editingStructureId ? normalizedStructure : structure,
+        )
+      : [...institutionDraft.structures, normalizedStructure];
+
+    const nextInstitution = syncInstitutionSettingsStructures(institutionDraft, nextStructures);
+    await persistInstitutionSettings(nextInstitution, {
+      onSuccess: () => navigate(buildInstitutionStructurePath(normalizedStructure.id)),
+    });
   }
 
   async function handleSaveBranding(event: React.FormEvent<HTMLFormElement>) {
@@ -989,9 +1195,11 @@ export function TeamPage({
         throw new Error((payload as { error?: string }).error ?? 'No fue posible guardar la identidad visual.');
       }
 
-      setBrandingDraft((payload as AdminCenterPatchResponse).branding ?? brandingDraft);
+      const savedBranding = (payload as AdminCenterPatchResponse).branding ?? brandingDraft;
+      setBrandingDraft(savedBranding);
       await loadAdminCenter();
       refreshAppData();
+      closeBrandingEditor();
     } catch (error) {
       setSettingsError(
         error instanceof Error ? error.message : 'No fue posible guardar la identidad visual.',
@@ -1033,9 +1241,12 @@ export function TeamPage({
         );
       }
 
-      setExperienceDraft((payload as AdminCenterPatchResponse).experience ?? experienceDraft);
+      const savedExperience =
+        (payload as AdminCenterPatchResponse).experience ?? experienceDraft;
+      setExperienceDraft(savedExperience);
       await loadAdminCenter();
       refreshAppData();
+      closeExperienceEditor();
     } catch (error) {
       setSettingsError(
         error instanceof Error
@@ -1078,9 +1289,11 @@ export function TeamPage({
         );
       }
 
-      setWorkflowDraft((payload as AdminCenterPatchResponse).workflow ?? workflowDraft);
+      const savedWorkflow = (payload as AdminCenterPatchResponse).workflow ?? workflowDraft;
+      setWorkflowDraft(savedWorkflow);
       await loadAdminCenter();
       refreshAppData();
+      closeWorkflowEditor();
     } catch (error) {
       setSettingsError(
         error instanceof Error
@@ -1115,7 +1328,7 @@ export function TeamPage({
       }
 
       const uploadedUrl = (payload as UploadResponse).url;
-      setBrandingDraft((current) => {
+      const applyUpload = (current: BrandingSettings | null): BrandingSettings | null => {
         if (!current) {
           return current;
         }
@@ -1133,7 +1346,9 @@ export function TeamPage({
           faviconMode: 'Imagen',
           faviconUrl: uploadedUrl,
         };
-      });
+      };
+
+      setBrandingDraft((current) => applyUpload(current));
 
       await showAlert({
         tone: 'success',
@@ -1199,6 +1414,8 @@ export function TeamPage({
       );
       setSelectedIntegrationId(nextIntegration.id);
       await loadAdminCenter();
+      refreshAppData();
+      closeIntegrationEditor();
     } catch (error) {
       setIntegrationError(
         error instanceof Error ? error.message : 'No fue posible guardar la integración.',
@@ -2118,6 +2335,12 @@ export function TeamPage({
       {},
     );
     const autoProvisioningCount = structures.filter((structure) => structure.allowAutoProvisioning).length;
+    const structureDraftId = structureDraft
+      ? buildInstitutionStructureId(structureDraft.institution, editingStructureId ?? undefined)
+      : '';
+    const structureDraftRoute = structureDraftId
+      ? buildInstitutionStructurePath(structureDraftId)
+      : buildInstitutionStructurePath('estructura');
 
     function renderStructureListEditor(
       key: keyof Pick<
@@ -2175,7 +2398,7 @@ export function TeamPage({
     }
 
     return (
-      <div className="page-stack">
+      <div className="page-stack team-page team-page--institution">
         <section className="surface section-card section-card--compact">
           <div className="section-heading">
             <div>
@@ -2188,16 +2411,6 @@ export function TeamPage({
             Aquí se gobiernan las estructuras por universidad. Cada estructura impacta los
             formularios de usuarios, Cursos y Biblioteca para mantener el catálogo alineado.
           </p>
-        </section>
-
-        <section className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Parámetros</span>
-              <h3>Configuración institucional</h3>
-            </div>
-            <Database size={18} />
-          </div>
 
           <div className="metrics-grid metrics-grid--three">
             <div className="mini-metric">
@@ -2213,79 +2426,50 @@ export function TeamPage({
               <strong>{autoProvisioningCount}</strong>
             </div>
           </div>
+        </section>
 
-          <div className="form-grid">
-            <label className="field">
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Parámetros</span>
+              <h3>Configuración institucional activa</h3>
+            </div>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={openInstitutionSettings}>
+                <PencilLine size={16} />
+                <span>Editar parámetros</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="institution-summary-grid">
+            <article className="admin-kpi">
               <span>Nombre visible</span>
-              <div className="field__control">
-                <input
-                  value={institutionDraft.displayName}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current ? { ...current, displayName: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+              <strong>{institutionDraft.displayName}</strong>
+              <p>Nombre público del entorno institucional.</p>
+            </article>
 
-            <label className="field">
+            <article className="admin-kpi">
               <span>Correo de soporte</span>
-              <div className="field__control">
-                <input
-                  type="email"
-                  value={institutionDraft.supportEmail}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current ? { ...current, supportEmail: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+              <strong>{institutionDraft.supportEmail}</strong>
+              <p>Canal principal para soporte administrativo.</p>
+            </article>
 
-            <label className="field">
+            <article className="admin-kpi">
               <span>Dominio por defecto</span>
-              <div className="field__control">
-                <input
-                  value={institutionDraft.defaultDomain}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current ? { ...current, defaultDomain: event.target.value } : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+              <strong>{institutionDraft.defaultDomain}</strong>
+              <p>Dominio base usado para vinculación y control.</p>
+            </article>
 
-            <label className="field">
-              <span>Estado inicial de usuario</span>
-              <div className="field__control">
-                <select
-                  value={institutionDraft.defaultUserState}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            defaultUserState: event.target.value as InstitutionSettings['defaultUserState'],
-                          }
-                        : current,
-                    )
-                  }
-                >
-                  {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
+            <article className="admin-kpi">
+              <span>Estado inicial</span>
+              <strong>{institutionDraft.defaultUserState}</strong>
+              <p>Condición inicial al crear nuevos accesos.</p>
+            </article>
           </div>
         </section>
 
-        <section className="surface section-card">
+        <section className="surface section-card section-card--compact">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Directorio</span>
@@ -2305,15 +2489,309 @@ export function TeamPage({
             facultades, programas, periodos, tipologías y lineamientos se usan en Cursos y Biblioteca.
           </p>
 
-          {isStructureComposerOpen && structureDraft ? (
-            <div className="editor-card institution-structure-composer">
-              <div className="editor-card__header">
-                <div>
-                  <span className="eyebrow">Edición local</span>
-                  <h3>{editingStructureId ? 'Editar estructura' : 'Crear estructura'}</h3>
-                </div>
+          {structures.length === 0 ? (
+            <div className="empty-state">
+              <strong>No hay estructuras institucionales creadas</strong>
+              <p>
+                Crea la primera estructura para alimentar el directorio académico y los catálogos
+                operativos de Cursos y Biblioteca.
+              </p>
+            </div>
+          ) : (
+            <div className="institution-structure-grid">
+              {structures.map((structure) => {
+                const linkedCourses = countCoursesForStructure(appData.courses, structure);
+                const linkedResources = resourceCountByInstitution[structure.institution] ?? 0;
+
+                return (
+                  <button
+                    key={structure.id}
+                    type="button"
+                    className="institution-directory-card"
+                    onClick={() => openStructureDetail(structure)}
+                  >
+                    <div className="institution-directory-card__header">
+                      <div>
+                        <span className="eyebrow">Estructura</span>
+                        <strong>{structure.institution}</strong>
+                      </div>
+
+                      <Eye size={18} />
+                    </div>
+
+                    <div className="chip-row">
+                        <span className="badge badge--outline">
+                          {structure.pedagogicalGuidelines.length} regla
+                          {structure.pedagogicalGuidelines.length === 1 ? '' : 's'}
+                        </span>
+                        <span
+                          className={
+                            structure.allowAutoProvisioning
+                              ? 'badge badge--sage'
+                              : 'badge badge--ink'
+                          }
+                        >
+                          {structure.allowAutoProvisioning ? 'SSO auto' : 'SSO manual'}
+                        </span>
+                    </div>
+
+                    <div className="institution-directory-card__meta">
+                      <span>ID {structure.id}</span>
+                      <span>Ruta {buildInstitutionStructurePath(structure.id)}</span>
+                    </div>
+
+                    <div className="institution-directory-card__stats">
+                      <div className="mini-metric">
+                        <span>Cursos</span>
+                        <strong>{linkedCourses}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Recursos</span>
+                        <strong>{linkedResources}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Facultades</span>
+                        <strong>{structure.faculties.length}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Programas</span>
+                        <strong>{structure.programs.length}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Periodos</span>
+                        <strong>{structure.academicPeriods.length}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Tipologías</span>
+                        <strong>{structure.courseTypes.length}</strong>
+                      </div>
+                    </div>
+
+                    <p className="institution-structure-summary">
+                      {structure.faculties[0] || 'Sin facultad'} · {structure.programs[0] || 'Sin programa'}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {isInstitutionSettingsRoute && institutionSettingsDraft ? (
+          <ModalFrame
+            eyebrow="Configuración"
+            title="Editar parámetros institucionales"
+            description="Los cambios se guardan desde este modal y se reflejan en todo el directorio."
+            width="lg"
+            onClose={closeInstitutionOverlay}
+          >
+            <form className="editor-card" onSubmit={handleSaveInstitutionSettings}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Nombre visible</span>
+                  <div className="field__control">
+                    <input
+                      value={institutionSettingsDraft.displayName}
+                      onChange={(event) =>
+                        setInstitutionSettingsDraft((current) =>
+                          current ? { ...current, displayName: event.target.value } : current,
+                        )
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Correo de soporte</span>
+                  <div className="field__control">
+                    <input
+                      type="email"
+                      value={institutionSettingsDraft.supportEmail}
+                      onChange={(event) =>
+                        setInstitutionSettingsDraft((current) =>
+                          current ? { ...current, supportEmail: event.target.value } : current,
+                        )
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Dominio por defecto</span>
+                  <div className="field__control">
+                    <input
+                      value={institutionSettingsDraft.defaultDomain}
+                      onChange={(event) =>
+                        setInstitutionSettingsDraft((current) =>
+                          current ? { ...current, defaultDomain: event.target.value } : current,
+                        )
+                      }
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Estado inicial de usuario</span>
+                  <div className="field__control">
+                    <select
+                      value={institutionSettingsDraft.defaultUserState}
+                      onChange={(event) =>
+                        setInstitutionSettingsDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                defaultUserState:
+                                  event.target.value as InstitutionSettings['defaultUserState'],
+                              }
+                            : current,
+                        )
+                      }
+                    >
+                      {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
               </div>
 
+              {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+              <div className="action-row">
+                <button type="submit" className="cta-button" disabled={isSavingInstitution}>
+                  <span>{isSavingInstitution ? 'Guardando…' : 'Guardar parámetros'}</span>
+                </button>
+
+                <button type="button" className="filter-chip" onClick={closeInstitutionOverlay}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            </form>
+          </ModalFrame>
+        ) : null}
+
+        {isInstitutionStructureDetailRoute && selectedInstitutionStructure ? (
+          <ModalFrame
+            eyebrow="Detalle"
+            title={selectedInstitutionStructure.institution}
+            description="Consulta la estructura completa y abre la edición desde aquí cuando lo necesites."
+            width="xl"
+            onClose={closeInstitutionOverlay}
+          >
+            <div className="page-stack">
+              <section className="surface section-card section-card--compact">
+                <div className="institution-detail-grid">
+                  <article className="admin-kpi">
+                    <span>ID único</span>
+                    <strong>{selectedInstitutionStructure.id}</strong>
+                    <p>Identificador estable del directorio.</p>
+                  </article>
+
+                  <article className="admin-kpi">
+                    <span>Ruta única</span>
+                    <strong>{buildInstitutionStructurePath(selectedInstitutionStructure.id)}</strong>
+                    <p>Ruta directa al detalle de esta estructura.</p>
+                  </article>
+
+                  <article className="admin-kpi">
+                    <span>SSO automático</span>
+                    <strong>
+                      {selectedInstitutionStructure.allowAutoProvisioning ? 'Activo' : 'Manual'}
+                    </strong>
+                    <p>Modo de aprovisionamiento para esta institución.</p>
+                  </article>
+                </div>
+              </section>
+
+              <section className="surface section-card section-card--compact">
+                <div className="form-grid">
+                  <div className="field">
+                    <span>Facultades</span>
+                    <p className="institution-structure-summary">
+                      {selectedInstitutionStructure.faculties.join(', ') || 'Sin facultades registradas'}
+                    </p>
+                  </div>
+
+                  <div className="field">
+                    <span>Programas</span>
+                    <p className="institution-structure-summary">
+                      {selectedInstitutionStructure.programs.join(', ') || 'Sin programas registrados'}
+                    </p>
+                  </div>
+
+                  <div className="field">
+                    <span>Periodos</span>
+                    <p className="institution-structure-summary">
+                      {selectedInstitutionStructure.academicPeriods.join(', ') || 'Sin periodos registrados'}
+                    </p>
+                  </div>
+
+                  <div className="field">
+                    <span>Tipologías</span>
+                    <p className="institution-structure-summary">
+                      {selectedInstitutionStructure.courseTypes.join(', ') || 'Sin tipologías registradas'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="field field--full">
+                  <span>Lineamientos pedagógicos</span>
+                  <div className="list-stack">
+                    {selectedInstitutionStructure.pedagogicalGuidelines.length > 0 ? (
+                      selectedInstitutionStructure.pedagogicalGuidelines.map((guideline) => (
+                        <p key={guideline} className="institution-structure-summary">
+                          {guideline}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="institution-structure-summary">
+                        Sin reglas pedagógicas registradas.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="cta-button"
+                    onClick={() => openEditStructureComposer(selectedInstitutionStructure)}
+                  >
+                    <PencilLine size={16} />
+                    <span>Editar estructura</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="danger-button danger-button--ghost"
+                    onClick={() => void handleDeleteStructure(selectedInstitutionStructure)}
+                    disabled={isSavingInstitution}
+                  >
+                    <Trash2 size={16} />
+                    <span>Eliminar</span>
+                  </button>
+                </div>
+              </section>
+            </div>
+          </ModalFrame>
+        ) : null}
+
+        {(isInstitutionCreateRoute || isInstitutionStructureEditRoute) && structureDraft ? (
+          <ModalFrame
+            eyebrow="Edición"
+            title={editingStructureId ? 'Editar estructura institucional' : 'Crear estructura institucional'}
+            description="La edición se resuelve fuera del directorio para mantener la vista principal limpia."
+            width="xl"
+            onClose={closeInstitutionOverlay}
+          >
+            <form className="editor-card" onSubmit={handleSaveStructure}>
               <div className="form-grid">
                 <label className="field">
                   <span>Institución</span>
@@ -2336,16 +2814,27 @@ export function TeamPage({
                       type="checkbox"
                       checked={structureDraft.allowAutoProvisioning}
                       onChange={(event) =>
-                        updateStructureDraftField(
-                          'allowAutoProvisioning',
-                          event.target.checked,
-                        )
+                        updateStructureDraftField('allowAutoProvisioning', event.target.checked)
                       }
                     />
                     <p>
                       Si está activo, usuarios del dominio aprobado para esta estructura podrán
                       aprovisionarse automáticamente.
                     </p>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>ID único</span>
+                  <div className="field__control">
+                    <input value={structureDraftId} readOnly />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Ruta única</span>
+                  <div className="field__control">
+                    <input value={structureDraftRoute} readOnly />
                   </div>
                 </label>
 
@@ -2386,177 +2875,20 @@ export function TeamPage({
                 )}
               </div>
 
+              {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
               <div className="action-row">
-                <button type="button" className="cta-button" onClick={commitStructureDraft}>
-                  <span>{editingStructureId ? 'Actualizar estructura' : 'Agregar estructura'}</span>
+                <button type="submit" className="cta-button" disabled={isSavingInstitution}>
+                  <span>{isSavingInstitution ? 'Guardando…' : 'Guardar estructura'}</span>
                 </button>
 
-                <button type="button" className="filter-chip" onClick={closeStructureComposer}>
+                <button type="button" className="filter-chip" onClick={closeInstitutionOverlay}>
                   <span>Cancelar</span>
                 </button>
               </div>
-            </div>
-          ) : null}
-
-          {structures.length === 0 ? (
-            <div className="empty-state">
-              <strong>No hay estructuras institucionales creadas</strong>
-              <p>
-                Crea la primera estructura para alimentar el directorio académico y los catálogos
-                operativos de Cursos y Biblioteca.
-              </p>
-            </div>
-          ) : (
-            <div className="institution-structure-grid">
-              {structures.map((structure) => {
-                const linkedCourses = countCoursesForStructure(appData.courses, structure);
-                const linkedResources = resourceCountByInstitution[structure.institution] ?? 0;
-
-                return (
-                  <article key={structure.id} className="surface section-card section-card--compact">
-                    <div className="institution-structure-card__header">
-                      <div>
-                        <span className="eyebrow">Estructura</span>
-                        <h3>{structure.institution}</h3>
-                      </div>
-
-                      <div className="chip-row">
-                        <span className="badge badge--outline">
-                          {structure.pedagogicalGuidelines.length} regla
-                          {structure.pedagogicalGuidelines.length === 1 ? '' : 's'}
-                        </span>
-                        <span
-                          className={
-                            structure.allowAutoProvisioning
-                              ? 'badge badge--sage'
-                              : 'badge badge--ink'
-                          }
-                        >
-                          {structure.allowAutoProvisioning ? 'SSO auto' : 'SSO manual'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="institution-structure-summary">
-                      Vincula {linkedCourses} curso{linkedCourses === 1 ? '' : 's'} y {linkedResources}{' '}
-                      recurso{linkedResources === 1 ? '' : 's'} de Biblioteca bajo esta institución.
-                    </p>
-
-                    <div className="metrics-grid metrics-grid--three">
-                      <div className="mini-metric">
-                        <span>Facultades</span>
-                        <strong>{structure.faculties.length}</strong>
-                      </div>
-                      <div className="mini-metric">
-                        <span>Programas</span>
-                        <strong>{structure.programs.length}</strong>
-                      </div>
-                      <div className="mini-metric">
-                        <span>Periodos</span>
-                        <strong>{structure.academicPeriods.length}</strong>
-                      </div>
-                    </div>
-
-                    <div className="form-grid">
-                      <div className="field">
-                        <span>Facultades</span>
-                        <p className="institution-structure-summary">
-                          {structure.faculties.join(', ') || 'Sin facultades registradas'}
-                        </p>
-                      </div>
-
-                      <div className="field">
-                        <span>Programas</span>
-                        <p className="institution-structure-summary">
-                          {structure.programs.join(', ') || 'Sin programas registrados'}
-                        </p>
-                      </div>
-
-                      <div className="field">
-                        <span>Periodos</span>
-                        <p className="institution-structure-summary">
-                          {structure.academicPeriods.join(', ') || 'Sin periodos registrados'}
-                        </p>
-                      </div>
-
-                      <div className="field">
-                        <span>Tipologías</span>
-                        <p className="institution-structure-summary">
-                          {structure.courseTypes.join(', ') || 'Sin tipologías registradas'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="field field--full">
-                      <span>Lineamientos pedagógicos</span>
-                      <div className="list-stack">
-                        {structure.pedagogicalGuidelines.length > 0 ? (
-                          structure.pedagogicalGuidelines.map((guideline) => (
-                            <p key={guideline} className="institution-structure-summary">
-                              {guideline}
-                            </p>
-                          ))
-                        ) : (
-                          <p className="institution-structure-summary">
-                            Sin reglas pedagógicas registradas.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="action-row">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => openEditStructureComposer(structure)}
-                      >
-                        <PencilLine size={16} />
-                        <span>Editar</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="danger-button danger-button--ghost"
-                        onClick={() => void handleDeleteStructure(structure)}
-                      >
-                        <Trash2 size={16} />
-                        <span>Eliminar</span>
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Persistencia</span>
-              <h3>Aplicar cambios del directorio</h3>
-            </div>
-            <Database size={18} />
-          </div>
-
-          <p className="section-lead">
-            Cuando guardes, esta estructura quedará disponible para formularios, Biblioteca y alta
-            de cursos en toda la plataforma.
-          </p>
-
-          {settingsError ? <p className="form-error">{settingsError}</p> : null}
-
-          <div className="action-row">
-            <button
-              type="button"
-              className="cta-button"
-              onClick={() => void handleSaveInstitution()}
-              disabled={isSavingInstitution}
-            >
-              <span>{isSavingInstitution ? 'Guardando…' : 'Guardar configuración institucional'}</span>
-            </button>
-          </div>
-        </section>
+            </form>
+          </ModalFrame>
+        ) : null}
       </div>
     );
   }
@@ -2575,7 +2907,13 @@ export function TeamPage({
                 <span className="eyebrow">Branding</span>
                 <h3>Marca, login y lenguaje visual operativo</h3>
               </div>
-              <Brush size={18} />
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={openBrandingEditor}>
+                  <PencilLine size={16} />
+                  <span>Editar branding</span>
+                </button>
+                <Brush size={18} />
+              </div>
             </div>
 
             <div className="admin-brand-preview">
@@ -2612,18 +2950,12 @@ export function TeamPage({
 
             <div className="login-preview-grid">
               {(['Minimal', 'Split', 'Command'] as const).map((variant) => (
-                <button
+                <article
                   key={variant}
-                  type="button"
                   className={
                     brandingDraft.loginVariant === variant
                       ? 'login-preview-card login-preview-card--active'
                       : 'login-preview-card'
-                  }
-                  onClick={() =>
-                    setBrandingDraft((current) =>
-                      current ? { ...current, loginVariant: variant } : current,
-                    )
                   }
                 >
                   <span>{variant}</span>
@@ -2641,7 +2973,7 @@ export function TeamPage({
                         ? 'Presentación editorial con panel lateral.'
                         : 'Estética técnica con sensación de consola.'}
                   </p>
-                </button>
+                </article>
               ))}
             </div>
 
@@ -2667,7 +2999,15 @@ export function TeamPage({
           </article>
         </section>
 
-        <form className="surface section-card" onSubmit={handleSaveBranding}>
+        {isBrandingEditorOpen ? (
+          <ModalFrame
+            eyebrow="Branding"
+            title="Editar branding"
+            description="La configuración visual se resuelve en un modal dedicado para no saturar la vista de Gobierno."
+            width="xl"
+            onClose={closeBrandingEditor}
+          >
+            <form className="editor-card" onSubmit={handleSaveBranding}>
           <input
             ref={logoFileInputRef}
             type="file"
@@ -3172,8 +3512,13 @@ export function TeamPage({
             <button type="submit" className="cta-button" disabled={isSavingBranding}>
               <span>{isSavingBranding ? 'Guardando…' : 'Guardar branding'}</span>
             </button>
+            <button type="button" className="filter-chip" onClick={closeBrandingEditor}>
+              <span>Cancelar</span>
+            </button>
           </div>
-        </form>
+            </form>
+          </ModalFrame>
+        ) : null}
       </div>
     );
   }
@@ -3192,7 +3537,13 @@ export function TeamPage({
                 <span className="eyebrow">Experiencia</span>
                 <h3>Trabajo profundo y contexto mínimo</h3>
               </div>
-              <Eye size={18} />
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={openExperienceEditor}>
+                  <PencilLine size={16} />
+                  <span>Editar experiencia</span>
+                </button>
+                <Eye size={18} />
+              </div>
             </div>
 
             <div className="checklist">
@@ -3237,7 +3588,15 @@ export function TeamPage({
           </article>
         </section>
 
-        <form className="surface section-card" onSubmit={handleSaveExperience}>
+        {isExperienceEditorOpen ? (
+          <ModalFrame
+            eyebrow="Experiencia"
+            title="Editar experiencia de trabajo"
+            description="Estos ajustes se editan fuera de la vista resumen para mantener el foco operativo."
+            width="lg"
+            onClose={closeExperienceEditor}
+          >
+            <form className="editor-card" onSubmit={handleSaveExperience}>
           <div className="section-heading">
             <div>
               <span className="eyebrow">Ajustes</span>
@@ -3366,8 +3725,13 @@ export function TeamPage({
             <button type="submit" className="cta-button" disabled={isSavingExperience}>
               <span>{isSavingExperience ? 'Guardando…' : 'Guardar experiencia'}</span>
             </button>
+            <button type="button" className="filter-chip" onClick={closeExperienceEditor}>
+              <span>Cancelar</span>
+            </button>
           </div>
-        </form>
+            </form>
+          </ModalFrame>
+        ) : null}
       </div>
     );
   }
@@ -3386,7 +3750,13 @@ export function TeamPage({
                 <span className="eyebrow">Workflow</span>
                 <h3>Reglas operativas del expediente</h3>
               </div>
-              <Waypoints size={18} />
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={openWorkflowEditor}>
+                  <PencilLine size={16} />
+                  <span>Editar workflow</span>
+                </button>
+                <Waypoints size={18} />
+              </div>
             </div>
 
             <div className="checklist">
@@ -3427,7 +3797,15 @@ export function TeamPage({
           </article>
         </section>
 
-        <form className="surface section-card" onSubmit={handleSaveWorkflow}>
+        {isWorkflowEditorOpen ? (
+          <ModalFrame
+            eyebrow="Workflow"
+            title="Editar reglas del workflow"
+            description="La configuración del flujo queda aislada en modal para no mezclar lectura con edición."
+            width="lg"
+            onClose={closeWorkflowEditor}
+          >
+            <form className="editor-card" onSubmit={handleSaveWorkflow}>
           <div className="section-heading">
             <div>
               <span className="eyebrow">Reglas</span>
@@ -3540,8 +3918,13 @@ export function TeamPage({
             <button type="submit" className="cta-button" disabled={isSavingWorkflow}>
               <span>{isSavingWorkflow ? 'Guardando…' : 'Guardar workflow'}</span>
             </button>
+            <button type="button" className="filter-chip" onClick={closeWorkflowEditor}>
+              <span>Cancelar</span>
+            </button>
           </div>
-        </form>
+            </form>
+          </ModalFrame>
+        ) : null}
       </div>
     );
   }
@@ -3652,10 +4035,18 @@ export function TeamPage({
                 <span className="eyebrow">Detalle</span>
                 <h3>{selectedIntegration?.name ?? 'Selecciona una integración'}</h3>
               </div>
-              <TestTube2 size={18} />
+              <div className="action-row">
+                {selectedIntegration ? (
+                  <button type="button" className="ghost-button" onClick={openIntegrationEditor}>
+                    <PencilLine size={16} />
+                    <span>Configurar</span>
+                  </button>
+                ) : null}
+                <TestTube2 size={18} />
+              </div>
             </div>
 
-            {selectedIntegration && integrationDraft ? (
+            {selectedIntegration ? (
               <>
                 <div className="integration-summary">
                   <div className="integration-summary__row">
@@ -3675,6 +4066,103 @@ export function TeamPage({
                   <small>{selectedIntegration.runtimeSummary}</small>
                 </div>
 
+                <div className="field">
+                  <span>Alcances habilitados</span>
+                  <div className="role-pill-group">
+                    {selectedIntegration.scopes.map((scope) => (
+                      <span key={`${selectedIntegration.id}-${scope}`} className="role-pill role-pill--active">
+                        <span>{scope}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="integration-runtime">
+                  <strong>Variables esperadas</strong>
+                  <div className="role-pill-group">
+                    {selectedIntegration.requiredEnvKeys.map((key) => (
+                      <span key={`${selectedIntegration.id}-${key}`} className="role-pill">
+                        {key}
+                      </span>
+                    ))}
+                  </div>
+                  <p>
+                    Última prueba:{' '}
+                    {selectedIntegration.lastTestAt
+                      ? formatDateTime(selectedIntegration.lastTestAt)
+                      : 'Aún no ejecutada'}
+                  </p>
+                  <p>
+                    {selectedIntegration.envReady
+                      ? 'La integración ya tiene configuración suficiente para operar.'
+                      : 'Completa la configuración desde Gobierno o usa variables de entorno compatibles.'}
+                  </p>
+                  {selectedIntegration.lastError ? (
+                    <p className="form-error">{selectedIntegration.lastError}</p>
+                  ) : null}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="cta-button"
+                    onClick={openIntegrationEditor}
+                  >
+                    <span>Editar integración</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => void handleTestIntegration(selectedIntegration.id)}
+                    disabled={testingIntegrationId === selectedIntegration.id}
+                  >
+                    <RefreshCcw size={16} />
+                    <span>
+                      {testingIntegrationId === selectedIntegration.id
+                        ? 'Probando…'
+                        : 'Probar conectividad'}
+                    </span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state">
+                <p>Selecciona una integración para ver configuración, alcance y diagnóstico.</p>
+              </div>
+            )}
+          </article>
+        </section>
+
+        {isIntegrationEditorOpen && selectedIntegration && integrationDraft ? (
+          <ModalFrame
+            eyebrow="Integración"
+            title={`Configurar ${selectedIntegration.name}`}
+            description="La configuración técnica se resuelve en un modal dedicado para no mezclar directorio con edición."
+            width="xl"
+            onClose={closeIntegrationEditor}
+          >
+            <div className="page-stack">
+              <section className="surface section-card section-card--compact">
+                <div className="integration-summary">
+                  <div className="integration-summary__row">
+                    <span className={getBadgeClass(selectedIntegration.status)}>
+                      {selectedIntegration.status}
+                    </span>
+                    <span className="badge badge--outline">{selectedIntegration.category}</span>
+                    <span className="badge badge--outline">
+                      {selectedIntegration.envReady
+                        ? selectedIntegration.runtimeSource === 'runtime'
+                          ? 'Lista por entorno'
+                          : 'Lista por Gobierno'
+                        : 'Configuración pendiente'}
+                    </span>
+                  </div>
+                  <p>{selectedIntegration.description}</p>
+                  <small>{selectedIntegration.runtimeSummary}</small>
+                </div>
+              </section>
+
+              <section className="surface section-card">
                 <IntegrationAssistant
                   integration={selectedIntegration}
                   config={integrationDraft.config}
@@ -3693,8 +4181,10 @@ export function TeamPage({
                   }
                 />
 
-                {/* Configuración Administrativa Adicional - Consolidada */}
-                <div className="form-grid" style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+                <div
+                  className="form-grid"
+                  style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}
+                >
                   <label className="field field--toggle">
                     <span>Estado visible en front</span>
                     <div className="field__toggle">
@@ -3756,7 +4246,6 @@ export function TeamPage({
                   </div>
                 </label>
 
-                {/* Notas - Ocultar en especializados por redundancia */}
                 {![
                   'outbound-mail',
                   'openai',
@@ -3783,7 +4272,6 @@ export function TeamPage({
                   </label>
                 )}
 
-                {/* Campos Crudos - Ocultar en asistentes especializados para reducir ruido */}
                 {![
                   'outbound-mail',
                   'openai',
@@ -3821,31 +4309,6 @@ export function TeamPage({
                   </div>
                 )}
 
-                <div className="integration-runtime">
-                  <strong>Variables esperadas</strong>
-                  <div className="role-pill-group">
-                    {selectedIntegration.requiredEnvKeys.map((key) => (
-                      <span key={`${selectedIntegration.id}-${key}`} className="role-pill">
-                        {key}
-                      </span>
-                    ))}
-                  </div>
-                  <p>
-                    Última prueba:{' '}
-                    {selectedIntegration.lastTestAt
-                      ? formatDateTime(selectedIntegration.lastTestAt)
-                      : 'Aún no ejecutada'}
-                  </p>
-                  <p>
-                    {selectedIntegration.envReady
-                      ? 'La integración ya tiene configuración suficiente para operar.'
-                      : 'Completa la configuración desde Gobierno o usa variables de entorno compatibles.'}
-                  </p>
-                  {selectedIntegration.lastError ? (
-                    <p className="form-error">{selectedIntegration.lastError}</p>
-                  ) : null}
-                </div>
-
                 {integrationError ? <p className="form-error">{integrationError}</p> : null}
 
                 <div className="action-row">
@@ -3857,28 +4320,14 @@ export function TeamPage({
                   >
                     <span>{isSavingIntegration ? 'Guardando…' : 'Guardar integración'}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => void handleTestIntegration(selectedIntegration.id)}
-                    disabled={testingIntegrationId === selectedIntegration.id}
-                  >
-                    <RefreshCcw size={16} />
-                    <span>
-                      {testingIntegrationId === selectedIntegration.id
-                        ? 'Probando…'
-                        : 'Probar conectividad'}
-                    </span>
+                  <button type="button" className="filter-chip" onClick={closeIntegrationEditor}>
+                    <span>Cancelar</span>
                   </button>
                 </div>
-              </>
-            ) : (
-              <div className="empty-state">
-                <p>Selecciona una integración para ver configuración, alcance y diagnóstico.</p>
-              </div>
-            )}
-          </article>
-        </section>
+              </section>
+            </div>
+          </ModalFrame>
+        ) : null}
       </div>
     );
   }

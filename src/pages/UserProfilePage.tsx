@@ -6,6 +6,7 @@ import {
   Mail,
   MapPin,
   MoonStar,
+  PencilLine,
   Phone,
   ShieldCheck,
   SunMedium,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type {
@@ -152,12 +154,19 @@ export function UserProfilePage({
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState<PasswordChangeInput>(buildPasswordForm());
   const [isRolePickerOpen, setIsRolePickerOpen] = useState(false);
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false);
+  const [isAdminAccessEditorOpen, setIsAdminAccessEditorOpen] = useState(false);
+  const [isPasswordEditorOpen, setIsPasswordEditorOpen] = useState(false);
 
   useEffect(() => {
     if (targetUser) {
       setProfileDraft(buildProfileDraft(targetUser));
       setAdminDraft(buildAdminDraft(targetUser));
       setIsRolePickerOpen(false);
+      setPasswordForm(buildPasswordForm());
+      setIsProfileEditorOpen(false);
+      setIsAdminAccessEditorOpen(false);
+      setIsPasswordEditorOpen(false);
     }
   }, [targetUser]);
 
@@ -187,6 +196,23 @@ export function UserProfilePage({
 
   const profileUser = targetUser;
 
+  function closeProfileEditor() {
+    setProfileDraft(buildProfileDraft(profileUser));
+    setAdminDraft(buildAdminDraft(profileUser));
+    setIsProfileEditorOpen(false);
+  }
+
+  function closeAdminAccessEditor() {
+    setAdminDraft(buildAdminDraft(profileUser));
+    setIsRolePickerOpen(false);
+    setIsAdminAccessEditorOpen(false);
+  }
+
+  function closePasswordEditor() {
+    setPasswordForm(buildPasswordForm());
+    setIsPasswordEditorOpen(false);
+  }
+
   async function handleSaveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsProfileSaving(true);
@@ -209,6 +235,7 @@ export function UserProfilePage({
 
       refreshAppData();
       await refreshSession();
+      setIsProfileEditorOpen(false);
       await showAlert({
         title: 'Perfil actualizado',
         message: 'Tus datos básicos quedaron actualizados correctamente.',
@@ -258,6 +285,7 @@ export function UserProfilePage({
         await refreshSession();
       }
 
+      setIsAdminAccessEditorOpen(false);
       await showAlert({
         title: 'Usuario actualizado',
         message: 'La ficha del usuario quedó actualizada correctamente.',
@@ -347,6 +375,7 @@ export function UserProfilePage({
       }
 
       setPasswordForm(buildPasswordForm());
+      setIsPasswordEditorOpen(false);
       await showAlert({
         title: 'Contraseña actualizada',
         message: 'Tu contraseña quedó actualizada correctamente.',
@@ -417,414 +446,560 @@ export function UserProfilePage({
 
       <div className={profileLayoutClass}>
         <section className="page-stack">
-          <form className="surface section-card" onSubmit={isAdminDirectoryView ? handleSaveAdmin : handleSaveProfile}>
+          <section className="surface section-card">
             <div className="section-heading">
               <div>
                 <span className="eyebrow">Perfil</span>
                 <h3>Información personal</h3>
               </div>
-              <UserRound size={18} />
+              <div className="action-row">
+                <button type="button" className="ghost-button" onClick={() => setIsProfileEditorOpen(true)}>
+                  <PencilLine size={16} />
+                  <span>Editar perfil</span>
+                </button>
+                <UserRound size={18} />
+              </div>
             </div>
 
-            <div className="form-grid">
-              <label className="field">
-                <span>Nombre</span>
-                <div className="field__control">
-                  <input
-                    value={isAdminDirectoryView ? adminDraft?.name ?? '' : profileDraft.name}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, name: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, name: value }));
-                      }
-                    }}
-                    required
-                  />
+            <div className="list-stack">
+              <div className="list-item">
+                <div>
+                  <strong>Nombre y contacto</strong>
+                  <p>{profileUser.name}</p>
                 </div>
-              </label>
+                <div className="list-item__meta">
+                  <span>{profileUser.email}</span>
+                  <span>{profileUser.phone || 'Sin teléfono'}</span>
+                </div>
+              </div>
 
-              <label className="field">
-                <span>Correo</span>
-                <div className="field__control">
-                  <input
-                    type="email"
-                    value={isAdminDirectoryView ? adminDraft?.email ?? '' : profileDraft.email}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, email: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, email: value }));
-                      }
-                    }}
-                    required
-                  />
+              <div className="list-item">
+                <div>
+                  <strong>Titular y ubicación</strong>
+                  <p>{profileUser.headline || 'Sin titular profesional'}</p>
                 </div>
-              </label>
+                <div className="list-item__meta">
+                  <span>{profileUser.location || 'Ubicación no definida'}</span>
+                  <span>{profileUser.role}</span>
+                </div>
+              </div>
 
-              <label className="field">
-                <span>Titular profesional</span>
-                <div className="field__control">
-                  <input
-                    value={isAdminDirectoryView ? adminDraft?.headline ?? '' : profileDraft.headline}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, headline: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, headline: value }));
-                      }
-                    }}
-                    placeholder="Ej. Coordinación académica, Diseño instruccional..."
-                  />
+              <div className="list-item">
+                <div>
+                  <strong>Biografía</strong>
+                  <p>{profileUser.bio || 'Sin biografía registrada.'}</p>
                 </div>
-              </label>
-
-              <label className="field">
-                <span>Teléfono</span>
-                <div className="field__control">
-                  <input
-                    value={isAdminDirectoryView ? adminDraft?.phone ?? '' : profileDraft.phone}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, phone: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, phone: value }));
-                      }
-                    }}
-                    placeholder="+57..."
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Ubicación</span>
-                <div className="field__control">
-                  <input
-                    value={isAdminDirectoryView ? adminDraft?.location ?? '' : profileDraft.location}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, location: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, location: value }));
-                      }
-                    }}
-                    placeholder="Ciudad, país"
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Biografía breve</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={isAdminDirectoryView ? adminDraft?.bio ?? '' : profileDraft.bio}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (isAdminDirectoryView) {
-                        setAdminDraft((current) => (current ? { ...current, bio: value } : current));
-                      } else {
-                        setProfileDraft((current) => ({ ...current, bio: value }));
-                      }
-                    }}
-                    placeholder="Describe brevemente tu enfoque o tu función dentro de la operación."
-                  />
-                </div>
-              </label>
+              </div>
             </div>
-
-            <div className="action-row">
-              <button
-                type="submit"
-                className="cta-button"
-                disabled={isAdminDirectoryView ? isAdminSaving : isProfileSaving}
-              >
-                <span>
-                  {isAdminDirectoryView
-                    ? isAdminSaving
-                      ? 'Guardando...'
-                      : 'Guardar usuario'
-                    : isProfileSaving
-                      ? 'Guardando...'
-                      : 'Guardar perfil'}
-                </span>
-              </button>
-            </div>
-          </form>
+          </section>
 
           {isAdminDirectoryView && adminDraft ? (
-            <form className="surface section-card" onSubmit={handleSaveAdmin}>
+            <section className="surface section-card">
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">Gobierno</span>
                   <h3>Acceso, roles y alcance</h3>
                 </div>
-                <ShieldCheck size={18} />
-              </div>
-
-              <div className="form-grid">
-                <label className="field">
-                  <span>Rol principal</span>
-                  <div className="field__control">
-                    <select
-                      value={adminDraft.role}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current
-                            ? {
-                                ...current,
-                                role: event.target.value as Role,
-                                secondaryRoles: current.secondaryRoles.filter(
-                                  (item) => item !== event.target.value,
-                                ),
-                              }
-                            : current,
-                        )
-                      }
-                    >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={adminDraft.status}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current ? { ...current, status: event.target.value as UserUpdateInput['status'] } : current,
-                        )
-                      }
-                    >
-                      {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Institución</span>
-                  <div className="field__control">
-                    <input
-                      value={adminDraft.institution}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current ? { ...current, institution: event.target.value } : current,
-                        )
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Facultad</span>
-                  <div className="field__control">
-                    <input
-                      value={adminDraft.faculty}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current ? { ...current, faculty: event.target.value } : current,
-                        )
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Programa</span>
-                  <div className="field__control">
-                    <input
-                      value={adminDraft.program}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current ? { ...current, program: event.target.value } : current,
-                        )
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Alcance</span>
-                  <div className="field__control">
-                    <input
-                      value={adminDraft.scope}
-                      onChange={(event) =>
-                        setAdminDraft((current) =>
-                          current ? { ...current, scope: event.target.value } : current,
-                        )
-                      }
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <label className="field field--full">
-                <span>Roles complementarios</span>
-                <div className="tag-token-list">
-                  {adminDraft.secondaryRoles.length === 0 ? (
-                    <span className="tag-token tag-token--muted">Sin roles complementarios</span>
-                  ) : (
-                    adminDraft.secondaryRoles.map((item) => (
-                      <span key={item} className="tag-token">
-                        {item}
-                      </span>
-                    ))
-                  )}
-                </div>
-                <div className="action-row action-row--inline">
+                <div className="action-row">
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => setIsRolePickerOpen((current) => !current)}
+                    onClick={() => setIsAdminAccessEditorOpen(true)}
                   >
-                    <Waypoints size={16} />
-                    <span>{isRolePickerOpen ? 'Ocultar selector' : 'Editar roles complementarios'}</span>
+                    <PencilLine size={16} />
+                    <span>Editar acceso</span>
                   </button>
+                  <ShieldCheck size={18} />
                 </div>
-
-                {isRolePickerOpen ? (
-                  <div className="role-picker-panel">
-                    {appData.roles
-                      .filter((item) => item !== adminDraft.role)
-                      .map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          className={
-                            adminDraft.secondaryRoles.includes(item)
-                              ? 'filter-chip filter-chip--active'
-                              : 'filter-chip'
-                          }
-                          onClick={() =>
-                            setAdminDraft((current) =>
-                              current ? toggleSecondaryRole(current, item) : current,
-                            )
-                          }
-                        >
-                          <span>{item}</span>
-                        </button>
-                      ))}
-                  </div>
-                ) : null}
-              </label>
-
-              <label className="field field--full">
-                <span>Motivo de estado</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={adminDraft.statusReason}
-                    onChange={(event) =>
-                      setAdminDraft((current) =>
-                        current ? { ...current, statusReason: event.target.value } : current,
-                      )
-                    }
-                    placeholder="Describe el motivo si el usuario no queda activo."
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Nueva contraseña</span>
-                <div className="field__control">
-                  <input
-                    type="password"
-                    value={adminDraft.password ?? ''}
-                    onChange={(event) =>
-                      setAdminDraft((current) =>
-                        current ? { ...current, password: event.target.value } : current,
-                      )
-                    }
-                    placeholder="Opcional"
-                  />
-                </div>
-              </label>
-
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isAdminSaving}>
-                  <span>{isAdminSaving ? 'Guardando...' : 'Guardar gobierno'}</span>
-                </button>
-                {profileUser.id !== viewer.id ? (
-                  <button
-                    type="button"
-                    className="danger-button danger-button--ghost"
-                    onClick={() => void handleDeleteUser()}
-                  >
-                    <Trash2 size={16} />
-                    <span>Eliminar usuario</span>
-                  </button>
-                ) : null}
               </div>
-            </form>
+
+              <div className="list-stack">
+                <div className="list-item">
+                  <div>
+                    <strong>Rol principal y estado</strong>
+                    <p>{profileUser.role}</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>{profileUser.status ?? 'Pendiente'}</span>
+                    <span>{profileUser.scope || 'Sin alcance'}</span>
+                  </div>
+                </div>
+
+                <div className="list-item">
+                  <div>
+                    <strong>Directorio institucional</strong>
+                    <p>
+                      {profileUser.institution || 'Sin institución'} · {profileUser.faculty || 'Sin facultad'} ·{' '}
+                      {profileUser.program || 'Sin programa'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="list-item">
+                  <div>
+                    <strong>Roles complementarios</strong>
+                    <p>
+                      {profileUser.secondaryRoles?.join(' · ') || 'Sin roles complementarios'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
           ) : (
-            <form className="surface section-card" onSubmit={handlePasswordChange}>
+            <section className="surface section-card">
               <div className="section-heading">
                 <div>
                   <span className="eyebrow">Seguridad</span>
                   <h3>Contraseña y acceso</h3>
                 </div>
-                <KeyRound size={18} />
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setIsPasswordEditorOpen(true)}
+                  >
+                    <PencilLine size={16} />
+                    <span>Actualizar contraseña</span>
+                  </button>
+                  <KeyRound size={18} />
+                </div>
               </div>
 
-              <div className="form-grid">
-                <label className="field">
-                  <span>Contraseña actual</span>
-                  <div className="field__control">
-                    <input
-                      type="password"
-                      value={passwordForm.currentPassword}
+              <div className="list-stack">
+                <div className="list-item">
+                  <div>
+                    <strong>Acceso protegido</strong>
+                    <p>La contraseña se cambia fuera de la vista principal para mantener la lectura limpia.</p>
+                  </div>
+                  <div className="list-item__meta">
+                    <span>Longitud mínima 10 caracteres</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {isProfileEditorOpen ? (
+            <ModalFrame
+              eyebrow="Perfil"
+              title="Editar información personal"
+              description="La edición se resuelve en modal para que la vista de perfil permanezca limpia."
+              width="xl"
+              onClose={closeProfileEditor}
+            >
+              <form className="editor-card" onSubmit={isAdminDirectoryView ? handleSaveAdmin : handleSaveProfile}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Nombre</span>
+                    <div className="field__control">
+                      <input
+                        value={isAdminDirectoryView ? adminDraft?.name ?? '' : profileDraft.name}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, name: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, name: value }));
+                          }
+                        }}
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Correo</span>
+                    <div className="field__control">
+                      <input
+                        type="email"
+                        value={isAdminDirectoryView ? adminDraft?.email ?? '' : profileDraft.email}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, email: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, email: value }));
+                          }
+                        }}
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Titular profesional</span>
+                    <div className="field__control">
+                      <input
+                        value={isAdminDirectoryView ? adminDraft?.headline ?? '' : profileDraft.headline}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, headline: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, headline: value }));
+                          }
+                        }}
+                        placeholder="Ej. Coordinación académica, Diseño instruccional..."
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Teléfono</span>
+                    <div className="field__control">
+                      <input
+                        value={isAdminDirectoryView ? adminDraft?.phone ?? '' : profileDraft.phone}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, phone: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, phone: value }));
+                          }
+                        }}
+                        placeholder="+57..."
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Ubicación</span>
+                    <div className="field__control">
+                      <input
+                        value={isAdminDirectoryView ? adminDraft?.location ?? '' : profileDraft.location}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, location: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, location: value }));
+                          }
+                        }}
+                        placeholder="Ciudad, país"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Biografía breve</span>
+                    <div className="field__control field__control--textarea">
+                      <textarea
+                        rows={4}
+                        value={isAdminDirectoryView ? adminDraft?.bio ?? '' : profileDraft.bio}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (isAdminDirectoryView) {
+                            setAdminDraft((current) => (current ? { ...current, bio: value } : current));
+                          } else {
+                            setProfileDraft((current) => ({ ...current, bio: value }));
+                          }
+                        }}
+                        placeholder="Describe brevemente tu enfoque o tu función dentro de la operación."
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="submit"
+                    className="cta-button"
+                    disabled={isAdminDirectoryView ? isAdminSaving : isProfileSaving}
+                  >
+                    <span>
+                      {isAdminDirectoryView
+                        ? isAdminSaving
+                          ? 'Guardando...'
+                          : 'Guardar usuario'
+                        : isProfileSaving
+                          ? 'Guardando...'
+                          : 'Guardar perfil'}
+                    </span>
+                  </button>
+                  <button type="button" className="filter-chip" onClick={closeProfileEditor}>
+                    <span>Cancelar</span>
+                  </button>
+                </div>
+              </form>
+            </ModalFrame>
+          ) : null}
+
+          {isAdminDirectoryView && adminDraft && isAdminAccessEditorOpen ? (
+            <ModalFrame
+              eyebrow="Gobierno"
+              title="Editar acceso, roles y alcance"
+              description="Los cambios administrativos se resuelven fuera de la página para evitar saturación."
+              width="xl"
+              onClose={closeAdminAccessEditor}
+            >
+              <form className="editor-card" onSubmit={handleSaveAdmin}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Rol principal</span>
+                    <div className="field__control">
+                      <select
+                        value={adminDraft.role}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  role: event.target.value as Role,
+                                  secondaryRoles: current.secondaryRoles.filter(
+                                    (item) => item !== event.target.value,
+                                  ),
+                                }
+                              : current,
+                          )
+                        }
+                      >
+                        {appData.roles.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Estado</span>
+                    <div className="field__control">
+                      <select
+                        value={adminDraft.status}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current ? { ...current, status: event.target.value as UserUpdateInput['status'] } : current,
+                          )
+                        }
+                      >
+                        {['Activo', 'Inactivo', 'Suspendido', 'Pendiente'].map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Institución</span>
+                    <div className="field__control">
+                      <input
+                        value={adminDraft.institution}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current ? { ...current, institution: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Facultad</span>
+                    <div className="field__control">
+                      <input
+                        value={adminDraft.faculty}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current ? { ...current, faculty: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Programa</span>
+                    <div className="field__control">
+                      <input
+                        value={adminDraft.program}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current ? { ...current, program: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Alcance</span>
+                    <div className="field__control">
+                      <input
+                        value={adminDraft.scope}
+                        onChange={(event) =>
+                          setAdminDraft((current) =>
+                            current ? { ...current, scope: event.target.value } : current,
+                          )
+                        }
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <label className="field field--full">
+                  <span>Roles complementarios</span>
+                  <div className="tag-token-list">
+                    {adminDraft.secondaryRoles.length === 0 ? (
+                      <span className="tag-token tag-token--muted">Sin roles complementarios</span>
+                    ) : (
+                      adminDraft.secondaryRoles.map((item) => (
+                        <span key={item} className="tag-token">
+                          {item}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <div className="action-row action-row--inline">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => setIsRolePickerOpen((current) => !current)}
+                    >
+                      <Waypoints size={16} />
+                      <span>{isRolePickerOpen ? 'Ocultar selector' : 'Editar roles complementarios'}</span>
+                    </button>
+                  </div>
+
+                  {isRolePickerOpen ? (
+                    <div className="role-picker-panel">
+                      {appData.roles
+                        .filter((item) => item !== adminDraft.role)
+                        .map((item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            className={
+                              adminDraft.secondaryRoles.includes(item)
+                                ? 'filter-chip filter-chip--active'
+                                : 'filter-chip'
+                            }
+                            onClick={() =>
+                              setAdminDraft((current) =>
+                                current ? toggleSecondaryRole(current, item) : current,
+                              )
+                            }
+                          >
+                            <span>{item}</span>
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
+                </label>
+
+                <label className="field field--full">
+                  <span>Motivo de estado</span>
+                  <div className="field__control field__control--textarea">
+                    <textarea
+                      rows={3}
+                      value={adminDraft.statusReason}
                       onChange={(event) =>
-                        setPasswordForm((current) => ({
-                          ...current,
-                          currentPassword: event.target.value,
-                        }))
+                        setAdminDraft((current) =>
+                          current ? { ...current, statusReason: event.target.value } : current,
+                        )
                       }
-                      required
+                      placeholder="Describe el motivo si el usuario no queda activo."
                     />
                   </div>
                 </label>
 
-                <label className="field">
+                <label className="field field--full">
                   <span>Nueva contraseña</span>
                   <div className="field__control">
                     <input
                       type="password"
-                      value={passwordForm.nextPassword}
+                      value={adminDraft.password ?? ''}
                       onChange={(event) =>
-                        setPasswordForm((current) => ({
-                          ...current,
-                          nextPassword: event.target.value,
-                        }))
+                        setAdminDraft((current) =>
+                          current ? { ...current, password: event.target.value } : current,
+                        )
                       }
-                      minLength={10}
-                      required
+                      placeholder="Opcional"
                     />
                   </div>
                 </label>
-              </div>
 
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isChangingPassword}>
-                  <span>{isChangingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</span>
-                </button>
-              </div>
-            </form>
-          )}
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isAdminSaving}>
+                    <span>{isAdminSaving ? 'Guardando...' : 'Guardar gobierno'}</span>
+                  </button>
+                  <button type="button" className="filter-chip" onClick={closeAdminAccessEditor}>
+                    <span>Cancelar</span>
+                  </button>
+                  {profileUser.id !== viewer.id ? (
+                    <button
+                      type="button"
+                      className="danger-button danger-button--ghost"
+                      onClick={() => void handleDeleteUser()}
+                    >
+                      <Trash2 size={16} />
+                      <span>Eliminar usuario</span>
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+            </ModalFrame>
+          ) : null}
+
+          {!isAdminDirectoryView && isPasswordEditorOpen ? (
+            <ModalFrame
+              eyebrow="Seguridad"
+              title="Actualizar contraseña"
+              description="La seguridad se edita en modal para mantener el perfil como vista de lectura."
+              width="lg"
+              onClose={closePasswordEditor}
+            >
+              <form className="editor-card" onSubmit={handlePasswordChange}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Contraseña actual</span>
+                    <div className="field__control">
+                      <input
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(event) =>
+                          setPasswordForm((current) => ({
+                            ...current,
+                            currentPassword: event.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Nueva contraseña</span>
+                    <div className="field__control">
+                      <input
+                        type="password"
+                        value={passwordForm.nextPassword}
+                        onChange={(event) =>
+                          setPasswordForm((current) => ({
+                            ...current,
+                            nextPassword: event.target.value,
+                          }))
+                        }
+                        minLength={10}
+                        required
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isChangingPassword}>
+                    <span>{isChangingPassword ? 'Actualizando...' : 'Actualizar contraseña'}</span>
+                  </button>
+                  <button type="button" className="filter-chip" onClick={closePasswordEditor}>
+                    <span>Cancelar</span>
+                  </button>
+                </div>
+              </form>
+            </ModalFrame>
+          ) : null}
         </section>
 
         <aside className="page-stack">
