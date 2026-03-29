@@ -4079,7 +4079,7 @@ export function CourseWorkspacePage({
         className={
           isWorkflowPage
             ? 'surface section-card section-card--compact course-sections'
-            : 'surface section-card section-card--compact course-sections course-sections--focus'
+            : 'course-sections course-sections--focus'
         }
       >
         {isWorkflowPage ? (
@@ -4123,9 +4123,14 @@ export function CourseWorkspacePage({
         <section className="surface section-card section-card--compact workspace-focus-head">
           <div className="workspace-focus-head__top">
             <div className="workspace-focus-head__copy">
-              <span className="eyebrow">{focusedStageMeta.eyebrow}</span>
+              <div className="workspace-focus-head__badges">
+                <span className="eyebrow">{focusedStageMeta.eyebrow}</span>
+                <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
+                <span className={`badge badge--${stage?.tone ?? 'ink'}`}>
+                  {stage?.name ?? currentCourse.stageId}
+                </span>
+              </div>
               <h3>{focusedStageMeta.title}</h3>
-              <p>{focusedStageMeta.description}</p>
             </div>
 
             <div className="workspace-focus-head__actions">
@@ -4151,14 +4156,10 @@ export function CourseWorkspacePage({
             <span>{currentCourse.title}</span>
             <span>{currentCourse.faculty}</span>
             <span>{currentCourse.program}</span>
-          </div>
-
-          <div className="workspace-focus-head__stats">
             {focusedStageMeta.stats.map((item) => (
-              <article key={item.label} className="workspace-focus-stat">
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </article>
+              <span key={item.label}>
+                {item.label}: <strong>{item.value}</strong>
+              </span>
             ))}
           </div>
         </section>

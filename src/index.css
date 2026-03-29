@@ -5800,7 +5800,12 @@ body::after {
 }
 
 .course-sections--focus {
-  padding-block: 16px;
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .module-grid--summary {
@@ -5809,17 +5814,23 @@ body::after {
 
 .workspace-focus-head {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+  padding: 14px 16px;
 }
 
 .workspace-focus-head__top,
+.workspace-focus-head__badges,
 .workspace-focus-head__actions,
-.workspace-focus-head__meta,
-.workspace-focus-head__stats {
+.workspace-focus-head__meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.workspace-focus-head__badges,
+.workspace-focus-head__meta {
+  flex-wrap: wrap;
 }
 
 .workspace-focus-head__top {
@@ -5828,19 +5839,14 @@ body::after {
 
 .workspace-focus-head__copy {
   display: grid;
-  gap: 8px;
-  max-width: 72ch;
+  gap: 6px;
+  max-width: none;
 }
 
 .workspace-focus-head__copy h3 {
   margin: 0;
   color: var(--text-strong);
-}
-
-.workspace-focus-head__copy p {
-  margin: 0;
-  color: var(--text-muted);
-  line-height: 1.6;
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
 }
 
 .workspace-focus-head__actions {
@@ -5849,36 +5855,23 @@ body::after {
 }
 
 .workspace-focus-head__meta {
-  flex-wrap: wrap;
   color: var(--text-muted);
-  font-size: 0.92rem;
+  font-size: 0.86rem;
 }
 
-.workspace-focus-head__stats {
-  flex-wrap: wrap;
-}
-
-.workspace-focus-stat {
-  display: grid;
-  gap: 6px;
-  min-width: 140px;
-  padding: 14px 16px;
-  border-radius: 16px;
+.workspace-focus-head__meta > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
 }
 
-.workspace-focus-stat span {
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.workspace-focus-stat strong {
+.workspace-focus-head__meta strong {
+  margin-left: 4px;
   color: var(--text-strong);
-  font-family: var(--font-display);
-  font-size: 1.1rem;
 }
 
 .field--search {
@@ -5897,6 +5890,35 @@ body::after {
 
 .courses-page--folders {
   gap: 18px;
+}
+
+.workspace-page--focus .content-stage,
+.workspace-page--focus {
+  gap: 12px;
+}
+
+.workspace-page--focus .workspace-grid {
+  gap: 12px;
+}
+
+.workspace-page--focus .section-card,
+.workspace-page--focus .section-card--compact,
+.workspace-page--focus .editor-card,
+.workspace-page--focus .task-editor {
+  padding: 16px;
+}
+
+.workspace-page--focus .section-heading {
+  margin-bottom: 12px;
+}
+
+.workspace-page--focus .section-heading h3 {
+  margin-top: 4px;
+  font-size: 1.16rem;
+}
+
+.workspace-page--focus .section-lead {
+  display: none;
 }
 
 .courses-toolbar__search {
