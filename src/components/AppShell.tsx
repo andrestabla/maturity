@@ -263,6 +263,10 @@ export function AppShell({
     .map((item) => item[0]?.toUpperCase() ?? '')
     .slice(0, 2)
     .join('');
+  const sidebarDisplayName = user.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .join(' ');
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
@@ -451,6 +455,14 @@ export function AppShell({
           </nav>
 
           <div className="sidebar-footer">
+            <div className="sidebar-account">
+              <div className="sidebar-account__avatar">{userInitials}</div>
+              <div className="sidebar-account__copy">
+                <strong>{sidebarDisplayName}</strong>
+                <span>{role}</span>
+              </div>
+            </div>
+
             {secondaryNavigation.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
@@ -464,22 +476,14 @@ export function AppShell({
               </NavLink>
             ))}
 
-            <NavLink to="/profile" className="sidebar-user">
-              <div className="sidebar-user__avatar">{userInitials}</div>
-              <div>
-                <strong>{user.name}</strong>
-                <span>{role}</span>
-              </div>
-            </NavLink>
-
             <button
               type="button"
-              className="ghost-button sidebar-logout"
+              className="nav-link nav-link--footer nav-link--button sidebar-logout"
               title="Salir"
               aria-label="Salir"
               onClick={() => void onLogout()}
             >
-              <LogOut size={16} />
+              <LogOut size={18} />
               <span>Salir</span>
             </button>
           </div>
