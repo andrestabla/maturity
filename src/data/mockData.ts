@@ -7,11 +7,13 @@ import type {
   CourseMetadata,
   CourseProduct,
   CourseStageNotes,
+  ExperienceSettings,
   LibraryResource,
   Role,
   RoleProfile,
   StageDefinition,
   Task,
+  WorkflowSettings,
 } from '../types.js';
 
 type BaseCourse = Omit<Course, 'metadata' | 'auditLog' | 'stageNotes' | 'products'>;
@@ -1224,6 +1226,22 @@ export const defaultBranding: BrandingSettings = {
   supportUrl: 'mailto:soporte@maturity360.co',
 };
 
+export const defaultExperienceSettings: ExperienceSettings = {
+  studioMode: 'Profundo',
+  showSummaryHero: true,
+  showFocusedStageHeader: true,
+  stageRailVisibility: 'Solo workflow',
+  profileLayout: 'Dos columnas',
+};
+
+export const defaultWorkflowSettings: WorkflowSettings = {
+  showWorkflowStageCards: true,
+  showQuickAccessPanel: true,
+  handoffRequiresCheckpoint: true,
+  handoffBlocksOnBlockedCheckpoints: true,
+  handoffBlocksOnCriticalObservations: true,
+};
+
 export const mockAppData: AppData = {
   roles,
   stages,
@@ -1233,6 +1251,8 @@ export const mockAppData: AppData = {
   libraryResources,
   roleProfiles,
   branding: defaultBranding,
+  experience: defaultExperienceSettings,
+  workflow: defaultWorkflowSettings,
   users: [
     {
       id: 'user-admin-demo',

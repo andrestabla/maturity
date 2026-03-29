@@ -61,6 +61,8 @@ const governmentTabLabels = {
   users: 'Usuarios',
   institution: 'Institución',
   branding: 'Branding',
+  experience: 'Experiencia',
+  workflow: 'Workflow',
   integrations: 'Integraciones',
   services: 'Servicios',
   logs: 'Logs',

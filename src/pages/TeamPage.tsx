@@ -30,11 +30,13 @@ import type {
   AppData,
   AuthUser,
   BrandingSettings,
+  ExperienceSettings,
   InstitutionSettings,
   PasswordChangeInput,
   Role,
   UserMutationInput,
   UserUpdateInput,
+  WorkflowSettings,
 } from '../types.js';
 import { formatDate, formatDateTime, formatLongDate } from '../utils/format.js';
 import { canManageUsers } from '../utils/permissions.js';
@@ -46,7 +48,16 @@ interface TeamPageProps {
   refreshSession: () => Promise<void>;
 }
 
-type AdminTab = 'users' | 'institution' | 'branding' | 'integrations' | 'services' | 'logs' | 'audit';
+type AdminTab =
+  | 'users'
+  | 'institution'
+  | 'branding'
+  | 'experience'
+  | 'workflow'
+  | 'integrations'
+  | 'services'
+  | 'logs'
+  | 'audit';
 
 interface AdminCenterResponse {
   data: AdminCenterData;
@@ -55,6 +66,8 @@ interface AdminCenterResponse {
 interface AdminCenterPatchResponse {
   institution?: InstitutionSettings;
   branding?: BrandingSettings;
+  experience?: ExperienceSettings;
+  workflow?: WorkflowSettings;
 }
 
 interface AdminIntegrationResponse {
@@ -175,6 +188,16 @@ const adminTabs: Array<{
     description: 'Marca, tipografía, login, loader y recursos visuales base.',
   },
   {
+    id: 'experience',
+    label: 'Experiencia',
+    description: 'Foco visual, rail de etapas y organización de la zona de trabajo.',
+  },
+  {
+    id: 'workflow',
+    label: 'Workflow',
+    description: 'Reglas de handoff, tarjetas de etapa y acceso rápido operativo.',
+  },
+  {
     id: 'integrations',
     label: 'Integraciones',
     description: 'Configuración y asistentes por servicio externo.',
@@ -229,6 +252,8 @@ export function TeamPage({
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isSavingInstitution, setIsSavingInstitution] = useState(false);
   const [isSavingBranding, setIsSavingBranding] = useState(false);
+  const [isSavingExperience, setIsSavingExperience] = useState(false);
+  const [isSavingWorkflow, setIsSavingWorkflow] = useState(false);
   const [isSavingIntegration, setIsSavingIntegration] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
@@ -241,6 +266,8 @@ export function TeamPage({
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionSettings | null>(null);
   const [brandingDraft, setBrandingDraft] = useState<BrandingSettings | null>(null);
+  const [experienceDraft, setExperienceDraft] = useState<ExperienceSettings | null>(null);
+  const [workflowDraft, setWorkflowDraft] = useState<WorkflowSettings | null>(null);
   const [integrationDraft, setIntegrationDraft] = useState<AdminIntegrationMutationInput | null>(null);
   const [passwordForm, setPasswordForm] = useState<PasswordChangeInput>(() => buildPasswordForm());
   const [serviceStatusFilter, setServiceStatusFilter] = useState<string>('Todas');
@@ -282,6 +309,8 @@ export function TeamPage({
       setAdminData(nextData);
       setInstitutionDraft(nextData.institution);
       setBrandingDraft(nextData.branding);
+      setExperienceDraft(nextData.experience);
+      setWorkflowDraft(nextData.workflow);
       setUserForm(buildUserForm(nextData.institution));
       setSelectedIntegrationId((current) =>
         current ??
@@ -752,6 +781,97 @@ export function TeamPage({
       );
     } finally {
       setIsSavingBranding(false);
+    }
+  }
+
+  async function handleSaveExperience(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!experienceDraft) {
+      return;
+    }
+
+    setSettingsError(null);
+    setIsSavingExperience(true);
+
+    try {
+      const response = await fetch('/api/admin-center', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          section: 'experience',
+          data: experienceDraft,
+        }),
+      });
+
+      const payload = (await response.json()) as AdminCenterPatchResponse | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          (payload as { error?: string }).error ??
+            'No fue posible guardar la configuración de experiencia.',
+        );
+      }
+
+      setExperienceDraft((payload as AdminCenterPatchResponse).experience ?? experienceDraft);
+      await loadAdminCenter();
+      refreshAppData();
+    } catch (error) {
+      setSettingsError(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible guardar la configuración de experiencia.',
+      );
+    } finally {
+      setIsSavingExperience(false);
+    }
+  }
+
+  async function handleSaveWorkflow(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!workflowDraft) {
+      return;
+    }
+
+    setSettingsError(null);
+    setIsSavingWorkflow(true);
+
+    try {
+      const response = await fetch('/api/admin-center', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          section: 'workflow',
+          data: workflowDraft,
+        }),
+      });
+
+      const payload = (await response.json()) as AdminCenterPatchResponse | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          (payload as { error?: string }).error ?? 'No fue posible guardar la configuración del workflow.',
+        );
+      }
+
+      setWorkflowDraft((payload as AdminCenterPatchResponse).workflow ?? workflowDraft);
+      await loadAdminCenter();
+      refreshAppData();
+    } catch (error) {
+      setSettingsError(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible guardar la configuración del workflow.',
+      );
+    } finally {
+      setIsSavingWorkflow(false);
     }
   }
 
@@ -2596,6 +2716,374 @@ export function TeamPage({
     );
   }
 
+  function renderExperienceTab() {
+    if (!experienceDraft) {
+      return null;
+    }
+
+    return (
+      <div className="page-stack">
+        <section className="insight-grid">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Experiencia</span>
+                <h3>Trabajo profundo y contexto mínimo</h3>
+              </div>
+              <Eye size={18} />
+            </div>
+
+            <div className="checklist">
+              <div className="checklist__item">
+                <strong>Modo de estudio</strong>
+                <p>{experienceDraft.studioMode === 'Profundo' ? 'Las secciones de producción priorizan foco y aislamiento.' : 'Las secciones mantienen más contexto visible mientras se trabaja.'}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Rail de etapas</strong>
+                <p>{experienceDraft.stageRailVisibility}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Perfil</strong>
+                <p>{experienceDraft.profileLayout}</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Impacto</span>
+                <h3>Qué cambia en la plataforma</h3>
+              </div>
+              <BadgeCheck size={18} />
+            </div>
+
+            <div className="checklist">
+              <div className="checklist__item">
+                <strong>Hero del workflow</strong>
+                <p>Controla si la vista resumen abre con una lectura amplia del curso o entra más rápido al expediente.</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Cabecera contextual</strong>
+                <p>Decide si las zonas dedicadas conservan una capa superior con código, curso y métricas mínimas.</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Layout de perfil</strong>
+                <p>Permite reducir scroll largo en perfil forzando una lectura apilada o dos columnas.</p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <form className="surface section-card" onSubmit={handleSaveExperience}>
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Ajustes</span>
+              <h3>Configurar experiencia de trabajo</h3>
+            </div>
+            <ShieldCheck size={18} />
+          </div>
+
+          <div className="form-grid">
+            <label className="field">
+              <span>Modo de estudio</span>
+              <div className="field__control">
+                <select
+                  value={experienceDraft.studioMode}
+                  onChange={(event) =>
+                    setExperienceDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            studioMode: event.target.value as ExperienceSettings['studioMode'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Profundo', 'Contextual'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Visibilidad del rail de etapas</span>
+              <div className="field__control">
+                <select
+                  value={experienceDraft.stageRailVisibility}
+                  onChange={(event) =>
+                    setExperienceDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            stageRailVisibility:
+                              event.target.value as ExperienceSettings['stageRailVisibility'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Solo workflow', 'Siempre', 'Oculto'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Layout de perfil</span>
+              <div className="field__control">
+                <select
+                  value={experienceDraft.profileLayout}
+                  onChange={(event) =>
+                    setExperienceDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            profileLayout: event.target.value as ExperienceSettings['profileLayout'],
+                          }
+                        : current,
+                    )
+                  }
+                >
+                  {['Dos columnas', 'Apilado'].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label className="field field--toggle">
+              <span>Mostrar hero del workflow</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={experienceDraft.showSummaryHero}
+                  onChange={(event) =>
+                    setExperienceDraft((current) =>
+                      current ? { ...current, showSummaryHero: event.target.checked } : current,
+                    )
+                  }
+                />
+                <p>Conserva la lectura amplia del curso en la vista resumen antes de entrar a la operación.</p>
+              </div>
+            </label>
+
+            <label className="field field--toggle">
+              <span>Mostrar cabecera contextual en Studio</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={experienceDraft.showFocusedStageHeader}
+                  onChange={(event) =>
+                    setExperienceDraft((current) =>
+                      current
+                        ? { ...current, showFocusedStageHeader: event.target.checked }
+                        : current,
+                    )
+                  }
+                />
+                <p>Deja visible el contexto mínimo del curso dentro de arquitectura, producción, LMS o QA.</p>
+              </div>
+            </label>
+          </div>
+
+          {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+          <div className="action-row">
+            <button type="submit" className="cta-button" disabled={isSavingExperience}>
+              <span>{isSavingExperience ? 'Guardando…' : 'Guardar experiencia'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  function renderWorkflowTab() {
+    if (!workflowDraft) {
+      return null;
+    }
+
+    return (
+      <div className="page-stack">
+        <section className="insight-grid">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Workflow</span>
+                <h3>Reglas operativas del expediente</h3>
+              </div>
+              <Waypoints size={18} />
+            </div>
+
+            <div className="checklist">
+              <div className="checklist__item">
+                <strong>Tarjetas de etapas</strong>
+                <p>{workflowDraft.showWorkflowStageCards ? 'Visibles en el resumen del curso.' : 'Ocultas para reducir ruido en la vista resumen.'}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Acceso rápido</strong>
+                <p>{workflowDraft.showQuickAccessPanel ? 'El resumen mantiene panel de saltos operativos.' : 'El resumen elimina accesos rápidos secundarios.'}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Handoff</strong>
+                <p>{workflowDraft.handoffRequiresCheckpoint ? 'El paso entre etapas exige checkpoint completo.' : 'El handoff puede avanzar sin checkpoint finalizado.'}</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Bloqueos</span>
+                <h3>Condiciones que frenan el avance</h3>
+              </div>
+              <AlertTriangle size={18} />
+            </div>
+
+            <div className="checklist">
+              <div className="checklist__item">
+                <strong>Checkpoints bloqueados</strong>
+                <p>{workflowDraft.handoffBlocksOnBlockedCheckpoints ? 'Sí detienen el handoff.' : 'No bloquean el paso automáticamente.'}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Observaciones críticas</strong>
+                <p>{workflowDraft.handoffBlocksOnCriticalObservations ? 'Sí detienen el handoff.' : 'Se registran, pero no frenan el avance.'}</p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <form className="surface section-card" onSubmit={handleSaveWorkflow}>
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Reglas</span>
+              <h3>Configurar comportamiento del workflow</h3>
+            </div>
+            <ShieldCheck size={18} />
+          </div>
+
+          <div className="form-grid">
+            <label className="field field--toggle">
+              <span>Mostrar tarjetas de etapa en resumen</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={workflowDraft.showWorkflowStageCards}
+                  onChange={(event) =>
+                    setWorkflowDraft((current) =>
+                      current
+                        ? { ...current, showWorkflowStageCards: event.target.checked }
+                        : current,
+                    )
+                  }
+                />
+                <p>Las tarjetas resumen de arquitectura, producción, LMS, QA y cierre aparecen solo en la vista principal del curso.</p>
+              </div>
+            </label>
+
+            <label className="field field--toggle">
+              <span>Mostrar panel de acceso rápido</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={workflowDraft.showQuickAccessPanel}
+                  onChange={(event) =>
+                    setWorkflowDraft((current) =>
+                      current ? { ...current, showQuickAccessPanel: event.target.checked } : current,
+                    )
+                  }
+                />
+                <p>Permite mantener accesos directos a planeación, producción, recursos, QA e historial.</p>
+              </div>
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label className="field field--toggle">
+              <span>Exigir checkpoint para handoff</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={workflowDraft.handoffRequiresCheckpoint}
+                  onChange={(event) =>
+                    setWorkflowDraft((current) =>
+                      current
+                        ? { ...current, handoffRequiresCheckpoint: event.target.checked }
+                        : current,
+                    )
+                  }
+                />
+                <p>El responsable actual debe cerrar su checkpoint antes de transferir el curso.</p>
+              </div>
+            </label>
+
+            <label className="field field--toggle">
+              <span>Bloquear handoff por checkpoints bloqueados</span>
+              <div className="field__toggle">
+                <input
+                  type="checkbox"
+                  checked={workflowDraft.handoffBlocksOnBlockedCheckpoints}
+                  onChange={(event) =>
+                    setWorkflowDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            handoffBlocksOnBlockedCheckpoints: event.target.checked,
+                          }
+                        : current,
+                    )
+                  }
+                />
+                <p>Si existe un checkpoint en rojo dentro de la ruta previa, el curso no avanza.</p>
+              </div>
+            </label>
+          </div>
+
+          <label className="field field--toggle">
+            <span>Bloquear handoff por observaciones críticas</span>
+            <div className="field__toggle">
+              <input
+                type="checkbox"
+                checked={workflowDraft.handoffBlocksOnCriticalObservations}
+                onChange={(event) =>
+                  setWorkflowDraft((current) =>
+                    current
+                      ? {
+                          ...current,
+                          handoffBlocksOnCriticalObservations: event.target.checked,
+                        }
+                      : current,
+                  )
+                }
+              />
+              <p>Las observaciones de severidad alta se vuelven criterio de paso antes del siguiente responsable.</p>
+            </div>
+          </label>
+
+          {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+          <div className="action-row">
+            <button type="submit" className="cta-button" disabled={isSavingWorkflow}>
+              <span>{isSavingWorkflow ? 'Guardando…' : 'Guardar workflow'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   function renderIntegrationsTab() {
     const integrations = adminData?.integrations ?? [];
     const sortedIntegrations = [...integrations].sort((left, right) => {
@@ -3235,7 +3723,14 @@ export function TeamPage({
     );
   }
 
-  if (isAdminLoading || !adminData || !institutionDraft || !brandingDraft) {
+  if (
+    isAdminLoading ||
+    !adminData ||
+    !institutionDraft ||
+    !brandingDraft ||
+    !experienceDraft ||
+    !workflowDraft
+  ) {
     return (
       <div className="page-stack team-page">
         <section className="surface section-card">
@@ -3247,7 +3742,7 @@ export function TeamPage({
             <Clock3 size={18} />
           </div>
           <p className="section-lead">
-            Estamos cargando usuarios, integraciones, configuraciones, logs y auditoría.
+            Estamos cargando usuarios, configuraciones de experiencia, workflow, integraciones, logs y auditoría.
           </p>
         </section>
       </div>
@@ -3270,9 +3765,9 @@ export function TeamPage({
             </div>
 
             <p className="section-lead">
-              Desde aquí administras usuarios, estructuras institucionales, branding, integraciones,
-              servicios conectados, logs y auditoría, sin mezclar esta capa con la operación diaria de
-              producción de cursos.
+              Desde aquí administras usuarios, estructuras institucionales, branding, experiencia,
+              workflow, integraciones, servicios conectados, logs y auditoría, sin mezclar esta capa
+              con la operación diaria de producción de cursos.
             </p>
 
             <div className="admin-kpi-grid">
@@ -3314,6 +3809,8 @@ export function TeamPage({
       {activeTab === 'users' ? renderUsersTab() : null}
       {activeTab === 'institution' ? renderInstitutionTab() : null}
       {activeTab === 'branding' ? renderBrandingTab() : null}
+      {activeTab === 'experience' ? renderExperienceTab() : null}
+      {activeTab === 'workflow' ? renderWorkflowTab() : null}
       {activeTab === 'integrations' ? renderIntegrationsTab() : null}
       {activeTab === 'services' ? renderServicesTab() : null}
       {activeTab === 'logs' ? renderLogsTab() : null}

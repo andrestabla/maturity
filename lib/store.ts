@@ -1,4 +1,9 @@
-import { defaultBranding, mockAppData } from '../src/data/mockData.js';
+import {
+  defaultBranding,
+  defaultExperienceSettings,
+  defaultWorkflowSettings,
+  mockAppData,
+} from '../src/data/mockData.js';
 import type {
   Alert,
   AlertMutationInput,
@@ -1873,6 +1878,8 @@ export async function loadAppData(): Promise<AppData> {
     roleProfiles,
     users,
     branding: defaultBranding,
+    experience: defaultExperienceSettings,
+    workflow: defaultWorkflowSettings,
   };
 }
 

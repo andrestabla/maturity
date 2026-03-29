@@ -1,4 +1,9 @@
-import { defaultBranding, mockAppData } from '../src/data/mockData.js';
+import {
+  defaultBranding,
+  defaultExperienceSettings,
+  defaultWorkflowSettings,
+  mockAppData,
+} from '../src/data/mockData.js';
 import type {
   AdminAuditClassification,
   AdminAuditEntry,
@@ -13,8 +18,10 @@ import type {
   AdminLogSeverity,
   AuthUser,
   BrandingSettings,
+  ExperienceSettings,
   InstitutionSettings,
   Role,
+  WorkflowSettings,
 } from '../src/types.js';
 import { getSql } from './db.js';
 import { probeR2Connectivity } from './r2.js';
@@ -141,6 +148,47 @@ function sanitizeBrandingSettings(input: BrandingSettings): BrandingSettings {
     loaderLabel: input.loaderLabel.trim() || defaultBranding.loaderLabel,
     loaderMessage: input.loaderMessage.trim() || defaultBranding.loaderMessage,
     supportUrl: input.supportUrl.trim() || defaultBranding.supportUrl,
+  };
+}
+
+function sanitizeExperienceSettings(input: ExperienceSettings): ExperienceSettings {
+  return {
+    studioMode: input.studioMode ?? defaultExperienceSettings.studioMode,
+    showSummaryHero:
+      typeof input.showSummaryHero === 'boolean'
+        ? input.showSummaryHero
+        : defaultExperienceSettings.showSummaryHero,
+    showFocusedStageHeader:
+      typeof input.showFocusedStageHeader === 'boolean'
+        ? input.showFocusedStageHeader
+        : defaultExperienceSettings.showFocusedStageHeader,
+    stageRailVisibility: input.stageRailVisibility ?? defaultExperienceSettings.stageRailVisibility,
+    profileLayout: input.profileLayout ?? defaultExperienceSettings.profileLayout,
+  };
+}
+
+function sanitizeWorkflowSettings(input: WorkflowSettings): WorkflowSettings {
+  return {
+    showWorkflowStageCards:
+      typeof input.showWorkflowStageCards === 'boolean'
+        ? input.showWorkflowStageCards
+        : defaultWorkflowSettings.showWorkflowStageCards,
+    showQuickAccessPanel:
+      typeof input.showQuickAccessPanel === 'boolean'
+        ? input.showQuickAccessPanel
+        : defaultWorkflowSettings.showQuickAccessPanel,
+    handoffRequiresCheckpoint:
+      typeof input.handoffRequiresCheckpoint === 'boolean'
+        ? input.handoffRequiresCheckpoint
+        : defaultWorkflowSettings.handoffRequiresCheckpoint,
+    handoffBlocksOnBlockedCheckpoints:
+      typeof input.handoffBlocksOnBlockedCheckpoints === 'boolean'
+        ? input.handoffBlocksOnBlockedCheckpoints
+        : defaultWorkflowSettings.handoffBlocksOnBlockedCheckpoints,
+    handoffBlocksOnCriticalObservations:
+      typeof input.handoffBlocksOnCriticalObservations === 'boolean'
+        ? input.handoffBlocksOnCriticalObservations
+        : defaultWorkflowSettings.handoffBlocksOnCriticalObservations,
   };
 }
 
@@ -844,6 +892,28 @@ async function seedAdminCenterDefaults() {
     ON CONFLICT (key) DO NOTHING
   `;
 
+  await sql`
+    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+    VALUES (
+      ${'experience'},
+      ${JSON.stringify(defaultExperienceSettings)}::jsonb,
+      ${timestamp},
+      ${'system'}
+    )
+    ON CONFLICT (key) DO NOTHING
+  `;
+
+  await sql`
+    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+    VALUES (
+      ${'workflow'},
+      ${JSON.stringify(defaultWorkflowSettings)}::jsonb,
+      ${timestamp},
+      ${'system'}
+    )
+    ON CONFLICT (key) DO NOTHING
+  `;
+
   for (const integration of defaultIntegrationPresets) {
     await sql`
       INSERT INTO maturity_admin_integrations (
@@ -1359,6 +1429,11 @@ export async function getBrandingSettings() {
   return sanitizeBrandingSettings(branding);
 }
 
+export async function getExperienceSettings() {
+  const settings = await readSetting<ExperienceSettings>('experience', defaultExperienceSettings);
+  return sanitizeExperienceSettings(settings);
+}
+
 export async function getInstitutionSettings() {
   const settings = await readSetting<InstitutionSettings>(
     'institution',
@@ -1367,13 +1442,21 @@ export async function getInstitutionSettings() {
   return sanitizeInstitutionSettings(settings);
 }
 
+export async function getWorkflowSettings() {
+  const settings = await readSetting<WorkflowSettings>('workflow', defaultWorkflowSettings);
+  return sanitizeWorkflowSettings(settings);
+}
+
 export async function getAdminCenterData(): Promise<AdminCenterData> {
   await seedAdminCenterDefaults();
 
-  const [users, institution, branding, integrations, logs, audit] = await Promise.all([
+  const [users, institution, branding, experience, workflow, integrations, logs, audit] =
+    await Promise.all([
     getUserDirectory(),
     getInstitutionSettings(),
     getBrandingSettings(),
+    getExperienceSettings(),
+    getWorkflowSettings(),
     readIntegrations(),
     readLogs(),
     readAudit(),
@@ -1383,6 +1466,8 @@ export async function getAdminCenterData(): Promise<AdminCenterData> {
     users,
     institution,
     branding,
+    experience,
+    workflow,
     integrations,
     logs,
     audit,
@@ -1444,6 +1529,68 @@ export async function updateBrandingSettings(input: BrandingSettings, actor: Adm
     event: 'branding_updated',
     result: 'ok',
     detail: 'Se guardaron nombre visible, marca corta, colores y estilo de superficies.',
+    userId: actor.id,
+    userName: actor.name,
+  });
+
+  return next;
+}
+
+export async function updateExperienceSettings(input: ExperienceSettings, actor: AdminActor) {
+  const before = await getExperienceSettings();
+  const next = sanitizeExperienceSettings(input);
+
+  await writeSetting('experience', next, actor);
+  await recordAdminAudit({
+    classification: 'Funcional',
+    entityType: 'experience-settings',
+    entityId: 'experience',
+    action: 'update',
+    actorId: actor.id,
+    actorName: actor.name,
+    detail: 'Se actualizaron las reglas de foco visual, rail y layout de trabajo.',
+    beforeValue: JSON.stringify(before),
+    afterValue: JSON.stringify(next),
+  });
+  await recordAdminLog({
+    category: 'Administración',
+    module: 'Gobierno',
+    service: 'Experiencia',
+    severity: 'Success',
+    event: 'experience_settings_updated',
+    result: 'ok',
+    detail: 'Se guardaron modo de estudio, visibilidad del rail y layout de perfil.',
+    userId: actor.id,
+    userName: actor.name,
+  });
+
+  return next;
+}
+
+export async function updateWorkflowSettings(input: WorkflowSettings, actor: AdminActor) {
+  const before = await getWorkflowSettings();
+  const next = sanitizeWorkflowSettings(input);
+
+  await writeSetting('workflow', next, actor);
+  await recordAdminAudit({
+    classification: 'Funcional',
+    entityType: 'workflow-settings',
+    entityId: 'workflow',
+    action: 'update',
+    actorId: actor.id,
+    actorName: actor.name,
+    detail: 'Se actualizaron reglas de handoff y visibilidad del workflow.',
+    beforeValue: JSON.stringify(before),
+    afterValue: JSON.stringify(next),
+  });
+  await recordAdminLog({
+    category: 'Administración',
+    module: 'Gobierno',
+    service: 'Workflow',
+    severity: 'Success',
+    event: 'workflow_settings_updated',
+    result: 'ok',
+    detail: 'Se guardaron controles de handoff, tarjetas de etapas y acceso rápido.',
     userId: actor.id,
     userName: actor.name,
   });

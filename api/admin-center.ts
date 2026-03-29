@@ -1,12 +1,19 @@
 import {
   getAdminCenterData,
   updateBrandingSettings,
+  updateExperienceSettings,
   updateInstitutionSettings,
+  updateWorkflowSettings,
 } from '../lib/admin-center.js';
 import { canManageUsers } from '../lib/permissions.js';
 import { errorResponse, jsonResponse, readJson } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
-import type { BrandingSettings, InstitutionSettings } from '../src/types.js';
+import type {
+  BrandingSettings,
+  ExperienceSettings,
+  InstitutionSettings,
+  WorkflowSettings,
+} from '../src/types.js';
 
 export const config = {
   runtime: 'edge',
@@ -20,6 +27,14 @@ type AdminCenterPatchPayload =
   | {
       section: 'branding';
       data: BrandingSettings;
+    }
+  | {
+      section: 'experience';
+      data: ExperienceSettings;
+    }
+  | {
+      section: 'workflow';
+      data: WorkflowSettings;
     };
 
 export default async function handler(request: Request) {
@@ -70,6 +85,28 @@ export default async function handler(request: Request) {
 
       return jsonResponse({
         branding,
+      });
+    }
+
+    if (payload.section === 'experience') {
+      const experience = await updateExperienceSettings(payload.data, {
+        id: user.id,
+        name: user.name,
+      });
+
+      return jsonResponse({
+        experience,
+      });
+    }
+
+    if (payload.section === 'workflow') {
+      const workflow = await updateWorkflowSettings(payload.data, {
+        id: user.id,
+        name: user.name,
+      });
+
+      return jsonResponse({
+        workflow,
       });
     }
 

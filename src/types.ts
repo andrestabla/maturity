@@ -45,6 +45,9 @@ export type AdminIntegrationCategory =
   | 'Sistema';
 export type BrandingFontPreset = 'Control' | 'Editorial' | 'Institutional';
 export type BrandingLoginVariant = 'Minimal' | 'Split' | 'Command';
+export type WorkspaceStudioMode = 'Profundo' | 'Contextual';
+export type StageRailVisibility = 'Solo workflow' | 'Siempre' | 'Oculto';
+export type ProfileLayoutMode = 'Dos columnas' | 'Apilado';
 export type AdminLogSeverity = 'Info' | 'Success' | 'Warning' | 'Error';
 export type AdminLogCategory =
   | 'Sistema'
@@ -296,6 +299,8 @@ export interface AppData {
   roleProfiles: RoleProfile[];
   users: AuthUser[];
   branding: BrandingSettings;
+  experience: ExperienceSettings;
+  workflow: WorkflowSettings;
 }
 
 export interface AuthUser {
@@ -409,6 +414,22 @@ export interface BrandingSettings {
   supportUrl: string;
 }
 
+export interface ExperienceSettings {
+  studioMode: WorkspaceStudioMode;
+  showSummaryHero: boolean;
+  showFocusedStageHeader: boolean;
+  stageRailVisibility: StageRailVisibility;
+  profileLayout: ProfileLayoutMode;
+}
+
+export interface WorkflowSettings {
+  showWorkflowStageCards: boolean;
+  showQuickAccessPanel: boolean;
+  handoffRequiresCheckpoint: boolean;
+  handoffBlocksOnBlockedCheckpoints: boolean;
+  handoffBlocksOnCriticalObservations: boolean;
+}
+
 export interface AdminIntegration {
   id: string;
   name: string;
@@ -464,6 +485,8 @@ export interface AdminCenterData {
   users: AuthUser[];
   institution: InstitutionSettings;
   branding: BrandingSettings;
+  experience: ExperienceSettings;
+  workflow: WorkflowSettings;
   integrations: AdminIntegration[];
   logs: AdminLogEntry[];
   audit: AdminAuditEntry[];

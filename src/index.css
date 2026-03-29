@@ -7432,6 +7432,10 @@ body::after {
   align-items: start;
 }
 
+.profile-layout--stacked {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 980px) {
   .profile-layout {
     grid-template-columns: 1fr;

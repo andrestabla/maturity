@@ -1017,6 +1017,8 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
+  const experienceSettings = appData.experience;
+  const workflowSettings = appData.workflow;
   const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
   const currentCheckpoint = currentCourse.stageChecklist[currentStageIndex];
   const nextStage = currentStageIndex >= 0 ? appData.stages[currentStageIndex + 1] : undefined;
@@ -1030,10 +1032,31 @@ export function CourseWorkspacePage({
   const criticalObservations = currentCourse.observations.filter(
     (observation) => observation.status !== 'Resuelta' && observation.severity === 'Alta',
   );
+  const checkpointRequirementMet = workflowSettings.handoffRequiresCheckpoint
+    ? Boolean(currentCheckpoint && currentCheckpoint.status === 'done')
+    : true;
+  const blockedCheckpointRequirementMet = workflowSettings.handoffBlocksOnBlockedCheckpoints
+    ? blockingCheckpoints.length === 0
+    : true;
+  const criticalObservationRequirementMet = workflowSettings.handoffBlocksOnCriticalObservations
+    ? criticalObservations.length === 0
+    : true;
+  const handoffBlockingReason =
+    workflowSettings.handoffBlocksOnBlockedCheckpoints && blockingCheckpoints.length > 0
+      ? `Hay ${blockingCheckpoints.length} checkpoint(s) bloqueado(s) antes de avanzar.`
+      : workflowSettings.handoffBlocksOnCriticalObservations && criticalObservations.length > 0
+        ? `Hay ${criticalObservations.length} observación(es) crítica(s) pendiente(s) por resolver.`
+        : null;
+  const handoffBlockingCount =
+    (workflowSettings.handoffBlocksOnBlockedCheckpoints ? blockingCheckpoints.length : 0) +
+    (workflowSettings.handoffBlocksOnCriticalObservations ? criticalObservations.length : 0);
+  const handoffReadinessReason = !checkpointRequirementMet
+    ? 'La etapa activa todavía no está marcada como completada.'
+    : handoffBlockingReason;
   const isHandoffReady =
-    Boolean(currentCheckpoint && currentCheckpoint.status === 'done') &&
-    blockingCheckpoints.length === 0 &&
-    criticalObservations.length === 0;
+    checkpointRequirementMet &&
+    blockedCheckpointRequirementMet &&
+    criticalObservationRequirementMet;
   const currentOwner = currentCheckpoint?.owner ?? stage?.owner ?? 'Coordinador';
   const deliverablesReadyCount = currentCourse.deliverables.filter(
     (deliverable) => deliverable.status === 'Listo',
@@ -1084,7 +1107,7 @@ export function CourseWorkspacePage({
       ? 'Listo'
       : isHandoffReady
         ? 'En curso'
-        : blockingCheckpoints.length > 0 || criticalObservations.length > 0
+        : !checkpointRequirementMet || handoffBlockingCount > 0
           ? 'Pendiente'
           : 'En curso';
   const workflowStages = [
@@ -1169,6 +1192,13 @@ export function CourseWorkspacePage({
   ];
 
   const isWorkflowPage = activeSection === 'summary';
+  const isFocusedStudio =
+    !isWorkflowPage && experienceSettings.studioMode === 'Profundo';
+  const showSummaryHero = isWorkflowPage && experienceSettings.showSummaryHero;
+  const showStageRailInSummary =
+    experienceSettings.stageRailVisibility === 'Solo workflow' ||
+    experienceSettings.stageRailVisibility === 'Siempre';
+  const showStageRailOutsideSummary = experienceSettings.stageRailVisibility === 'Siempre';
   const focusedStageMeta =
     activeSection === 'summary'
       ? null
@@ -1279,6 +1309,8 @@ export function CourseWorkspacePage({
                           { label: 'Cierre', value: formatDate(currentCourse.metadata.targetCloseDate) },
                         ],
                       };
+  const showFocusedStageHeader =
+    !isWorkflowPage && experienceSettings.showFocusedStageHeader && Boolean(focusedStageMeta);
 
   function goToSection(section: CourseSection) {
     navigate(buildCourseSectionPath(currentCourseSlug, section));
@@ -4011,8 +4043,8 @@ export function CourseWorkspacePage({
   }
 
   return (
-    <div className={isWorkflowPage ? 'page-stack workspace-page' : 'page-stack workspace-page workspace-page--focus'}>
-      {isWorkflowPage ? (
+    <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
+      {showSummaryHero ? (
       <section className="surface workspace-hero">
         <div className="workspace-hero__copy">
           <div className="workspace-hero__badges">
@@ -4079,10 +4111,12 @@ export function CourseWorkspacePage({
         className={
           isWorkflowPage
             ? 'surface section-card section-card--compact course-sections'
-            : 'course-sections course-sections--focus'
+            : isFocusedStudio
+              ? 'course-sections course-sections--focus'
+              : 'surface section-card section-card--compact course-sections'
         }
       >
-        {isWorkflowPage ? (
+      {isWorkflowPage ? (
         <div className="section-heading section-heading--compact">
           <div>
             <span className="eyebrow">Workflow</span>
@@ -4119,7 +4153,7 @@ export function CourseWorkspacePage({
         </div>
       </section>
 
-      {!isWorkflowPage && focusedStageMeta ? (
+      {showFocusedStageHeader && focusedStageMeta ? (
         <section className="surface section-card section-card--compact workspace-focus-head">
           <div className="workspace-focus-head__top">
             <div className="workspace-focus-head__copy">
@@ -4622,60 +4656,62 @@ export function CourseWorkspacePage({
             producción, montaje, QA y cierre con notificación.
           </p>
 
-          <div className="workflow-stage-grid">
-            {workflowStages.map((item) => {
-              const isCurrentStage = item.stageId ? currentCourse.stageId === item.stageId : false;
+          {workflowSettings.showWorkflowStageCards ? (
+            <div className="workflow-stage-grid">
+              {workflowStages.map((item) => {
+                const isCurrentStage = item.stageId ? currentCourse.stageId === item.stageId : false;
 
-              return (
-                <article
-                  key={item.key}
-                  className={
-                    activeSection === item.section
-                      ? 'surface-muted workflow-stage-card workflow-stage-card--active'
-                      : 'surface-muted workflow-stage-card'
-                  }
-                >
-                  <div className="workflow-stage-card__top">
-                    <div>
-                      <span className="eyebrow">{item.owner}</span>
-                      <h4>{item.title}</h4>
+                return (
+                  <article
+                    key={item.key}
+                    className={
+                      activeSection === item.section
+                        ? 'surface-muted workflow-stage-card workflow-stage-card--active'
+                        : 'surface-muted workflow-stage-card'
+                    }
+                  >
+                    <div className="workflow-stage-card__top">
+                      <div>
+                        <span className="eyebrow">{item.owner}</span>
+                        <h4>{item.title}</h4>
+                      </div>
+
+                      <div className="workflow-stage-card__badges">
+                        <span className={badgeClass(item.status)}>{item.status}</span>
+                        {isCurrentStage ? <span className="badge badge--outline">Actual</span> : null}
+                      </div>
                     </div>
 
-                    <div className="workflow-stage-card__badges">
-                      <span className={badgeClass(item.status)}>{item.status}</span>
-                      {isCurrentStage ? <span className="badge badge--outline">Actual</span> : null}
+                    <p>{item.description}</p>
+
+                    <div className="workflow-stage-card__meta">
+                      <span>{item.summary}</span>
+                      <span>{item.owner}</span>
                     </div>
-                  </div>
 
-                  <p>{item.description}</p>
+                    <ul className="workflow-stage-card__list">
+                      {item.checklist.map((checkpoint) => (
+                        <li key={checkpoint}>{checkpoint}</li>
+                      ))}
+                    </ul>
 
-                  <div className="workflow-stage-card__meta">
-                    <span>{item.summary}</span>
-                    <span>{item.owner}</span>
-                  </div>
+                    <div className="workflow-stage-card__actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => goToSection(item.section)}
+                      >
+                        <span>{item.actionLabel}</span>
+                        <MoveRight size={16} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
 
-                  <ul className="workflow-stage-card__list">
-                    {item.checklist.map((checkpoint) => (
-                      <li key={checkpoint}>{checkpoint}</li>
-                    ))}
-                  </ul>
-
-                  <div className="workflow-stage-card__actions">
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => goToSection(item.section)}
-                    >
-                      <span>{item.actionLabel}</span>
-                      <MoveRight size={16} />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          <StageRail items={currentCourse.stageChecklist} />
+          {showStageRailInSummary ? <StageRail items={currentCourse.stageChecklist} /> : null}
 
           <div className="module-grid module-grid--summary">
             <div className="module-card">
@@ -4761,50 +4797,52 @@ export function CourseWorkspacePage({
               </div>
             </article>
 
-            <article className="surface section-card">
-              <div className="section-heading section-heading--compact">
-                <div>
-                  <span className="eyebrow">Acceso rápido</span>
-                  <h3>Ir directo a la siguiente operación</h3>
+            {workflowSettings.showQuickAccessPanel ? (
+              <article className="surface section-card">
+                <div className="section-heading section-heading--compact">
+                  <div>
+                    <span className="eyebrow">Acceso rápido</span>
+                    <h3>Ir directo a la siguiente operación</h3>
+                  </div>
                 </div>
-              </div>
 
-              <div className="chip-row">
-                <button type="button" className="filter-chip" onClick={() => goToSection('planning')}>
-                  Planeación
-                </button>
-                <button type="button" className="filter-chip" onClick={() => goToSection('production')}>
-                  Producción
-                </button>
-                <button type="button" className="filter-chip" onClick={() => goToSection('resources')}>
-                  Recursos
-                </button>
-                <button type="button" className="filter-chip" onClick={() => goToSection('qa')}>
-                  QA y validación
-                </button>
-                <button type="button" className="filter-chip" onClick={() => goToSection('history')}>
-                  Historial
-                </button>
-              </div>
+                <div className="chip-row">
+                  <button type="button" className="filter-chip" onClick={() => goToSection('planning')}>
+                    Planeación
+                  </button>
+                  <button type="button" className="filter-chip" onClick={() => goToSection('production')}>
+                    Producción
+                  </button>
+                  <button type="button" className="filter-chip" onClick={() => goToSection('resources')}>
+                    Recursos
+                  </button>
+                  <button type="button" className="filter-chip" onClick={() => goToSection('qa')}>
+                    QA y validación
+                  </button>
+                  <button type="button" className="filter-chip" onClick={() => goToSection('history')}>
+                    Historial
+                  </button>
+                </div>
 
-              <div className="flow-glance flow-glance--compact">
-                <div className="flow-glance__item">
-                  <strong>{deliverablesReadyCount}/{currentCourse.deliverables.length || 1}</strong>
-                  <span>entregables listos</span>
-                  <p>La producción académica y multimedia ya deja rastro de avance dentro del curso.</p>
+                <div className="flow-glance flow-glance--compact">
+                  <div className="flow-glance__item">
+                    <strong>{deliverablesReadyCount}/{currentCourse.deliverables.length || 1}</strong>
+                    <span>entregables listos</span>
+                    <p>La producción académica y multimedia ya deja rastro de avance dentro del curso.</p>
+                  </div>
+                  <div className="flow-glance__item">
+                    <strong>{ownedResources.length + curatedResources.length}</strong>
+                    <span>recursos vinculados</span>
+                    <p>Los recursos propios y curados acompañan el expediente y la arquitectura del curso.</p>
+                  </div>
+                  <div className="flow-glance__item">
+                    <strong>{approvedProductsCount}/{totalProductsCount || 1}</strong>
+                    <span>productos aprobados</span>
+                    <p>El curso ya combina seguimiento operativo con producción real de artefactos dentro de la plataforma.</p>
+                  </div>
                 </div>
-                <div className="flow-glance__item">
-                  <strong>{ownedResources.length + curatedResources.length}</strong>
-                  <span>recursos vinculados</span>
-                  <p>Los recursos propios y curados acompañan el expediente y la arquitectura del curso.</p>
-                </div>
-                <div className="flow-glance__item">
-                  <strong>{approvedProductsCount}/{totalProductsCount || 1}</strong>
-                  <span>productos aprobados</span>
-                  <p>El curso ya combina seguimiento operativo con producción real de artefactos dentro de la plataforma.</p>
-                </div>
-              </div>
-            </article>
+              </article>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -4830,7 +4868,7 @@ export function CourseWorkspacePage({
           <Compass size={18} />
         </div>
 
-        <StageRail items={currentCourse.stageChecklist} />
+        {showStageRailOutsideSummary ? <StageRail items={currentCourse.stageChecklist} /> : null}
 
         <div className="handoff-grid">
           <article className="surface-muted handoff-card">
@@ -4852,7 +4890,7 @@ export function CourseWorkspacePage({
               </div>
               <div className="handoff-metric">
                 <span>Bloqueos</span>
-                <strong>{blockingCheckpoints.length + criticalObservations.length}</strong>
+                <strong>{handoffBlockingCount}</strong>
               </div>
               <div className="handoff-metric">
                 <span>Alertas del curso</span>
@@ -4866,14 +4904,10 @@ export function CourseWorkspacePage({
                 : 'Este curso está en la última etapa. Al cerrar el handoff quedará listo para publicación o activación.'}
             </p>
 
-            {blockingCheckpoints.length > 0 || criticalObservations.length > 0 ? (
+            {handoffReadinessReason ? (
               <div className="empty-state handoff-state">
                 <strong>El handoff todavía no está listo</strong>
-                <p>
-                  {blockingCheckpoints.length > 0
-                    ? `Hay ${blockingCheckpoints.length} checkpoint(s) bloqueado(s) antes de avanzar.`
-                    : `Hay ${criticalObservations.length} observación(es) crítica(s) pendiente(s) por resolver.`}
-                </p>
+                <p>{handoffReadinessReason}</p>
               </div>
             ) : (
               <div className="empty-state handoff-state">

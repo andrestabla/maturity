@@ -367,6 +367,10 @@ export function UserProfilePage({
   }
 
   const initials = deriveUserInitials(profileUser.name);
+  const profileLayoutClass =
+    appData.experience.profileLayout === 'Apilado'
+      ? 'profile-layout profile-layout--stacked'
+      : 'profile-layout';
 
   return (
     <div className="page-stack profile-page">
@@ -411,7 +415,7 @@ export function UserProfilePage({
         </p>
       </section>
 
-      <div className="profile-layout">
+      <div className={profileLayoutClass}>
         <section className="page-stack">
           <form className="surface section-card" onSubmit={isAdminDirectoryView ? handleSaveAdmin : handleSaveProfile}>
             <div className="section-heading">
