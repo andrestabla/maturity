@@ -77,7 +77,7 @@ const governmentTabLabels = {
 } as const;
 
 const courseSectionLabels = {
-  summary: 'Resumen',
+  summary: 'Workflow',
   general: 'Información general',
   architecture: 'Arquitectura',
   planning: 'Planeación',
@@ -113,7 +113,8 @@ export function AppShell({
   const visibleCourses = useMemo(() => getVisibleCourses(appData, role), [appData, role]);
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
-  const courseMatch = matchPath('/courses/:slug', location.pathname);
+  const courseSectionMatch = matchPath('/courses/:slug/:section', location.pathname);
+  const courseMatch = courseSectionMatch ?? matchPath('/courses/:slug', location.pathname);
   const userDetailMatch = matchPath('/admin/users/:userId', location.pathname);
   const teamMatch = matchPath('/admin/:section', location.pathname);
   const activeCourse =
@@ -125,7 +126,7 @@ export function AppShell({
     userDetailMatch?.params.userId
       ? appData.users.find((member) => member.id === userDetailMatch.params.userId)
       : null;
-  const activeCourseSectionHash = location.hash.replace('#', '');
+  const activeCourseSection = courseSectionMatch?.params.section ?? 'summary';
 
   const breadcrumbs = useMemo(() => {
     if (location.pathname === '/') {
@@ -145,12 +146,12 @@ export function AppShell({
       ];
 
       const sectionLabel =
-        courseSectionLabels[activeCourseSectionHash as keyof typeof courseSectionLabels];
+        courseSectionLabels[activeCourseSection as keyof typeof courseSectionLabels];
 
-      if (sectionLabel && activeCourseSectionHash !== 'summary') {
+      if (sectionLabel && activeCourseSection !== 'summary') {
         items.push({
           label: sectionLabel,
-          path: `/courses/${activeCourse.slug}#${activeCourseSectionHash}`,
+          path: `/courses/${activeCourse.slug}/${activeCourseSection}`,
         });
       }
 
@@ -191,7 +192,7 @@ export function AppShell({
     return [];
   }, [
     activeCourse,
-    activeCourseSectionHash,
+    activeCourseSection,
     activeGovernmentSection,
     activeUserDetail,
     courseMatch,

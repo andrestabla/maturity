@@ -12,7 +12,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
@@ -81,6 +81,26 @@ type CourseSection =
   | 'lms'
   | 'qa'
   | 'history';
+
+const validCourseSections: CourseSection[] = [
+  'summary',
+  'general',
+  'architecture',
+  'planning',
+  'production',
+  'resources',
+  'lms',
+  'qa',
+  'history',
+];
+
+function isCourseSection(value: string | undefined): value is CourseSection {
+  return Boolean(value && validCourseSections.includes(value as CourseSection));
+}
+
+function buildCourseSectionPath(slug: string, section: CourseSection) {
+  return section === 'summary' ? `/courses/${slug}` : `/courses/${slug}/${section}`;
+}
 
 function badgeClass(status: string) {
   switch (status) {
@@ -568,14 +588,14 @@ export function CourseWorkspacePage({
   appData,
   refreshAppData,
 }: CourseWorkspacePageProps) {
-  const { slug = '' } = useParams();
+  const { slug = '', section: sectionParam } = useParams<{ slug?: string; section?: string }>();
   const { showAlert, showConfirm } = useSystemDialog();
-  const location = useLocation();
   const navigate = useNavigate();
   const course = getCourseBySlug(appData, slug);
   const fallbackStageId = appData.stages[0]?.id ?? 'configuracion';
   const currentStageId = course?.stageId ?? fallbackStageId;
   const currentCourseSlug = course?.slug ?? slug;
+  const activeSection: CourseSection = isCourseSection(sectionParam) ? sectionParam : 'summary';
   const stage = course ? getStageMeta(appData, course.stageId) : undefined;
   const relatedTasks = course
     ? appData.tasks.filter((task) => task.courseSlug === course.slug)
@@ -599,7 +619,6 @@ export function CourseWorkspacePage({
   const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
   const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
   const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<CourseSection>('summary');
   const [courseError, setCourseError] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -864,38 +883,14 @@ export function CourseWorkspacePage({
   ]);
 
   useEffect(() => {
-    const hash = location.hash.replace('#', '');
-
-    if (!hash) {
+    if (!sectionParam) {
       return;
     }
 
-    const validSections: CourseSection[] = [
-      'summary',
-      'general',
-      'architecture',
-      'planning',
-      'production',
-      'resources',
-      'lms',
-      'qa',
-      'history',
-    ];
-
-    if (validSections.includes(hash as CourseSection) && hash !== activeSection) {
-      setActiveSection(hash as CourseSection);
+    if (!isCourseSection(sectionParam)) {
+      navigate(buildCourseSectionPath(currentCourseSlug, 'summary'), { replace: true });
     }
-  }, [activeSection, location.hash]);
-
-  useEffect(() => {
-    navigate(
-      {
-        pathname: location.pathname,
-        hash: activeSection,
-      },
-      { replace: true },
-    );
-  }, [activeSection, location.pathname, navigate]);
+  }, [currentCourseSlug, navigate, sectionParam]);
 
   useEffect(() => {
     const nextError = courseError
@@ -1190,6 +1185,10 @@ export function CourseWorkspacePage({
       actionLabel: 'Abrir historial',
     },
   ];
+
+  function goToSection(section: CourseSection) {
+    navigate(buildCourseSectionPath(currentCourseSlug, section));
+  }
 
   function cleanPreviewLine(line: string) {
     return line
@@ -4008,7 +4007,7 @@ export function CourseWorkspacePage({
                   ? 'segmented-control__button is-active'
                   : 'segmented-control__button'
               }
-              onClick={() => setActiveSection(value as CourseSection)}
+              onClick={() => goToSection(value as CourseSection)}
             >
               <span>{label}</span>
             </button>
@@ -4515,7 +4514,7 @@ export function CourseWorkspacePage({
                     <button
                       type="button"
                       className="ghost-button"
-                      onClick={() => setActiveSection(item.section)}
+                      onClick={() => goToSection(item.section)}
                     >
                       <span>{item.actionLabel}</span>
                       <MoveRight size={16} />
@@ -4621,19 +4620,19 @@ export function CourseWorkspacePage({
               </div>
 
               <div className="chip-row">
-                <button type="button" className="filter-chip" onClick={() => setActiveSection('planning')}>
+                <button type="button" className="filter-chip" onClick={() => goToSection('planning')}>
                   Planeación
                 </button>
-                <button type="button" className="filter-chip" onClick={() => setActiveSection('production')}>
+                <button type="button" className="filter-chip" onClick={() => goToSection('production')}>
                   Producción
                 </button>
-                <button type="button" className="filter-chip" onClick={() => setActiveSection('resources')}>
+                <button type="button" className="filter-chip" onClick={() => goToSection('resources')}>
                   Recursos
                 </button>
-                <button type="button" className="filter-chip" onClick={() => setActiveSection('qa')}>
+                <button type="button" className="filter-chip" onClick={() => goToSection('qa')}>
                   QA y validación
                 </button>
-                <button type="button" className="filter-chip" onClick={() => setActiveSection('history')}>
+                <button type="button" className="filter-chip" onClick={() => goToSection('history')}>
                   Historial
                 </button>
               </div>
