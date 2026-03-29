@@ -7799,9 +7799,49 @@ body::after {
   margin-top: 10px;
 }
 
+.institution-structure-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.institution-structure-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.institution-structure-summary {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.institution-list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.institution-list-editor__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.institution-list-editor__row .field__control {
+  flex: 1 1 auto;
+}
+
 @media (max-width: 1180px) {
   .folder-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .institution-structure-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -7826,6 +7866,11 @@ body::after {
 
   .folder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .institution-list-editor__row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

@@ -8,6 +8,7 @@ import type {
   CourseProduct,
   CourseStageNotes,
   ExperienceSettings,
+  InstitutionSettings,
   LibraryResource,
   Role,
   RoleProfile,
@@ -152,6 +153,12 @@ function makeCourseMetadata(course: BaseCourse): CourseMetadata {
             : 'Bajo'),
     route: makeCourseRoute(course),
   };
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, 'es'),
+  );
 }
 
 function makeCourseAuditLog(course: BaseCourse): CourseAuditEntry[] {
@@ -1242,6 +1249,36 @@ export const defaultWorkflowSettings: WorkflowSettings = {
   handoffBlocksOnCriticalObservations: true,
 };
 
+export const defaultInstitutionSettings: InstitutionSettings = {
+  displayName: 'Maturity University',
+  structures: [
+    {
+      id: 'institution-structure-maturity-university',
+      institution: 'Maturity University',
+      faculties: uniqueValues(courses.map((course) => course.faculty)),
+      programs: uniqueValues(courses.map((course) => course.program)),
+      academicPeriods: uniqueValues(
+        courses.map((course) => course.metadata.academicPeriod || '2026-1'),
+      ),
+      courseTypes: uniqueValues(courses.map((course) => course.metadata.courseType || 'Curso')),
+      pedagogicalGuidelines: [
+        'Todo curso debe definir resultados de aprendizaje, metodología y evaluación antes de pasar a producción.',
+        'Cada handoff debe conservar trazabilidad de cambios, evidencias y responsables en plataforma.',
+      ],
+      allowAutoProvisioning: false,
+    },
+  ],
+  institutions: ['Maturity University'],
+  faculties: uniqueValues(courses.map((course) => course.faculty)),
+  programs: uniqueValues(courses.map((course) => course.program)),
+  academicPeriods: uniqueValues(courses.map((course) => course.metadata.academicPeriod || '2026-1')),
+  courseTypes: uniqueValues(courses.map((course) => course.metadata.courseType || 'Curso')),
+  supportEmail: 'soporte@maturity360.co',
+  defaultDomain: 'maturity360.co',
+  defaultUserState: 'Pendiente',
+  allowAutoProvisioning: false,
+};
+
 export const mockAppData: AppData = {
   roles,
   stages,
@@ -1250,6 +1287,7 @@ export const mockAppData: AppData = {
   alerts,
   libraryResources,
   roleProfiles,
+  institution: defaultInstitutionSettings,
   branding: defaultBranding,
   experience: defaultExperienceSettings,
   workflow: defaultWorkflowSettings,

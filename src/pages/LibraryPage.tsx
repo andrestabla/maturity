@@ -8,6 +8,7 @@ import type {
   Role,
 } from '../types.js';
 import { getVisibleCourses, getVisibleResources } from '../utils/domain.js';
+import { buildCourseScopeLabel, countCoursesForStructure } from '../utils/institutions.js';
 import {
   canCreateLibraryResources,
   canDeleteLibraryResources,
@@ -73,6 +74,24 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
   const resources = getVisibleResources(appData, role);
   const visibleCourses = getVisibleCourses(appData, role);
   const defaultCourseSlug = visibleCourses[0]?.slug ?? appData.courses[0]?.slug ?? '';
+  const courseBySlug = new Map(appData.courses.map((course) => [course.slug, course]));
+  const courseOptions = visibleCourses.map((course) => ({
+    value: course.slug,
+    label: `${course.title} · ${buildCourseScopeLabel(course)}`,
+  }));
+  const structureSummaries = appData.institution.structures.map((structure) => {
+    const linkedCourses = countCoursesForStructure(visibleCourses, structure);
+    const linkedResources = resources.filter((resource) => {
+      const institution = courseBySlug.get(resource.courseSlug)?.metadata.institution?.trim();
+      return institution === structure.institution;
+    }).length;
+
+    return {
+      structure,
+      linkedCourses,
+      linkedResources,
+    };
+  });
   const filteredResources =
     filter === 'Todos'
       ? resources
@@ -355,9 +374,9 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
                     onChange={(event) => updateResourceField('courseSlug', event.target.value)}
                     required
                   >
-                    {visibleCourses.map((course) => (
-                      <option key={course.slug} value={course.slug}>
-                        {course.title}
+                    {courseOptions.map((course) => (
+                      <option key={course.value} value={course.value}>
+                        {course.label}
                       </option>
                     ))}
                   </select>
@@ -449,6 +468,63 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
         ) : null}
       </section>
 
+      <section className="surface section-card section-card--compact">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Directorio aplicado</span>
+            <h3>Estructuras institucionales vinculadas</h3>
+          </div>
+          <NotebookTabs size={18} />
+        </div>
+
+        <p className="section-lead">
+          Biblioteca toma la institución de cada curso para ordenar recursos dentro del directorio académico definido en Gobierno.
+        </p>
+
+        {structureSummaries.length === 0 ? (
+          <div className="empty-state">
+            <strong>No hay estructuras institucionales configuradas</strong>
+            <p>Cuando el directorio institucional tenga estructuras, aparecerán aquí con su impacto en biblioteca.</p>
+          </div>
+        ) : (
+          <div className="institution-structure-grid">
+            {structureSummaries.map(({ structure, linkedCourses, linkedResources }) => (
+              <article key={structure.id} className="surface section-card section-card--compact">
+                <div className="institution-structure-card__header">
+                  <div>
+                    <span className="eyebrow">Institución</span>
+                    <h3>{structure.institution}</h3>
+                  </div>
+                  <span className="badge badge--outline">
+                    {structure.pedagogicalGuidelines.length} regla
+                    {structure.pedagogicalGuidelines.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+
+                <div className="metrics-grid metrics-grid--three">
+                  <div className="mini-metric">
+                    <span>Cursos visibles</span>
+                    <strong>{linkedCourses}</strong>
+                  </div>
+                  <div className="mini-metric">
+                    <span>Recursos visibles</span>
+                    <strong>{linkedResources}</strong>
+                  </div>
+                  <div className="mini-metric">
+                    <span>SSO automático</span>
+                    <strong>{structure.allowAutoProvisioning ? 'Sí' : 'No'}</strong>
+                  </div>
+                </div>
+
+                <p className="institution-structure-summary">
+                  Tipologías: {structure.courseTypes.join(', ') || 'Sin tipologías'}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="insight-grid">
         <article className="surface section-card">
           <div className="section-heading">
@@ -527,9 +603,9 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
                                 updateResourceDraft(resource.id, 'courseSlug', event.target.value)
                               }
                             >
-                              {visibleCourses.map((course) => (
-                                <option key={course.slug} value={course.slug}>
-                                  {course.title}
+                              {courseOptions.map((course) => (
+                                <option key={course.value} value={course.value}>
+                                  {course.label}
                                 </option>
                               ))}
                             </select>

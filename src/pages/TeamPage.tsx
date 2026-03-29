@@ -9,6 +9,8 @@ import {
   Eye,
   KeyRound,
   Logs,
+  PencilLine,
+  Plus,
   RefreshCcw,
   ShieldCheck,
   TestTube2,
@@ -32,6 +34,7 @@ import type {
   BrandingSettings,
   ExperienceSettings,
   InstitutionSettings,
+  InstitutionStructure,
   PasswordChangeInput,
   Role,
   UserMutationInput,
@@ -39,6 +42,7 @@ import type {
   WorkflowSettings,
 } from '../types.js';
 import { formatDate, formatDateTime, formatLongDate } from '../utils/format.js';
+import { countCoursesForStructure } from '../utils/institutions.js';
 import { canManageUsers } from '../utils/permissions.js';
 
 interface TeamPageProps {
@@ -80,15 +84,17 @@ interface UploadResponse {
 }
 
 function buildUserForm(settings?: InstitutionSettings): UserMutationInput {
+  const primaryStructure = settings?.structures[0];
+
   return {
     name: '',
     email: '',
     role: 'Coordinador',
     secondaryRoles: [],
     status: settings?.defaultUserState ?? 'Pendiente',
-    institution: settings?.institutions[0] ?? settings?.displayName ?? '',
-    faculty: settings?.faculties[0] ?? '',
-    program: settings?.programs[0] ?? '',
+    institution: primaryStructure?.institution ?? settings?.institutions[0] ?? settings?.displayName ?? '',
+    faculty: primaryStructure?.faculties[0] ?? settings?.faculties[0] ?? '',
+    program: primaryStructure?.programs[0] ?? settings?.programs[0] ?? '',
     scope: 'Global',
     statusReason: '',
     password: '',
@@ -119,19 +125,83 @@ function createIntegrationDraft(
   };
 }
 
-function parseListInput(value: string) {
-  return Array.from(
-    new Set(
-      value
-        .split(/\n|,/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
+function uniqueListValues(values: string[]) {
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, 'es'),
   );
 }
 
-function stringifyList(values: string[]) {
-  return values.join('\n');
+function buildInstitutionStructureId(name: string, fallbackId?: string) {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return fallbackId || `institution-structure-${slug || crypto.randomUUID().slice(0, 8)}`;
+}
+
+function normalizeStructureDraft(structure: InstitutionStructure): InstitutionStructure {
+  return {
+    id: buildInstitutionStructureId(structure.institution, structure.id),
+    institution: structure.institution.trim() || 'Institución sin definir',
+    faculties: uniqueListValues(structure.faculties),
+    programs: uniqueListValues(structure.programs),
+    academicPeriods: uniqueListValues(structure.academicPeriods),
+    courseTypes: uniqueListValues(structure.courseTypes),
+    pedagogicalGuidelines: uniqueListValues(structure.pedagogicalGuidelines),
+    allowAutoProvisioning: Boolean(structure.allowAutoProvisioning),
+  };
+}
+
+function buildStructureDraft(
+  settings?: InstitutionSettings | null,
+  structure?: InstitutionStructure | null,
+): InstitutionStructure {
+  if (structure) {
+    return {
+      ...structure,
+      faculties: structure.faculties.length > 0 ? [...structure.faculties] : [''],
+      programs: structure.programs.length > 0 ? [...structure.programs] : [''],
+      academicPeriods: structure.academicPeriods.length > 0 ? [...structure.academicPeriods] : [''],
+      courseTypes: structure.courseTypes.length > 0 ? [...structure.courseTypes] : [''],
+      pedagogicalGuidelines:
+        structure.pedagogicalGuidelines.length > 0 ? [...structure.pedagogicalGuidelines] : [''],
+    };
+  }
+
+  return {
+    id: '',
+    institution: '',
+    faculties: [''],
+    programs: [''],
+    academicPeriods: [''],
+    courseTypes: [''],
+    pedagogicalGuidelines: [''],
+    allowAutoProvisioning: Boolean(settings?.allowAutoProvisioning),
+  };
+}
+
+function syncInstitutionSettingsStructures(
+  settings: InstitutionSettings,
+  structures: InstitutionStructure[],
+): InstitutionSettings {
+  const normalizedStructures = structures
+    .map(normalizeStructureDraft)
+    .sort((left, right) => left.institution.localeCompare(right.institution, 'es'));
+
+  return {
+    ...settings,
+    structures: normalizedStructures,
+    institutions: uniqueListValues(normalizedStructures.map((item) => item.institution)),
+    faculties: uniqueListValues(normalizedStructures.flatMap((item) => item.faculties)),
+    programs: uniqueListValues(normalizedStructures.flatMap((item) => item.programs)),
+    academicPeriods: uniqueListValues(normalizedStructures.flatMap((item) => item.academicPeriods)),
+    courseTypes: uniqueListValues(normalizedStructures.flatMap((item) => item.courseTypes)),
+    allowAutoProvisioning: normalizedStructures.some((item) => item.allowAutoProvisioning),
+  };
 }
 
 function getBadgeClass(status: string) {
@@ -265,6 +335,9 @@ export function TeamPage({
   const [userForm, setUserForm] = useState<UserMutationInput>(() => buildUserForm());
   const [editingDraft, setEditingDraft] = useState<UserUpdateInput | null>(null);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionSettings | null>(null);
+  const [structureDraft, setStructureDraft] = useState<InstitutionStructure | null>(null);
+  const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
+  const [isStructureComposerOpen, setIsStructureComposerOpen] = useState(false);
   const [brandingDraft, setBrandingDraft] = useState<BrandingSettings | null>(null);
   const [experienceDraft, setExperienceDraft] = useState<ExperienceSettings | null>(null);
   const [workflowDraft, setWorkflowDraft] = useState<WorkflowSettings | null>(null);
@@ -585,6 +658,149 @@ export function TeamPage({
     navigate(`/admin/users/${target.id}`);
   }
 
+  function openCreateStructureComposer() {
+    setSettingsError(null);
+    setEditingStructureId(null);
+    setStructureDraft(buildStructureDraft(institutionDraft));
+    setIsStructureComposerOpen(true);
+  }
+
+  function openEditStructureComposer(structure: InstitutionStructure) {
+    setSettingsError(null);
+    setEditingStructureId(structure.id);
+    setStructureDraft(buildStructureDraft(institutionDraft, structure));
+    setIsStructureComposerOpen(true);
+  }
+
+  function closeStructureComposer() {
+    setEditingStructureId(null);
+    setStructureDraft(null);
+    setIsStructureComposerOpen(false);
+  }
+
+  function updateStructureDraftField<Key extends keyof InstitutionStructure>(
+    key: Key,
+    value: InstitutionStructure[Key],
+  ) {
+    setStructureDraft((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  function updateStructureDraftListField(
+    key: keyof Pick<
+      InstitutionStructure,
+      'faculties' | 'programs' | 'academicPeriods' | 'courseTypes' | 'pedagogicalGuidelines'
+    >,
+    index: number,
+    value: string,
+  ) {
+    setStructureDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const values = current[key].length > 0 ? [...current[key]] : [''];
+      values[index] = value;
+      return { ...current, [key]: values };
+    });
+  }
+
+  function appendStructureDraftListField(
+    key: keyof Pick<
+      InstitutionStructure,
+      'faculties' | 'programs' | 'academicPeriods' | 'courseTypes' | 'pedagogicalGuidelines'
+    >,
+  ) {
+    setStructureDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: [...current[key], ''],
+      };
+    });
+  }
+
+  function removeStructureDraftListField(
+    key: keyof Pick<
+      InstitutionStructure,
+      'faculties' | 'programs' | 'academicPeriods' | 'courseTypes' | 'pedagogicalGuidelines'
+    >,
+    index: number,
+  ) {
+    setStructureDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextValues = current[key].filter((_, itemIndex) => itemIndex !== index);
+
+      return {
+        ...current,
+        [key]: nextValues.length > 0 ? nextValues : [''],
+      };
+    });
+  }
+
+  function commitStructureDraft() {
+    if (!institutionDraft || !structureDraft) {
+      return;
+    }
+
+    if (!structureDraft.institution.trim()) {
+      setSettingsError('Cada estructura debe tener un nombre de institución.');
+      return;
+    }
+
+    const normalizedInstitutionName = structureDraft.institution.trim().toLowerCase();
+    const duplicateStructure = institutionDraft.structures.find(
+      (structure) =>
+        structure.id !== editingStructureId &&
+        structure.institution.trim().toLowerCase() === normalizedInstitutionName,
+    );
+
+    if (duplicateStructure) {
+      setSettingsError('Ya existe una estructura registrada para esa institución.');
+      return;
+    }
+
+    const normalizedStructure = normalizeStructureDraft(structureDraft);
+    const nextStructures = editingStructureId
+      ? institutionDraft.structures.map((structure) =>
+          structure.id === editingStructureId ? normalizedStructure : structure,
+        )
+      : [...institutionDraft.structures, normalizedStructure];
+
+    setInstitutionDraft(syncInstitutionSettingsStructures(institutionDraft, nextStructures));
+    closeStructureComposer();
+  }
+
+  async function handleDeleteStructure(structure: InstitutionStructure) {
+    if (!institutionDraft) {
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Eliminar estructura institucional',
+      message: `Se eliminará la estructura de ${structure.institution}. Los cursos y recursos ya creados seguirán existiendo, pero perderán esta referencia de directorio hasta que se reasignen.`,
+      tone: 'warning',
+      confirmLabel: 'Eliminar estructura',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const nextStructures = institutionDraft.structures.filter((item) => item.id !== structure.id);
+    setInstitutionDraft(syncInstitutionSettingsStructures(institutionDraft, nextStructures));
+
+    if (editingStructureId === structure.id) {
+      closeStructureComposer();
+    }
+  }
+
   async function handleUpdateUser() {
     if (!editingDraft) {
       return;
@@ -693,8 +909,8 @@ export function TeamPage({
     }
   }
 
-  async function handleSaveInstitution(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSaveInstitution(event?: React.FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
 
     if (!institutionDraft) {
       return;
@@ -732,6 +948,7 @@ export function TeamPage({
         status: current.status || nextInstitution.defaultUserState,
       }));
       await loadAdminCenter();
+      refreshAppData();
     } catch (error) {
       setSettingsError(
         error instanceof Error
@@ -1885,29 +2102,116 @@ export function TeamPage({
       return null;
     }
 
+    const structures = institutionDraft.structures ?? [];
+    const courseBySlug = new Map(appData.courses.map((course) => [course.slug, course]));
+    const resourceCountByInstitution = appData.libraryResources.reduce<Record<string, number>>(
+      (accumulator, resource) => {
+        const institution = courseBySlug.get(resource.courseSlug)?.metadata.institution?.trim();
+
+        if (!institution) {
+          return accumulator;
+        }
+
+        accumulator[institution] = (accumulator[institution] ?? 0) + 1;
+        return accumulator;
+      },
+      {},
+    );
+    const autoProvisioningCount = structures.filter((structure) => structure.allowAutoProvisioning).length;
+
+    function renderStructureListEditor(
+      key: keyof Pick<
+        InstitutionStructure,
+        'faculties' | 'programs' | 'academicPeriods' | 'courseTypes' | 'pedagogicalGuidelines'
+      >,
+      label: string,
+      placeholder: string,
+      addLabel: string,
+      helpText?: string,
+    ) {
+      if (!structureDraft) {
+        return null;
+      }
+
+      const values = structureDraft[key].length > 0 ? structureDraft[key] : [''];
+
+      return (
+        <div className="field field--full">
+          <span>{label}</span>
+          {helpText ? <small className="field-help">{helpText}</small> : null}
+
+          <div className="institution-list-editor">
+            {values.map((value, index) => (
+              <div key={`${key}-${index}`} className="institution-list-editor__row">
+                <div className="field__control">
+                  <input
+                    value={value}
+                    onChange={(event) => updateStructureDraftListField(key, index, event.target.value)}
+                    placeholder={placeholder}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="filter-chip"
+                  onClick={() => removeStructureDraftListField(key, index)}
+                >
+                  <span>Quitar</span>
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => appendStructureDraftListField(key)}
+            >
+              <Plus size={16} />
+              <span>{addLabel}</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="page-stack">
         <section className="surface section-card section-card--compact">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Modelo institucional</span>
-              <h3>Estructura académica y reglas de aprovisionamiento</h3>
+              <h3>Directorio académico y reglas de aprovisionamiento</h3>
             </div>
             <Building2 size={18} />
           </div>
           <p className="section-lead">
-            Define instituciones, facultades, programas, periodos y estado por defecto para que
-            formularios y alcances de usuario se comporten de forma consistente.
+            Aquí se gobiernan las estructuras por universidad. Cada estructura impacta los
+            formularios de usuarios, Cursos y Biblioteca para mantener el catálogo alineado.
           </p>
         </section>
 
-        <form className="surface section-card" onSubmit={handleSaveInstitution}>
+        <section className="surface section-card">
           <div className="section-heading">
             <div>
               <span className="eyebrow">Parámetros</span>
               <h3>Configuración institucional</h3>
             </div>
             <Database size={18} />
+          </div>
+
+          <div className="metrics-grid metrics-grid--three">
+            <div className="mini-metric">
+              <span>Estructuras creadas</span>
+              <strong>{structures.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>Cursos vinculados</span>
+              <strong>{appData.courses.length}</strong>
+            </div>
+            <div className="mini-metric">
+              <span>SSO automático activo</span>
+              <strong>{autoProvisioningCount}</strong>
+            </div>
           </div>
 
           <div className="form-grid">
@@ -1979,122 +2283,280 @@ export function TeamPage({
               </div>
             </label>
           </div>
+        </section>
 
-          <div className="form-grid">
-            <label className="field">
-              <span>Instituciones</span>
-              <div className="field__control">
-                <textarea
-                  rows={5}
-                  value={stringifyList(institutionDraft.institutions)}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, institutions: parseListInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+        <section className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Directorio</span>
+              <h3>Estructuras institucionales</h3>
+            </div>
 
-            <label className="field">
-              <span>Facultades</span>
-              <div className="field__control">
-                <textarea
-                  rows={5}
-                  value={stringifyList(institutionDraft.faculties)}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, faculties: parseListInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Programas</span>
-              <div className="field__control">
-                <textarea
-                  rows={5}
-                  value={stringifyList(institutionDraft.programs)}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, programs: parseListInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
-
-            <label className="field">
-              <span>Periodos académicos</span>
-              <div className="field__control">
-                <textarea
-                  rows={5}
-                  value={stringifyList(institutionDraft.academicPeriods)}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, academicPeriods: parseListInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+            <div className="action-row">
+              <button type="button" className="ghost-button" onClick={openCreateStructureComposer}>
+                <Plus size={16} />
+                <span>Crear estructura</span>
+              </button>
+            </div>
           </div>
 
-          <div className="form-grid">
-            <label className="field">
-              <span>Tipologías de curso</span>
-              <div className="field__control">
-                <textarea
-                  rows={4}
-                  value={stringifyList(institutionDraft.courseTypes)}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, courseTypes: parseListInput(event.target.value) }
-                        : current,
-                    )
-                  }
-                />
-              </div>
-            </label>
+          <p className="section-lead">
+            Cada tarjeta representa una universidad o estructura académica independiente. Sus
+            facultades, programas, periodos, tipologías y lineamientos se usan en Cursos y Biblioteca.
+          </p>
 
-            <label className="field field--toggle">
-              <span>Aprovisionamiento automático por SSO</span>
-              <div className="field__toggle">
-                <input
-                  type="checkbox"
-                  checked={institutionDraft.allowAutoProvisioning}
-                  onChange={(event) =>
-                    setInstitutionDraft((current) =>
-                      current
-                        ? { ...current, allowAutoProvisioning: event.target.checked }
-                        : current,
-                    )
-                  }
-                />
-                <p>Si está activo, nuevos usuarios por dominio aprobado pueden quedar creados automáticamente.</p>
+          {isStructureComposerOpen && structureDraft ? (
+            <div className="editor-card institution-structure-composer">
+              <div className="editor-card__header">
+                <div>
+                  <span className="eyebrow">Edición local</span>
+                  <h3>{editingStructureId ? 'Editar estructura' : 'Crear estructura'}</h3>
+                </div>
               </div>
-            </label>
+
+              <div className="form-grid">
+                <label className="field">
+                  <span>Institución</span>
+                  <div className="field__control">
+                    <input
+                      value={structureDraft.institution}
+                      onChange={(event) =>
+                        updateStructureDraftField('institution', event.target.value)
+                      }
+                      placeholder="Universidad, escuela o sede"
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field field--toggle">
+                  <span>Aprovisionamiento automático por SSO</span>
+                  <div className="field__toggle">
+                    <input
+                      type="checkbox"
+                      checked={structureDraft.allowAutoProvisioning}
+                      onChange={(event) =>
+                        updateStructureDraftField(
+                          'allowAutoProvisioning',
+                          event.target.checked,
+                        )
+                      }
+                    />
+                    <p>
+                      Si está activo, usuarios del dominio aprobado para esta estructura podrán
+                      aprovisionarse automáticamente.
+                    </p>
+                  </div>
+                </label>
+
+                {renderStructureListEditor(
+                  'faculties',
+                  'Facultades',
+                  'Ej. Ciencias de la Salud',
+                  'Agregar facultad',
+                )}
+
+                {renderStructureListEditor(
+                  'programs',
+                  'Programas',
+                  'Ej. Ingeniería Industrial',
+                  'Agregar programa',
+                )}
+
+                {renderStructureListEditor(
+                  'academicPeriods',
+                  'Periodos académicos',
+                  'Ej. 2026-1',
+                  'Agregar periodo',
+                )}
+
+                {renderStructureListEditor(
+                  'courseTypes',
+                  'Tipologías de curso',
+                  'Ej. Troncal',
+                  'Agregar tipología',
+                )}
+
+                {renderStructureListEditor(
+                  'pedagogicalGuidelines',
+                  'Lineamientos pedagógicos',
+                  'Ej. Toda unidad debe declarar su evidencia evaluativa',
+                  'Agregar regla',
+                  'Una regla por campo. Usa + para seguir construyendo la política pedagógica.',
+                )}
+              </div>
+
+              <div className="action-row">
+                <button type="button" className="cta-button" onClick={commitStructureDraft}>
+                  <span>{editingStructureId ? 'Actualizar estructura' : 'Agregar estructura'}</span>
+                </button>
+
+                <button type="button" className="filter-chip" onClick={closeStructureComposer}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {structures.length === 0 ? (
+            <div className="empty-state">
+              <strong>No hay estructuras institucionales creadas</strong>
+              <p>
+                Crea la primera estructura para alimentar el directorio académico y los catálogos
+                operativos de Cursos y Biblioteca.
+              </p>
+            </div>
+          ) : (
+            <div className="institution-structure-grid">
+              {structures.map((structure) => {
+                const linkedCourses = countCoursesForStructure(appData.courses, structure);
+                const linkedResources = resourceCountByInstitution[structure.institution] ?? 0;
+
+                return (
+                  <article key={structure.id} className="surface section-card section-card--compact">
+                    <div className="institution-structure-card__header">
+                      <div>
+                        <span className="eyebrow">Estructura</span>
+                        <h3>{structure.institution}</h3>
+                      </div>
+
+                      <div className="chip-row">
+                        <span className="badge badge--outline">
+                          {structure.pedagogicalGuidelines.length} regla
+                          {structure.pedagogicalGuidelines.length === 1 ? '' : 's'}
+                        </span>
+                        <span
+                          className={
+                            structure.allowAutoProvisioning
+                              ? 'badge badge--sage'
+                              : 'badge badge--ink'
+                          }
+                        >
+                          {structure.allowAutoProvisioning ? 'SSO auto' : 'SSO manual'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="institution-structure-summary">
+                      Vincula {linkedCourses} curso{linkedCourses === 1 ? '' : 's'} y {linkedResources}{' '}
+                      recurso{linkedResources === 1 ? '' : 's'} de Biblioteca bajo esta institución.
+                    </p>
+
+                    <div className="metrics-grid metrics-grid--three">
+                      <div className="mini-metric">
+                        <span>Facultades</span>
+                        <strong>{structure.faculties.length}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Programas</span>
+                        <strong>{structure.programs.length}</strong>
+                      </div>
+                      <div className="mini-metric">
+                        <span>Periodos</span>
+                        <strong>{structure.academicPeriods.length}</strong>
+                      </div>
+                    </div>
+
+                    <div className="form-grid">
+                      <div className="field">
+                        <span>Facultades</span>
+                        <p className="institution-structure-summary">
+                          {structure.faculties.join(', ') || 'Sin facultades registradas'}
+                        </p>
+                      </div>
+
+                      <div className="field">
+                        <span>Programas</span>
+                        <p className="institution-structure-summary">
+                          {structure.programs.join(', ') || 'Sin programas registrados'}
+                        </p>
+                      </div>
+
+                      <div className="field">
+                        <span>Periodos</span>
+                        <p className="institution-structure-summary">
+                          {structure.academicPeriods.join(', ') || 'Sin periodos registrados'}
+                        </p>
+                      </div>
+
+                      <div className="field">
+                        <span>Tipologías</span>
+                        <p className="institution-structure-summary">
+                          {structure.courseTypes.join(', ') || 'Sin tipologías registradas'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="field field--full">
+                      <span>Lineamientos pedagógicos</span>
+                      <div className="list-stack">
+                        {structure.pedagogicalGuidelines.length > 0 ? (
+                          structure.pedagogicalGuidelines.map((guideline) => (
+                            <p key={guideline} className="institution-structure-summary">
+                              {guideline}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="institution-structure-summary">
+                            Sin reglas pedagógicas registradas.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="action-row">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => openEditStructureComposer(structure)}
+                      >
+                        <PencilLine size={16} />
+                        <span>Editar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        onClick={() => void handleDeleteStructure(structure)}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Persistencia</span>
+              <h3>Aplicar cambios del directorio</h3>
+            </div>
+            <Database size={18} />
           </div>
+
+          <p className="section-lead">
+            Cuando guardes, esta estructura quedará disponible para formularios, Biblioteca y alta
+            de cursos en toda la plataforma.
+          </p>
 
           {settingsError ? <p className="form-error">{settingsError}</p> : null}
 
           <div className="action-row">
-            <button type="submit" className="cta-button" disabled={isSavingInstitution}>
+            <button
+              type="button"
+              className="cta-button"
+              onClick={() => void handleSaveInstitution()}
+              disabled={isSavingInstitution}
+            >
               <span>{isSavingInstitution ? 'Guardando…' : 'Guardar configuración institucional'}</span>
             </button>
           </div>
-        </form>
+        </section>
       </div>
     );
   }

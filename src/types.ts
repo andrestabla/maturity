@@ -298,6 +298,7 @@ export interface AppData {
   libraryResources: LibraryResource[];
   roleProfiles: RoleProfile[];
   users: AuthUser[];
+  institution: InstitutionSettings;
   branding: BrandingSettings;
   experience: ExperienceSettings;
   workflow: WorkflowSettings;
@@ -375,8 +376,20 @@ export interface UserProfileUpdateInput {
   bio: string;
 }
 
+export interface InstitutionStructure {
+  id: string;
+  institution: string;
+  faculties: string[];
+  programs: string[];
+  academicPeriods: string[];
+  courseTypes: string[];
+  pedagogicalGuidelines: string[];
+  allowAutoProvisioning: boolean;
+}
+
 export interface InstitutionSettings {
   displayName: string;
+  structures: InstitutionStructure[];
   institutions: string[];
   faculties: string[];
   programs: string[];
@@ -606,8 +619,11 @@ export interface LibraryResourceMutationInput {
 export interface CourseMutationInput {
   title: string;
   code: string;
+  institution: string;
   faculty: string;
   program: string;
+  academicPeriod: string;
+  courseType: string;
   modality: string;
   credits: number;
   stageId: string;

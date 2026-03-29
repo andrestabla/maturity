@@ -20,6 +20,7 @@ import type {
   BrandingSettings,
   ExperienceSettings,
   InstitutionSettings,
+  InstitutionStructure,
   Role,
   WorkflowSettings,
 } from '../src/types.js';
@@ -83,43 +84,138 @@ function uniqueValues(values: string[]) {
 
 function inferDefaultDomain() {
   const envEmail = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase() ?? '';
-  const domain = envEmail.includes('@') ? envEmail.split('@').at(-1) ?? '' : '';
+  const emailParts = envEmail.split('@');
+  const domain = envEmail.includes('@') ? emailParts[emailParts.length - 1] ?? '' : '';
   return domain || 'maturity360.co';
 }
 
-function buildDefaultInstitutionSettings(): InstitutionSettings {
-  return {
-    displayName: 'Maturity University',
-    institutions: uniqueValues(
-      mockAppData.courses.map((course) => course.metadata.institution || 'Maturity University'),
-    ),
-    faculties: uniqueValues(mockAppData.courses.map((course) => course.faculty)),
-    programs: uniqueValues(mockAppData.courses.map((course) => course.program)),
-    academicPeriods: uniqueValues(
-      mockAppData.courses.map((course) => course.metadata.academicPeriod || '2026-1'),
-    ),
-    courseTypes: uniqueValues(
-      mockAppData.courses.map((course) => course.metadata.courseType || 'Curso'),
-    ),
-    supportEmail: `soporte@${inferDefaultDomain()}`,
-    defaultDomain: inferDefaultDomain(),
-    defaultUserState: 'Pendiente',
-    allowAutoProvisioning: false,
-  };
+function buildStructureId(name: string) {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `institution-structure-${slug || crypto.randomUUID().slice(0, 8)}`;
 }
 
-function sanitizeInstitutionSettings(input: InstitutionSettings): InstitutionSettings {
+function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionStructure {
   return {
-    displayName: input.displayName.trim() || 'Maturity University',
-    institutions: uniqueValues(input.institutions),
+    id: input.id?.trim() || buildStructureId(input.institution),
+    institution: input.institution.trim() || 'Institución sin definir',
     faculties: uniqueValues(input.faculties),
     programs: uniqueValues(input.programs),
     academicPeriods: uniqueValues(input.academicPeriods),
     courseTypes: uniqueValues(input.courseTypes),
+    pedagogicalGuidelines: uniqueValues(input.pedagogicalGuidelines),
+    allowAutoProvisioning: Boolean(input.allowAutoProvisioning),
+  };
+}
+
+function buildDefaultInstitutionStructures(): InstitutionStructure[] {
+  const structureMap = new Map<string, InstitutionStructure>();
+
+  for (const course of mockAppData.courses) {
+    const institutionName = course.metadata.institution || 'Maturity University';
+    const current =
+      structureMap.get(institutionName) ?? {
+        id: buildStructureId(institutionName),
+        institution: institutionName,
+        faculties: [],
+        programs: [],
+        academicPeriods: [],
+        courseTypes: [],
+        pedagogicalGuidelines: [
+          'Todo curso debe definir resultados de aprendizaje, metodología y evaluación antes de pasar a producción.',
+          'Cada handoff debe conservar trazabilidad de cambios, evidencias y responsables dentro de la plataforma.',
+        ],
+        allowAutoProvisioning: false,
+      };
+
+    current.faculties.push(course.faculty);
+    current.programs.push(course.program);
+    current.academicPeriods.push(course.metadata.academicPeriod || '2026-1');
+    current.courseTypes.push(course.metadata.courseType || 'Curso');
+    structureMap.set(institutionName, current);
+  }
+
+  return Array.from(structureMap.values())
+    .map(sanitizeInstitutionStructure)
+    .sort((left, right) => left.institution.localeCompare(right.institution, 'es'));
+}
+
+function buildLegacyInstitutionStructures(input: InstitutionSettings): InstitutionStructure[] {
+  const institutions = uniqueValues(input.institutions);
+  const institutionNames =
+    institutions.length > 0 ? institutions : [input.displayName.trim() || 'Maturity University'];
+
+  return institutionNames.map((institutionName) =>
+    sanitizeInstitutionStructure({
+      id: buildStructureId(institutionName),
+      institution: institutionName,
+      faculties: input.faculties,
+      programs: input.programs,
+      academicPeriods: input.academicPeriods,
+      courseTypes: input.courseTypes,
+      pedagogicalGuidelines: [],
+      allowAutoProvisioning: Boolean(input.allowAutoProvisioning),
+    }),
+  );
+}
+
+function collectStructureValues(
+  structures: InstitutionStructure[],
+  key: 'faculties' | 'programs' | 'academicPeriods' | 'courseTypes',
+) {
+  return uniqueValues(
+    structures.reduce<string[]>((accumulator, structure) => {
+      accumulator.push(...structure[key]);
+      return accumulator;
+    }, []),
+  );
+}
+
+function buildDefaultInstitutionSettings(): InstitutionSettings {
+  const structures = buildDefaultInstitutionStructures();
+
+  return {
+    displayName: 'Maturity University',
+    structures,
+    institutions: uniqueValues(structures.map((structure) => structure.institution)),
+    faculties: collectStructureValues(structures, 'faculties'),
+    programs: collectStructureValues(structures, 'programs'),
+    academicPeriods: collectStructureValues(structures, 'academicPeriods'),
+    courseTypes: collectStructureValues(structures, 'courseTypes'),
+    supportEmail: `soporte@${inferDefaultDomain()}`,
+    defaultDomain: inferDefaultDomain(),
+    defaultUserState: 'Pendiente',
+    allowAutoProvisioning: structures.some((structure) => structure.allowAutoProvisioning),
+  };
+}
+
+function sanitizeInstitutionSettings(input: InstitutionSettings): InstitutionSettings {
+  const structures =
+    input.structures && input.structures.length > 0
+      ? input.structures.map(sanitizeInstitutionStructure)
+      : buildLegacyInstitutionStructures(input);
+
+  return {
+    displayName: input.displayName.trim() || 'Maturity University',
+    structures,
+    institutions: uniqueValues(structures.map((structure) => structure.institution)),
+    faculties: collectStructureValues(structures, 'faculties'),
+    programs: collectStructureValues(structures, 'programs'),
+    academicPeriods: collectStructureValues(structures, 'academicPeriods'),
+    courseTypes: collectStructureValues(structures, 'courseTypes'),
     supportEmail: input.supportEmail.trim().toLowerCase(),
     defaultDomain: input.defaultDomain.trim().toLowerCase(),
     defaultUserState: input.defaultUserState,
-    allowAutoProvisioning: Boolean(input.allowAutoProvisioning),
+    allowAutoProvisioning:
+      typeof input.allowAutoProvisioning === 'boolean'
+        ? input.allowAutoProvisioning
+        : structures.some((structure) => structure.allowAutoProvisioning),
   };
 }
 

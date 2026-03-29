@@ -44,6 +44,14 @@ import type {
 import { formatDate, formatLongDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
+  getFirstInstitutionStructure,
+  getInstitutionAcademicPeriods,
+  getInstitutionCourseTypes,
+  getInstitutionFaculties,
+  getInstitutionPedagogicalGuidelines,
+  getInstitutionPrograms,
+} from '../utils/institutions.js';
+import {
   canCreateDeliverables,
   canCreateObservations,
   canCreateCourseProducts,
@@ -148,12 +156,59 @@ function checkpointBadgeClass(status: StageCheckpointStatus) {
   }
 }
 
+function uniqueOptions(values: string[]) {
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, 'es'),
+  );
+}
+
+function syncCourseStructureFields(
+  appData: AppData,
+  form: CourseMutationInput,
+): CourseMutationInput {
+  const fallbackStructure = getFirstInstitutionStructure(appData.institution);
+  const institution =
+    form.institution.trim() ||
+    fallbackStructure?.institution ||
+    appData.institution.institutions[0] ||
+    appData.institution.displayName ||
+    '';
+  const facultyOptions = getInstitutionFaculties(appData.institution, institution);
+  const programOptions = getInstitutionPrograms(appData.institution, institution);
+  const academicPeriodOptions = getInstitutionAcademicPeriods(appData.institution, institution);
+  const courseTypeOptions = getInstitutionCourseTypes(appData.institution, institution);
+
+  return {
+    ...form,
+    institution,
+    faculty:
+      facultyOptions.includes(form.faculty) || !form.faculty.trim()
+        ? form.faculty.trim() || facultyOptions[0] || ''
+        : facultyOptions[0] || '',
+    program:
+      programOptions.includes(form.program) || !form.program.trim()
+        ? form.program.trim() || programOptions[0] || ''
+        : programOptions[0] || '',
+    academicPeriod:
+      academicPeriodOptions.includes(form.academicPeriod) || !form.academicPeriod.trim()
+        ? form.academicPeriod.trim() || academicPeriodOptions[0] || ''
+        : academicPeriodOptions[0] || '',
+    courseType:
+      courseTypeOptions.includes(form.courseType) || !form.courseType.trim()
+        ? form.courseType.trim() || courseTypeOptions[0] || ''
+        : courseTypeOptions[0] || '',
+  };
+}
+
 function makeCourseForm(course: Course): CourseMutationInput {
   return {
     title: course.title,
     code: course.code,
+    institution: course.metadata.institution,
     faculty: course.faculty,
     program: course.program,
+    academicPeriod: course.metadata.academicPeriod,
+    courseType: course.metadata.courseType,
     modality: course.modality,
     credits: course.credits,
     stageId: course.stageId,
@@ -167,8 +222,11 @@ function buildEmptyCourseForm(stageId: string): CourseMutationInput {
   return {
     title: '',
     code: '',
+    institution: '',
     faculty: '',
     program: '',
+    academicPeriod: '',
+    courseType: '',
     modality: '',
     credits: 1,
     stageId,
@@ -644,7 +702,9 @@ export function CourseWorkspacePage({
   const [isCheckpointSaving, setIsCheckpointSaving] = useState<number | null>(null);
   const [isHandoffSaving, setIsHandoffSaving] = useState(false);
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
-    course ? makeCourseForm(course) : buildEmptyCourseForm(currentStageId),
+    course
+      ? syncCourseStructureFields(appData, makeCourseForm(course))
+      : syncCourseStructureFields(appData, buildEmptyCourseForm(currentStageId)),
   );
   const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
     makeTaskForm(currentCourseSlug, currentStageId),
@@ -797,6 +857,63 @@ export function CourseWorkspacePage({
       (course?.stageChecklist ?? []).map((checkpoint, index) => [index, checkpoint.status]),
     ) as Record<number, StageCheckpointStatus>,
   );
+  const currentInstitution =
+    courseForm.institution ||
+    course?.metadata.institution ||
+    getFirstInstitutionStructure(appData.institution)?.institution ||
+    appData.institution.displayName;
+  const institutionOptions = uniqueOptions(
+    appData.institution.institutions.length > 0
+      ? appData.institution.institutions
+      : appData.courses.map((item) => item.metadata.institution || ''),
+  );
+  const facultyOptions = uniqueOptions(
+    getInstitutionFaculties(appData.institution, currentInstitution),
+  );
+  const programOptions = uniqueOptions(
+    getInstitutionPrograms(appData.institution, currentInstitution),
+  );
+  const academicPeriodOptions = uniqueOptions(
+    getInstitutionAcademicPeriods(appData.institution, currentInstitution),
+  );
+  const courseTypeOptions = uniqueOptions(
+    getInstitutionCourseTypes(appData.institution, currentInstitution),
+  );
+  const institutionGuidelines = getInstitutionPedagogicalGuidelines(
+    appData.institution,
+    currentInstitution,
+  );
+
+  function updateCourseDraftField<Key extends keyof CourseMutationInput>(
+    key: Key,
+    value: CourseMutationInput[Key],
+  ) {
+    setCourseForm((current) => {
+      const nextForm =
+        key === 'institution'
+          ? syncCourseStructureFields(appData, {
+              ...current,
+              institution: value as CourseMutationInput['institution'],
+              faculty: '',
+              program: '',
+              academicPeriod: '',
+              courseType: '',
+            })
+          : {
+              ...current,
+              [key]: value,
+            };
+
+      setMetadataForm((currentMetadata) => ({
+        ...currentMetadata,
+        institution: nextForm.institution,
+        academicPeriod: nextForm.academicPeriod,
+        courseType: nextForm.courseType,
+      }));
+
+      return nextForm;
+    });
+  }
 
   function toggleProductComposer(stageId: CourseProductStage) {
     setProductError(null);
@@ -812,14 +929,20 @@ export function CourseWorkspacePage({
 
   useEffect(() => {
     if (!course) {
-      setCourseForm(buildEmptyCourseForm(currentStageId));
+      const fallbackInstitution =
+        getFirstInstitutionStructure(appData.institution)?.institution ||
+        appData.institution.displayName ||
+        '';
+
+      setCourseForm(syncCourseStructureFields(appData, buildEmptyCourseForm(currentStageId)));
       setMetadataForm((current) => ({
         ...current,
-        institution: '',
+        institution: fallbackInstitution,
         shortName: '',
         semester: '',
-        academicPeriod: '',
-        courseType: '',
+        academicPeriod:
+          getInstitutionAcademicPeriods(appData.institution, fallbackInstitution)[0] || '',
+        courseType: getInstitutionCourseTypes(appData.institution, fallbackInstitution)[0] || '',
         learningOutcomes: [],
         topics: [],
         methodology: '',
@@ -850,7 +973,7 @@ export function CourseWorkspacePage({
       return;
     }
 
-    setCourseForm(makeCourseForm(course));
+    setCourseForm(syncCourseStructureFields(appData, makeCourseForm(course)));
     setMetadataForm(makeMetadataForm(course));
     setNewTaskForm(makeTaskForm(course.slug, course.stageId));
     setNewTimelineForm(makeTimelineForm());
@@ -874,6 +997,7 @@ export function CourseWorkspacePage({
       ) as Record<number, StageCheckpointStatus>,
     );
   }, [
+    appData,
     appData.tasks,
     course,
     currentCourseSlug,
@@ -881,6 +1005,10 @@ export function CourseWorkspacePage({
     defaultDeliverableOwner,
     defaultObservationRole,
   ]);
+
+  useEffect(() => {
+    setCourseForm((current) => syncCourseStructureFields(appData, current));
+  }, [appData]);
 
   useEffect(() => {
     if (!sectionParam) {
@@ -4215,9 +4343,7 @@ export function CourseWorkspacePage({
                 <div className="field__control">
                   <input
                     value={courseForm.title}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, title: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('title', event.target.value)}
                     required
                   />
                 </div>
@@ -4228,37 +4354,94 @@ export function CourseWorkspacePage({
                 <div className="field__control">
                   <input
                     value={courseForm.code}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, code: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('code', event.target.value)}
                     required
                   />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Institución</span>
+                <div className="field__control">
+                  <select
+                    value={courseForm.institution}
+                    onChange={(event) => updateCourseDraftField('institution', event.target.value)}
+                    required
+                  >
+                    {institutionOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
               <label className="field">
                 <span>Facultad</span>
                 <div className="field__control">
-                  <input
+                  <select
                     value={courseForm.faculty}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, faculty: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
                     required
-                  />
+                  >
+                    {facultyOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
               <label className="field">
                 <span>Programa</span>
                 <div className="field__control">
-                  <input
+                  <select
                     value={courseForm.program}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, program: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('program', event.target.value)}
                     required
-                  />
+                  >
+                    {programOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Periodo académico</span>
+                <div className="field__control">
+                  <select
+                    value={courseForm.academicPeriod}
+                    onChange={(event) => updateCourseDraftField('academicPeriod', event.target.value)}
+                    required
+                  >
+                    {academicPeriodOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Tipo de curso</span>
+                <div className="field__control">
+                  <select
+                    value={courseForm.courseType}
+                    onChange={(event) => updateCourseDraftField('courseType', event.target.value)}
+                    required
+                  >
+                    {courseTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
@@ -4267,9 +4450,7 @@ export function CourseWorkspacePage({
                 <div className="field__control">
                   <input
                     value={courseForm.modality}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, modality: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('modality', event.target.value)}
                     required
                   />
                 </div>
@@ -4284,10 +4465,10 @@ export function CourseWorkspacePage({
                     max={12}
                     value={courseForm.credits}
                     onChange={(event) =>
-                      setCourseForm((current) => ({
-                        ...current,
-                        credits: Number.parseInt(event.target.value, 10) || 1,
-                      }))
+                      updateCourseDraftField(
+                        'credits',
+                        Number.parseInt(event.target.value, 10) || 1,
+                      )
                     }
                     required
                   />
@@ -4299,9 +4480,7 @@ export function CourseWorkspacePage({
                 <div className="field__control">
                   <select
                     value={courseForm.stageId}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, stageId: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('stageId', event.target.value)}
                   >
                     {appData.stages.map((item) => (
                       <option key={item.id} value={item.id}>
@@ -4318,10 +4497,10 @@ export function CourseWorkspacePage({
                   <select
                     value={courseForm.status}
                     onChange={(event) =>
-                      setCourseForm((current) => ({
-                        ...current,
-                        status: event.target.value as CourseMutationInput['status'],
-                      }))
+                      updateCourseDraftField(
+                        'status',
+                        event.target.value as CourseMutationInput['status'],
+                      )
                     }
                   >
                     {['En ritmo', 'En revisión', 'Riesgo', 'Bloqueado', 'Listo'].map((status) => (
@@ -4338,12 +4517,7 @@ export function CourseWorkspacePage({
                 <div className="field__control">
                   <input
                     value={courseForm.nextMilestone}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({
-                        ...current,
-                        nextMilestone: event.target.value,
-                      }))
-                    }
+                    onChange={(event) => updateCourseDraftField('nextMilestone', event.target.value)}
                     required
                   />
                 </div>
@@ -4355,9 +4529,7 @@ export function CourseWorkspacePage({
                   <textarea
                     rows={4}
                     value={courseForm.summary}
-                    onChange={(event) =>
-                      setCourseForm((current) => ({ ...current, summary: event.target.value }))
-                    }
+                    onChange={(event) => updateCourseDraftField('summary', event.target.value)}
                     required
                   />
                 </div>
@@ -4390,16 +4562,23 @@ export function CourseWorkspacePage({
               <label className="field">
                 <span>Institución</span>
                 <div className="field__control">
-                  <input
+                  <select
                     value={metadataForm.institution}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      updateCourseDraftField('institution', event.target.value);
                       setMetadataForm((current) => ({
                         ...current,
                         institution: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                     required
-                  />
+                  >
+                    {institutionOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
@@ -4438,32 +4617,46 @@ export function CourseWorkspacePage({
               <label className="field">
                 <span>Periodo académico</span>
                 <div className="field__control">
-                  <input
+                  <select
                     value={metadataForm.academicPeriod}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      updateCourseDraftField('academicPeriod', event.target.value);
                       setMetadataForm((current) => ({
                         ...current,
                         academicPeriod: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                     required
-                  />
+                  >
+                    {academicPeriodOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
               <label className="field">
                 <span>Tipo de curso</span>
                 <div className="field__control">
-                  <input
+                  <select
                     value={metadataForm.courseType}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      updateCourseDraftField('courseType', event.target.value);
                       setMetadataForm((current) => ({
                         ...current,
                         courseType: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                     required
-                  />
+                  >
+                    {courseTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </label>
 
@@ -4541,6 +4734,23 @@ export function CourseWorkspacePage({
                   </select>
                 </div>
               </label>
+
+              <div className="field field--full">
+                <span>Lineamientos pedagógicos activos</span>
+                <div className="list-stack">
+                  {institutionGuidelines.length > 0 ? (
+                    institutionGuidelines.map((guideline) => (
+                      <p key={guideline} className="institution-structure-summary">
+                        {guideline}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="institution-structure-summary">
+                      Esta institución no tiene lineamientos pedagógicos configurados todavía.
+                    </p>
+                  )}
+                </div>
+              </div>
 
               <label className="field field--full">
                 <span>Metodología</span>

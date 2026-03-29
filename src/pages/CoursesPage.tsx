@@ -14,6 +14,13 @@ import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
 import { getStageMeta, getVisibleCourses } from '../utils/domain.js';
+import {
+  getFirstInstitutionStructure,
+  getInstitutionAcademicPeriods,
+  getInstitutionCourseTypes,
+  getInstitutionFaculties,
+  getInstitutionPrograms,
+} from '../utils/institutions.js';
 import { canManageCourses } from '../utils/permissions.js';
 
 interface CoursesPageProps {
@@ -46,19 +53,66 @@ const statusFilters: StatusFilter[] = [
 ];
 const repositoryLabel = 'Repositorio institucional';
 
-function createInitialCourseForm(appData: AppData): CourseMutationInput {
+function uniqueOptions(values: string[]) {
+  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, 'es'),
+  );
+}
+
+function syncCourseStructureFields(
+  appData: AppData,
+  form: CourseMutationInput,
+): CourseMutationInput {
+  const fallbackStructure = getFirstInstitutionStructure(appData.institution);
+  const institution =
+    form.institution.trim() ||
+    fallbackStructure?.institution ||
+    appData.institution.institutions[0] ||
+    appData.institution.displayName ||
+    '';
+  const facultyOptions = getInstitutionFaculties(appData.institution, institution);
+  const programOptions = getInstitutionPrograms(appData.institution, institution);
+  const academicPeriodOptions = getInstitutionAcademicPeriods(appData.institution, institution);
+  const courseTypeOptions = getInstitutionCourseTypes(appData.institution, institution);
+
   return {
+    ...form,
+    institution,
+    faculty:
+      facultyOptions.includes(form.faculty) || !form.faculty.trim()
+        ? form.faculty.trim() || facultyOptions[0] || ''
+        : facultyOptions[0] || '',
+    program:
+      programOptions.includes(form.program) || !form.program.trim()
+        ? form.program.trim() || programOptions[0] || ''
+        : programOptions[0] || '',
+    academicPeriod:
+      academicPeriodOptions.includes(form.academicPeriod) || !form.academicPeriod.trim()
+        ? form.academicPeriod.trim() || academicPeriodOptions[0] || ''
+        : academicPeriodOptions[0] || '',
+    courseType:
+      courseTypeOptions.includes(form.courseType) || !form.courseType.trim()
+        ? form.courseType.trim() || courseTypeOptions[0] || ''
+        : courseTypeOptions[0] || '',
+  };
+}
+
+function createInitialCourseForm(appData: AppData): CourseMutationInput {
+  return syncCourseStructureFields(appData, {
     title: '',
     code: '',
+    institution: '',
     faculty: '',
     program: '',
+    academicPeriod: '',
+    courseType: '',
     modality: 'Virtual guiado',
     credits: 3,
     stageId: appData.stages[0]?.id ?? 'configuracion',
     status: 'En revisión',
     summary: '',
     nextMilestone: '',
-  };
+  });
 }
 
 function getInstitution(course: Course) {
@@ -361,6 +415,31 @@ export function CoursesPage({
   const typeOptions = Array.from(
     new Set(visibleCourses.map((course) => course.metadata.courseType || 'Curso')),
   ).sort((left, right) => left.localeCompare(right, 'es'));
+  const composerInstitutionOptions = useMemo(
+    () =>
+      uniqueOptions(
+        appData.institution.institutions.length > 0
+          ? appData.institution.institutions
+          : visibleCourses.map((course) => getInstitution(course)),
+      ),
+    [appData.institution, visibleCourses],
+  );
+  const composerFacultyOptions = useMemo(
+    () => uniqueOptions(getInstitutionFaculties(appData.institution, courseForm.institution)),
+    [appData.institution, courseForm.institution],
+  );
+  const composerProgramOptions = useMemo(
+    () => uniqueOptions(getInstitutionPrograms(appData.institution, courseForm.institution)),
+    [appData.institution, courseForm.institution],
+  );
+  const composerPeriodOptions = useMemo(
+    () => uniqueOptions(getInstitutionAcademicPeriods(appData.institution, courseForm.institution)),
+    [appData.institution, courseForm.institution],
+  );
+  const composerCourseTypeOptions = useMemo(
+    () => uniqueOptions(getInstitutionCourseTypes(appData.institution, courseForm.institution)),
+    [appData.institution, courseForm.institution],
+  );
 
   useEffect(() => {
     if (
@@ -370,6 +449,10 @@ export function CoursesPage({
       setSelectedNode('root');
     }
   }, [selectedNode, visibleCourses]);
+
+  useEffect(() => {
+    setCourseForm((current) => syncCourseStructureFields(appData, current));
+  }, [appData]);
 
   async function handleCreateCourse(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -410,10 +493,23 @@ export function CoursesPage({
     key: Key,
     value: CourseMutationInput[Key],
   ) {
-    setCourseForm((current) => ({
-      ...current,
-      [key]: value,
-    }));
+    setCourseForm((current) => {
+      if (key === 'institution') {
+        return syncCourseStructureFields(appData, {
+          ...current,
+          institution: value as CourseMutationInput['institution'],
+          faculty: '',
+          program: '',
+          academicPeriod: '',
+          courseType: '',
+        });
+      }
+
+      return {
+        ...current,
+        [key]: value,
+      };
+    });
   }
 
   function clearFilters() {
@@ -774,26 +870,87 @@ export function CoursesPage({
                 </label>
 
                 <label className="field">
+                  <span>Institución</span>
+                  <div className="field__control">
+                    <select
+                      value={courseForm.institution}
+                      onChange={(event) => updateCourseField('institution', event.target.value)}
+                      required
+                    >
+                      {composerInstitutionOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
                   <span>Facultad</span>
                   <div className="field__control">
-                    <input
+                    <select
                       value={courseForm.faculty}
                       onChange={(event) => updateCourseField('faculty', event.target.value)}
-                      placeholder="Facultad"
                       required
-                    />
+                    >
+                      {composerFacultyOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </label>
 
                 <label className="field">
                   <span>Programa</span>
                   <div className="field__control">
-                    <input
+                    <select
                       value={courseForm.program}
                       onChange={(event) => updateCourseField('program', event.target.value)}
-                      placeholder="Programa académico"
                       required
-                    />
+                    >
+                      {composerProgramOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Periodo académico</span>
+                  <div className="field__control">
+                    <select
+                      value={courseForm.academicPeriod}
+                      onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
+                      required
+                    >
+                      {composerPeriodOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Tipología de curso</span>
+                  <div className="field__control">
+                    <select
+                      value={courseForm.courseType}
+                      onChange={(event) => updateCourseField('courseType', event.target.value)}
+                      required
+                    >
+                      {composerCourseTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </label>
 

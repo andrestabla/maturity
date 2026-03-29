@@ -1,6 +1,7 @@
 import {
   defaultBranding,
   defaultExperienceSettings,
+  defaultInstitutionSettings,
   defaultWorkflowSettings,
   mockAppData,
 } from '../src/data/mockData.js';
@@ -294,7 +295,11 @@ function buildDefaultCourseMetadata(
     | 'updatedAt'
     | 'schedule'
     | 'modules'
-  >,
+  > & {
+    institution?: string;
+    academicPeriod?: string;
+    courseType?: string;
+  },
 ): CourseMetadata {
   const targetCloseDate =
     course.schedule
@@ -302,11 +307,11 @@ function buildDefaultCourseMetadata(
       .sort((left, right) => right.dueDate.localeCompare(left.dueDate))[0]?.dueDate ?? course.updatedAt;
 
   return {
-    institution: 'Maturity University',
+    institution: course.institution?.trim() || 'Maturity University',
     shortName: course.title,
     semester: 'Por definir',
-    academicPeriod: '2026-1',
-    courseType: 'Curso',
+    academicPeriod: course.academicPeriod?.trim() || '2026-1',
+    courseType: course.courseType?.trim() || 'Curso',
     learningOutcomes: [course.summary],
     topics: course.modules.map((module) => module.title),
     methodology: `${course.modality} con seguimiento por etapas y expediente persistente.`,
@@ -702,8 +707,11 @@ function makeCourseRecord(input: CourseMutationInput): Course {
     metadata: buildDefaultCourseMetadata({
       title: input.title,
       code: input.code,
+      institution: input.institution,
       faculty: input.faculty,
       program: input.program,
+      academicPeriod: input.academicPeriod,
+      courseType: input.courseType,
       modality: input.modality,
       summary: input.summary,
       status: input.status,
@@ -1477,7 +1485,11 @@ async function readCourseBySlug(slug: string) {
 }
 
 function mergeCourseMetadata(
-  course: Course,
+  course: Course & {
+    institution?: string;
+    academicPeriod?: string;
+    courseType?: string;
+  },
   metadata: Partial<CourseMetadataMutationInput>,
 ): Course['metadata'] {
   return {
@@ -1877,6 +1889,7 @@ export async function loadAppData(): Promise<AppData> {
     libraryResources,
     roleProfiles,
     users,
+    institution: defaultInstitutionSettings,
     branding: defaultBranding,
     experience: defaultExperienceSettings,
     workflow: defaultWorkflowSettings,
@@ -2116,15 +2129,22 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
         ...current,
         title: input.title,
         code: input.code,
+        institution: input.institution,
         faculty: input.faculty,
         program: input.program,
+        academicPeriod: input.academicPeriod,
+        courseType: input.courseType,
         modality: input.modality,
         summary: input.summary,
         status: input.status,
         stageId: input.stageId,
         updatedAt: getTodayLabel(),
       },
-      {},
+      {
+        institution: input.institution,
+        academicPeriod: input.academicPeriod,
+        courseType: input.courseType,
+      },
     ),
   };
 
@@ -3010,7 +3030,7 @@ export async function createDeliverableRecord(courseSlug: string, input: Deliver
   };
 
   await persistCourse(nextCourse);
-  return nextCourse.deliverables.at(-1) ?? null;
+  return nextCourse.deliverables[nextCourse.deliverables.length - 1] ?? null;
 }
 
 export async function updateDeliverableRecord(
@@ -3120,7 +3140,7 @@ export async function createObservationRecord(courseSlug: string, input: Observa
   };
 
   await persistCourse(nextCourse);
-  return nextCourse.observations.at(-1) ?? null;
+  return nextCourse.observations[nextCourse.observations.length - 1] ?? null;
 }
 
 export async function updateObservationRecord(
