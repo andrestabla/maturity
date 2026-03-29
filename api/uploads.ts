@@ -4,7 +4,7 @@ import { errorResponse, jsonResponse } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
 const ALLOWED_SCOPES = new Set<UploadScope>(['branding', 'course', 'library', 'profile', 'general']);

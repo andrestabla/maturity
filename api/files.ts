@@ -3,7 +3,7 @@ import { errorResponse } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
 function sanitizeKey(value: string) {
