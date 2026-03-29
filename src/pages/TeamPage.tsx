@@ -18,7 +18,7 @@ import {
   UsersRound,
   Waypoints,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -59,6 +59,11 @@ interface AdminCenterPatchResponse {
 
 interface AdminIntegrationResponse {
   integration: AdminIntegration;
+}
+
+interface UploadResponse {
+  key: string;
+  url: string;
 }
 
 function buildUserForm(settings?: InstitutionSettings): UserMutationInput {
@@ -245,6 +250,11 @@ export function TeamPage({
   const [logSeverityFilter, setLogSeverityFilter] = useState<string>('Todas');
   const [auditQuery, setAuditQuery] = useState('');
   const [auditClassificationFilter, setAuditClassificationFilter] = useState<string>('Todas');
+  const [uploadingBrandingAsset, setUploadingBrandingAsset] = useState<'logo' | 'favicon' | null>(
+    null,
+  );
+  const logoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function loadAdminCenter() {
     if (!isAdmin) {
@@ -742,6 +752,76 @@ export function TeamPage({
       );
     } finally {
       setIsSavingBranding(false);
+    }
+  }
+
+  async function handleBrandingAssetUpload(slot: 'logo' | 'favicon', file: File) {
+    setSettingsError(null);
+    setUploadingBrandingAsset(slot);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('scope', 'branding');
+      formData.append('folder', slot);
+
+      const response = await fetch('/api/uploads', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData,
+      });
+
+      const payload = (await response.json()) as UploadResponse | { error?: string };
+
+      if (!response.ok) {
+        throw new Error((payload as { error?: string }).error ?? 'No fue posible cargar el archivo.');
+      }
+
+      const uploadedUrl = (payload as UploadResponse).url;
+      setBrandingDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        if (slot === 'logo') {
+          return {
+            ...current,
+            logoMode: 'Imagen',
+            logoUrl: uploadedUrl,
+          };
+        }
+
+        return {
+          ...current,
+          faviconMode: 'Imagen',
+          faviconUrl: uploadedUrl,
+        };
+      });
+
+      await showAlert({
+        tone: 'success',
+        title: slot === 'logo' ? 'Logo cargado' : 'Favicon cargado',
+        message: 'El archivo ya quedó almacenado en Cloudflare R2 y vinculado al branding.',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible cargar el archivo en Cloudflare R2.';
+      setSettingsError(message);
+      await showAlert({
+        tone: 'error',
+        title: 'No fue posible cargar el archivo',
+        message,
+      });
+    } finally {
+      setUploadingBrandingAsset(null);
+
+      if (slot === 'logo' && logoFileInputRef.current) {
+        logoFileInputRef.current.value = '';
+      }
+
+      if (slot === 'favicon' && faviconFileInputRef.current) {
+        faviconFileInputRef.current.value = '';
+      }
     }
   }
 
@@ -2006,6 +2086,30 @@ export function TeamPage({
         </section>
 
         <form className="surface section-card" onSubmit={handleSaveBranding}>
+          <input
+            ref={logoFileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleBrandingAssetUpload('logo', file);
+              }
+            }}
+          />
+          <input
+            ref={faviconFileInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleBrandingAssetUpload('favicon', file);
+              }
+            }}
+          />
           <div className="section-heading">
             <div>
               <span className="eyebrow">Identidad visual</span>
@@ -2110,6 +2214,17 @@ export function TeamPage({
                   placeholder="https://..."
                 />
               </div>
+              <div className="field-upload-row">
+                <button
+                  type="button"
+                  className="ghost-button field-upload-button"
+                  onClick={() => logoFileInputRef.current?.click()}
+                  disabled={uploadingBrandingAsset === 'logo'}
+                >
+                  {uploadingBrandingAsset === 'logo' ? 'Cargando…' : 'Cargar'}
+                </button>
+                <small>Sube el logo directamente a Cloudflare R2.</small>
+              </div>
             </label>
 
             <label className="field">
@@ -2164,6 +2279,17 @@ export function TeamPage({
                   }
                   placeholder="https://..."
                 />
+              </div>
+              <div className="field-upload-row">
+                <button
+                  type="button"
+                  className="ghost-button field-upload-button"
+                  onClick={() => faviconFileInputRef.current?.click()}
+                  disabled={uploadingBrandingAsset === 'favicon'}
+                >
+                  {uploadingBrandingAsset === 'favicon' ? 'Cargando…' : 'Cargar'}
+                </button>
+                <small>Sube el favicon a Cloudflare R2 y úsalo sin URL externa.</small>
               </div>
             </label>
 

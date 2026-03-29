@@ -17,6 +17,7 @@ import type {
   Role,
 } from '../src/types.js';
 import { getSql } from './db.js';
+import { probeR2Connectivity } from './r2.js';
 import { getUserDirectory, prepareDatabase } from './store.js';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
@@ -51,6 +52,12 @@ interface AdminAuditRow extends AdminAuditEntry {}
 interface AdminActor {
   id: string | null;
   name: string;
+}
+
+interface IntegrationTestResult {
+  status: AdminIntegrationStatus;
+  detail: string;
+  lastError: string | null;
 }
 
 function parseJson<T>(value: JsonValue): T {
@@ -506,6 +513,239 @@ const integrationAssistantMap: Record<
   },
 };
 
+function getIntegrationConfigValue(
+  config: Record<string, string>,
+  envKey: string,
+  configKey?: string,
+) {
+  return cleanSecretCandidate(config[configKey || '']) || cleanSecretCandidate(process.env[envKey]);
+}
+
+function cleanSecretCandidate(value?: string | null) {
+  return value?.trim() ?? '';
+}
+
+async function readResponseText(response: Response) {
+  try {
+    return (await response.text()).trim();
+  } catch {
+    return '';
+  }
+}
+
+async function verifyOpenAI(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey = getIntegrationConfigValue(config, 'OPENAI_API_KEY', 'openaiApiKey');
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'La integración de OpenAI no tiene API Key disponible.',
+      lastError: 'Missing OpenAI API key',
+    };
+  }
+
+  const response = await fetch('https://api.openai.com/v1/models', {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `OpenAI rechazó la validación (${response.status}).`,
+      lastError: detail || `OpenAI validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'OpenAI respondió correctamente a la consulta de modelos.',
+    lastError: null,
+  };
+}
+
+async function verifyGemini(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey =
+    getIntegrationConfigValue(config, 'GEMINI_API_KEY', 'geminiApiKey') ||
+    getIntegrationConfigValue(config, 'GOOGLE_GENERATIVE_AI_API_KEY', 'geminiApiKey');
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'La integración de Gemini no tiene API Key disponible.',
+      lastError: 'Missing Gemini API key',
+    };
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+  );
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `Gemini rechazó la validación (${response.status}).`,
+      lastError: detail || `Gemini validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'Gemini respondió correctamente a la consulta de modelos.',
+    lastError: null,
+  };
+}
+
+async function verifyYoutube(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey = getIntegrationConfigValue(config, 'YOUTUBE_API_KEY', 'youtubeApiKey');
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'La integración de YouTube no tiene API Key disponible.',
+      lastError: 'Missing YouTube API key',
+    };
+  }
+
+  const safeSearchMap: Record<string, string> = {
+    Estricto: 'strict',
+    Moderado: 'moderate',
+    'Sin filtro': 'none',
+  };
+  const params = new URLSearchParams({
+    part: 'snippet',
+    type: 'video',
+    maxResults: '1',
+    q: 'educacion virtual',
+    key: apiKey,
+    regionCode: config.defaultRegion?.trim() || 'CO',
+    safeSearch: safeSearchMap[config.safeSearch] || 'moderate',
+  });
+  const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`);
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `YouTube Data API rechazó la consulta (${response.status}).`,
+      lastError: detail || `YouTube validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'YouTube Data API respondió correctamente a una búsqueda de prueba.',
+    lastError: null,
+  };
+}
+
+async function verifyAcademicDatabase(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const endpoint =
+    cleanSecretCandidate(config.endpoint) || cleanSecretCandidate(process.env.ACADEMIC_DATABASE_ENDPOINT);
+
+  if (!endpoint) {
+    return {
+      status: 'Con error',
+      detail: 'No hay endpoint académico configurado.',
+      lastError: 'Missing academic database endpoint',
+    };
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `La fuente académica respondió con error (${response.status}).`,
+      lastError: detail || `Academic endpoint failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'La fuente académica respondió correctamente a la validación.',
+    lastError: null,
+  };
+}
+
+async function verifyGoogleConfiguration(
+  integrationId: 'google-sso' | 'google-calendar' | 'google-meet',
+  config: Record<string, string>,
+): Promise<IntegrationTestResult> {
+  const clientId = getIntegrationConfigValue(config, 'GOOGLE_CLIENT_ID', 'googleClientId');
+  const clientSecret = getIntegrationConfigValue(config, 'GOOGLE_CLIENT_SECRET', 'googleClientSecret');
+
+  if (!clientId || !clientSecret) {
+    return {
+      status: 'Con error',
+      detail: 'Faltan Google Client ID y/o Google Client Secret.',
+      lastError: 'Missing Google OAuth credentials',
+    };
+  }
+
+  if (integrationId === 'google-sso') {
+    const redirectUri = cleanSecretCandidate(config.googleRedirectUri);
+
+    if (!redirectUri) {
+      return {
+        status: 'Con error',
+        detail: 'Google SSO requiere Redirect URI para quedar listo.',
+        lastError: 'Missing Google redirect URI',
+      };
+    }
+  }
+
+  return {
+    status: 'Pendiente',
+    detail:
+      'La configuración OAuth base está guardada, pero la verificación end-to-end aún requiere autorización Google desde una siguiente iteración.',
+    lastError: null,
+  };
+}
+
+async function verifyVercelRuntime(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl =
+    cleanSecretCandidate(process.env.NEXT_PUBLIC_APP_URL) ||
+    (cleanSecretCandidate(process.env.VERCEL_URL)
+      ? `https://${cleanSecretCandidate(process.env.VERCEL_URL)}`
+      : '');
+
+  if (!baseUrl) {
+    return {
+      status: 'Con error',
+      detail: 'No fue posible determinar la URL del runtime desplegado.',
+      lastError: 'Missing public app URL',
+    };
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/health`, {
+    headers: {
+      'x-maturity-runtime-check': config.project || 'maturity',
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `El runtime respondió con error (${response.status}).`,
+      lastError: detail || `Vercel runtime failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'El runtime de Vercel respondió correctamente al chequeo de salud.',
+    lastError: null,
+  };
+}
+
 async function ensureAdminCenterSchema() {
   await prepareDatabase();
   const sql = getSql();
@@ -697,7 +937,7 @@ function evaluateIntegrationRuntime(
   summary: string;
 } {
   const getVal = (envKey: string, configKey?: string) => {
-    return (config[configKey || '']?.trim() || process.env[envKey]?.trim() || '');
+    return getIntegrationConfigValue(config, envKey, configKey);
   };
 
   switch (integrationId) {
@@ -877,15 +1117,15 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
   const config = parseJson<Record<string, string>>(row.config);
   const scopes = parseJson<string[]>(row.scopes);
   const runtime = evaluateIntegrationRuntime(row.id, config);
-  const effectiveEnabled = row.enabled || runtime.source === 'runtime';
+  const effectiveEnabled = row.enabled;
   const effectiveStatus: AdminIntegrationStatus = !effectiveEnabled
     ? 'Inactiva'
-    : runtime.ready
-      ? 'Activa'
-      : row.lastError
+    : row.status === 'En prueba'
+      ? 'En prueba'
+      : row.status === 'Con error' || (row.lastTestAt && row.lastError)
         ? 'Con error'
-        : row.status === 'En prueba'
-          ? 'En prueba'
+        : row.status === 'Activa' && row.lastTestAt && !row.lastError && runtime.ready
+          ? 'Activa'
           : 'Pendiente';
 
   return {
@@ -1228,6 +1468,8 @@ export async function updateIntegrationSettings(
       config = ${JSON.stringify(nextConfig)}::jsonb,
       notes = ${input.notes.trim()},
       fallback_to = ${input.fallbackTo.trim()},
+      last_test_at = ${null},
+      last_error = ${null},
       updated_at = ${timestamp}
     WHERE id = ${input.id}
   `;
@@ -1246,13 +1488,15 @@ export async function updateIntegrationSettings(
         ...current,
         enabled: input.enabled,
         status: nextStatus,
-        scopes: nextScopes,
-        config: nextConfig,
-        notes: input.notes.trim(),
-        fallbackTo: input.fallbackTo.trim(),
-        updatedAt: timestamp,
-      }),
+      scopes: nextScopes,
+      config: nextConfig,
+      notes: input.notes.trim(),
+      fallbackTo: input.fallbackTo.trim(),
+      lastTestAt: null,
+      lastError: null,
+      updatedAt: timestamp,
     }),
+  }),
   });
   await recordAdminLog({
     category: 'Integración',
@@ -1295,23 +1539,65 @@ export async function runIntegrationConnectivityTest(id: string, actor: AdminAct
     detail = `La validación falló: ${serialized.runtimeSummary}`;
     status = 'Con error';
     lastError = serialized.runtimeSummary;
-  } else if (id === 'neon-database') {
+  } else {
     try {
-      const db = getSql();
-      await db`SELECT 1`;
-      status = 'Activa';
-      detail = 'Neon respondió correctamente a una consulta de disponibilidad.';
+      let result: IntegrationTestResult;
+
+      switch (id) {
+        case 'neon-database': {
+          const db = getSql();
+          await db`SELECT 1`;
+          result = {
+            status: 'Activa',
+            detail: 'Neon respondió correctamente a una consulta de disponibilidad.',
+            lastError: null,
+          };
+          break;
+        }
+        case 'vercel-runtime':
+          result = await verifyVercelRuntime(serialized.config);
+          break;
+        case 'cloudflare-r2':
+          result = {
+            status: 'Activa',
+            detail: await probeR2Connectivity(serialized.config),
+            lastError: null,
+          };
+          break;
+        case 'openai':
+          result = await verifyOpenAI(serialized.config);
+          break;
+        case 'gemini':
+          result = await verifyGemini(serialized.config);
+          break;
+        case 'youtube-data-api':
+          result = await verifyYoutube(serialized.config);
+          break;
+        case 'academic-databases':
+          result = await verifyAcademicDatabase(serialized.config);
+          break;
+        case 'google-sso':
+        case 'google-calendar':
+        case 'google-meet':
+          result = await verifyGoogleConfiguration(id, serialized.config);
+          break;
+        default:
+          result = {
+            status: 'Pendiente',
+            detail: `La integración ${serialized.name} aún no tiene una prueba operativa automatizada.`,
+            lastError: null,
+          };
+          break;
+      }
+
+      status = result.status;
+      detail = result.detail;
+      lastError = result.lastError;
     } catch (error) {
       status = 'Con error';
-      lastError = error instanceof Error ? error.message : 'database_test_failed';
-      detail = `La validación de Neon falló: ${lastError}`;
+      lastError = error instanceof Error ? error.message : 'integration_test_failed';
+      detail = `La validación de ${serialized.name} falló: ${lastError}`;
     }
-  } else if (id === 'vercel-runtime') {
-    status = 'Activa';
-    detail = serialized.runtimeSummary;
-  } else {
-    status = 'Activa';
-    detail = `Validación de runtime completada: ${serialized.runtimeSummary}`;
   }
 
   await sql`
@@ -1328,9 +1614,9 @@ export async function runIntegrationConnectivityTest(id: string, actor: AdminAct
     category: 'Integración',
     module: 'Gobierno',
     service: current.name,
-    severity: status === 'Activa' ? 'Success' : 'Warning',
+    severity: status === 'Activa' ? 'Success' : status === 'Con error' ? 'Error' : 'Warning',
     event: 'integration_test',
-    result: status === 'Activa' ? 'ok' : 'failed',
+    result: status === 'Activa' ? 'ok' : status === 'Pendiente' ? 'pending' : 'failed',
     detail,
     userId: actor.id,
     userName: actor.name,

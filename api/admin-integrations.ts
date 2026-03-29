@@ -8,7 +8,7 @@ import { getSessionUser } from '../lib/session.js';
 import type { AdminIntegrationMutationInput } from '../src/types.js';
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
 };
 
 interface IntegrationTestPayload {

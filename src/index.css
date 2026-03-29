@@ -6555,6 +6555,22 @@ body::after {
   justify-content: center;
 }
 
+.field-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.field-upload-row small {
+  color: var(--muted);
+}
+
+.field-upload-button {
+  min-width: 104px;
+  justify-content: center;
+}
+
 .empty-state--embedded {
   margin: 0;
   border-radius: 0;
@@ -6874,6 +6890,11 @@ body::after {
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .field-upload-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
