@@ -422,7 +422,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
 function productStageLabel(stage: CourseProductStage) {
   switch (stage) {
     case 'general':
-      return 'Información general';
+      return 'Microcurrículo';
     case 'architecture':
       return 'Arquitectura';
     case 'production':
@@ -1042,14 +1042,6 @@ export function CourseWorkspacePage({
     (deliverable) => deliverable.status !== 'Listo',
   ).length;
   const totalActivities = currentCourse.modules.reduce((sum, module) => sum + module.activities, 0);
-  const totalOwnResources = currentCourse.modules.reduce(
-    (sum, module) => sum + module.ownResources,
-    0,
-  );
-  const totalCuratedResources = currentCourse.modules.reduce(
-    (sum, module) => sum + module.curatedResources,
-    0,
-  );
   const pendingTasksCount = relatedTasks.filter((task) => task.status !== 'Lista').length;
   const pendingObservationsCount = currentCourse.observations.filter(
     (observation) => observation.status !== 'Resuelta',
@@ -1064,16 +1056,6 @@ export function CourseWorkspacePage({
   const upcomingMilestones = currentCourse.schedule
     .slice()
     .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
-    .slice(0, 4);
-  const priorityTasks = visibleTasks
-    .slice()
-    .sort((left, right) => {
-      const priorityWeight = { Alta: 0, Media: 1, Baja: 2 };
-      return (
-        priorityWeight[left.priority] - priorityWeight[right.priority] ||
-        left.dueDate.localeCompare(right.dueDate)
-      );
-    })
     .slice(0, 4);
   const teamCoverage = appData.roles
     .map((roleName) => ({
@@ -1185,6 +1167,118 @@ export function CourseWorkspacePage({
       actionLabel: 'Abrir historial',
     },
   ];
+
+  const isWorkflowPage = activeSection === 'summary';
+  const focusedStageMeta =
+    activeSection === 'summary'
+      ? null
+      : activeSection === 'general'
+        ? {
+            eyebrow: 'Microcurrículo',
+            title: 'Zona dedicada del microcurrículo',
+            description:
+              'Trabaja la base curricular del curso sin distraerte con indicadores globales. Aquí viven sílabus, resultados, metodología y referencias.',
+            stats: [
+              { label: 'Resultados', value: String(currentCourse.metadata.learningOutcomes.length) },
+              { label: 'Temas', value: String(currentCourse.metadata.topics.length) },
+              { label: 'Versión', value: currentCourse.metadata.currentVersion },
+            ],
+          }
+        : activeSection === 'architecture'
+          ? {
+              eyebrow: 'Arquitectura',
+              title: 'Zona dedicada de arquitectura',
+              description:
+                'Diseña módulos, actividades y la lógica instruccional del curso desde una sola capa de trabajo.',
+              stats: [
+                { label: 'Módulos', value: String(currentCourse.modules.length) },
+                { label: 'Actividades', value: String(totalActivities) },
+                { label: 'Blueprints', value: String(countProductsByStage('architecture')) },
+              ],
+            }
+          : activeSection === 'planning'
+            ? {
+                eyebrow: 'Planeación',
+                title: 'Zona dedicada de planeación',
+                description:
+                  'Asigna responsables, organiza hitos y mueve el trabajo del curso con foco operativo.',
+                stats: [
+                  { label: 'Equipo', value: String(currentCourse.team.length) },
+                  { label: 'Tareas', value: String(pendingTasksCount) },
+                  { label: 'Hitos', value: String(upcomingMilestones.length) },
+                ],
+              }
+            : activeSection === 'production'
+              ? {
+                  eyebrow: 'Producción',
+                  title: 'Zona dedicada de producción',
+                  description:
+                    'Escribe actividades, gestiona entregables y consolida productos de autoría dentro del curso.',
+                  stats: [
+                    { label: 'Entregables', value: String(deliverablesOpenCount) },
+                    { label: 'Actividades', value: String(totalActivities) },
+                    { label: 'Productos', value: String(countProductsByStage('production')) },
+                  ],
+                }
+              : activeSection === 'resources'
+                ? {
+                    eyebrow: 'Recursos',
+                    title: 'Zona dedicada de recursos',
+                    description:
+                      'Curación, multimedia y biblioteca asociada en una sola vista para trabajo editorial y documental.',
+                    stats: [
+                      { label: 'Curados', value: String(curatedResources.length) },
+                      { label: 'Propios', value: String(ownedResources.length) },
+                      {
+                        label: 'Productos',
+                        value: String(
+                          countProductsByStage('curation') + countProductsByStage('multimedia'),
+                        ),
+                      },
+                    ],
+                  }
+                : activeSection === 'lms'
+                  ? {
+                      eyebrow: 'LMS',
+                      title: 'Zona dedicada de montaje',
+                      description:
+                        'Implementa y documenta el montaje técnico del curso con evidencias, checklist y ajustes de plataforma.',
+                      stats: [
+                        {
+                          label: 'Checkpoints',
+                          value: String(
+                            currentCourse.stageChecklist.filter(
+                              (checkpoint) => checkpoint.owner === 'Gestor LMS',
+                            ).length,
+                          ),
+                        },
+                        { label: 'Bloqueos', value: String(currentCourse.stageNotes.lms.blockers.length) },
+                        { label: 'Evidencias', value: String(currentCourse.stageNotes.lms.evidence.length) },
+                      ],
+                    }
+                  : activeSection === 'qa'
+                    ? {
+                        eyebrow: 'QA y validación',
+                        title: 'Zona dedicada de QA',
+                        description:
+                          'Gestiona hallazgos, checkpoints y criterios de aprobación antes del cierre del curso.',
+                        stats: [
+                          { label: 'Observaciones', value: String(pendingObservationsCount) },
+                          { label: 'Bloqueos', value: String(blockingCheckpoints.length) },
+                          { label: 'Rúbricas', value: String(countProductsByStage('qa')) },
+                        ],
+                      }
+                    : {
+                        eyebrow: 'Historial',
+                        title: 'Zona dedicada de historial',
+                        description:
+                          'Consulta la trazabilidad del expediente y revisa cómo evolucionó el curso a lo largo del flujo.',
+                        stats: [
+                          { label: 'Movimientos', value: String(historyFeed.length) },
+                          { label: 'Versión', value: currentCourse.metadata.currentVersion },
+                          { label: 'Cierre', value: formatDate(currentCourse.metadata.targetCloseDate) },
+                        ],
+                      };
 
   function goToSection(section: CourseSection) {
     navigate(buildCourseSectionPath(currentCourseSlug, section));
@@ -3917,7 +4011,8 @@ export function CourseWorkspacePage({
   }
 
   return (
-    <div className="page-stack workspace-page">
+    <div className={isWorkflowPage ? 'page-stack workspace-page' : 'page-stack workspace-page workspace-page--focus'}>
+      {isWorkflowPage ? (
       <section className="surface workspace-hero">
         <div className="workspace-hero__copy">
           <div className="workspace-hero__badges">
@@ -3978,19 +4073,28 @@ export function CourseWorkspacePage({
           </div>
         </div>
       </section>
+      ) : null}
 
-      <section className="surface section-card section-card--compact course-sections">
+      <section
+        className={
+          isWorkflowPage
+            ? 'surface section-card section-card--compact course-sections'
+            : 'surface section-card section-card--compact course-sections course-sections--focus'
+        }
+      >
+        {isWorkflowPage ? (
         <div className="section-heading section-heading--compact">
           <div>
             <span className="eyebrow">Workflow</span>
             <h3>Ruta operativa y expediente del curso</h3>
           </div>
         </div>
+        ) : null}
 
         <div className="segmented-control segmented-control--wide">
           {[
             ['summary', 'Workflow'],
-            ['general', 'Información general'],
+            ['general', 'Microcurrículo'],
             ['architecture', 'Arquitectura'],
             ['planning', 'Planeación'],
             ['production', 'Producción'],
@@ -4014,6 +4118,51 @@ export function CourseWorkspacePage({
           ))}
         </div>
       </section>
+
+      {!isWorkflowPage && focusedStageMeta ? (
+        <section className="surface section-card section-card--compact workspace-focus-head">
+          <div className="workspace-focus-head__top">
+            <div className="workspace-focus-head__copy">
+              <span className="eyebrow">{focusedStageMeta.eyebrow}</span>
+              <h3>{focusedStageMeta.title}</h3>
+              <p>{focusedStageMeta.description}</p>
+            </div>
+
+            <div className="workspace-focus-head__actions">
+              {activeSection === 'general' && canManageCourses(userRole) ? (
+                <button
+                  type="button"
+                  className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsCourseEditorOpen((current) => !current)}
+                >
+                  <PencilLine size={16} />
+                  <span>{isCourseEditorOpen ? 'Cerrar edición' : 'Editar microcurrículo'}</span>
+                </button>
+              ) : null}
+
+              <Link to={`/courses/${currentCourse.slug}`} className="ghost-button">
+                <span>Volver al workflow</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="workspace-focus-head__meta">
+            <span className="badge badge--outline">{currentCourse.code}</span>
+            <span>{currentCourse.title}</span>
+            <span>{currentCourse.faculty}</span>
+            <span>{currentCourse.program}</span>
+          </div>
+
+          <div className="workspace-focus-head__stats">
+            {focusedStageMeta.stats.map((item) => (
+              <article key={item.label} className="workspace-focus-stat">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {activeSection === 'general' && isCourseEditorOpen ? (
         <section className="surface section-card">
@@ -4660,161 +4809,17 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'general' ? (
-        <>
-          <section className="surface section-card section-card--compact">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Información general</span>
-                <h3>Ficha académica y documental</h3>
-              </div>
-            </div>
-
-            <div className="module-grid module-grid--summary">
-              <div className="module-card">
-                <div className="module-card__top">
-                  <strong>{currentCourse.metadata.shortName}</strong>
-                  <span>{currentCourse.metadata.institution}</span>
-                </div>
-                <p>{currentCourse.summary}</p>
-              </div>
-              <div className="module-card">
-                <div className="module-card__top">
-                  <strong>{currentCourse.metadata.academicPeriod}</strong>
-                  <span>Periodo académico</span>
-                </div>
-                <p>
-                  Semestre {currentCourse.metadata.semester} · {currentCourse.metadata.courseType}
-                </p>
-              </div>
-              <div className="module-card">
-                <div className="module-card__top">
-                  <strong>{currentCourse.metadata.currentVersion}</strong>
-                  <span>Versión vigente</span>
-                </div>
-                <p>
-                  Prioridad {currentCourse.metadata.priority} · Riesgo{' '}
-                  {currentCourse.metadata.riskLevel}
-                </p>
-              </div>
-              <div className="module-card">
-                <div className="module-card__top">
-                  <strong>{countProductsByStage('general')}</strong>
-                  <span>documentos base</span>
-                </div>
-                <p>El sílabus y los artefactos curriculares quedan versionados dentro del curso.</p>
-              </div>
-              <div className="module-card">
-                <div className="module-card__top">
-                  <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
-                  <span>Cierre objetivo</span>
-                </div>
-                <p>{courseRouteLabel}</p>
-              </div>
-            </div>
-
-            <div className="list-stack">
-              <div className="list-item">
-                <div>
-                  <strong>Ruta institucional y trazabilidad</strong>
-                  <p>{courseRouteLabel}</p>
-                </div>
-                <div className="list-item__meta">
-                  <span>ID {currentCourse.code}</span>
-                  <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
-                </div>
-              </div>
-
-              <div className="list-item">
-                <div>
-                  <strong>Resultados de aprendizaje</strong>
-                  <p>{currentCourse.metadata.learningOutcomes.join(' · ')}</p>
-                </div>
-                <div className="list-item__meta">
-                  <span>{currentCourse.credits} créditos</span>
-                  <span>{currentCourse.modality}</span>
-                </div>
-              </div>
-
-              <div className="list-item">
-                <div>
-                  <strong>Metodología y evaluación</strong>
-                  <p>
-                    {currentCourse.metadata.methodology} Evaluación: {currentCourse.metadata.evaluation}
-                  </p>
-                </div>
-                <div className="list-item__meta">
-                  <span>{currentCourse.metadata.topics.length} temas clave</span>
-                  <span>{currentCourse.metadata.bibliography.length} referencias</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="workspace-grid">
-            {renderProductStudio(
-              'general',
-              'Sílabus y base curricular',
-              'Productos nucleares del curso',
-              'Aquí se crean, editan y versionan el sílabus, microcurrículo y demás documentos fundacionales del curso.',
-            )}
-          </section>
-        </>
-      ) : null}
-
-      {activeSection === 'architecture' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Arquitectura</span>
-              <h3>Módulos, actividades y diseño de experiencia</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.modules.length}</strong>
-                <span>módulos activos</span>
-              </div>
-              <p>La estructura didáctica del curso ya vive dentro del expediente como arquitectura editable.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{totalActivities}</strong>
-                <span>actividades mapeadas</span>
-              </div>
-              <p>Cada módulo conserva carga, objetivo de aprendizaje y trazabilidad de avance.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{totalOwnResources}</strong>
-                <span>recursos propios</span>
-              </div>
-              <p>La arquitectura conecta piezas propias con la producción y la biblioteca del curso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{totalCuratedResources}</strong>
-                <span>recursos curados</span>
-              </div>
-              <p>La lectura de arquitectura ya expone el balance entre autoría y curación externa.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{countProductsByStage('architecture')}</strong>
-                <span>productos instruccionales</span>
-              </div>
-              <p>La capa pedagógica del curso se conserva como artefacto editable y no solo como nota.</p>
-            </div>
-          </div>
+        <section className="workspace-grid">
+          {renderProductStudio(
+            'general',
+            'Microcurrículo y base curricular',
+            'Productos nucleares del curso',
+            'Aquí se crean, editan y versionan el sílabus, microcurrículo y demás documentos fundacionales del curso.',
+          )}
         </section>
       ) : null}
 
-      {(activeSection === 'qa' || activeSection === 'history') ? (
+      {activeSection === 'qa' ? (
       <section className="surface section-card section-card--compact">
         <div className="section-heading">
           <div>
@@ -4978,285 +4983,6 @@ export function CourseWorkspacePage({
 
         {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
       </section>
-      ) : null}
-
-      {activeSection === 'planning' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Planeación</span>
-              <h3>Equipo, hitos y carga operativa</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{teamCoverage.length}</strong>
-                <span>roles cubiertos</span>
-              </div>
-              <p>El curso ya tiene cobertura operativa en los roles que participan activamente del flujo.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{pendingTasksCount}</strong>
-                <span>tareas abiertas</span>
-              </div>
-              <p>La coordinación puede leer la carga actual del curso por responsable y por etapa.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{upcomingMilestones.length}</strong>
-                <span>hitos visibles</span>
-              </div>
-              <p>El cronograma activo se mantiene conectado al expediente y a la transferencia de etapas.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentOwner}</strong>
-                <span>owner actual</span>
-              </div>
-              <p>El responsable vigente marca el ritmo de ejecución y el siguiente paso del curso.</p>
-            </div>
-          </div>
-
-          <div className="list-stack">
-            {priorityTasks.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin cola prioritaria</strong>
-                <p>Las próximas tareas críticas aparecerán aquí para lectura rápida de coordinación.</p>
-              </div>
-            ) : (
-              priorityTasks.map((task) => (
-                <div key={task.id} className="list-item">
-                  <div>
-                    <span className="badge badge--outline">{task.priority}</span>
-                    <strong>{task.title}</strong>
-                    <p>{task.summary}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{task.role}</span>
-                    <span>Vence {formatDate(task.dueDate)}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {activeSection === 'lms' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Montaje LMS</span>
-              <h3>Implementación técnica y checklist operativo</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.stageNotes.lms.status}</strong>
-                <span>estado LMS</span>
-              </div>
-              <p>El curso ya conserva una lectura operativa específica para montaje y ajustes de plataforma.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>
-                  {
-                    currentCourse.stageChecklist.filter((checkpoint) => checkpoint.owner === 'Gestor LMS')
-                      .length
-                  }
-                </strong>
-                <span>checkpoints LMS</span>
-              </div>
-              <p>Los puntos de control técnicos quedan enlazados al flujo y al expediente del curso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.stageNotes.lms.blockers.length}</strong>
-                <span>bloqueos técnicos</span>
-              </div>
-              <p>La bitácora de LMS ya expone incidencias y dependencias antes del cierre del curso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.stageNotes.lms.evidence.length}</strong>
-                <span>evidencias</span>
-              </div>
-              <p>El montaje conserva soporte documental y trazabilidad dentro de la misma ruta del curso.</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeSection === 'production' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Producción académica</span>
-              <h3>Autoría, módulos y entregables</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.modules.length}</strong>
-                <span>módulos activos</span>
-              </div>
-              <p>La arquitectura del curso ya aterriza objetivos, actividades y progreso por unidad.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{deliverablesOpenCount}</strong>
-                <span>entregables abiertos</span>
-              </div>
-              <p>Los entregables siguen el flujo de revisión, ajuste y cierre dentro del expediente.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>
-                  {currentCourse.modules.reduce((sum, module) => sum + module.activities, 0)}
-                </strong>
-                <span>actividades mapeadas</span>
-              </div>
-              <p>La producción académica ya integra actividades, materiales y recursos asociados al curso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{deliverablesReadyCount}</strong>
-                <span>entregables listos</span>
-              </div>
-              <p>La lectura de avance no se limita al porcentaje general; también expone evidencia concreta.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{countProductsByStage('production')}</strong>
-                <span>productos de autoría</span>
-              </div>
-              <p>Guías, actividades y recursos propios ya viven como producción editable dentro del curso.</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeSection === 'resources' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Curación y multimedia</span>
-              <h3>Inventario y apoyo especializado</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{curatedResources.length}</strong>
-                <span>recursos curados</span>
-              </div>
-              <p>Fuentes externas y académicas listas para trazabilidad y uso dentro del curso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{ownedResources.length}</strong>
-                <span>recursos propios</span>
-              </div>
-              <p>Piezas internas, multimedia y activos que el curso ya tiene asociados.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.assistants.length}</strong>
-                <span>asistentes sugeridos</span>
-              </div>
-              <p>Apoyos especializados para acelerar curación, coherencia y decisiones de producción.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{relatedResources.length}</strong>
-                <span>recursos totales</span>
-              </div>
-              <p>La biblioteca se conecta al expediente y mantiene el contexto por unidad o necesidad.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{countProductsByStage('curation') + countProductsByStage('multimedia')}</strong>
-                <span>productos de apoyo</span>
-              </div>
-              <p>La curación y multimedia ya quedan como piezas desarrollables, revisables y visibles.</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {activeSection === 'qa' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">QA y validación</span>
-              <h3>Control de calidad y devoluciones</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{pendingObservationsCount}</strong>
-                <span>observaciones pendientes</span>
-              </div>
-              <p>Las devoluciones visibles en el curso siguen asociadas a rol, severidad y estado.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{resolvedObservationsCount}</strong>
-                <span>resueltas</span>
-              </div>
-              <p>Las correcciones cerradas permanecen en el expediente como evidencia de validación.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{relatedAlerts.length}</strong>
-                <span>alertas activas</span>
-              </div>
-              <p>Las alertas del curso acompañan el control operativo y los riesgos del handoff.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{blockingCheckpoints.length}</strong>
-                <span>checkpoints bloqueados</span>
-              </div>
-              <p>La transición de etapa valida prerequisitos antes de habilitar el siguiente paso.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{countProductsByStage('qa')}</strong>
-                <span>productos de validación</span>
-              </div>
-              <p>Las rúbricas y criterios de cierre también forman parte del expediente editable del curso.</p>
-            </div>
-          </div>
-        </section>
       ) : null}
 
       {['architecture', 'planning', 'production', 'resources', 'lms', 'qa'].includes(activeSection) ? (
@@ -7217,85 +6943,6 @@ export function CourseWorkspacePage({
 
       {activeSection === 'history' ? (
         <section className="surface section-card section-card--compact">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Historial y cierre</span>
-              <h3>Trazabilidad del expediente</h3>
-            </div>
-          </div>
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{historyFeed.length}</strong>
-                <span>movimientos persistentes</span>
-              </div>
-              <p>Cada cambio importante del curso queda registrado en una bitácora operativa visible.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.metadata.currentVersion}</strong>
-                <span>versión activa</span>
-              </div>
-              <p>La ficha, el cronograma y el flujo comparten una misma lectura de versión.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{formatDate(currentCourse.metadata.targetCloseDate)}</strong>
-                <span>fecha objetivo</span>
-              </div>
-              <p>La salida del curso se puede contrastar contra hitos reales y cambios del expediente.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.metadata.riskLevel}</strong>
-                <span>riesgo consolidado</span>
-              </div>
-              <p>La bitácora ayuda a entender por qué el curso está como está, no solo en qué estado quedó.</p>
-            </div>
-          </div>
-
-          <div className="list-stack">
-            <div className="list-item">
-              <div>
-                <strong>Ruta institucional</strong>
-                <p>{courseRouteLabel}</p>
-              </div>
-              <div className="list-item__meta">
-                <span>Versión vigente del expediente</span>
-                <span>Actualizado {formatDate(currentCourse.updatedAt)}</span>
-              </div>
-            </div>
-
-            <div className="list-item">
-              <div>
-                <strong>Último hito registrado</strong>
-                <p>{currentCourse.nextMilestone}</p>
-              </div>
-              <div className="list-item__meta">
-                <span>{currentCourse.status}</span>
-                <span>{stage?.name ?? currentCourse.stageId}</span>
-              </div>
-            </div>
-
-            <div className="list-item">
-              <div>
-                <strong>Cierre objetivo y referencia documental</strong>
-                <p>
-                  {currentCourse.metadata.bibliography[0] ??
-                    'La bitácora del curso conserva la referencia base del expediente.'}
-                </p>
-              </div>
-              <div className="list-item__meta">
-                <span>Cierre {formatDate(currentCourse.metadata.targetCloseDate)}</span>
-                <span>{currentCourse.metadata.priority} prioridad</span>
-              </div>
-            </div>
-          </div>
-
           <div className="timeline-stack timeline-stack--history">
             {historyFeed.map((event) => (
               <div key={event.id} className="timeline-item timeline-item--active">

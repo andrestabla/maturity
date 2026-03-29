@@ -78,7 +78,7 @@ const governmentTabLabels = {
 
 const courseSectionLabels = {
   summary: 'Workflow',
-  general: 'Información general',
+  general: 'Microcurrículo',
   architecture: 'Arquitectura',
   planning: 'Planeación',
   production: 'Producción',
