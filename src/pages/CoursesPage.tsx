@@ -109,7 +109,7 @@ function createInitialCourseForm(appData: AppData): CourseMutationInput {
     program: '',
     academicPeriod: '',
     courseType: '',
-    modality: 'Virtual guiado',
+    modality: 'presencial',
     credits: 3,
     stageId: appData.stages[0]?.id ?? 'configuracion',
     status: 'En revisión',
@@ -1198,8 +1198,8 @@ export function CoursesPage({
                       <select
                         value={courseForm.academicPeriod}
                         onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
-                        required
                       >
+                        <option value="">Sin definir</option>
                         {composerPeriodOptions.map((option) => (
                           <option key={option} value={option}>
                             {option}
@@ -1229,12 +1229,16 @@ export function CoursesPage({
                   <label className="field">
                     <span>Modalidad</span>
                     <div className="field__control">
-                      <input
+                      <select
                         value={courseForm.modality}
                         onChange={(event) => updateCourseField('modality', event.target.value)}
-                        placeholder="Virtual guiado"
                         required
-                      />
+                      >
+                        <option value="presencial">Presencial</option>
+                        <option value="virtual">Virtual</option>
+                        <option value="híbrido">Híbrido</option>
+                        <option value="MOOC">MOOC</option>
+                      </select>
                     </div>
                   </label>
 
