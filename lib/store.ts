@@ -1801,15 +1801,15 @@ async function resolveInstitutionReferenceContext(input: {
 
   return {
     institutionId: institutionRows[0]?.id ?? structure.id,
-    institutionName: institutionRows[0]?.name ?? structure.institution,
+    institutionName: (institutionRows[0]?.name ?? structure.institution).trim(),
     facultyId: facultyRows[0]?.id ?? null,
-    facultyName,
+    facultyName: (facultyName || '').trim(),
     programId: programRows[0]?.id ?? null,
-    programName,
+    programName: (programName || '').trim(),
     academicPeriodId: academicPeriodRows[0]?.id ?? null,
-    academicPeriodName,
+    academicPeriodName: (academicPeriodName || '').trim(),
     courseTypeId: courseTypeRows[0]?.id ?? null,
-    courseTypeName,
+    courseTypeName: (courseTypeName || '').trim(),
   };
 }
 

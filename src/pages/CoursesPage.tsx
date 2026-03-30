@@ -58,9 +58,20 @@ const statusFilters: StatusFilter[] = [
 ];
 
 function uniqueOptions(values: string[]) {
-  return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
-    left.localeCompare(right, 'es'),
-  );
+  const seen = new Set<string>();
+  const results: string[] = [];
+
+  for (const raw of values) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      results.push(trimmed);
+    }
+  }
+
+  return results.sort((left, right) => left.localeCompare(right, 'es'));
 }
 
 function syncCourseStructureFields(
@@ -609,7 +620,7 @@ export function CoursesPage({
   );
   const [createdCourse, setCreatedCourse] = useState<Course | null>(null);
 
-  const visibleCourses = getVisibleCourses(appData, role);
+  const visibleCourses = getVisibleCourses(appData, userRole === 'Administrador' ? 'Administrador' : role);
   const canCreate = canManageCourses(userRole);
 
   const projectOptions = useMemo(
@@ -682,14 +693,6 @@ export function CoursesPage({
     [appData.institution, courseForm.institution],
   );
 
-  useEffect(() => {
-    if (
-      selectedNode !== 'root' &&
-      !visibleCourses.some((course) => matchesFolder(course, selectedNode))
-    ) {
-      setSelectedNode('root');
-    }
-  }, [selectedNode, visibleCourses]);
 
   useEffect(() => {
     setCourseForm((current) => syncCourseStructureFields(appData, current));
