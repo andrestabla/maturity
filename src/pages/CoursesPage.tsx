@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ChevronRight,
+  CheckCircle,
   FolderClosed,
   FolderOpen,
   LayoutGrid,
@@ -119,15 +120,15 @@ function createInitialCourseForm(appData: AppData): CourseMutationInput {
 }
 
 function getInstitution(course: Course) {
-  return course.metadata.institution || 'Institución sin definir';
+  return course.metadata.institution?.trim() || 'Institución sin definir';
 }
 
 function getAcademicPeriod(course: Course) {
-  return course.metadata.academicPeriod || 'Periodo sin definir';
+  return course.metadata.academicPeriod?.trim() || 'Periodo sin definir';
 }
 
 function getCourseType(course: Course) {
-  return course.metadata.courseType || 'Tipología sin definir';
+  return course.metadata.courseType?.trim() || 'Tipología sin definir';
 }
 
 function buildRouteLabel(course: Course) {
@@ -233,43 +234,57 @@ function parseNode(selectedNode: string) {
 
 function matchesFolder(course: Course, selectedNode: string) {
   const node = parseNode(selectedNode);
-  const institution = getInstitution(course);
+  const institution = getInstitution(course).trim().toLowerCase();
 
   if (node.type === 'root') {
     return true;
   }
 
+  const nodeInstitution = node.institution.trim().toLowerCase();
+
   if (node.type === 'institution') {
-    return institution === node.institution;
+    return institution === nodeInstitution;
   }
 
+  const courseFaculty = course.faculty.trim().toLowerCase();
+  const nodeFaculty = node.faculty.trim().toLowerCase();
+
   if (node.type === 'faculty') {
-    return institution === node.institution && course.faculty === node.faculty;
+    return institution === nodeInstitution && courseFaculty === nodeFaculty;
   }
+
+  const courseProgram = course.program.trim().toLowerCase();
+  const nodeProgram = node.program.trim().toLowerCase();
 
   if (node.type === 'program') {
     return (
-      institution === node.institution &&
-      course.faculty === node.faculty &&
-      course.program === node.program
+      institution === nodeInstitution &&
+      courseFaculty === nodeFaculty &&
+      courseProgram === nodeProgram
     );
   }
+
+  const academicPeriod = getAcademicPeriod(course).trim().toLowerCase();
+  const nodePeriod = node.academicPeriod.trim().toLowerCase();
 
   if (node.type === 'academicPeriod') {
     return (
-      institution === node.institution &&
-      course.faculty === node.faculty &&
-      course.program === node.program &&
-      getAcademicPeriod(course) === node.academicPeriod
+      institution === nodeInstitution &&
+      courseFaculty === nodeFaculty &&
+      courseProgram === nodeProgram &&
+      academicPeriod === nodePeriod
     );
   }
 
+  const courseType = getCourseType(course).trim().toLowerCase();
+  const nodeType = node.courseType.trim().toLowerCase();
+
   return (
-    institution === node.institution &&
-    course.faculty === node.faculty &&
-    course.program === node.program &&
-    getAcademicPeriod(course) === node.academicPeriod &&
-    getCourseType(course) === node.courseType
+    institution === nodeInstitution &&
+    courseFaculty === nodeFaculty &&
+    courseProgram === nodeProgram &&
+    academicPeriod === nodePeriod &&
+    courseType === nodeType
   );
 }
 
@@ -592,6 +607,7 @@ export function CoursesPage({
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
     createInitialCourseForm(appData),
   );
+  const [createdCourse, setCreatedCourse] = useState<Course | null>(null);
 
   const visibleCourses = getVisibleCourses(appData, role);
   const canCreate = canManageCourses(userRole);
@@ -693,7 +709,7 @@ export function CoursesPage({
         body: JSON.stringify(courseForm),
       });
 
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as { course?: Course; error?: string };
 
       if (!response.ok) {
         throw new Error(payload.error ?? 'No fue posible crear el curso.');
@@ -702,6 +718,10 @@ export function CoursesPage({
       refreshAppData();
       setCourseForm(createInitialCourseForm(appData));
       setIsComposerOpen(false);
+      
+      if (payload.course) {
+        setCreatedCourse(payload.course);
+      }
     } catch (error) {
       await showAlert({
         title: 'No fue posible crear el curso',
@@ -1500,6 +1520,41 @@ export function CoursesPage({
           )}
         </section>
       ) : null}
+      {createdCourse && (
+        <ModalFrame
+          eyebrow="Creación rápida"
+          title="¡Curso creado con éxito!"
+          width="sm"
+          onClose={() => setCreatedCourse(null)}
+        >
+          <div className="success-state">
+            <div className="success-state__icon">
+              <CheckCircle size={48} color="var(--success-main)" />
+            </div>
+            <h4>{createdCourse.title}</h4>
+            <p>
+              El curso se ha registrado correctamente en el repositorio y la estructura de carpetas
+              se ha actualizado.
+            </p>
+            <div className="success-state__actions">
+              <Link
+                to={`/courses/${createdCourse.slug}`}
+                className="button button--primary button--full"
+                onClick={() => setCreatedCourse(null)}
+              >
+                <span>Ver curso</span>
+              </Link>
+              <button
+                type="button"
+                className="ghost-button button--full"
+                onClick={() => setCreatedCourse(null)}
+              >
+                <span>Cerrar</span>
+              </button>
+            </div>
+          </div>
+        </ModalFrame>
+      )}
     </div>
   );
 }

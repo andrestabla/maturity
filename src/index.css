@@ -7988,3 +7988,46 @@ body::after {
     align-items: stretch;
   }
 }
+
+/* Success State Modal */
+.success-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10px 0;
+  gap: 16px;
+}
+
+.success-state__icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 40px;
+  background: var(--success-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.success-state h4 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--foreground);
+}
+
+.success-state p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.94rem;
+  max-width: 320px;
+}
+
+.success-state__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
