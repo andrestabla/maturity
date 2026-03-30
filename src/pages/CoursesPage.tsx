@@ -1305,7 +1305,6 @@ export function CoursesPage({
                         value={courseForm.nextMilestone}
                         onChange={(event) => updateCourseField('nextMilestone', event.target.value)}
                         placeholder="Aprobación de arquitectura · 12 abr 2026"
-                        required
                       />
                     </div>
                   </label>
@@ -1318,7 +1317,6 @@ export function CoursesPage({
                         onChange={(event) => updateCourseField('summary', event.target.value)}
                         placeholder="Describe el enfoque del curso y su intención formativa."
                         rows={4}
-                        required
                       />
                     </div>
                   </label>
