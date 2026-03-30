@@ -810,9 +810,6 @@ export function CoursesPage({
   const currentNode = parseNode(selectedNode);
   const isRootEntry = selectedNode === 'root';
   const isProgramEntry = currentNode.type === 'academicPeriod';
-  const openCount = currentFolderCourses.filter((course) => course.status !== 'Listo').length;
-  const blockedCount = currentFolderCourses.filter((course) => course.status === 'Bloqueado').length;
-  const stageCount = new Set(currentFolderCourses.map((course) => course.stageId)).size;
   const activeFilterCount = [
     projectFilter !== 'Todos',
     institutionFilter !== 'Todas',
@@ -854,7 +851,7 @@ export function CoursesPage({
               </div>
             </label>
 
-            {canCreate ? (
+            {canCreate && !isProgramEntry ? (
               <button
                 type="button"
                 className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
@@ -866,75 +863,77 @@ export function CoursesPage({
             ) : null}
           </div>
 
-          <div className="courses-filter-grid courses-filter-grid--compact">
-            <label className="field field--compact">
-              <span>Institución</span>
-              <div className="field__control">
-                <select
-                  value={institutionFilter}
-                  onChange={(event) => setInstitutionFilter(event.target.value)}
-                >
-                  <option value="Todas">Todas</option>
-                  {institutionOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
+          {!isProgramEntry && (
+            <div className="courses-filter-grid courses-filter-grid--compact">
+              <label className="field field--compact">
+                <span>Institución</span>
+                <div className="field__control">
+                  <select
+                    value={institutionFilter}
+                    onChange={(event) => setInstitutionFilter(event.target.value)}
+                  >
+                    <option value="Todas">Todas</option>
+                    {institutionOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
 
-            <label className="field field--compact">
-              <span>Facultad</span>
-              <div className="field__control">
-                <select
-                  value={facultyFilter}
-                  onChange={(event) => setFacultyFilter(event.target.value)}
-                >
-                  <option value="Todas">Todas</option>
-                  {facultyOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
+              <label className="field field--compact">
+                <span>Facultad</span>
+                <div className="field__control">
+                  <select
+                    value={facultyFilter}
+                    onChange={(event) => setFacultyFilter(event.target.value)}
+                  >
+                    <option value="Todas">Todas</option>
+                    {facultyOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
 
-            <label className="field field--compact">
-              <span>Programa</span>
-              <div className="field__control">
-                <select
-                  value={programFilter}
-                  onChange={(event) => setProgramFilter(event.target.value)}
-                >
-                  <option value="Todos">Todos</option>
-                  {programOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
+              <label className="field field--compact">
+                <span>Programa</span>
+                <div className="field__control">
+                  <select
+                    value={programFilter}
+                    onChange={(event) => setProgramFilter(event.target.value)}
+                  >
+                    <option value="Todos">Todos</option>
+                    {programOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
 
-            <label className="field field--compact">
-              <span>Proyecto / curso</span>
-              <div className="field__control">
-                <select
-                  value={projectFilter}
-                  onChange={(event) => setProjectFilter(event.target.value)}
-                >
-                  <option value="Todos">Todos</option>
-                  {projectOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-          </div>
+              <label className="field field--compact">
+                <span>Proyecto / curso</span>
+                <div className="field__control">
+                  <select
+                    value={projectFilter}
+                    onChange={(event) => setProjectFilter(event.target.value)}
+                  >
+                    <option value="Todos">Todos</option>
+                    {projectOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+            </div>
+          )}
 
           {shouldShowAdvancedFilters ? (
             <div className="courses-filter-grid courses-filter-grid--advanced">
@@ -1300,26 +1299,28 @@ export function CoursesPage({
       </section>
 
       <section className="surface section-card section-card--compact folder-browser folder-browser--compact">
-        <div className="folder-browser__head">
-          <div>
-            <span className="eyebrow">{isRootEntry ? 'Nivel 1' : 'Subcarpetas'}</span>
-            <h3>{isRootEntry ? 'Carpetas' : getNodeLabel(selectedNode)}</h3>
-            {!isRootEntry ? <p className="courses-results__summary">{getFolderSectionCopy(selectedNode)}</p> : null}
-          </div>
+        {!isProgramEntry && (
+          <div className="folder-browser__head">
+            <div>
+              <span className="eyebrow">{isRootEntry ? 'Nivel 1' : 'Subcarpetas'}</span>
+              <h3>{isRootEntry ? 'Carpetas' : getNodeLabel(selectedNode)}</h3>
+              {!isRootEntry ? <p className="courses-results__summary">{getFolderSectionCopy(selectedNode)}</p> : null}
+            </div>
 
-          <div className="folder-browser__actions">
-            {parentNode ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setSelectedNode(parentNode)}
-              >
-                <ArrowLeft size={16} />
-                <span>Subir un nivel</span>
-              </button>
-            ) : null}
+            <div className="folder-browser__actions">
+              {parentNode ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setSelectedNode(parentNode)}
+                >
+                  <ArrowLeft size={16} />
+                  <span>Subir un nivel</span>
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
 
         {!isRootEntry ? (
           <>
@@ -1389,21 +1390,17 @@ export function CoursesPage({
 
       {isProgramEntry ? (
         <section className="surface section-card explorer-content">
-          <div className="explorer-content__head">
-            <div>
-              <span className="eyebrow">Cursos</span>
-              <h3>Cursos dentro de {getNodeLabel(selectedNode)}</h3>
-              <p className="courses-results__summary">
-                {currentFolderCourses.length} visibles en esta carpeta.
-              </p>
+          {!isProgramEntry && (
+            <div className="explorer-content__head">
+              <div>
+                <span className="eyebrow">Cursos</span>
+                <h3>Cursos dentro de {getNodeLabel(selectedNode)}</h3>
+                <p className="courses-results__summary">
+                  {currentFolderCourses.length} visibles en esta carpeta.
+                </p>
+              </div>
             </div>
-          </div>
-
-          <div className="courses-inline-meta">
-            <span>{openCount} abiertos</span>
-            <span>{blockedCount === 0 ? 'Sin bloqueos' : `${blockedCount} bloqueados`}</span>
-            <span>{stageCount} etapas activas</span>
-          </div>
+          )}
 
           {currentFolderCourses.length === 0 ? (
             <div className="empty-state">
