@@ -1103,7 +1103,6 @@ export function CoursesPage({
             <ModalFrame
               eyebrow="Alta rápida"
               title="Crear curso"
-              description="El alta se abre en modal para mantener el directorio y los filtros siempre despejados."
               width="xl"
               onClose={() => setIsComposerOpen(false)}
             >
@@ -1138,7 +1137,6 @@ export function CoursesPage({
 
                   <div className="form-section-header field--full">
                     <h5>Estructura institucional y ubicación</h5>
-                    <p>Define dónde se ubicará el curso dentro del repositorio jerárquico.</p>
                   </div>
 
                   <label className="field">
