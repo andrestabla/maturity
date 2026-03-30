@@ -2022,8 +2022,28 @@ async function cleanupOrphanOperationalRows() {
 
 async function ensureSchema() {
   const sql = getSql();
+  const CURRENT_SCHEMA_VERSION = 10; // Current version of schema initialization
 
   try {
+    // 1. Minimum check: ensure metadata table exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_system_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `;
+
+    // 2. Check if we can skip everything
+    const versionRow = (await sql`
+      SELECT value FROM maturity_system_metadata WHERE key = 'schema_version' LIMIT 1
+    `) as Array<{ value: string }>;
+
+    const currentVersion = versionRow[0]?.value ? parseInt(versionRow[0].value, 10) : 0;
+    if (currentVersion >= CURRENT_SCHEMA_VERSION) {
+      return;
+    }
+
+    // 3. Perform original initialization sequence (only once per schema change)
     await sql`
       CREATE TABLE IF NOT EXISTS maturity_roles (
         role TEXT PRIMARY KEY,
@@ -2759,8 +2779,15 @@ async function ensureSchema() {
         END IF;
       END $$;
     `;
-  } finally {
-    await sql`SELECT pg_advisory_unlock(3602026)`;
+
+    // 4. Update the stored version to avoid running this again
+    await sql`
+      INSERT INTO maturity_system_metadata (key, value)
+      VALUES ('schema_version', ${CURRENT_SCHEMA_VERSION.toString()})
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `;
+  } catch (err) {
+    throw err;
   }
 }
 
@@ -3240,13 +3267,29 @@ async function appendAuditEntryByCourseSlug(
 }
 
 async function ensureSeedData() {
+  const sql = getSql();
+
+  // Check if already seeded to avoid redundant checks
+  const seededRow = (await sql`
+    SELECT value FROM maturity_system_metadata WHERE key = 'system_seeded' LIMIT 1
+  `) as Array<{ value: string }>;
+
+  if (seededRow[0]?.value === 'true') {
+    return { seeded: true, courses: -1 };
+  }
+
   await ensureAdminUserSeed();
 
-  const sql = getSql();
   const countRows = (await sql`
     SELECT COUNT(*)::INT AS count
     FROM maturity_courses
   `) as Array<{ count: number }>;
+
+  await sql`
+    INSERT INTO maturity_system_metadata (key, value)
+    VALUES ('system_seeded', 'true')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+  `;
 
   return {
     seeded: false,
