@@ -53,6 +53,7 @@ import type {
 import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
+import crypto from 'node:crypto';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -139,14 +140,25 @@ interface PublicUserRow {
   memberships: JsonValue | null;
 }
 
+let isInitializing = false;
 let initializationPromise: Promise<void> | null = null;
 
 async function performInitialization() {
-  await ensureSchema();
-  await ensureSeedData();
+  isInitializing = true;
+  try {
+    await ensureSchema();
+    await ensureSeedData();
+  } catch (err) {
+    initializationPromise = null;
+    throw err;
+  } finally {
+    isInitializing = false;
+  }
 }
 
 async function ensureInitialized() {
+  if (isInitializing) return;
+  
   if (!initializationPromise) {
     initializationPromise = performInitialization();
   }
