@@ -16,10 +16,13 @@ import { CourseCard } from '../components/CourseCard.js';
 import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
 import { getStageMeta, getVisibleCourses } from '../utils/domain.js';
 import {
+  buildCourseDirectoryLabel,
+  courseRepositoryLabel,
   getFirstInstitutionStructure,
   getInstitutionAcademicPeriods,
   getInstitutionCourseTypes,
   getInstitutionFaculties,
+  getInstitutionStructures,
   getInstitutionPrograms,
 } from '../utils/institutions.js';
 import { canManageCourses } from '../utils/permissions.js';
@@ -34,7 +37,7 @@ interface CoursesPageProps {
 type ExplorerView = 'cards' | 'list';
 type StatusFilter = 'Todos' | CourseStatus;
 type SortMode = 'recent' | 'progress' | 'name';
-type FolderNodeType = 'root' | 'institution' | 'faculty' | 'program';
+type FolderNodeType = 'root' | 'institution' | 'faculty' | 'program' | 'academicPeriod' | 'courseType';
 
 interface FolderEntry {
   key: string;
@@ -52,7 +55,6 @@ const statusFilters: StatusFilter[] = [
   'Bloqueado',
   'Listo',
 ];
-const repositoryLabel = 'Repositorio institucional';
 
 function uniqueOptions(values: string[]) {
   return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
@@ -120,8 +122,27 @@ function getInstitution(course: Course) {
   return course.metadata.institution || 'Institución sin definir';
 }
 
+function getAcademicPeriod(course: Course) {
+  return course.metadata.academicPeriod || 'Periodo sin definir';
+}
+
+function getCourseType(course: Course) {
+  return course.metadata.courseType || 'Tipología sin definir';
+}
+
 function buildRouteLabel(course: Course) {
-  return `${getInstitution(course)} / ${course.faculty} / ${course.program}`;
+  return buildCourseDirectoryLabel(
+    {
+      institution: getInstitution(course),
+      faculty: course.faculty,
+      program: course.program,
+      academicPeriod: getAcademicPeriod(course),
+      courseType: getCourseType(course),
+    },
+    {
+      includeCourseTitle: false,
+    },
+  );
 }
 
 function makeInstitutionKey(institution: string) {
@@ -136,12 +157,31 @@ function makeProgramKey(institution: string, faculty: string, program: string) {
   return `program::${institution}::${faculty}::${program}`;
 }
 
+function makeAcademicPeriodKey(
+  institution: string,
+  faculty: string,
+  program: string,
+  academicPeriod: string,
+) {
+  return `academicPeriod::${institution}::${faculty}::${program}::${academicPeriod}`;
+}
+
+function makeCourseTypeKey(
+  institution: string,
+  faculty: string,
+  program: string,
+  academicPeriod: string,
+  courseType: string,
+) {
+  return `courseType::${institution}::${faculty}::${program}::${academicPeriod}::${courseType}`;
+}
+
 function parseNode(selectedNode: string) {
   if (selectedNode === 'root') {
     return { type: 'root' as const };
   }
 
-  const [type, institution, faculty, program] = selectedNode.split('::');
+  const [type, institution, faculty, program, academicPeriod, courseType] = selectedNode.split('::');
 
   if (type === 'institution' && institution) {
     return {
@@ -167,6 +207,27 @@ function parseNode(selectedNode: string) {
     };
   }
 
+  if (type === 'academicPeriod' && institution && faculty && program && academicPeriod) {
+    return {
+      type: 'academicPeriod' as const,
+      institution,
+      faculty,
+      program,
+      academicPeriod,
+    };
+  }
+
+  if (type === 'courseType' && institution && faculty && program && academicPeriod && courseType) {
+    return {
+      type: 'courseType' as const,
+      institution,
+      faculty,
+      program,
+      academicPeriod,
+      courseType,
+    };
+  }
+
   return { type: 'root' as const };
 }
 
@@ -186,10 +247,29 @@ function matchesFolder(course: Course, selectedNode: string) {
     return institution === node.institution && course.faculty === node.faculty;
   }
 
+  if (node.type === 'program') {
+    return (
+      institution === node.institution &&
+      course.faculty === node.faculty &&
+      course.program === node.program
+    );
+  }
+
+  if (node.type === 'academicPeriod') {
+    return (
+      institution === node.institution &&
+      course.faculty === node.faculty &&
+      course.program === node.program &&
+      getAcademicPeriod(course) === node.academicPeriod
+    );
+  }
+
   return (
     institution === node.institution &&
     course.faculty === node.faculty &&
-    course.program === node.program
+    course.program === node.program &&
+    getAcademicPeriod(course) === node.academicPeriod &&
+    getCourseType(course) === node.courseType
   );
 }
 
@@ -208,14 +288,22 @@ function getParentNode(selectedNode: string) {
     return makeInstitutionKey(node.institution);
   }
 
-  return makeFacultyKey(node.institution, node.faculty);
+  if (node.type === 'program') {
+    return makeFacultyKey(node.institution, node.faculty);
+  }
+
+  if (node.type === 'academicPeriod') {
+    return makeProgramKey(node.institution, node.faculty, node.program);
+  }
+
+  return makeAcademicPeriodKey(node.institution, node.faculty, node.program, node.academicPeriod);
 }
 
 function getNodeLabel(selectedNode: string) {
   const node = parseNode(selectedNode);
 
   if (node.type === 'root') {
-    return repositoryLabel;
+    return courseRepositoryLabel;
   }
 
   if (node.type === 'institution') {
@@ -226,99 +314,226 @@ function getNodeLabel(selectedNode: string) {
     return node.faculty;
   }
 
-  return node.program;
+  if (node.type === 'program') {
+    return node.program;
+  }
+
+  if (node.type === 'academicPeriod') {
+    return node.academicPeriod;
+  }
+
+  return node.courseType;
 }
 
 function getNodePath(selectedNode: string) {
   const node = parseNode(selectedNode);
 
   if (node.type === 'root') {
-    return [{ key: 'root', label: repositoryLabel }];
+    return [{ key: 'root', label: courseRepositoryLabel }];
   }
 
   if (node.type === 'institution') {
     return [
-      { key: 'root', label: repositoryLabel },
+      { key: 'root', label: courseRepositoryLabel },
       { key: makeInstitutionKey(node.institution), label: node.institution },
     ];
   }
 
   if (node.type === 'faculty') {
     return [
-      { key: 'root', label: repositoryLabel },
+      { key: 'root', label: courseRepositoryLabel },
       { key: makeInstitutionKey(node.institution), label: node.institution },
       { key: makeFacultyKey(node.institution, node.faculty), label: node.faculty },
     ];
   }
 
+  if (node.type === 'program') {
+    return [
+      { key: 'root', label: courseRepositoryLabel },
+      { key: makeInstitutionKey(node.institution), label: node.institution },
+      { key: makeFacultyKey(node.institution, node.faculty), label: node.faculty },
+      { key: makeProgramKey(node.institution, node.faculty, node.program), label: node.program },
+    ];
+  }
+
+  if (node.type === 'academicPeriod') {
+    return [
+      { key: 'root', label: courseRepositoryLabel },
+      { key: makeInstitutionKey(node.institution), label: node.institution },
+      { key: makeFacultyKey(node.institution, node.faculty), label: node.faculty },
+      { key: makeProgramKey(node.institution, node.faculty, node.program), label: node.program },
+      {
+        key: makeAcademicPeriodKey(node.institution, node.faculty, node.program, node.academicPeriod),
+        label: node.academicPeriod,
+      },
+    ];
+  }
+
   return [
-    { key: 'root', label: repositoryLabel },
+    { key: 'root', label: courseRepositoryLabel },
     { key: makeInstitutionKey(node.institution), label: node.institution },
     { key: makeFacultyKey(node.institution, node.faculty), label: node.faculty },
     { key: makeProgramKey(node.institution, node.faculty, node.program), label: node.program },
+    {
+      key: makeAcademicPeriodKey(node.institution, node.faculty, node.program, node.academicPeriod),
+      label: node.academicPeriod,
+    },
+    {
+      key: makeCourseTypeKey(
+        node.institution,
+        node.faculty,
+        node.program,
+        node.academicPeriod,
+        node.courseType,
+      ),
+      label: node.courseType,
+    },
   ];
 }
 
-function buildFolderEntries(courses: Course[], selectedNode: string): FolderEntry[] {
+function describeFolderCount(count: number, singularContext: string, pluralContext: string) {
+  if (count === 0) {
+    return `Sin cursos todavía en ${pluralContext}.`;
+  }
+
+  return `${count} curso${count === 1 ? '' : 's'} en ${count === 1 ? singularContext : pluralContext}.`;
+}
+
+function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: string): FolderEntry[] {
   const node = parseNode(selectedNode);
+  const structures = getInstitutionStructures(appData.institution);
+  const institutionNames = uniqueOptions([
+    ...structures.map((structure) => structure.institution),
+    ...courses.map((course) => getInstitution(course)),
+  ]);
 
   if (node.type === 'root') {
-    const institutionMap = courses.reduce<Record<string, number>>((accumulator, course) => {
-      const institution = getInstitution(course);
-      accumulator[institution] = (accumulator[institution] ?? 0) + 1;
-      return accumulator;
-    }, {});
+    return institutionNames
+      .map((institution) => {
+        const key = makeInstitutionKey(institution);
+        const count = courses.filter((course) => matchesFolder(course, key)).length;
 
-    return Object.entries(institutionMap)
-      .map(([institution, count]) => ({
-        key: makeInstitutionKey(institution),
-        label: institution,
-        description: `${count} curso${count === 1 ? '' : 's'} en esta institución`,
-        count,
-        type: 'institution' as const,
-      }))
+        return {
+          key,
+          label: institution,
+          description: describeFolderCount(count, 'esta institución', 'estas instituciones'),
+          count,
+          type: 'institution' as const,
+        };
+      })
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
   if (node.type === 'institution') {
-    const facultyMap = courses.reduce<Record<string, number>>((accumulator, course) => {
-      if (getInstitution(course) !== node.institution) {
-        return accumulator;
-      }
+    const facultyOptions = uniqueOptions([
+      ...getInstitutionFaculties(appData.institution, node.institution),
+      ...courses
+        .filter((course) => getInstitution(course) === node.institution)
+        .map((course) => course.faculty),
+    ]);
 
-      accumulator[course.faculty] = (accumulator[course.faculty] ?? 0) + 1;
-      return accumulator;
-    }, {});
+    return facultyOptions
+      .map((faculty) => {
+        const key = makeFacultyKey(node.institution, faculty);
+        const count = courses.filter((course) => matchesFolder(course, key)).length;
 
-    return Object.entries(facultyMap)
-      .map(([faculty, count]) => ({
-        key: makeFacultyKey(node.institution, faculty),
-        label: faculty,
-        description: `${count} curso${count === 1 ? '' : 's'} dentro de la facultad`,
-        count,
-        type: 'faculty' as const,
-      }))
+        return {
+          key,
+          label: faculty,
+          description: describeFolderCount(count, 'esta facultad', 'estas facultades'),
+          count,
+          type: 'faculty' as const,
+        };
+      })
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
   if (node.type === 'faculty') {
-    const programMap = courses.reduce<Record<string, number>>((accumulator, course) => {
-      if (getInstitution(course) !== node.institution || course.faculty !== node.faculty) {
-        return accumulator;
-      }
+    const programOptions = uniqueOptions([
+      ...getInstitutionPrograms(appData.institution, node.institution),
+      ...courses
+        .filter((course) => getInstitution(course) === node.institution && course.faculty === node.faculty)
+        .map((course) => course.program),
+    ]);
 
-      accumulator[course.program] = (accumulator[course.program] ?? 0) + 1;
-      return accumulator;
-    }, {});
+    return programOptions
+      .map((program) => {
+        const key = makeProgramKey(node.institution, node.faculty, program);
+        const count = courses.filter((course) => matchesFolder(course, key)).length;
 
-    return Object.entries(programMap)
-      .map(([program, count]) => ({
-        key: makeProgramKey(node.institution, node.faculty, program),
-        label: program,
-        description: `${count} curso${count === 1 ? '' : 's'} en este programa`,
-        count,
-        type: 'program' as const,
-      }))
+        return {
+          key,
+          label: program,
+          description: describeFolderCount(count, 'este programa', 'estos programas'),
+          count,
+          type: 'program' as const,
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label, 'es'));
+  }
+
+  if (node.type === 'program') {
+    const academicPeriodOptions = uniqueOptions([
+      ...getInstitutionAcademicPeriods(appData.institution, node.institution),
+      ...courses
+        .filter(
+          (course) =>
+            getInstitution(course) === node.institution &&
+            course.faculty === node.faculty &&
+            course.program === node.program,
+        )
+        .map((course) => getAcademicPeriod(course)),
+    ]);
+
+    return academicPeriodOptions
+      .map((academicPeriod) => {
+        const key = makeAcademicPeriodKey(node.institution, node.faculty, node.program, academicPeriod);
+        const count = courses.filter((course) => matchesFolder(course, key)).length;
+
+        return {
+          key,
+          label: academicPeriod,
+          description: describeFolderCount(count, 'este periodo', 'estos periodos'),
+          count,
+          type: 'academicPeriod' as const,
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label, 'es'));
+  }
+
+  if (node.type === 'academicPeriod') {
+    const courseTypeOptions = uniqueOptions([
+      ...getInstitutionCourseTypes(appData.institution, node.institution),
+      ...courses
+        .filter(
+          (course) =>
+            getInstitution(course) === node.institution &&
+            course.faculty === node.faculty &&
+            course.program === node.program &&
+            getAcademicPeriod(course) === node.academicPeriod,
+        )
+        .map((course) => getCourseType(course)),
+    ]);
+
+    return courseTypeOptions
+      .map((courseType) => {
+        const key = makeCourseTypeKey(
+          node.institution,
+          node.faculty,
+          node.program,
+          node.academicPeriod,
+          courseType,
+        );
+        const count = courses.filter((course) => matchesFolder(course, key)).length;
+
+        return {
+          key,
+          label: courseType,
+          description: describeFolderCount(count, 'esta tipología', 'estas tipologías'),
+          count,
+          type: 'courseType' as const,
+        };
+      })
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
@@ -340,8 +555,17 @@ function getFolderSectionCopy(selectedNode: string) {
     return 'Aquí se organizan los programas académicos que pertenecen a esta facultad.';
   }
 
-  return 'Ya estás en el nivel de programa. Debajo verás los cursos disponibles en esta carpeta.';
+  if (node.type === 'program') {
+    return 'Aquí se organizan los periodos académicos disponibles para el programa.';
+  }
+
+  if (node.type === 'academicPeriod') {
+    return 'Selecciona la tipología del curso para entrar a la carpeta operativa final.';
+  }
+
+  return 'Ya estás en la carpeta final del directorio. Debajo verás los cursos disponibles en esta ruta.';
 }
+
 
 export function CoursesPage({
   role,
@@ -577,7 +801,7 @@ export function CoursesPage({
       return right.updatedAt.localeCompare(left.updatedAt);
     });
 
-  const folderEntries = buildFolderEntries(repositoryCourses, selectedNode);
+  const folderEntries = buildFolderEntries(appData, repositoryCourses, selectedNode);
   const folderPath = getNodePath(selectedNode);
   const parentNode = getParentNode(selectedNode);
   const currentNode = parseNode(selectedNode);
@@ -845,221 +1069,233 @@ export function CoursesPage({
               onClose={() => setIsComposerOpen(false)}
             >
               <form className="editor-card" onSubmit={handleCreateCourse}>
-              <div className="editor-card__header">
-                <div>
-                  <span className="eyebrow">Alta rápida</span>
-                  <h3>Crear curso</h3>
+                <div className="editor-card__header">
+                  <div>
+                    <span className="eyebrow">Alta rápida</span>
+                    <h3>Crear curso</h3>
+                  </div>
                 </div>
-              </div>
 
-              <div className="form-grid">
-                <label className="field">
-                  <span>Título</span>
-                  <div className="field__control">
-                    <input
-                      value={courseForm.title}
-                      onChange={(event) => updateCourseField('title', event.target.value)}
-                      placeholder="Nombre del curso"
-                      required
-                    />
+                <div className="form-grid">
+                  <div className="form-section-header field--full">
+                    <h5>Identidad del curso</h5>
                   </div>
-                </label>
+                  <label className="field">
+                    <span>Título</span>
+                    <div className="field__control">
+                      <input
+                        value={courseForm.title}
+                        onChange={(event) => updateCourseField('title', event.target.value)}
+                        placeholder="Nombre del curso"
+                        required
+                      />
+                    </div>
+                  </label>
 
-                <label className="field">
-                  <span>ID / código</span>
-                  <div className="field__control">
-                    <input
-                      value={courseForm.code}
-                      onChange={(event) => updateCourseField('code', event.target.value)}
-                      placeholder="CUR-UNIX-EDU-PSI-0001"
-                      required
-                    />
+                  <label className="field">
+                    <span>ID / código</span>
+                    <div className="field__control">
+                      <input
+                        value={courseForm.code}
+                        onChange={(event) => updateCourseField('code', event.target.value)}
+                        placeholder="CUR-UNIX-EDU-PSI-0001"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <div className="form-section-header field--full">
+                    <h5>Estructura institucional y ubicación</h5>
+                    <p>Define dónde se ubicará el curso dentro del repositorio jerárquico.</p>
                   </div>
-                </label>
 
-                <label className="field">
-                  <span>Institución</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.institution}
-                      onChange={(event) => updateCourseField('institution', event.target.value)}
-                      required
-                    >
-                      {composerInstitutionOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Facultad</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.faculty}
-                      onChange={(event) => updateCourseField('faculty', event.target.value)}
-                      required
-                    >
-                      {composerFacultyOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Programa</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.program}
-                      onChange={(event) => updateCourseField('program', event.target.value)}
-                      required
-                    >
-                      {composerProgramOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Periodo académico</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.academicPeriod}
-                      onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
-                      required
-                    >
-                      {composerPeriodOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Tipología de curso</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.courseType}
-                      onChange={(event) => updateCourseField('courseType', event.target.value)}
-                      required
-                    >
-                      {composerCourseTypeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Modalidad</span>
-                  <div className="field__control">
-                    <input
-                      value={courseForm.modality}
-                      onChange={(event) => updateCourseField('modality', event.target.value)}
-                      placeholder="Virtual guiado"
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Créditos</span>
-                  <div className="field__control">
-                    <input
-                      type="number"
-                      min={1}
-                      max={12}
-                      value={courseForm.credits}
-                      onChange={(event) =>
-                        updateCourseField('credits', Number.parseInt(event.target.value, 10) || 1)
-                      }
-                      required
-                    />
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Etapa inicial</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.stageId}
-                      onChange={(event) => updateCourseField('stageId', event.target.value)}
-                    >
-                      {appData.stages.map((stage) => (
-                        <option key={stage.id} value={stage.id}>
-                          {stage.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={courseForm.status}
-                      onChange={(event) =>
-                        updateCourseField('status', event.target.value as CourseStatus)
-                      }
-                    >
-                      {statusFilters
-                        .filter((item) => item !== 'Todos')
-                        .map((status) => (
-                          <option key={status} value={status}>
-                            {status}
+                  <label className="field">
+                    <span>Institución</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.institution}
+                        onChange={(event) => updateCourseField('institution', event.target.value)}
+                        required
+                      >
+                        {composerInstitutionOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
                           </option>
                         ))}
-                    </select>
-                  </div>
-                </label>
+                      </select>
+                    </div>
+                  </label>
 
-                <label className="field field--full">
-                  <span>Próximo hito</span>
-                  <div className="field__control">
-                    <input
-                      value={courseForm.nextMilestone}
-                      onChange={(event) => updateCourseField('nextMilestone', event.target.value)}
-                      placeholder="Aprobación de arquitectura · 12 abr 2026"
-                      required
-                    />
-                  </div>
-                </label>
+                  <label className="field">
+                    <span>Facultad</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.faculty}
+                        onChange={(event) => updateCourseField('faculty', event.target.value)}
+                        required
+                      >
+                        {composerFacultyOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
 
-                <label className="field field--full">
-                  <span>Resumen</span>
-                  <div className="field__control field__control--textarea">
-                    <textarea
-                      value={courseForm.summary}
-                      onChange={(event) => updateCourseField('summary', event.target.value)}
-                      placeholder="Describe el enfoque del curso y su intención formativa."
-                      rows={4}
-                      required
-                    />
-                  </div>
-                </label>
-              </div>
+                  <label className="field">
+                    <span>Programa</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.program}
+                        onChange={(event) => updateCourseField('program', event.target.value)}
+                        required
+                      >
+                        {composerProgramOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
 
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isSaving}>
-                  <span>{isSaving ? 'Creando…' : 'Crear curso'}</span>
-                </button>
-                <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
-                  <span>Cancelar</span>
-                </button>
-              </div>
+                  <label className="field">
+                    <span>Periodo académico</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.academicPeriod}
+                        onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
+                        required
+                      >
+                        {composerPeriodOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Tipología de curso</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.courseType}
+                        onChange={(event) => updateCourseField('courseType', event.target.value)}
+                        required
+                      >
+                        {composerCourseTypeOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Modalidad</span>
+                    <div className="field__control">
+                      <input
+                        value={courseForm.modality}
+                        onChange={(event) => updateCourseField('modality', event.target.value)}
+                        placeholder="Virtual guiado"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <div className="form-section-header field--full">
+                    <h5>Configuración operativa</h5>
+                  </div>
+
+                  <label className="field">
+                    <span>Créditos</span>
+                    <div className="field__control">
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={courseForm.credits}
+                        onChange={(event) =>
+                           updateCourseField('credits', Number.parseInt(event.target.value, 10) || 1)
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Etapa inicial</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.stageId}
+                        onChange={(event) => updateCourseField('stageId', event.target.value)}
+                      >
+                        {appData.stages.map((stage) => (
+                          <option key={stage.id} value={stage.id}>
+                            {stage.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Estado</span>
+                    <div className="field__control">
+                      <select
+                        value={courseForm.status}
+                        onChange={(event) =>
+                          updateCourseField('status', event.target.value as CourseStatus)
+                        }
+                      >
+                        {statusFilters
+                          .filter((item) => item !== 'Todos')
+                          .map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Próximo hito</span>
+                    <div className="field__control">
+                      <input
+                        value={courseForm.nextMilestone}
+                        onChange={(event) => updateCourseField('nextMilestone', event.target.value)}
+                        placeholder="Aprobación de arquitectura · 12 abr 2026"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Resumen</span>
+                    <div className="field__control field__control--textarea">
+                      <textarea
+                        value={courseForm.summary}
+                        onChange={(event) => updateCourseField('summary', event.target.value)}
+                        placeholder="Describe el enfoque del curso y su intención formativa."
+                        rows={4}
+                        required
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isSaving}>
+                    <span>{isSaving ? 'Creando…' : 'Crear curso'}</span>
+                  </button>
+                  <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
+                    <span>Cancelar</span>
+                  </button>
+                </div>
               </form>
             </ModalFrame>
           ) : null}

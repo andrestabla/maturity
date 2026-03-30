@@ -1,5 +1,21 @@
 import type { Course, InstitutionSettings, InstitutionStructure } from '../types.js';
 
+interface CourseDirectoryContext {
+  institution?: string | null;
+  faculty?: string | null;
+  program?: string | null;
+  academicPeriod?: string | null;
+  courseType?: string | null;
+  title?: string | null;
+}
+
+interface CourseDirectoryOptions {
+  includeRepositoryLabel?: boolean;
+  includeCourseTitle?: boolean;
+}
+
+export const courseRepositoryLabel = 'Repositorio institucional';
+
 export function getInstitutionStructures(settings?: InstitutionSettings | null) {
   return settings?.structures ?? [];
 }
@@ -175,9 +191,49 @@ export function getInstitutionPedagogicalGuidelines(
   return getStructureValues(settings, institution, 'pedagogicalGuidelines');
 }
 
+function sanitizeCourseDirectoryValue(value: string | null | undefined) {
+  return value?.trim() || '';
+}
+
+export function buildCourseDirectorySegments(
+  context: CourseDirectoryContext,
+  options: CourseDirectoryOptions = {},
+) {
+  const { includeRepositoryLabel = true, includeCourseTitle = true } = options;
+  const segments = [
+    includeRepositoryLabel ? courseRepositoryLabel : '',
+    sanitizeCourseDirectoryValue(context.institution),
+    sanitizeCourseDirectoryValue(context.faculty),
+    sanitizeCourseDirectoryValue(context.program),
+    sanitizeCourseDirectoryValue(context.academicPeriod),
+    sanitizeCourseDirectoryValue(context.courseType),
+    includeCourseTitle ? sanitizeCourseDirectoryValue(context.title) : '',
+  ];
+
+  return segments.filter(Boolean);
+}
+
+export function buildCourseDirectoryLabel(
+  context: CourseDirectoryContext,
+  options?: CourseDirectoryOptions,
+) {
+  return buildCourseDirectorySegments(context, options).join(' / ');
+}
+
 export function buildCourseScopeLabel(course: Pick<Course, 'faculty' | 'program' | 'metadata'>) {
-  const institution = course.metadata.institution || 'Institución sin definir';
-  return `${institution} / ${course.faculty} / ${course.program}`;
+  return buildCourseDirectoryLabel(
+    {
+      institution: course.metadata.institution || 'Institución sin definir',
+      faculty: course.faculty,
+      program: course.program,
+      academicPeriod: course.metadata.academicPeriod,
+      courseType: course.metadata.courseType,
+    },
+    {
+      includeRepositoryLabel: false,
+      includeCourseTitle: false,
+    },
+  );
 }
 
 export function countCoursesForStructure(

@@ -50,7 +50,7 @@ import type {
   UserProfileUpdateInput,
   UserUpdateInput,
 } from '../src/types.js';
-import { buildInstitutionStructureId } from '../src/utils/institutions.js';
+import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
 
@@ -334,8 +334,22 @@ function buildStageChecklist(stageId: string): Course['stageChecklist'] {
   }));
 }
 
-function buildCourseRoute(course: Pick<Course, 'faculty' | 'program' | 'title'>) {
-  return `Repositorio institucional / ${course.faculty} / ${course.program} / ${course.title}`;
+function buildCourseRoute(
+  course: Pick<Course, 'faculty' | 'program' | 'title'> & {
+    institution?: string;
+    academicPeriod?: string;
+    courseType?: string;
+    metadata?: Partial<CourseMetadata>;
+  },
+) {
+  return buildCourseDirectoryLabel({
+    institution: course.metadata?.institution ?? course.institution,
+    faculty: course.faculty,
+    program: course.program,
+    academicPeriod: course.metadata?.academicPeriod ?? course.academicPeriod,
+    courseType: course.metadata?.courseType ?? course.courseType,
+    title: course.title,
+  });
 }
 
 const stageNoteDefinitions: Record<
@@ -1582,6 +1596,16 @@ async function ensureInstitutionDirectoryFromLegacySources() {
   );
 }
 
+function hasInstitutionCatalogValue(values: string[], target: string) {
+  const normalizedTarget = target.trim().toLowerCase();
+
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  return values.some((value) => value.trim().toLowerCase() === normalizedTarget);
+}
+
 async function resolveInstitutionReferenceContext(input: {
   institutionId?: string | null;
   institution: string;
@@ -1589,7 +1613,10 @@ async function resolveInstitutionReferenceContext(input: {
   program?: string;
   academicPeriod?: string;
   courseType?: string;
+}, options?: {
+  strict?: boolean;
 }) {
+  const strict = Boolean(options?.strict);
   const institutionName = input.institution.trim() || defaultInstitutionSettings.displayName;
   let structures = await readInstitutionStructuresRecord();
   let structure =
@@ -1599,6 +1626,12 @@ async function resolveInstitutionReferenceContext(input: {
     ) ?? null;
 
   if (!structure) {
+    if (strict) {
+      throw new Error(
+        `La institución "${institutionName}" no existe en Gobierno > Institución. Parametrízala antes de crear cursos.`,
+      );
+    }
+
     await syncInstitutionDirectoryRecords(
       [
         ...structures,
@@ -1628,6 +1661,34 @@ async function resolveInstitutionReferenceContext(input: {
     throw new Error('No fue posible resolver la estructura institucional del contexto.');
   }
 
+  if (strict && input.faculty?.trim() && !hasInstitutionCatalogValue(structure.faculties, input.faculty)) {
+    throw new Error(
+      `La facultad "${input.faculty.trim()}" no está parametrizada para ${structure.institution}.`,
+    );
+  }
+
+  if (strict && input.program?.trim() && !hasInstitutionCatalogValue(structure.programs, input.program)) {
+    throw new Error(
+      `El programa "${input.program.trim()}" no está parametrizado para ${structure.institution}.`,
+    );
+  }
+
+  if (
+    strict &&
+    input.academicPeriod?.trim() &&
+    !hasInstitutionCatalogValue(structure.academicPeriods, input.academicPeriod)
+  ) {
+    throw new Error(
+      `El periodo académico "${input.academicPeriod.trim()}" no está parametrizado para ${structure.institution}.`,
+    );
+  }
+
+  if (strict && input.courseType?.trim() && !hasInstitutionCatalogValue(structure.courseTypes, input.courseType)) {
+    throw new Error(
+      `La tipología "${input.courseType.trim()}" no está parametrizada para ${structure.institution}.`,
+    );
+  }
+
   let changed = false;
   const nextStructure: InstitutionStructure = {
     ...structure,
@@ -1638,22 +1699,26 @@ async function resolveInstitutionReferenceContext(input: {
     pedagogicalGuidelines: [...structure.pedagogicalGuidelines],
   };
 
-  if (input.faculty?.trim() && !nextStructure.faculties.includes(input.faculty.trim())) {
+  if (!strict && input.faculty?.trim() && !nextStructure.faculties.includes(input.faculty.trim())) {
     nextStructure.faculties = uniqueValues([...nextStructure.faculties, input.faculty]);
     changed = true;
   }
 
-  if (input.program?.trim() && !nextStructure.programs.includes(input.program.trim())) {
+  if (!strict && input.program?.trim() && !nextStructure.programs.includes(input.program.trim())) {
     nextStructure.programs = uniqueValues([...nextStructure.programs, input.program]);
     changed = true;
   }
 
-  if (input.academicPeriod?.trim() && !nextStructure.academicPeriods.includes(input.academicPeriod.trim())) {
+  if (
+    !strict &&
+    input.academicPeriod?.trim() &&
+    !nextStructure.academicPeriods.includes(input.academicPeriod.trim())
+  ) {
     nextStructure.academicPeriods = uniqueValues([...nextStructure.academicPeriods, input.academicPeriod]);
     changed = true;
   }
 
-  if (input.courseType?.trim() && !nextStructure.courseTypes.includes(input.courseType.trim())) {
+  if (!strict && input.courseType?.trim() && !nextStructure.courseTypes.includes(input.courseType.trim())) {
     nextStructure.courseTypes = uniqueValues([...nextStructure.courseTypes, input.courseType]);
     changed = true;
   }
@@ -1767,8 +1832,11 @@ async function backfillCourseInstitutionRelations() {
       academicPeriod: context.academicPeriodName,
       courseType: context.courseTypeName,
       route: buildCourseRoute({
+        institution: context.institutionName,
         faculty: context.facultyName || row.faculty,
         program: context.programName || row.program,
+        academicPeriod: context.academicPeriodName,
+        courseType: context.courseTypeName,
         title: row.title,
       }),
     };
@@ -2826,6 +2894,8 @@ async function prepareCourseForPersistence(course: Course) {
     program: course.program,
     academicPeriod: course.metadata.academicPeriod || '2026-1',
     courseType: course.metadata.courseType || 'Curso',
+  }, {
+    strict: true,
   });
 
   const nextCourse = normalizeCourse({
@@ -2839,8 +2909,11 @@ async function prepareCourseForPersistence(course: Course) {
       academicPeriod: context.academicPeriodName,
       courseType: context.courseTypeName,
       route: buildCourseRoute({
+        institution: context.institutionName,
         faculty: context.facultyName || course.faculty,
         program: context.programName || course.program,
+        academicPeriod: context.academicPeriodName,
+        courseType: context.courseTypeName,
         title: course.title,
       }),
     },
@@ -3680,8 +3753,54 @@ export async function createCourseRecord(input: CourseMutationInput) {
   assertCourseContextInput(input);
 
   const course = makeCourseRecord(input);
-  return persistCourse(course);
+  const result = await persistCourse(course);
+
+  // Provision initial folders/resources
+  await provisionCourseFolders(course);
+
+  return result;
 }
+
+async function provisionCourseFolders(course: Course) {
+  const sql = getSql();
+  const levels = [
+    { unit: 'Institución', title: course.metadata.institution },
+    { unit: 'Facultad', title: course.faculty },
+    { unit: 'Programa', title: course.program },
+    { unit: 'Periodo', title: course.metadata.academicPeriod },
+    { unit: 'Tipología', title: course.metadata.courseType },
+  ];
+
+  for (const level of levels) {
+    if (!level.title) continue;
+
+    const id = `resource-folder-${course.slug}-${slugify(level.unit)}-${slugify(level.title)}`;
+    
+    // Check if it already exists (shouldn't for a new course, but just in case)
+    const existing = await sql`
+      SELECT id FROM maturity_library_resources WHERE id = ${id} LIMIT 1
+    `;
+
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO maturity_library_resources (
+          id, title, kind, course_slug, unit, source, status, tags, summary
+        ) VALUES (
+          ${id},
+          ${level.title},
+          'Curado',
+          ${course.slug},
+          ${level.unit},
+          'Estructura institucional',
+          'Listo',
+          ${JSON.stringify(['Carpeta', 'Estructura'])}::jsonb,
+          ${`Nivel de carpeta para ${level.unit}: ${level.title}`}
+        )
+      `;
+    }
+  }
+}
+
 
 export async function updateCourseRecord(slug: string, input: CourseMutationInput) {
   await ensureSchema();
