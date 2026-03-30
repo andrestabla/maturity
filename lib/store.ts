@@ -139,6 +139,21 @@ interface PublicUserRow {
   memberships: JsonValue | null;
 }
 
+let initializationPromise: Promise<void> | null = null;
+
+async function performInitialization() {
+  await ensureSchema();
+  await ensureSeedData();
+}
+
+async function ensureInitialized() {
+  if (!initializationPromise) {
+    initializationPromise = performInitialization();
+  }
+  return initializationPromise;
+}
+
+
 interface SessionLookupRow {
   id: string;
   name: string;
@@ -3475,8 +3490,17 @@ async function readUsers() {
 }
 
 export async function prepareDatabase() {
-  await ensureSchema();
-  return ensureSeedData();
+  await ensureInitialized();
+  const sql = getSql();
+  const countRows = (await sql`
+    SELECT COUNT(*)::INT AS count
+    FROM maturity_courses
+  `) as Array<{ count: number }>;
+
+  return {
+    seeded: false,
+    courses: countRows[0]?.count ?? 0,
+  };
 }
 
 export async function getInstitutionSettingsRecord(
@@ -3484,12 +3508,12 @@ export async function getInstitutionSettingsRecord(
     Pick<InstitutionSettings, 'displayName' | 'supportEmail' | 'defaultDomain' | 'defaultUserState'>
   >,
 ) {
-  await ensureSchema();
+  await ensureInitialized();
   return readInstitutionSettingsRecord(overrides);
 }
 
 export async function syncInstitutionSettingsRecord(settings: InstitutionSettings) {
-  await ensureSchema();
+  await ensureInitialized();
   await syncInstitutionDirectoryRecords(settings.structures, { pruneMissing: true });
   await backfillCourseInstitutionRelations();
   await rebuildUserInstitutionMemberships();
@@ -3502,8 +3526,7 @@ export async function syncInstitutionSettingsRecord(settings: InstitutionSetting
 }
 
 export async function loadAppData(): Promise<AppData> {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const [roles, stages, courses, tasks, alerts, libraryResources, roleProfiles, users] =
     await Promise.all([
@@ -3534,13 +3557,12 @@ export async function loadAppData(): Promise<AppData> {
 }
 
 export async function findCourseRecordBySlug(slug: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   return readCourseBySlug(slug);
 }
 
 export async function findAlertById(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     SELECT
@@ -3559,8 +3581,7 @@ export async function findAlertById(id: string) {
 }
 
 export async function createAlertRecord(input: AlertMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const alert = makeAlertRecord(input);
   await persistAlert(alert);
@@ -3568,7 +3589,7 @@ export async function createAlertRecord(input: AlertMutationInput) {
 }
 
 export async function deleteAlertRecord(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     DELETE FROM maturity_alerts
@@ -3580,8 +3601,7 @@ export async function deleteAlertRecord(id: string) {
 }
 
 export async function findUserByEmail(email: string) {
-  await ensureSchema();
-  await ensureAdminUserSeed();
+  await ensureInitialized();
 
   const sql = getSql();
   const rows = (await sql`
@@ -3644,7 +3664,7 @@ export async function findUserByEmail(email: string) {
 }
 
 export async function createSessionRecord(userId: string, tokenHash: string, expiresAt: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
 
   await sql`
@@ -3660,7 +3680,7 @@ export async function createSessionRecord(userId: string, tokenHash: string, exp
 }
 
 export async function findSessionByTokenHash(tokenHash: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     SELECT
@@ -3725,7 +3745,7 @@ export async function findSessionByTokenHash(tokenHash: string) {
 }
 
 export async function touchUserLastAccess(userId: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
 
   await sql`
@@ -3738,7 +3758,7 @@ export async function touchUserLastAccess(userId: string) {
 }
 
 export async function deleteSessionByTokenHash(tokenHash: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
 
   await sql`
@@ -3748,8 +3768,7 @@ export async function deleteSessionByTokenHash(tokenHash: string) {
 }
 
 export async function createCourseRecord(input: CourseMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   assertCourseContextInput(input);
 
   const course = makeCourseRecord(input);
@@ -3803,8 +3822,7 @@ async function provisionCourseFolders(course: Course) {
 
 
 export async function updateCourseRecord(slug: string, input: CourseMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   assertCourseContextInput(input);
 
   const sql = getSql();
@@ -3898,8 +3916,7 @@ export async function updateCourseMetadataRecord(
   courseSlug: string,
   input: CourseMetadataMutationInput,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -3921,8 +3938,7 @@ export async function updateCourseMetadataRecord(
 }
 
 export async function createTimelineItemRecord(courseSlug: string, input: TimelineItemMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -3962,8 +3978,7 @@ export async function updateTimelineItemRecord(
   timelineItemId: string,
   input: Partial<TimelineItemMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4009,8 +4024,7 @@ export async function updateTimelineItemRecord(
 }
 
 export async function deleteTimelineItemRecord(courseSlug: string, timelineItemId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4041,16 +4055,14 @@ export async function deleteTimelineItemRecord(courseSlug: string, timelineItemI
 }
 
 export async function findTeamMemberById(courseSlug: string, memberId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
   return course ? findTeamMember(course, memberId) : null;
 }
 
 export async function createTeamMemberRecord(courseSlug: string, input: TeamMemberMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4078,8 +4090,7 @@ export async function updateTeamMemberRecord(
   memberId: string,
   input: Partial<TeamMemberMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4125,8 +4136,7 @@ export async function updateTeamMemberRecord(
 }
 
 export async function deleteTeamMemberRecord(courseSlug: string, memberId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4156,8 +4166,7 @@ export async function deleteTeamMemberRecord(courseSlug: string, memberId: strin
 }
 
 export async function findLearningModuleById(courseSlug: string, moduleId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
   return course ? findLearningModule(course, moduleId) : null;
@@ -4167,8 +4176,7 @@ export async function createLearningModuleRecord(
   courseSlug: string,
   input: LearningModuleMutationInput,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4200,8 +4208,7 @@ export async function updateLearningModuleRecord(
   moduleId: string,
   input: Partial<LearningModuleMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4247,8 +4254,7 @@ export async function updateLearningModuleRecord(
 }
 
 export async function deleteLearningModuleRecord(courseSlug: string, moduleId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4282,8 +4288,7 @@ export async function deleteLearningModuleRecord(courseSlug: string, moduleId: s
 }
 
 export async function findCourseProductById(courseSlug: string, productId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
   return course ? findCourseProduct(course, productId) : null;
@@ -4293,8 +4298,7 @@ export async function createCourseProductRecord(
   courseSlug: string,
   input: CourseProductMutationInput,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4322,8 +4326,7 @@ export async function updateCourseProductRecord(
   productId: string,
   input: Partial<CourseProductMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4367,8 +4370,7 @@ export async function updateCourseProductRecord(
 }
 
 export async function deleteCourseProductRecord(courseSlug: string, productId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4402,8 +4404,7 @@ export async function updateCourseStageNoteRecord(
   key: CourseStageNoteKey,
   input: CourseStageNoteMutationInput,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4429,7 +4430,7 @@ export async function updateCourseStageNoteRecord(
 }
 
 export async function deleteCourseRecord(slug: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
 
   await sql`
@@ -4457,8 +4458,7 @@ export async function deleteCourseRecord(slug: string) {
 }
 
 export async function createTaskRecord(input: TaskMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const task = makeTaskRecord(input);
   await persistTask(task);
@@ -4472,8 +4472,7 @@ export async function createTaskRecord(input: TaskMutationInput) {
 }
 
 export async function updateTaskRecord(id: string, input: Partial<TaskMutationInput>) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   const sql = getSql();
 
   const rows = (await sql`
@@ -4514,7 +4513,7 @@ export async function updateTaskRecord(id: string, input: Partial<TaskMutationIn
 }
 
 export async function deleteTaskRecord(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const current = await findTaskById(id);
   const result = (await sql`
@@ -4536,7 +4535,7 @@ export async function deleteTaskRecord(id: string) {
 }
 
 export async function findTaskById(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     SELECT
@@ -4562,8 +4561,7 @@ export async function updateStageCheckpointRecord(
   checkpointIndex: number,
   input: StageCheckpointMutationInput,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4619,8 +4617,7 @@ export async function updateStageCheckpointRecord(
 }
 
 export async function advanceCourseStageRecord(courseSlug: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4751,8 +4748,7 @@ export async function advanceCourseStageRecord(courseSlug: string) {
 }
 
 export async function createDeliverableRecord(courseSlug: string, input: DeliverableMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4779,8 +4775,7 @@ export async function updateDeliverableRecord(
   deliverableId: string,
   input: Partial<DeliverableMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4823,8 +4818,7 @@ export async function updateDeliverableRecord(
 }
 
 export async function deleteDeliverableRecord(courseSlug: string, deliverableId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4853,16 +4847,14 @@ export async function deleteDeliverableRecord(courseSlug: string, deliverableId:
 }
 
 export async function findDeliverableById(courseSlug: string, deliverableId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   const course = await readCourseBySlug(courseSlug);
 
   return course?.deliverables.find((deliverable) => deliverable.id === deliverableId) ?? null;
 }
 
 export async function createObservationRecord(courseSlug: string, input: ObservationMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4889,8 +4881,7 @@ export async function updateObservationRecord(
   observationId: string,
   input: Partial<ObservationMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4933,8 +4924,7 @@ export async function updateObservationRecord(
 }
 
 export async function deleteObservationRecord(courseSlug: string, observationId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const course = await readCourseBySlug(courseSlug);
 
@@ -4963,16 +4953,14 @@ export async function deleteObservationRecord(courseSlug: string, observationId:
 }
 
 export async function findObservationById(courseSlug: string, observationId: string) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
   const course = await readCourseBySlug(courseSlug);
 
   return course?.observations.find((observation) => observation.id === observationId) ?? null;
 }
 
 export async function createLibraryResourceRecord(input: LibraryResourceMutationInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const resource = makeLibraryResourceRecord(input);
   await persistLibraryResource(resource);
@@ -4986,7 +4974,7 @@ export async function createLibraryResourceRecord(input: LibraryResourceMutation
 }
 
 export async function findLibraryResourceById(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     SELECT
@@ -5024,8 +5012,7 @@ export async function updateLibraryResourceRecord(
   id: string,
   input: Partial<LibraryResourceMutationInput>,
 ) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   const current = await findLibraryResourceById(id);
 
@@ -5050,7 +5037,7 @@ export async function updateLibraryResourceRecord(
 }
 
 export async function deleteLibraryResourceRecord(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const current = await findLibraryResourceById(id);
   const rows = (await sql`
@@ -5072,13 +5059,12 @@ export async function deleteLibraryResourceRecord(id: string) {
 }
 
 export async function getUserDirectory() {
-  await ensureSchema();
-  await ensureAdminUserSeed();
+  await ensureInitialized();
   return readUsers();
 }
 
 export async function findUserById(id: string) {
-  await ensureSchema();
+  await ensureInitialized();
   const sql = getSql();
   const rows = (await sql`
     SELECT
@@ -5140,8 +5126,7 @@ export async function findUserById(id: string) {
 }
 
 export async function createUserRecord(input: UserMutationInput, actorId?: string | null) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   if (!normalizeUserScopeValue(input.institution)) {
     throw new Error('El usuario debe quedar vinculado a una institución.');
@@ -5222,8 +5207,7 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
 }
 
 export async function updateUserRecord(input: UserUpdateInput) {
-  await ensureSchema();
-  await ensureSeedData();
+  await ensureInitialized();
 
   if (!normalizeUserScopeValue(input.institution)) {
     throw new Error('El usuario debe quedar vinculado a una institución.');
