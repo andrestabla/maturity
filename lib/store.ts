@@ -139,25 +139,19 @@ interface PublicUserRow {
   memberships: JsonValue | null;
 }
 
-let isInitializing = false;
 let initializationPromise: Promise<void> | null = null;
 
 async function performInitialization() {
-  isInitializing = true;
   try {
     await ensureSchema();
     await ensureSeedData();
   } catch (err) {
     initializationPromise = null;
     throw err;
-  } finally {
-    isInitializing = false;
   }
 }
 
-async function ensureInitialized() {
-  if (isInitializing) return;
-  
+export async function ensureInitialized() {
   if (!initializationPromise) {
     initializationPromise = performInitialization();
   }
@@ -2026,7 +2020,6 @@ async function cleanupOrphanOperationalRows() {
 
 async function ensureSchema() {
   const sql = getSql();
-  await sql`SELECT pg_advisory_lock(3602026)`;
 
   try {
     await sql`
@@ -2082,50 +2075,15 @@ async function ensureSchema() {
       )
     `;
 
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS institution_structure_id TEXT
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS faculty_id TEXT
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS program_id TEXT
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS academic_period_id TEXT
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS course_type_id TEXT
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS audit_log JSONB NOT NULL DEFAULT '[]'::jsonb
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb
-    `;
-
-    await sql`
-      ALTER TABLE maturity_courses
-      ADD COLUMN IF NOT EXISTS products JSONB NOT NULL DEFAULT '[]'::jsonb
-    `;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS institution_structure_id TEXT`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS faculty_id TEXT`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS program_id TEXT`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS academic_period_id TEXT`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS course_type_id TEXT`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS audit_log JSONB NOT NULL DEFAULT '[]'::jsonb`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS stage_notes JSONB NOT NULL DEFAULT '{}'::jsonb`;
+    await sql`ALTER TABLE maturity_courses ADD COLUMN IF NOT EXISTS products JSONB NOT NULL DEFAULT '[]'::jsonb`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS maturity_tasks (
