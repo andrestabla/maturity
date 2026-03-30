@@ -1372,7 +1372,7 @@ export function CoursesPage({
               </button>
             ))}
           </div>
-        ) : (
+        ) : !isProgramEntry ? (
           <div className="empty-state empty-state--embedded folder-browser__empty">
             <strong>
               {isProgramEntry
@@ -1385,7 +1385,7 @@ export function CoursesPage({
                 : 'Ajusta los filtros o vuelve un nivel para encontrar más rutas académicas.'}
             </p>
           </div>
-        )}
+        ) : null}
       </section>
 
       {isProgramEntry ? (
@@ -1425,6 +1425,7 @@ export function CoursesPage({
                     ownerLabel={stageMeta?.owner}
                     alertCount={alertCount}
                     pendingObservations={pendingObservations}
+                    variant={isProgramEntry ? 'simple' : 'default'}
                   />
                 );
               })}

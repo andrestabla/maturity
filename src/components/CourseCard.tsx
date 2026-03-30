@@ -10,6 +10,7 @@ interface CourseCardProps {
   ownerLabel?: string;
   alertCount?: number;
   pendingObservations?: number;
+  variant?: 'default' | 'simple';
 }
 
 function statusClass(status: Course['status']) {
@@ -36,9 +37,15 @@ export function CourseCard({
   ownerLabel,
   alertCount = 0,
   pendingObservations = 0,
+  variant = 'default',
 }: CourseCardProps) {
+  const isSimple = variant === 'simple';
+
   return (
-    <Link to={`/courses/${course.slug}`} className="course-card surface">
+    <Link
+      to={`/courses/${course.slug}`}
+      className={isSimple ? 'course-card course-card--simple surface' : 'course-card surface'}
+    >
       <div className="course-card__top">
         <div>
           <span className="eyebrow">{course.code}</span>
@@ -48,12 +55,12 @@ export function CourseCard({
         <ArrowUpRight size={18} />
       </div>
 
-      <p className="course-card__summary">{course.summary}</p>
+      {!isSimple && <p className="course-card__summary">{course.summary}</p>}
 
       <div className="course-card__meta">
         <span>{course.faculty}</span>
         <span>{course.credits} créditos</span>
-        <span>{course.modality}</span>
+        {!isSimple && <span>{course.modality}</span>}
       </div>
 
       <div className="course-card__badges">
@@ -61,7 +68,7 @@ export function CourseCard({
         <span className="badge badge--outline">{stageName}</span>
       </div>
 
-      {routeLabel || ownerLabel || alertCount > 0 || pendingObservations > 0 ? (
+      {!isSimple && (routeLabel || ownerLabel || alertCount > 0 || pendingObservations > 0) ? (
         <div className="course-card__signals">
           {routeLabel ? <span>{routeLabel}</span> : null}
           {ownerLabel ? <span>Responsable actual: {ownerLabel}</span> : null}
@@ -72,30 +79,34 @@ export function CourseCard({
       ) : null}
 
       <div className="course-card__progress">
-        <div className="progress-copy">
-          <strong>Avance {course.progress}%</strong>
-          <span>{course.nextMilestone}</span>
-        </div>
+        {!isSimple && (
+          <div className="progress-copy">
+            <strong>Avance {course.progress}%</strong>
+            <span>{course.nextMilestone}</span>
+          </div>
+        )}
         <div className="progress-bar">
           <span style={{ width: `${course.progress}%` }} />
         </div>
       </div>
 
-      <div className="course-card__footer">
-        <div className="course-card__date">
-          <CalendarDays size={16} />
-          <span>Actualizado {formatDate(course.updatedAt)}</span>
-        </div>
+      {!isSimple && (
+        <div className="course-card__footer">
+          <div className="course-card__date">
+            <CalendarDays size={16} />
+            <span>Actualizado {formatDate(course.updatedAt)}</span>
+          </div>
 
-        <div className="avatar-stack" aria-hidden="true">
-          {course.team.slice(0, 3).map((member) => (
-            <span key={member.id}>{member.initials}</span>
-          ))}
-          {course.team.length > 3 ? <span>+{course.team.length - 3}</span> : null}
+          <div className="avatar-stack" aria-hidden="true">
+            {course.team.slice(0, 3).map((member) => (
+              <span key={member.id}>{member.initials}</span>
+            ))}
+            {course.team.length > 3 ? <span>+{course.team.length - 3}</span> : null}
+          </div>
         </div>
-      </div>
+      )}
 
-      {course.status === 'Bloqueado' ? (
+      {course.status === 'Bloqueado' && !isSimple ? (
         <div className="inline-alert">
           <CircleAlert size={16} />
           <span>Hay un bloqueo abierto que impide el siguiente paso.</span>
