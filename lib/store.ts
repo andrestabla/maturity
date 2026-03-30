@@ -53,7 +53,6 @@ import type {
 import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
-import crypto from 'node:crypto';
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
