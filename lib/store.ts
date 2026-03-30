@@ -2868,10 +2868,10 @@ async function prepareCourseForPersistence(course: Course) {
     institution: course.metadata.institution || defaultInstitutionSettings.displayName,
     faculty: course.faculty,
     program: course.program,
-    academicPeriod: course.metadata.academicPeriod || '2026-1',
-    courseType: course.metadata.courseType || 'Curso',
+    academicPeriod: course.metadata.academicPeriod || '',
+    courseType: course.metadata.courseType || '',
   }, {
-    strict: true,
+    strict: false,
   });
 
   const nextCourse = normalizeCourse({
