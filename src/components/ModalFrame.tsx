@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useId, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalFrameProps {
   eyebrow?: string;
@@ -53,7 +54,7 @@ export function ModalFrame({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section
         className={`modal-panel surface modal-panel--${width}`}
@@ -78,6 +79,7 @@ export function ModalFrame({
 
         {footer ? <footer className="modal-panel__foot">{footer}</footer> : null}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

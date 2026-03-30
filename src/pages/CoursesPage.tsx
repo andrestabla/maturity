@@ -1062,20 +1062,13 @@ export function CoursesPage({
 
           {isComposerOpen ? (
             <ModalFrame
-              eyebrow="Cursos"
+              eyebrow="Alta rápida"
               title="Crear curso"
               description="El alta se abre en modal para mantener el directorio y los filtros siempre despejados."
               width="xl"
               onClose={() => setIsComposerOpen(false)}
             >
-              <form className="editor-card" onSubmit={handleCreateCourse}>
-                <div className="editor-card__header">
-                  <div>
-                    <span className="eyebrow">Alta rápida</span>
-                    <h3>Crear curso</h3>
-                  </div>
-                </div>
-
+              <form onSubmit={handleCreateCourse}>
                 <div className="form-grid">
                   <div className="form-section-header field--full">
                     <h5>Identidad del curso</h5>
@@ -1298,6 +1291,7 @@ export function CoursesPage({
                 </div>
               </form>
             </ModalFrame>
+
           ) : null}
         </div>
       </section>
