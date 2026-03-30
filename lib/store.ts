@@ -2022,7 +2022,7 @@ async function cleanupOrphanOperationalRows() {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 10; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 11; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2779,6 +2779,14 @@ async function ensureSchema() {
         END IF;
       END $$;
     `;
+
+    // Migration 11: Unify course status labels
+    if (currentVersion < 11) {
+      await sql`UPDATE maturity_courses SET status = 'En curso' WHERE status = 'En ritmo'`;
+      await sql`UPDATE maturity_courses SET status = 'En QA' WHERE status = 'En revisión'`;
+      await sql`UPDATE maturity_courses SET status = 'En riesgo' WHERE status = 'Riesgo'`;
+      await sql`UPDATE maturity_courses SET status = 'Entregado' WHERE status = 'Listo'`;
+    }
 
     // 4. Update the stored version to avoid running this again
     await sql`
