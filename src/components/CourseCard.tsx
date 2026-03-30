@@ -15,16 +15,18 @@ interface CourseCardProps {
 
 function statusClass(status: Course['status']) {
   switch (status) {
-    case 'En ritmo':
+    case 'Sin iniciar':
+      return 'badge badge--outline';
+    case 'En curso':
       return 'badge badge--sage';
-    case 'En revisión':
-      return 'badge badge--gold';
-    case 'Riesgo':
+    case 'En QA':
       return 'badge badge--ocean';
+    case 'Entregado':
+      return 'badge badge--ink';
     case 'Bloqueado':
       return 'badge badge--coral';
-    case 'Listo':
-      return 'badge badge--ink';
+    case 'En riesgo':
+      return 'badge badge--gold';
     default:
       return 'badge';
   }

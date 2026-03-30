@@ -9,11 +9,12 @@ export type Role =
   | 'Auditor';
 
 export type CourseStatus =
-  | 'En ritmo'
-  | 'En revisión'
-  | 'Riesgo'
+  | 'Sin iniciar'
+  | 'En curso'
+  | 'En QA'
+  | 'Entregado'
   | 'Bloqueado'
-  | 'Listo';
+  | 'En riesgo';
 
 export type DeliverableStatus =
   | 'En curso'

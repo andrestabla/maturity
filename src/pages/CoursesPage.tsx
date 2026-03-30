@@ -50,11 +50,12 @@ interface FolderEntry {
 
 const statusFilters: StatusFilter[] = [
   'Todos',
-  'En ritmo',
-  'En revisión',
-  'Riesgo',
+  'Sin iniciar',
+  'En curso',
+  'En QA',
+  'Entregado',
   'Bloqueado',
-  'Listo',
+  'En riesgo',
 ];
 
 function uniqueOptions(values: string[]) {
@@ -124,7 +125,7 @@ function createInitialCourseForm(appData: AppData): CourseMutationInput {
     modality: 'presencial',
     credits: 3,
     stageId: appData.stages[0]?.id ?? 'configuracion',
-    status: 'En revisión',
+    status: 'Sin iniciar',
     summary: '',
     nextMilestone: '',
   });

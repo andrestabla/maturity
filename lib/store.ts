@@ -407,11 +407,11 @@ const productStageOwners: Record<CourseProductStage, Role> = {
 };
 
 function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
-  if (status === 'Bloqueado' || status === 'Riesgo') {
+  if (status === 'Bloqueado' || status === 'En riesgo') {
     return 'Alto';
   }
 
-  if (status === 'En revisión') {
+  if (status === 'En QA') {
     return 'Medio';
   }
 
@@ -419,7 +419,7 @@ function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] 
 }
 
 function derivePriority(status: Course['status']): CourseMetadata['priority'] {
-  return status === 'Bloqueado' || status === 'Riesgo' ? 'Alta' : 'Media';
+  return status === 'Bloqueado' || status === 'En riesgo' ? 'Alta' : 'Media';
 }
 
 function buildDefaultCourseMetadata(
@@ -607,7 +607,7 @@ function buildDefaultCourseStageNotes(
       status:
         course.stageId === 'calidad'
           ? 'En curso'
-          : course.status === 'Listo'
+          : course.status === 'Entregado'
             ? 'Listo'
             : 'Pendiente',
       summary: 'La validación consolida hallazgos, devoluciones y aprobaciones del curso antes del cierre.',
@@ -1037,11 +1037,11 @@ function deriveCourseStatusFromChecklist(
   }
 
   if (stageChecklist.every((item) => item.status === 'done')) {
-    return 'Listo';
+    return 'Entregado';
   }
 
-  if (currentStatus === 'Bloqueado' || currentStatus === 'Listo') {
-    return 'En revisión';
+  if (currentStatus === 'Bloqueado' || currentStatus === 'Entregado') {
+    return 'En QA';
   }
 
   return currentStatus;
@@ -4715,7 +4715,7 @@ export async function advanceCourseStageRecord(courseSlug: string) {
     progress: isLastStage
       ? 100
       : Math.max(course.progress, Math.round(((currentStageIndex + 2) / platformStages.length) * 100)),
-    status: isLastStage ? 'Listo' : 'En revisión',
+    status: isLastStage ? 'Entregado' : 'En QA',
     nextMilestone: isLastStage
       ? `Curso listo para publicación · ${getTodayLabel()}`
       : `Handoff hacia ${nextStage?.name ?? 'siguiente etapa'} · ${getTodayLabel()}`,

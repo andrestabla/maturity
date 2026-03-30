@@ -732,11 +732,12 @@ button {
   box-shadow: 0 4px 12px rgba(19, 33, 38, 0.04);
 }
 
-.course-card--status-en-ritmo { border-left-color: #2aada2 !important; }
-.course-card--status-en-revisión { border-left-color: #eab308 !important; }
-.course-card--status-riesgo { border-left-color: #00a3ff !important; }
+.course-card--status-sin-iniciar { border-left-color: #94a3b8 !important; }
+.course-card--status-en-curso { border-left-color: #2aada2 !important; }
+.course-card--status-en-qa { border-left-color: #0ea5e9 !important; }
+.course-card--status-entregado { border-left-color: #1f2937 !important; }
 .course-card--status-bloqueado { border-left-color: #ef4444 !important; }
-.course-card--status-listo { border-left-color: #1f2937 !important; }
+.course-card--status-en-riesgo { border-left-color: #eab308 !important; }
 
 .course-card--simple::before {
   content: '';
