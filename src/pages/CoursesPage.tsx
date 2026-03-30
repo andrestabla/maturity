@@ -178,15 +178,6 @@ function makeAcademicPeriodKey(
   return `academicPeriod::${institution}::${faculty}::${program}::${academicPeriod}`;
 }
 
-function makeCourseTypeKey(
-  institution: string,
-  faculty: string,
-  program: string,
-  academicPeriod: string,
-  courseType: string,
-) {
-  return `courseType::${institution}::${faculty}::${program}::${academicPeriod}::${courseType}`;
-}
 
 function parseNode(selectedNode: string) {
   if (selectedNode === 'root') {
@@ -404,16 +395,6 @@ function getNodePath(selectedNode: string) {
       key: makeAcademicPeriodKey(node.institution, node.faculty, node.program, node.academicPeriod),
       label: node.academicPeriod,
     },
-    {
-      key: makeCourseTypeKey(
-        node.institution,
-        node.faculty,
-        node.program,
-        node.academicPeriod,
-        node.courseType,
-      ),
-      label: node.courseType,
-    },
   ];
 }
 
@@ -527,42 +508,6 @@ function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: s
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
-  if (node.type === 'academicPeriod') {
-    const courseTypeOptions = uniqueOptions([
-      ...getInstitutionCourseTypes(appData.institution, node.institution),
-      ...courses
-        .filter(
-          (course) =>
-            getInstitution(course) === node.institution &&
-            course.faculty === node.faculty &&
-            course.program === node.program &&
-            getAcademicPeriod(course) === node.academicPeriod,
-        )
-        .map((course) => getCourseType(course)),
-    ]);
-
-    return courseTypeOptions
-      .map((courseType) => {
-        const key = makeCourseTypeKey(
-          node.institution,
-          node.faculty,
-          node.program,
-          node.academicPeriod,
-          courseType,
-        );
-        const count = courses.filter((course) => matchesFolder(course, key)).length;
-
-        return {
-          key,
-          label: courseType,
-          description: describeFolderCount(count, 'esta tipología', 'estas tipologías'),
-          count,
-          type: 'courseType' as const,
-        };
-      })
-      .sort((left, right) => left.label.localeCompare(right.label, 'es'));
-  }
-
   return [];
 }
 
@@ -585,11 +530,7 @@ function getFolderSectionCopy(selectedNode: string) {
     return 'Aquí se organizan los periodos académicos disponibles para el programa.';
   }
 
-  if (node.type === 'academicPeriod') {
-    return 'Selecciona la tipología del curso para entrar a la carpeta operativa final.';
-  }
-
-  return 'Ya estás en la carpeta final del directorio. Debajo verás los cursos disponibles en esta ruta.';
+  return 'Selecciona un periodo para ver los cursos. Ya estás en el nivel operativo final.';
 }
 
 
@@ -868,7 +809,7 @@ export function CoursesPage({
   const parentNode = getParentNode(selectedNode);
   const currentNode = parseNode(selectedNode);
   const isRootEntry = selectedNode === 'root';
-  const isProgramEntry = currentNode.type === 'program';
+  const isProgramEntry = currentNode.type === 'academicPeriod';
   const openCount = currentFolderCourses.filter((course) => course.status !== 'Listo').length;
   const blockedCount = currentFolderCourses.filter((course) => course.status === 'Bloqueado').length;
   const stageCount = new Set(currentFolderCourses.map((course) => course.stageId)).size;
