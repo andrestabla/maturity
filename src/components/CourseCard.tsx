@@ -44,7 +44,11 @@ export function CourseCard({
   return (
     <Link
       to={`/courses/${course.slug}`}
-      className={isSimple ? 'course-card course-card--simple surface' : 'course-card surface'}
+      className={
+        isSimple
+          ? `course-card course-card--simple course-card--status-${course.status.toLowerCase().replace(/\s+/g, '-')} surface`
+          : `course-card course-card--status-${course.status.toLowerCase().replace(/\s+/g, '-')} surface`
+      }
     >
       <div className="course-card__top">
         <div>

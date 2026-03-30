@@ -723,9 +723,30 @@ button {
 }
 
 .course-card--simple {
-  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  padding: 16px 16px 16px 20px;
   gap: 12px;
   min-height: auto;
+  border: 1.5px solid var(--line-strong);
+  box-shadow: 0 4px 12px rgba(19, 33, 38, 0.04);
+}
+
+.course-card--status-en-ritmo { border-left-color: #2aada2 !important; }
+.course-card--status-en-revisión { border-left-color: #eab308 !important; }
+.course-card--status-riesgo { border-left-color: #00a3ff !important; }
+.course-card--status-bloqueado { border-left-color: #ef4444 !important; }
+.course-card--status-listo { border-left-color: #1f2937 !important; }
+
+.course-card--simple::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background-color: inherit;
+  border-left: inherit;
 }
 
 .course-card--simple .course-card__top {
@@ -6880,7 +6901,11 @@ body::after {
   .courses-filter-grid,
   .folder-grid,
   .handoff-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+
+  .courses-grid--explorer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .courses-explorer,
