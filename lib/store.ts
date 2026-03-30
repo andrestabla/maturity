@@ -1894,13 +1894,14 @@ async function rebuildUserInstitutionMemberships() {
   }>;
 
   for (const user of users) {
-    const secondaryRoles = parseJson<Role[]>(user.secondaryRoles ?? []);
-    const context = await resolveInstitutionReferenceContext({
-      institutionId: user.institutionId,
-      institution: user.institution?.trim() || defaultInstitutionSettings.displayName,
-      faculty: user.faculty?.trim() || '',
-      program: user.program?.trim() || '',
-    });
+    try {
+      const secondaryRoles = parseJson<Role[]>(user.secondaryRoles ?? []);
+      const context = await resolveInstitutionReferenceContext({
+        institutionId: user.institutionId,
+        institution: user.institution?.trim() || defaultInstitutionSettings.displayName,
+        faculty: user.faculty?.trim() || '',
+        program: user.program?.trim() || '',
+      });
 
     const memberships: Array<{
       id: string;
@@ -1972,17 +1973,20 @@ async function rebuildUserInstitutionMemberships() {
       `;
     }
 
-    await sql`
-      UPDATE maturity_users
-      SET
-        institution_id = ${context.institutionId},
-        faculty_id = ${context.facultyId},
-        program_id = ${context.programId},
-        institution = ${context.institutionName},
-        faculty = ${context.facultyName || null},
-        program = ${context.programName || null}
-      WHERE id = ${user.id}
-    `;
+      await sql`
+        UPDATE maturity_users
+        SET
+          institution_id = ${context.institutionId},
+          faculty_id = ${context.facultyId},
+          program_id = ${context.programId},
+          institution = ${context.institutionName},
+          faculty = ${context.facultyName || null},
+          program = ${context.programName || null}
+        WHERE id = ${user.id}
+      `;
+    } catch {
+      // Skip users whose institution context cannot be resolved — prevents crashing initialization
+    }
   }
 }
 
