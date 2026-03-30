@@ -240,14 +240,6 @@ function assertCourseContextInput(input: CourseMutationInput) {
   if (!input.program.trim()) {
     throw new Error('El curso debe pertenecer a un programa.');
   }
-
-  if (!input.academicPeriod.trim()) {
-    throw new Error('El curso debe pertenecer a un periodo académico.');
-  }
-
-  if (!input.courseType.trim()) {
-    throw new Error('El curso debe tener una tipología definida.');
-  }
 }
 
 function getTodayLabel() {

@@ -17,74 +17,79 @@ interface DeletePayload {
 }
 
 export default async function handler(request: Request) {
-  const user = await getSessionUser(request);
+  try {
+    const user = await getSessionUser(request);
 
-  if (!user) {
-    return errorResponse(401, 'Authentication required');
-  }
-
-  if (request.method === 'POST') {
-    if (!canManageCourses(user.role)) {
-      return errorResponse(403, 'You do not have permission to create courses');
+    if (!user) {
+      return errorResponse(401, 'Authentication required');
     }
 
-    const payload = await readJson<CourseMutationInput>(request);
-    const course = await createCourseRecord(payload);
+    if (request.method === 'POST') {
+      if (!canManageCourses(user.role)) {
+        return errorResponse(403, 'You do not have permission to create courses');
+      }
 
-    return jsonResponse(
-      {
+      const payload = await readJson<CourseMutationInput>(request);
+      const course = await createCourseRecord(payload);
+
+      return jsonResponse(
+        {
+          course,
+        },
+        {
+          status: 201,
+        },
+      );
+    }
+
+    if (request.method === 'PATCH') {
+      if (!canManageCourses(user.role)) {
+        return errorResponse(403, 'You do not have permission to update courses');
+      }
+
+      const slug = new URL(request.url).searchParams.get('slug');
+
+      if (!slug) {
+        return errorResponse(400, 'Course slug is required');
+      }
+
+      const payload = await readJson<CourseMutationInput>(request);
+      const course = await updateCourseRecord(slug, payload);
+
+      if (!course) {
+        return errorResponse(404, 'Course not found');
+      }
+
+      return jsonResponse({
         course,
-      },
-      {
-        status: 201,
-      },
-    );
+      });
+    }
+
+    if (request.method === 'DELETE') {
+      if (!canDeleteCourses(user.role)) {
+        return errorResponse(403, 'You do not have permission to delete courses');
+      }
+
+      const payload = await readJson<DeletePayload>(request);
+
+      if (!payload.slug) {
+        return errorResponse(400, 'Course slug is required');
+      }
+
+      const deleted = await deleteCourseRecord(payload.slug);
+
+      if (!deleted) {
+        return errorResponse(404, 'Course not found');
+      }
+
+      return jsonResponse({
+        ok: true,
+      });
+    }
+
+    return errorResponse(405, 'Method not allowed');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unexpected error creating course';
+    return errorResponse(500, message);
   }
-
-  if (request.method === 'PATCH') {
-    if (!canManageCourses(user.role)) {
-      return errorResponse(403, 'You do not have permission to update courses');
-    }
-
-    const slug = new URL(request.url).searchParams.get('slug');
-
-    if (!slug) {
-      return errorResponse(400, 'Course slug is required');
-    }
-
-    const payload = await readJson<CourseMutationInput>(request);
-    const course = await updateCourseRecord(slug, payload);
-
-    if (!course) {
-      return errorResponse(404, 'Course not found');
-    }
-
-    return jsonResponse({
-      course,
-    });
-  }
-
-  if (request.method === 'DELETE') {
-    if (!canDeleteCourses(user.role)) {
-      return errorResponse(403, 'You do not have permission to delete courses');
-    }
-
-    const payload = await readJson<DeletePayload>(request);
-
-    if (!payload.slug) {
-      return errorResponse(400, 'Course slug is required');
-    }
-
-    const deleted = await deleteCourseRecord(payload.slug);
-
-    if (!deleted) {
-      return errorResponse(404, 'Course not found');
-    }
-
-    return jsonResponse({
-      ok: true,
-    });
-  }
-
-  return errorResponse(405, 'Method not allowed');
 }
