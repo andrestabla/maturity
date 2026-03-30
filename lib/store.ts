@@ -1452,6 +1452,12 @@ async function syncInstitutionDirectoryRecords(
 
   for (const structure of normalizedStructures) {
     const timestamp = new Date().toISOString();
+    // Check if an institution with this name already exists (different ID can cause name constraint violation)
+    const existingByName = (await sql`
+      SELECT id FROM maturity_institutions WHERE name = ${structure.institution} LIMIT 1
+    `) as Array<{ id: string }>;
+    const effectiveId = existingByName[0]?.id ?? structure.id;
+
     await sql`
       INSERT INTO maturity_institutions (
         id,
@@ -1461,7 +1467,7 @@ async function syncInstitutionDirectoryRecords(
         updated_at
       )
       VALUES (
-        ${structure.id},
+        ${effectiveId},
         ${structure.institution},
         ${structure.allowAutoProvisioning},
         ${timestamp},
@@ -1474,11 +1480,11 @@ async function syncInstitutionDirectoryRecords(
         updated_at = EXCLUDED.updated_at
     `;
 
-    await syncInstitutionCatalogValues('faculty', structure.id, structure.faculties);
-    await syncInstitutionCatalogValues('program', structure.id, structure.programs);
-    await syncInstitutionCatalogValues('academicPeriod', structure.id, structure.academicPeriods);
-    await syncInstitutionCatalogValues('courseType', structure.id, structure.courseTypes);
-    await syncInstitutionCatalogValues('guideline', structure.id, structure.pedagogicalGuidelines);
+    await syncInstitutionCatalogValues('faculty', effectiveId, structure.faculties);
+    await syncInstitutionCatalogValues('program', effectiveId, structure.programs);
+    await syncInstitutionCatalogValues('academicPeriod', effectiveId, structure.academicPeriods);
+    await syncInstitutionCatalogValues('courseType', effectiveId, structure.courseTypes);
+    await syncInstitutionCatalogValues('guideline', effectiveId, structure.pedagogicalGuidelines);
   }
 }
 
