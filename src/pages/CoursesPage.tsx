@@ -737,6 +737,45 @@ export function CoursesPage({
     });
   }
 
+  useEffect(() => {
+    if (!isComposerOpen) return;
+
+    const getSegment = (text: string) => {
+      if (!text) return 'XXX';
+      const words = text.trim().split(/\s+/).filter(w => w.length > 2);
+      if (words.length >= 2) {
+        return words.map(w => w[0]).join('').toUpperCase().slice(0, 3);
+      }
+      return text.trim().slice(0, 3).toUpperCase();
+    };
+
+    const inst = getSegment(courseForm.institution);
+    const fac = getSegment(courseForm.faculty);
+    const prog = getSegment(courseForm.program);
+    const type = getSegment(courseForm.courseType);
+    const year = new Date().getFullYear().toString().slice(-2);
+    
+    // Static suffix based on title length or similar to keep it stable during edits
+    const suffix = courseForm.title 
+      ? (courseForm.title.length % 100).toString().padStart(2, '0')
+      : '00';
+    
+    const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    const generatedCode = `CUR-${inst}-${fac}-${prog}-${type}-${year}${suffix}${random}`;
+
+    setCourseForm((current) => {
+      if (current.code === generatedCode) return current;
+      return { ...current, code: generatedCode };
+    });
+  }, [
+    isComposerOpen,
+    courseForm.institution,
+    courseForm.faculty,
+    courseForm.program,
+    courseForm.courseType,
+    courseForm.title,
+  ]);
+
   function clearFilters() {
     setProjectFilter('Todos');
     setInstitutionFilter('Todas');
@@ -1085,13 +1124,13 @@ export function CoursesPage({
                     </div>
                   </label>
 
-                  <label className="field">
-                    <span>ID / código</span>
+                  <label className="field field--readonly">
+                    <span>ID / código (Automático)</span>
                     <div className="field__control">
                       <input
                         value={courseForm.code}
-                        onChange={(event) => updateCourseField('code', event.target.value)}
-                        placeholder="CUR-UNIX-EDU-PSI-0001"
+                        readOnly
+                        placeholder="CUR-INST-FAC-PROG-..."
                         required
                       />
                     </div>
