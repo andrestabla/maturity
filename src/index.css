@@ -8215,3 +8215,44 @@ body::after {
   width: 100%;
   margin-top: 10px;
 }
+.summary-workspace-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.summary-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 80px;
+}
+
+.summary-actions-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.summary-actions-card__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+@media (max-width: 1024px) {
+  .summary-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-sidebar {
+    position: static;
+  }
+}
