@@ -20,7 +20,6 @@ import type {
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
-  CourseAuditEntry,
   CourseProductStage,
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
@@ -32,7 +31,7 @@ import type {
   TeamMember,
   TeamMemberMutationInput,
 } from '../types.js';
-import { formatDate, formatDateTime } from '../utils/format.js';
+import { formatDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
   getFirstInstitutionStructure,
@@ -136,23 +135,6 @@ function checkpointBadgeClass(status: StageCheckpointStatus) {
       return 'badge badge--gold';
     case 'blocked':
       return 'badge badge--coral';
-    default:
-      return 'badge badge--outline';
-  }
-}
-
-function historyTypeBadge(type: CourseAuditEntry['type']) {
-  switch (type) {
-    case 'course':
-      return 'badge badge--ocean';
-    case 'planning':
-      return 'badge badge--gold';
-    case 'production':
-      return 'badge badge--sage';
-    case 'resource':
-      return 'badge badge--lavender';
-    case 'qa':
-      return 'badge badge--ink';
     default:
       return 'badge badge--outline';
   }
@@ -575,6 +557,7 @@ export function CourseWorkspacePage({
   const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
 
 
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
@@ -1022,9 +1005,6 @@ export function CourseWorkspacePage({
       member: currentCourse.team.find((member) => member.role === roleName),
     }))
     .filter((item) => item.member);
-  const historyFeed = currentCourse.auditLog
-    .slice()
-    .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt));
 
   function countProductsByStage(stageId: CourseProductStage) {
     return currentCourse.products.filter((product) => product.stage === stageId).length;
@@ -3582,7 +3562,6 @@ export function CourseWorkspacePage({
             ['lms', 'LMS'],
             ['qa', 'QA'],
             ['entrega', 'Entrega'],
-            ['history', 'Historial'],
           ].map(([value, label]) => (
             <button
               key={value}
@@ -3692,7 +3671,7 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => goToSection('history')}
+                  onClick={() => setIsHistoryModalOpen(true)}
                 >
                   <History size={16} />
                   <span>Historial</span>
@@ -3915,36 +3894,63 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
-      {activeSection === 'history' ? (
-        <section className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Cronología</span>
-              <h3>Historial de maduración</h3>
+      {isHistoryModalOpen ? (
+        <ModalFrame
+          eyebrow="Trazabilidad"
+          title={`Expediente de cambios · ${currentCourse.title}`}
+          description="Historial detallado de acciones, responsables y cronología del curso."
+          width="xl"
+          onClose={() => setIsHistoryModalOpen(false)}
+        >
+          <div className="surface section-card section-card--compact">
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Acción</th>
+                    <th>Detalle</th>
+                    <th>Referencia</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentCourse.auditLog.length > 0 ? (
+                    currentCourse.auditLog
+                      .slice()
+                      .reverse()
+                      .map((entry) => (
+                        <tr key={entry.id}>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <div className={`status-dot status-dot--${entry.type}`} />
+                              <span className="font-semibold">{entry.title}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <p className="text-muted text-sm">{entry.detail}</p>
+                          </td>
+                          <td>
+                             <span className="badge badge--outline capitalize">
+                               {entry.type === 'history' ? 'Sistema' : entry.type}
+                             </span>
+                          </td>
+                          <td className="whitespace-nowrap font-mono text-xs">
+                            {formatDate(entry.happenedAt)}
+                          </td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="text-center py-12 text-muted">
+                        No hay registros de actividad para este curso todavía.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <History size={18} />
           </div>
-          <div className="list-stack">
-            {historyFeed.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin eventos registrados</strong>
-              </div>
-            ) : (
-              historyFeed.map((entry) => (
-                <div key={entry.id} className="list-item">
-                  <div className="list-item__visual">
-                    <span className={historyTypeBadge(entry.type)}>{entry.type}</span>
-                  </div>
-                  <div>
-                    <strong>{entry.title}</strong>
-                    <p>{entry.detail}</p>
-                    <span className="text-muted text-xs">{formatDateTime(entry.happenedAt)}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
+        </ModalFrame>
       ) : null}
 
       {activeWorkspaceOverlay === 'metadata' ? (
