@@ -4270,13 +4270,101 @@ export function CourseWorkspacePage({
         >
           <div className="page-stack">
             {!isEditingCourse ? (
-              <div className="editor-card">
-                <div className="editor-card__header">
-                  <div>
-                    <span className="eyebrow">Consulta</span>
-                    <h3>Ficha técnica y operativa</h3>
+              <div className="management-layout">
+                <main className="page-stack">
+                  <div className="detail-row">
+                    <article className="detail-section">
+                      <div className="section-heading">
+                        <h3>Información general</h3>
+                      </div>
+                      <div className="form-grid">
+                        <div className="field field--full">
+                          <span>Título</span>
+                          <p className="text-xl font-semibold">{currentCourse.title}</p>
+                        </div>
+                        <div className="field">
+                          <span>Código</span>
+                          <p className="font-mono">{currentCourse.code}</p>
+                        </div>
+                        <div className="field">
+                          <span>Institución</span>
+                          <p>{currentCourse.metadata.institution}</p>
+                        </div>
+                        <div className="field field--full">
+                          <span>Resumen</span>
+                          <p className="text-muted leading-relaxed">{currentCourse.summary}</p>
+                        </div>
+                      </div>
+                    </article>
+
+                    <article className="detail-section">
+                      <div className="section-heading">
+                        <h3>Perfil académico</h3>
+                      </div>
+                      <div className="form-grid form-grid--three">
+                        <div className="field">
+                          <span>Facultad</span>
+                          <p>{currentCourse.faculty}</p>
+                        </div>
+                        <div className="field">
+                          <span>Programa</span>
+                          <p>{currentCourse.program}</p>
+                        </div>
+                        <div className="field">
+                          <span>Créditos</span>
+                          <p>{currentCourse.credits}</p>
+                        </div>
+                        <div className="field">
+                          <span>Semestre</span>
+                          <p>{currentCourse.metadata.semester}</p>
+                        </div>
+                        <div className="field">
+                          <span>Modalidad</span>
+                          <p>{currentCourse.modality}</p>
+                        </div>
+                        <div className="field">
+                          <span>Periodo</span>
+                          <p>{currentCourse.metadata.academicPeriod}</p>
+                        </div>
+                      </div>
+                    </article>
                   </div>
-                  <div className="action-row">
+
+                  <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Contenido y Metodología</h3>
+                    </div>
+                    <div className="form-grid">
+                      <div className="field field--full">
+                        <span>Resultados de aprendizaje</span>
+                        <div className="list-stack list-stack--compact mt-2">
+                          {currentCourse.metadata.learningOutcomes.map((item, idx) => (
+                            <p key={idx} className="text-sm">• {item}</p>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="field field--full">
+                        <span>Temas clave</span>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {currentCourse.metadata.topics.map((item, idx) => (
+                            <span key={idx} className="badge badge--outline">{item}</span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="field">
+                        <span>Metodología</span>
+                        <p>{currentCourse.metadata.methodology}</p>
+                      </div>
+                      <div className="field">
+                        <span>Evaluación</span>
+                        <p>{currentCourse.metadata.evaluation}</p>
+                      </div>
+                    </div>
+                  </article>
+
+                  <div className="action-row mt-4">
                     <button
                       type="button"
                       className="cta-button"
@@ -4293,125 +4381,56 @@ export function CourseWorkspacePage({
                       <Trash2 size={16} />
                       <span>Eliminar curso</span>
                     </button>
+                    <button type="button" className="ghost-button" onClick={() => setIsCourseEditorOpen(false)}>
+                      <span>Cerrar</span>
+                    </button>
                   </div>
-                </div>
+                </main>
 
-                <div className="form-grid">
-                  <div className="field">
-                    <span>Título</span>
-                    <p className="text-lg font-semibold">{currentCourse.title}</p>
-                  </div>
-                  <div className="field">
-                    <span>Código</span>
-                    <p className="text-lg font-mono">{currentCourse.code}</p>
-                  </div>
-                  <div className="field">
-                    <span>Institución</span>
-                    <p>{currentCourse.metadata.institution}</p>
-                  </div>
-                  <div className="field">
-                    <span>Facultad</span>
-                    <p>{currentCourse.faculty}</p>
-                  </div>
-                  <div className="field">
-                    <span>Programa</span>
-                    <p>{currentCourse.program}</p>
-                  </div>
-                  <div className="field">
-                    <span>Periodo académico</span>
-                    <p>{currentCourse.metadata.academicPeriod}</p>
-                  </div>
-                  <div className="field">
-                    <span>Tipo de curso</span>
-                    <p>{currentCourse.metadata.courseType}</p>
-                  </div>
-                  <div className="field">
-                    <span>Modalidad</span>
-                    <p>{currentCourse.modality}</p>
-                  </div>
-                  <div className="field">
-                    <span>Créditos</span>
-                    <p>{currentCourse.credits}</p>
-                  </div>
-                  <div className="field">
-                    <span>Etapa actual</span>
-                    <p>{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</p>
-                  </div>
-                  <div className="field">
-                    <span>Estado</span>
-                    <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
-                  </div>
-                  <div className="field field--full">
-                    <span>Próximo hito</span>
-                    <p className="text-coral font-medium">{currentCourse.nextMilestone}</p>
-                  </div>
-                  <div className="field field--full">
-                    <span>Resumen</span>
-                    <p>{currentCourse.summary}</p>
-                  </div>
-
-                  <div className="field field--full mt-4 border-t pt-4">
-                    <span className="eyebrow block mb-4">Criterios Académicos</span>
-                  </div>
-
-                  <div className="field">
-                    <span>Nombre corto</span>
-                    <p>{currentCourse.metadata.shortName}</p>
-                  </div>
-                  <div className="field">
-                    <span>Semestre</span>
-                    <p>{currentCourse.metadata.semester}</p>
-                  </div>
-                  <div className="field">
-                    <span>Versión</span>
-                    <p>{currentCourse.metadata.currentVersion}</p>
-                  </div>
-                  <div className="field">
-                    <span>Prioridad</span>
-                    <p>{currentCourse.metadata.priority}</p>
-                  </div>
-                  <div className="field">
-                    <span>Riesgo</span>
-                    <p>{currentCourse.metadata.riskLevel}</p>
-                  </div>
-                  <div className="field">
-                    <span>Cierre objetivo</span>
-                    <p>{formatDate(currentCourse.metadata.targetCloseDate)}</p>
-                  </div>
-
-                  <div className="field field--full">
-                    <span>Resultados de aprendizaje</span>
-                    <div className="list-stack list-stack--compact mt-2">
-                      {currentCourse.metadata.learningOutcomes.map((item, idx) => (
-                        <p key={idx} className="text-sm">• {item}</p>
-                      ))}
+                <aside className="side-panel">
+                  <div className="highlight-item">
+                    <span className="eyebrow">Estado del proyecto</span>
+                    <h4>Plan operativo</h4>
+                    <div className="form-grid mt-4">
+                      <div className="field">
+                        <span>Etapa</span>
+                        <strong>{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</strong>
+                      </div>
+                      <div className="field">
+                        <span>Status</span>
+                        <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="field field--full">
-                    <span>Temas clave</span>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {currentCourse.metadata.topics.map((item, idx) => (
-                        <span key={idx} className="badge badge--outline">{item}</span>
-                      ))}
+                  <div className="highlight-item">
+                    <span className="eyebrow">Indicadores clave</span>
+                    <div className="form-grid">
+                      <div className="field">
+                        <span>Prioridad</span>
+                        <p className="font-semibold">{currentCourse.metadata.priority}</p>
+                      </div>
+                      <div className="field">
+                        <span>Riesgo</span>
+                        <p className="font-semibold">{currentCourse.metadata.riskLevel}</p>
+                      </div>
+                      <div className="field">
+                        <span>Versión</span>
+                        <p>{currentCourse.metadata.currentVersion}</p>
+                      </div>
+                      <div className="field">
+                        <span>Cierre obj.</span>
+                        <p>{formatDate(currentCourse.metadata.targetCloseDate)}</p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="field field--full">
-                    <span>Metodología</span>
-                    <p>{currentCourse.metadata.methodology}</p>
+                  <div className="highlight-item" style={{ background: 'var(--coral-soft)', border: '1px solid rgba(199, 124, 86, 0.2)' }}>
+                    <span className="eyebrow" style={{ color: '#8d3f22' }}>Meta inmediata</span>
+                    <h4 style={{ color: '#8d3f22' }}>Próximo hito</h4>
+                    <p className="mt-2 font-medium" style={{ color: '#8d3f22' }}>{currentCourse.nextMilestone}</p>
                   </div>
-                  <div className="field field--full">
-                    <span>Evaluación</span>
-                    <p>{currentCourse.metadata.evaluation}</p>
-                  </div>
-                </div>
-
-                <div className="action-row mt-8">
-                  <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
-                    <span>Cerrar detalles</span>
-                  </button>
-                </div>
+                </aside>
               </div>
             ) : (
               <>
@@ -4423,7 +4442,7 @@ export function CourseWorkspacePage({
                     </div>
                   </div>
 
-                  <div className="form-grid">
+                  <div className="form-grid form-grid--three">
                     <label className="field">
                       <span>Título</span>
                       <div className="field__control">
@@ -4632,17 +4651,17 @@ export function CourseWorkspacePage({
                       <span>Volver</span>
                     </button>
                   </div>
-                </form>
+                 </form>
 
-                <form className="editor-card" onSubmit={handleMetadataSave}>
-                  <div className="editor-card__header">
-                    <div>
-                      <span className="eyebrow">Ficha operativa</span>
-                      <h3>Metadatos y criterios académicos</h3>
-                    </div>
-                  </div>
+                 <form className="editor-card" onSubmit={handleMetadataSave}>
+                   <div className="editor-card__header">
+                     <div>
+                       <span className="eyebrow">Ficha operativa</span>
+                       <h3>Metadatos y criterios académicos</h3>
+                     </div>
+                   </div>
 
-                  <div className="form-grid">
+                   <div className="form-grid form-grid--three">
                     <label className="field">
                       <span>Institución</span>
                       <div className="field__control">
