@@ -674,6 +674,7 @@ export function CourseWorkspacePage({
     : [];
 
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
+  const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
   const [isModuleComposerOpen, setIsModuleComposerOpen] = useState(false);
@@ -2473,7 +2474,7 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
-      setIsCourseEditorOpen(false);
+      setIsEditingCourse(false);
     } catch (error) {
       setCourseError(error instanceof Error ? error.message : 'No fue posible actualizar el curso.');
     } finally {
@@ -6877,532 +6878,675 @@ export function CourseWorkspacePage({
           onClose={() => setIsCourseEditorOpen(false)}
         >
           <div className="page-stack">
-          <form className="editor-card" onSubmit={handleCourseSave}>
-            <div className="editor-card__header">
-              <div>
-                <span className="eyebrow">Edición</span>
-                <h3>Ajustar ficha del curso</h3>
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <label className="field">
-                <span>Título</span>
-                <div className="field__control">
-                  <input
-                    value={courseForm.title}
-                    onChange={(event) => updateCourseDraftField('title', event.target.value)}
-                    required
-                  />
+            {!isEditingCourse ? (
+              <div className="editor-card">
+                <div className="editor-card__header">
+                  <div>
+                    <span className="eyebrow">Consulta</span>
+                    <h3>Ficha técnica y operativa</h3>
+                  </div>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="cta-button"
+                      onClick={() => setIsEditingCourse(true)}
+                    >
+                      <PencilLine size={16} />
+                      <span>Editar información</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-button danger-button--ghost"
+                      onClick={() => void handleCourseDelete()}
+                    >
+                      <Trash2 size={16} />
+                      <span>Eliminar curso</span>
+                    </button>
+                  </div>
                 </div>
-              </label>
 
-              <label className="field">
-                <span>Código</span>
-                <div className="field__control">
-                  <input
-                    value={courseForm.code}
-                    onChange={(event) => updateCourseDraftField('code', event.target.value)}
-                    required
-                  />
+                <div className="form-grid">
+                  <div className="field">
+                    <span>Título</span>
+                    <p className="text-lg font-semibold">{currentCourse.title}</p>
+                  </div>
+                  <div className="field">
+                    <span>Código</span>
+                    <p className="text-lg font-mono">{currentCourse.code}</p>
+                  </div>
+                  <div className="field">
+                    <span>Institución</span>
+                    <p>{currentCourse.metadata.institution}</p>
+                  </div>
+                  <div className="field">
+                    <span>Facultad</span>
+                    <p>{currentCourse.faculty}</p>
+                  </div>
+                  <div className="field">
+                    <span>Programa</span>
+                    <p>{currentCourse.program}</p>
+                  </div>
+                  <div className="field">
+                    <span>Periodo académico</span>
+                    <p>{currentCourse.metadata.academicPeriod}</p>
+                  </div>
+                  <div className="field">
+                    <span>Tipo de curso</span>
+                    <p>{currentCourse.metadata.courseType}</p>
+                  </div>
+                  <div className="field">
+                    <span>Modalidad</span>
+                    <p>{currentCourse.modality}</p>
+                  </div>
+                  <div className="field">
+                    <span>Créditos</span>
+                    <p>{currentCourse.credits}</p>
+                  </div>
+                  <div className="field">
+                    <span>Etapa actual</span>
+                    <p>{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</p>
+                  </div>
+                  <div className="field">
+                    <span>Estado</span>
+                    <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
+                  </div>
+                  <div className="field field--full">
+                    <span>Próximo hito</span>
+                    <p className="text-coral font-medium">{currentCourse.nextMilestone}</p>
+                  </div>
+                  <div className="field field--full">
+                    <span>Resumen</span>
+                    <p>{currentCourse.summary}</p>
+                  </div>
+
+                  <div className="field field--full mt-4 border-t pt-4">
+                    <span className="eyebrow block mb-4">Criterios Académicos</span>
+                  </div>
+
+                  <div className="field">
+                    <span>Nombre corto</span>
+                    <p>{currentCourse.metadata.shortName}</p>
+                  </div>
+                  <div className="field">
+                    <span>Semestre</span>
+                    <p>{currentCourse.metadata.semester}</p>
+                  </div>
+                  <div className="field">
+                    <span>Versión</span>
+                    <p>{currentCourse.metadata.currentVersion}</p>
+                  </div>
+                  <div className="field">
+                    <span>Prioridad</span>
+                    <p>{currentCourse.metadata.priority}</p>
+                  </div>
+                  <div className="field">
+                    <span>Riesgo</span>
+                    <p>{currentCourse.metadata.riskLevel}</p>
+                  </div>
+                  <div className="field">
+                    <span>Cierre objetivo</span>
+                    <p>{formatDate(currentCourse.metadata.targetCloseDate)}</p>
+                  </div>
+
+                  <div className="field field--full">
+                    <span>Resultados de aprendizaje</span>
+                    <div className="list-stack list-stack--compact mt-2">
+                      {currentCourse.metadata.learningOutcomes.map((item, idx) => (
+                        <p key={idx} className="text-sm">• {item}</p>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="field field--full">
+                    <span>Temas clave</span>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {currentCourse.metadata.topics.map((item, idx) => (
+                        <span key={idx} className="badge badge--outline">{item}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="field field--full">
+                    <span>Metodología</span>
+                    <p>{currentCourse.metadata.methodology}</p>
+                  </div>
+                  <div className="field field--full">
+                    <span>Evaluación</span>
+                    <p>{currentCourse.metadata.evaluation}</p>
+                  </div>
                 </div>
-              </label>
 
-              <label className="field">
-                <span>Institución</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.institution}
-                    onChange={(event) => updateCourseDraftField('institution', event.target.value)}
-                    required
-                  >
-                    {institutionOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Facultad</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.faculty}
-                    onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
-                    required
-                  >
-                    {facultyOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Programa</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.program}
-                    onChange={(event) => updateCourseDraftField('program', event.target.value)}
-                    required
-                  >
-                    {programOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Periodo académico</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.academicPeriod}
-                    onChange={(event) => updateCourseDraftField('academicPeriod', event.target.value)}
-                    required
-                  >
-                    {academicPeriodOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Tipo de curso</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.courseType}
-                    onChange={(event) => updateCourseDraftField('courseType', event.target.value)}
-                    required
-                  >
-                    {courseTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Modalidad</span>
-                <div className="field__control">
-                  <input
-                    value={courseForm.modality}
-                    onChange={(event) => updateCourseDraftField('modality', event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Créditos</span>
-                <div className="field__control">
-                  <input
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={courseForm.credits}
-                    onChange={(event) =>
-                      updateCourseDraftField(
-                        'credits',
-                        Number.parseInt(event.target.value, 10) || 1,
-                      )
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Etapa</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.stageId}
-                    onChange={(event) => updateCourseDraftField('stageId', event.target.value)}
-                  >
-                    {appData.stages.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={courseForm.status}
-                    onChange={(event) =>
-                      updateCourseDraftField(
-                        'status',
-                        event.target.value as CourseMutationInput['status'],
-                      )
-                    }
-                  >
-                    {['En curso', 'En QA', 'En riesgo', 'Bloqueado', 'Entregado'].map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Próximo hito</span>
-                <div className="field__control">
-                  <input
-                    value={courseForm.nextMilestone}
-                    onChange={(event) => updateCourseDraftField('nextMilestone', event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={courseForm.summary}
-                    onChange={(event) => updateCourseDraftField('summary', event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-            </div>
-
-            {courseError ? <p className="form-error">{courseError}</p> : null}
-
-            <div className="action-row">
-              <button type="submit" className="cta-button" disabled={isCourseSaving}>
-                <span>{isCourseSaving ? 'Guardando…' : 'Guardar cambios'}</span>
-              </button>
-              <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
-                <span>Cancelar</span>
-              </button>
-
-              <button type="button" className="danger-button" onClick={() => void handleCourseDelete()}>
-                <Trash2 size={16} />
-                <span>Eliminar curso</span>
-              </button>
-            </div>
-          </form>
-
-          <form className="editor-card" onSubmit={handleMetadataSave}>
-            <div className="editor-card__header">
-              <div>
-                <span className="eyebrow">Ficha operativa</span>
-                <h3>Metadatos y criterios académicos</h3>
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <label className="field">
-                <span>Institución</span>
-                <div className="field__control">
-                  <select
-                    value={metadataForm.institution}
-                    onChange={(event) => {
-                      updateCourseDraftField('institution', event.target.value);
-                      setMetadataForm((current) => ({
-                        ...current,
-                        institution: event.target.value,
-                      }));
-                    }}
-                    required
-                  >
-                    {institutionOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Nombre corto</span>
-                <div className="field__control">
-                  <input
-                    value={metadataForm.shortName}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        shortName: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Semestre</span>
-                <div className="field__control">
-                  <input
-                    value={metadataForm.semester}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        semester: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Periodo académico</span>
-                <div className="field__control">
-                  <select
-                    value={metadataForm.academicPeriod}
-                    onChange={(event) => {
-                      updateCourseDraftField('academicPeriod', event.target.value);
-                      setMetadataForm((current) => ({
-                        ...current,
-                        academicPeriod: event.target.value,
-                      }));
-                    }}
-                    required
-                  >
-                    {academicPeriodOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Tipo de curso</span>
-                <div className="field__control">
-                  <select
-                    value={metadataForm.courseType}
-                    onChange={(event) => {
-                      updateCourseDraftField('courseType', event.target.value);
-                      setMetadataForm((current) => ({
-                        ...current,
-                        courseType: event.target.value,
-                      }));
-                    }}
-                    required
-                  >
-                    {courseTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Cierre objetivo</span>
-                <div className="field__control">
-                  <input
-                    type="date"
-                    value={metadataForm.targetCloseDate}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        targetCloseDate: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Versión</span>
-                <div className="field__control">
-                  <input
-                    value={metadataForm.currentVersion}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        currentVersion: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Prioridad</span>
-                <div className="field__control">
-                  <select
-                    value={metadataForm.priority}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        priority: event.target.value as CourseMetadataMutationInput['priority'],
-                      }))
-                    }
-                  >
-                    {['Alta', 'Media', 'Baja'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Riesgo</span>
-                <div className="field__control">
-                  <select
-                    value={metadataForm.riskLevel}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        riskLevel: event.target.value as CourseMetadataMutationInput['riskLevel'],
-                      }))
-                    }
-                  >
-                    {['Bajo', 'Medio', 'Alto'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <div className="field field--full">
-                <span>Lineamientos pedagógicos activos</span>
-                <div className="list-stack">
-                  {institutionGuidelines.length > 0 ? (
-                    institutionGuidelines.map((guideline) => (
-                      <p key={guideline} className="institution-structure-summary">
-                        {guideline}
-                      </p>
-                    ))
-                  ) : (
-                    <p className="institution-structure-summary">
-                      Esta institución no tiene lineamientos pedagógicos configurados todavía.
-                    </p>
-                  )}
+                <div className="action-row mt-8">
+                  <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
+                    <span>Cerrar detalles</span>
+                  </button>
                 </div>
               </div>
+            ) : (
+              <>
+                <form className="editor-card" onSubmit={handleCourseSave}>
+                  <div className="editor-card__header">
+                    <div>
+                      <span className="eyebrow">Edición</span>
+                      <h3>Ajustar ficha del curso</h3>
+                    </div>
+                  </div>
 
-              <label className="field field--full">
-                <span>Metodología</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={metadataForm.methodology}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        methodology: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Título</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.title}
+                          onChange={(event) => updateCourseDraftField('title', event.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
 
-              <label className="field field--full">
-                <span>Evaluación</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={metadataForm.evaluation}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        evaluation: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </label>
+                    <label className="field">
+                      <span>Código</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.code}
+                          onChange={(event) => updateCourseDraftField('code', event.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
 
-              <label className="field field--full">
-                <span>Resultados de aprendizaje</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={joinLines(metadataForm.learningOutcomes)}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        learningOutcomes: splitLines(event.target.value),
-                      }))
-                    }
-                    placeholder="Un resultado por línea"
-                    required
-                  />
-                </div>
-              </label>
+                    <label className="field">
+                      <span>Institución</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.institution}
+                          onChange={(event) => updateCourseDraftField('institution', event.target.value)}
+                          required
+                        >
+                          {institutionOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
 
-              <label className="field field--full">
-                <span>Temas clave</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={joinLines(metadataForm.topics)}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        topics: splitLines(event.target.value),
-                      }))
-                    }
-                    placeholder="Un tema por línea"
-                    required
-                  />
-                </div>
-              </label>
+                    <label className="field">
+                      <span>Facultad</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.faculty}
+                          onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
+                          required
+                        >
+                          {facultyOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
 
-              <label className="field field--full">
-                <span>Bibliografía base</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={4}
-                    value={joinLines(metadataForm.bibliography)}
-                    onChange={(event) =>
-                      setMetadataForm((current) => ({
-                        ...current,
-                        bibliography: splitLines(event.target.value),
-                      }))
-                    }
-                    placeholder="Una referencia por línea"
-                    required
-                  />
-                </div>
-              </label>
-            </div>
+                    <label className="field">
+                      <span>Programa</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.program}
+                          onChange={(event) => updateCourseDraftField('program', event.target.value)}
+                          required
+                        >
+                          {programOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
 
-            {metadataError ? <p className="form-error">{metadataError}</p> : null}
+                    <label className="field">
+                      <span>Periodo académico</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.academicPeriod}
+                          onChange={(event) => updateCourseDraftField('academicPeriod', event.target.value)}
+                          required
+                        >
+                          {academicPeriodOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
 
-            <div className="action-row">
-              <button type="submit" className="cta-button" disabled={isMetadataSaving}>
-                <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
-              </button>
-              <button type="button" className="filter-chip" onClick={() => setIsCourseEditorOpen(false)}>
-                <span>Cerrar</span>
-              </button>
-            </div>
-          </form>
+                    <label className="field">
+                      <span>Tipo de curso</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.courseType}
+                          onChange={(event) => updateCourseDraftField('courseType', event.target.value)}
+                          required
+                        >
+                          {courseTypeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Modalidad</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.modality}
+                          onChange={(event) => updateCourseDraftField('modality', event.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Créditos</span>
+                      <div className="field__control">
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          value={courseForm.credits}
+                          onChange={(event) =>
+                            updateCourseDraftField(
+                              'credits',
+                              Number.parseInt(event.target.value, 10) || 1,
+                            )
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Etapa</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.stageId}
+                          onChange={(event) => updateCourseDraftField('stageId', event.target.value)}
+                        >
+                          {appData.stages.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.status}
+                          onChange={(event) =>
+                            updateCourseDraftField(
+                              'status',
+                              event.target.value as CourseMutationInput['status'],
+                            )
+                          }
+                        >
+                          {['En curso', 'En QA', 'En riesgo', 'Bloqueado', 'Entregado'].map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Próximo hito</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.nextMilestone}
+                          onChange={(event) => updateCourseDraftField('nextMilestone', event.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Resumen</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={4}
+                          value={courseForm.summary}
+                          onChange={(event) => updateCourseDraftField('summary', event.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {courseError ? <p className="form-error">{courseError}</p> : null}
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isCourseSaving}>
+                      <span>{isCourseSaving ? 'Guardando…' : 'Guardar cambios'}</span>
+                    </button>
+                    <button type="button" className="filter-chip" onClick={() => setIsEditingCourse(false)}>
+                      <span>Volver</span>
+                    </button>
+                  </div>
+                </form>
+
+                <form className="editor-card" onSubmit={handleMetadataSave}>
+                  <div className="editor-card__header">
+                    <div>
+                      <span className="eyebrow">Ficha operativa</span>
+                      <h3>Metadatos y criterios académicos</h3>
+                    </div>
+                  </div>
+
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Institución</span>
+                      <div className="field__control">
+                        <select
+                          value={metadataForm.institution}
+                          onChange={(event) => {
+                            updateCourseDraftField('institution', event.target.value);
+                            setMetadataForm((current) => ({
+                              ...current,
+                              institution: event.target.value,
+                            }));
+                          }}
+                          required
+                        >
+                          {institutionOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Nombre corto</span>
+                      <div className="field__control">
+                        <input
+                          value={metadataForm.shortName}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              shortName: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Semestre</span>
+                      <div className="field__control">
+                        <input
+                          value={metadataForm.semester}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              semester: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Periodo académico</span>
+                      <div className="field__control">
+                        <select
+                          value={metadataForm.academicPeriod}
+                          onChange={(event) => {
+                            updateCourseDraftField('academicPeriod', event.target.value);
+                            setMetadataForm((current) => ({
+                              ...current,
+                              academicPeriod: event.target.value,
+                            }));
+                          }}
+                          required
+                        >
+                          {academicPeriodOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Tipo de curso</span>
+                      <div className="field__control">
+                        <select
+                          value={metadataForm.courseType}
+                          onChange={(event) => {
+                            updateCourseDraftField('courseType', event.target.value);
+                            setMetadataForm((current) => ({
+                              ...current,
+                              courseType: event.target.value,
+                            }));
+                          }}
+                          required
+                        >
+                          {courseTypeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Cierre objetivo</span>
+                      <div className="field__control">
+                        <input
+                          type="date"
+                          value={metadataForm.targetCloseDate}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              targetCloseDate: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Versión</span>
+                      <div className="field__control">
+                        <input
+                          value={metadataForm.currentVersion}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              currentVersion: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Prioridad</span>
+                      <div className="field__control">
+                        <select
+                          value={metadataForm.priority}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              priority: event.target.value as CourseMetadataMutationInput['priority'],
+                            }))
+                          }
+                        >
+                          {['Alta', 'Media', 'Baja'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Riesgo</span>
+                      <div className="field__control">
+                        <select
+                          value={metadataForm.riskLevel}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              riskLevel: event.target.value as CourseMetadataMutationInput['riskLevel'],
+                            }))
+                          }
+                        >
+                          {['Bajo', 'Medio', 'Alto'].map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <div className="field field--full">
+                      <span>Lineamientos pedagógicos activos</span>
+                      <div className="list-stack">
+                        {institutionGuidelines.length > 0 ? (
+                          institutionGuidelines.map((guideline) => (
+                            <p key={guideline} className="institution-structure-summary">
+                              {guideline}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="institution-structure-summary">
+                            Esta institución no tiene lineamientos pedagógicos configurados todavía.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="field field--full">
+                      <span>Metodología</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={metadataForm.methodology}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              methodology: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Evaluación</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={metadataForm.evaluation}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              evaluation: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Resultados de aprendizaje</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={4}
+                          value={joinLines(metadataForm.learningOutcomes)}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              learningOutcomes: splitLines(event.target.value),
+                            }))
+                          }
+                          placeholder="Un resultado por línea"
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Temas clave</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={3}
+                          value={joinLines(metadataForm.topics)}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              topics: splitLines(event.target.value),
+                            }))
+                          }
+                          placeholder="Un tema por línea"
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Bibliografía base</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          rows={4}
+                          value={joinLines(metadataForm.bibliography)}
+                          onChange={(event) =>
+                            setMetadataForm((current) => ({
+                              ...current,
+                              bibliography: splitLines(event.target.value),
+                            }))
+                          }
+                          placeholder="Una referencia por línea"
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {metadataError ? <p className="form-error">{metadataError}</p> : null}
+
+                  <div className="action-row">
+                    <button type="submit" className="cta-button" disabled={isMetadataSaving}>
+                      <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
+                    </button>
+                    <button type="button" className="filter-chip" onClick={() => setIsEditingCourse(false)}>
+                      <span>Volver</span>
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </ModalFrame>
       ) : null}
