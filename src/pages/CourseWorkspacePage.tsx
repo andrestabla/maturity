@@ -114,7 +114,7 @@ function buildCourseSectionPath(slug: string, section: CourseSection) {
 function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
-    case 'En ritmo':
+    case 'En curso':
     case 'Resuelta':
       return 'badge badge--sage';
     case 'En revisión':
@@ -231,7 +231,7 @@ function buildEmptyCourseForm(stageId: string): CourseMutationInput {
     modality: '',
     credits: 1,
     stageId,
-    status: 'En ritmo',
+    status: 'En curso',
     summary: '',
     nextMilestone: '',
   };
@@ -722,7 +722,7 @@ export function CourseWorkspacePage({
       modality: '',
       credits: 0,
       stageId: fallbackStageId,
-      status: 'En ritmo',
+      status: 'En curso',
       progress: 0,
       summary: '',
       nextMilestone: '',
@@ -1243,11 +1243,11 @@ export function CourseWorkspacePage({
       : upcomingMilestones.length === 0
         ? 'En curso'
         : teamCoverage.length >= 3
-          ? 'Listo'
+          ? 'Completado'
           : 'En curso';
   const notificationStatus =
-    currentCourse.status === 'Listo'
-      ? 'Listo'
+    currentCourse.status === 'Entregado'
+      ? 'Completado'
       : isHandoffReady
         ? 'En curso'
         : !checkpointRequirementMet || handoffBlockingCount > 0
@@ -4603,7 +4603,7 @@ export function CourseWorkspacePage({
                       )
                     }
                   >
-                    {['En ritmo', 'En revisión', 'Riesgo', 'Bloqueado', 'Listo'].map((status) => (
+                    {['En curso', 'En QA', 'En riesgo', 'Bloqueado', 'Entregado'].map((status) => (
                       <option key={status} value={status}>
                         {status}
                       </option>
