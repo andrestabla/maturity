@@ -58,6 +58,7 @@ interface CourseWorkspacePageProps {
   userRole: Role;
   appData: AppData;
   refreshAppData: () => void;
+  mutateAppData: (nextData: AppData | ((current: AppData) => AppData)) => void;
 }
 
 type CourseSection =
@@ -553,6 +554,7 @@ export function CourseWorkspacePage({
   userRole,
   appData,
   refreshAppData,
+  mutateAppData,
 }: CourseWorkspacePageProps) {
   const { slug = '', section: sectionParam } = useParams<{ slug?: string; section?: string }>();
   const { showAlert, showConfirm } = useSystemDialog();
@@ -2261,7 +2263,24 @@ export function CourseWorkspacePage({
     setIsCourseSaving(true);
     setCourseError(null);
 
+    const originalAppData = { ...appData };
+
     try {
+      // Optimistic update
+      mutateAppData((current) => ({
+        ...current,
+        courses: current.courses.map((c) =>
+          c.slug === currentCourse.slug
+            ? {
+                ...c,
+                ...courseForm,
+                metadata: { ...c.metadata, ...courseForm },
+                updatedAt: new Date().toISOString().slice(0, 10),
+              }
+            : c,
+        ),
+      }));
+
       const response = await fetch(`/api/courses?slug=${encodeURIComponent(currentCourse.slug)}`, {
         method: 'PATCH',
         credentials: 'same-origin',
@@ -2280,6 +2299,8 @@ export function CourseWorkspacePage({
       refreshAppData();
       setIsEditingCourse(false);
     } catch (error) {
+      // Rollback
+      mutateAppData(originalAppData);
       setCourseError(error instanceof Error ? error.message : 'No fue posible actualizar el curso.');
     } finally {
       setIsCourseSaving(false);
@@ -2291,7 +2312,23 @@ export function CourseWorkspacePage({
     setIsMetadataSaving(true);
     setMetadataError(null);
 
+    const originalAppData = { ...appData };
+
     try {
+      // Optimistic update
+      mutateAppData((current) => ({
+        ...current,
+        courses: current.courses.map((c) =>
+          c.slug === currentCourse.slug
+            ? {
+                ...c,
+                metadata: { ...c.metadata, ...metadataForm },
+                updatedAt: new Date().toISOString().slice(0, 10),
+              }
+            : c,
+        ),
+      }));
+
       const response = await fetch(
         `/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`,
         {
@@ -2312,6 +2349,8 @@ export function CourseWorkspacePage({
 
       refreshAppData();
     } catch (error) {
+      // Rollback
+      mutateAppData(originalAppData);
       setMetadataError(
         error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.',
       );
