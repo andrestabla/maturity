@@ -653,12 +653,146 @@ button {
 .course-card__footer,
 .course-card__date,
 .flow-glance__item span,
-.course-meta-strip {
+/* --- REDESIGN: VERTICAL TIMELINE --- */
+
+.vertical-timeline {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  color: rgba(19, 33, 38, 0.6);
-  font-size: 0.92rem;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  padding-left: 10px;
+}
+
+.vertical-timeline__item {
+  display: flex;
+  gap: 20px;
+  position: relative;
+}
+
+.vertical-timeline__indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.vertical-timeline__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  border: 2px solid var(--panel);
+  z-index: 2;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vertical-timeline__dot--active {
+  background: var(--coral);
+  box-shadow: 0 0 10px var(--coral-soft);
+  transform: scale(1.2);
+}
+
+.vertical-timeline__connector {
+  width: 2px;
+  flex-grow: 1;
+  background: var(--line);
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.vertical-timeline__content {
+  flex-grow: 1;
+}
+
+.timeline-stage-card {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.timeline-stage-card:hover {
+  transform: translateX(4px);
+  background: var(--panel-hover);
+  border-color: var(--coral-soft);
+}
+
+.timeline-stage-card--active {
+  background: white;
+  border: 1px solid var(--coral-soft);
+  box-shadow: 0 8px 24px rgba(255, 139, 105, 0.04);
+}
+
+.timeline-stage-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timeline-stage-card__header h4 {
+  margin: 2px 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.timeline-stage-card__summary {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.timeline-stage-card__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.timeline-stage-card__action {
+  color: var(--muted);
+  opacity: 0.4;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-stage-card:hover .timeline-stage-card__action {
+  opacity: 1;
+  color: var(--coral);
+}
+
+/* Minimalist Course Workspace Hero */
+.workspace-hero--minimalist {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  margin-bottom: 24px;
+}
+
+.course-basic-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.course-basic-info h2 {
+  font-size: 1.3rem;
+  margin: 0;
+  font-family: 'Sora', sans-serif;
+}
+
+.course-basic-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 .status-dot {

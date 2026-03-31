@@ -8,6 +8,7 @@ import {
   PencilLine,
   Plus,
   Save,
+  Settings,
   Trash2,
   UsersRound,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { StageRail } from '../components/StageRail.js';
+import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
 import type {
   AppData,
   Course,
@@ -1168,7 +1170,6 @@ export function CourseWorkspacePage({
   const relatedResources = appData.libraryResources.filter(
     (resource) => resource.courseSlug === currentCourse.slug,
   );
-  const courseRouteLabel = currentCourse.metadata.route;
   const blockingCheckpoints = currentCourse.stageChecklist.filter(
     (checkpoint, index) => index <= currentStageIndex && checkpoint.status === 'blocked',
   );
@@ -1200,10 +1201,6 @@ export function CourseWorkspacePage({
     checkpointRequirementMet &&
     blockedCheckpointRequirementMet &&
     criticalObservationRequirementMet;
-  const currentOwner = currentCheckpoint?.owner ?? stage?.owner ?? 'Coordinador';
-  const deliverablesReadyCount = currentCourse.deliverables.filter(
-    (deliverable) => deliverable.status === 'Listo',
-  ).length;
   const deliverablesOpenCount = currentCourse.deliverables.filter(
     (deliverable) => deliverable.status !== 'Listo',
   ).length;
@@ -1213,10 +1210,6 @@ export function CourseWorkspacePage({
     (observation) => observation.status !== 'Resuelta',
   ).length;
   const resolvedObservationsCount = currentCourse.observations.length - pendingObservationsCount;
-  const totalProductsCount = currentCourse.products.length;
-  const approvedProductsCount = currentCourse.products.filter(
-    (product) => product.status === 'Aprobado',
-  ).length;
   const curatedResources = relatedResources.filter((resource) => resource.kind === 'Curado');
   const ownedResources = relatedResources.filter((resource) => resource.kind === 'Propio');
   const upcomingMilestones = currentCourse.schedule
@@ -1338,9 +1331,6 @@ export function CourseWorkspacePage({
   const isFocusedStudio =
     !isWorkflowPage && experienceSettings.studioMode === 'Profundo';
   const showSummaryHero = isWorkflowPage && experienceSettings.showSummaryHero;
-  const showStageRailInSummary =
-    experienceSettings.stageRailVisibility === 'Solo workflow' ||
-    experienceSettings.stageRailVisibility === 'Siempre';
   const showStageRailOutsideSummary = experienceSettings.stageRailVisibility === 'Siempre';
   const focusedStageMeta =
     activeSection === 'summary'
@@ -4265,67 +4255,79 @@ export function CourseWorkspacePage({
 
   return (
     <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
-      {showSummaryHero ? (
-      <section className="surface workspace-hero">
-        <div className="workspace-hero__copy">
-          <div className="workspace-hero__badges">
-            <span className={badgeClass(course.status)}>{course.status}</span>
-            <span className={`badge badge--${stage?.tone ?? 'ink'}`}>{stage?.name ?? course.stageId}</span>
-          </div>
-
-          <span className="eyebrow">{course.code}</span>
-          <h3>{course.title}</h3>
-          <p>{course.summary}</p>
-
-          <div className="course-meta-strip">
-            <span>{course.faculty}</span>
-            <span>{course.program}</span>
-            <span>{course.modality}</span>
-            <span>{course.credits} créditos</span>
-          </div>
-
-          <div className="hero-points">
-            <div>
-              <strong>{course.pulse.velocity}%</strong>
-              <span>velocidad</span>
-            </div>
-            <div>
-              <strong>{course.pulse.quality}%</strong>
-              <span>calidad</span>
-            </div>
-            <div>
-              <strong>{course.pulse.alignment}%</strong>
-              <span>alineación</span>
+      {isWorkflowPage && !showFocusedStageHeader ? (
+        <section className="workspace-hero--minimalist">
+          <div className="course-basic-info">
+            <ProgressRing
+              value={course.progress}
+              label="Avance"
+              detail=""
+            />
+            <div className="course-progress-details">
+              <h2>{course.title}</h2>
+              <p>Estado: <strong>{course.status}</strong> · Etapa: <strong>{stage?.name ?? course.stageId}</strong></p>
             </div>
           </div>
 
-          {canManageCourses(userRole) ? (
-            <div className="hero-actions">
+          <div className="hero-actions">
+            {canManageCourses(userRole) ? (
               <button
                 type="button"
-                className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                className="cta-button"
                 onClick={() => setIsCourseEditorOpen(true)}
               >
-                <PencilLine size={16} />
-                <span>Editar curso</span>
+                <Settings size={16} />
+                <span>Ver detalles</span>
               </button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="workspace-hero__summary">
-          <ProgressRing
-            value={course.progress}
-            label="Avance del curso"
-            detail={course.nextMilestone}
-          />
-          <div className="hero-mini surface-muted">
-            <span className="eyebrow">Último movimiento</span>
-            <strong>{formatLongDate(course.updatedAt)}</strong>
-            <p>El flujo está en {stage?.name?.toLowerCase() ?? 'curso'} y el siguiente paso depende del equipo actual.</p>
+            ) : null}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : showSummaryHero ? (
+        <section className="surface workspace-hero">
+          <div className="workspace-hero__copy">
+            <div className="workspace-hero__badges">
+              <span className={badgeClass(course.status)}>{course.status}</span>
+              <span className={`badge badge--${stage?.tone ?? 'ink'}`}>{stage?.name ?? course.stageId}</span>
+            </div>
+
+            <span className="eyebrow">{course.code}</span>
+            <h3>{course.title}</h3>
+            <p>{course.summary}</p>
+
+            <div className="course-meta-strip">
+              <span>{course.faculty}</span>
+              <span>{course.program}</span>
+              <span>{course.modality}</span>
+              <span>{course.credits} créditos</span>
+            </div>
+
+            {canManageCourses(userRole) ? (
+              <div className="hero-actions">
+                <button
+                  type="button"
+                  className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => setIsCourseEditorOpen(true)}
+                >
+                  <PencilLine size={16} />
+                  <span>Editar curso</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="workspace-hero__summary">
+            <ProgressRing
+              value={course.progress}
+              label="Avance del curso"
+              detail={course.nextMilestone}
+            />
+            <div className="hero-mini surface-muted">
+              <span className="eyebrow">Último movimiento</span>
+              <strong>{formatLongDate(course.updatedAt)}</strong>
+              <p>El flujo está en {stage?.name?.toLowerCase() ?? 'curso'} y el siguiente paso depende del equipo actual.</p>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       <section
@@ -4960,209 +4962,23 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'summary' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="section-heading">
+        <section className="surface section-card">
+          <div className="section-heading mb-8">
             <div>
-              <span className="eyebrow">Workflow del curso</span>
-              <h3>Etapas operativas desde arquitectura hasta notificación</h3>
+              <span className="eyebrow text-coral font-bold uppercase tracking-widest">Workflow Lineal</span>
+              <h3 className="text-2xl mt-1">Evolución operativa del curso</h3>
             </div>
           </div>
 
-          <p className="section-lead">
-            Entra al flujo de trabajo real del curso y avanza por etapas: arquitectura, equipo,
-            producción, montaje, QA y cierre con notificación.
-          </p>
-
-          {workflowSettings.showWorkflowStageCards ? (
-            <div className="workflow-stage-grid">
-              {workflowStages.map((item) => {
-                const isCurrentStage = item.stageId ? currentCourse.stageId === item.stageId : false;
-
-                return (
-                  <article
-                    key={item.key}
-                    className={
-                      activeSection === item.section
-                        ? 'surface-muted workflow-stage-card workflow-stage-card--active'
-                        : 'surface-muted workflow-stage-card'
-                    }
-                  >
-                    <div className="workflow-stage-card__top">
-                      <div>
-                        <span className="eyebrow">{item.owner}</span>
-                        <h4>{item.title}</h4>
-                      </div>
-
-                      <div className="workflow-stage-card__badges">
-                        <span className={badgeClass(item.status)}>{item.status}</span>
-                        {isCurrentStage ? <span className="badge badge--outline">Actual</span> : null}
-                      </div>
-                    </div>
-
-                    <p>{item.description}</p>
-
-                    <div className="workflow-stage-card__meta">
-                      <span>{item.summary}</span>
-                      <span>{item.owner}</span>
-                    </div>
-
-                    <ul className="workflow-stage-card__list">
-                      {item.checklist.map((checkpoint) => (
-                        <li key={checkpoint}>{checkpoint}</li>
-                      ))}
-                    </ul>
-
-                    <div className="workflow-stage-card__actions">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => goToSection(item.section)}
-                      >
-                        <span>{item.actionLabel}</span>
-                        <MoveRight size={16} />
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {showStageRailInSummary ? <StageRail items={currentCourse.stageChecklist} /> : null}
-
-          <div className="module-grid module-grid--summary">
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentCourse.code}</strong>
-                <span>ID operativo</span>
-              </div>
-              <p>{courseRouteLabel}</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{relatedAlerts.length}</strong>
-                <span>alertas abiertas</span>
-              </div>
-              <p>Las alertas activas acompañan el curso y orientan la siguiente intervención del equipo.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{relatedTasks.length}</strong>
-                <span>tareas asociadas</span>
-              </div>
-              <p>La cola operativa del curso se mantiene trazada por etapa, responsable y fecha objetivo.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{totalProductsCount}</strong>
-                <span>productos editables</span>
-              </div>
-              <p>El curso ya concentra sílabus, guías, recursos y rúbricas dentro del mismo expediente.</p>
-            </div>
-
-            <div className="module-card">
-              <div className="module-card__top">
-                <strong>{currentOwner}</strong>
-                <span>responsable actual</span>
-              </div>
-              <p>El expediente del curso conserva responsables, handoffs y continuidad del proceso.</p>
-            </div>
-          </div>
-
-          <div className="workspace-grid workspace-grid--summary">
-            <article className="surface section-card">
-              <div className="section-heading section-heading--compact">
-                <div>
-                  <span className="eyebrow">Pendientes clave</span>
-                  <h3>Qué requiere atención ahora</h3>
-                </div>
-              </div>
-
-              <div className="list-stack">
-                <div className="list-item">
-                  <div>
-                    <strong>{pendingTasksCount} tareas abiertas</strong>
-                    <p>La planeación y el seguimiento operativo del curso siguen activos.</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{deliverablesOpenCount} entregables en curso</span>
-                  </div>
-                </div>
-
-                <div className="list-item">
-                  <div>
-                    <strong>{pendingObservationsCount} observaciones pendientes</strong>
-                    <p>Las devoluciones y hallazgos todavía vigentes afectan el avance del expediente.</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{criticalObservations.length} críticas</span>
-                  </div>
-                </div>
-
-                <div className="list-item">
-                  <div>
-                    <strong>{upcomingMilestones[0]?.label ?? 'Sin hito inmediato'}</strong>
-                    <p>{upcomingMilestones[0] ? formatLongDate(upcomingMilestones[0].dueDate) : 'Configura un cronograma para el curso.'}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{stage?.name ?? currentCourse.stageId}</span>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            {workflowSettings.showQuickAccessPanel ? (
-              <article className="surface section-card">
-                <div className="section-heading section-heading--compact">
-                  <div>
-                    <span className="eyebrow">Acceso rápido</span>
-                    <h3>Ir directo a la siguiente operación</h3>
-                  </div>
-                </div>
-
-                <div className="chip-row">
-                  <button type="button" className="filter-chip" onClick={() => goToSection('planning')}>
-                    Planeación
-                  </button>
-                  <button type="button" className="filter-chip" onClick={() => goToSection('production')}>
-                    Producción
-                  </button>
-                  <button type="button" className="filter-chip" onClick={() => goToSection('resources')}>
-                    Recursos
-                  </button>
-                  <button type="button" className="filter-chip" onClick={() => goToSection('qa')}>
-                    QA y validación
-                  </button>
-                  <button type="button" className="filter-chip" onClick={() => goToSection('history')}>
-                    Historial
-                  </button>
-                </div>
-
-                <div className="flow-glance flow-glance--compact">
-                  <div className="flow-glance__item">
-                    <strong>{deliverablesReadyCount}/{currentCourse.deliverables.length || 1}</strong>
-                    <span>entregables listos</span>
-                    <p>La producción académica y multimedia ya deja rastro de avance dentro del curso.</p>
-                  </div>
-                  <div className="flow-glance__item">
-                    <strong>{ownedResources.length + curatedResources.length}</strong>
-                    <span>recursos vinculados</span>
-                    <p>Los recursos propios y curados acompañan el expediente y la arquitectura del curso.</p>
-                  </div>
-                  <div className="flow-glance__item">
-                    <strong>{approvedProductsCount}/{totalProductsCount || 1}</strong>
-                    <span>productos aprobados</span>
-                    <p>El curso ya combina seguimiento operativo con producción real de artefactos dentro de la plataforma.</p>
-                  </div>
-                </div>
-              </article>
-            ) : null}
-          </div>
+          <VerticalStageTimeline
+            stages={workflowStages}
+            currentStageId={currentStageId}
+            courseSlug={currentCourse.slug}
+            badgeClass={badgeClass}
+          />
         </section>
       ) : null}
+
 
       {activeSection === 'general' ? (
         <section className="workspace-grid">
