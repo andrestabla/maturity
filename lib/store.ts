@@ -371,21 +371,29 @@ const stageNoteDefinitions: Record<
     heading: string;
   }
 > = {
-  architecture: {
+  microcurriculo: {
+    owner: 'Coordinador',
+    heading: 'Microcurrículo y base curricular',
+  },
+  arquitectura: {
     owner: 'Diseñador instruccional',
     heading: 'Arquitectura de aprendizaje',
   },
-  production: {
-    owner: 'Experto',
-    heading: 'Producción académica',
+  planeacion: {
+    owner: 'Coordinador',
+    heading: 'Planeación operativa',
   },
-  curation: {
+  escritura: {
     owner: 'Experto',
-    heading: 'Curación de contenidos',
+    heading: 'Escritura y autoría',
+  },
+  validacion: {
+    owner: 'Diseñador instruccional',
+    heading: 'Validación instruccional',
   },
   multimedia: {
     owner: 'Diseñador multimedia',
-    heading: 'Multimedia',
+    heading: 'Producción multimedia',
   },
   lms: {
     owner: 'Gestor LMS',
@@ -393,17 +401,24 @@ const stageNoteDefinitions: Record<
   },
   qa: {
     owner: 'Analista QA',
-    heading: 'QA y validación',
+    heading: 'QA y validación final',
+  },
+  entrega: {
+    owner: 'Coordinador',
+    heading: 'Entrega final y cierre',
   },
 };
 
 const productStageOwners: Record<CourseProductStage, Role> = {
-  general: 'Coordinador',
-  architecture: 'Diseñador instruccional',
-  production: 'Experto',
-  curation: 'Experto',
+  microcurriculo: 'Coordinador',
+  arquitectura: 'Diseñador instruccional',
+  planeacion: 'Coordinador',
+  escritura: 'Experto',
+  validacion: 'Diseñador instruccional',
   multimedia: 'Diseñador multimedia',
+  lms: 'Gestor LMS',
   qa: 'Analista QA',
+  entrega: 'Coordinador',
 };
 
 function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
@@ -531,9 +546,20 @@ function buildDefaultCourseStageNotes(
   >,
 ): Course['stageNotes'] {
   return {
-    architecture: {
-      owner: stageNoteDefinitions.architecture.owner,
-      heading: stageNoteDefinitions.architecture.heading,
+    microcurriculo: {
+      owner: stageNoteDefinitions.microcurriculo.owner,
+      heading: stageNoteDefinitions.microcurriculo.heading,
+      status: 'Listo',
+      summary: `Base curricular y sílabus consolidados para ${course.title}.`,
+      evidence: [
+        `${course.modules.length} módulo(s) definido(s)`,
+      ],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    arquitectura: {
+      owner: stageNoteDefinitions.arquitectura.owner,
+      heading: stageNoteDefinitions.arquitectura.heading,
       status: course.stageId === 'arquitectura' ? 'En curso' : 'Listo',
       summary: `La arquitectura del curso ${course.title} organiza módulos, actividades y secuencia de aprendizaje.`,
       evidence: [
@@ -543,30 +569,37 @@ function buildDefaultCourseStageNotes(
       blockers: [],
       updatedAt: course.updatedAt,
     },
-    production: {
-      owner: stageNoteDefinitions.production.owner,
-      heading: stageNoteDefinitions.production.heading,
+    planeacion: {
+      owner: stageNoteDefinitions.planeacion.owner,
+      heading: stageNoteDefinitions.planeacion.heading,
+      status: course.stageId === 'planeacion' ? 'En curso' : 'Pendiente',
+      summary: 'Hitos, cronograma y asignaciones de equipo definidos.',
+      evidence: [],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
+    escritura: {
+      owner: stageNoteDefinitions.escritura.owner,
+      heading: stageNoteDefinitions.escritura.heading,
       status:
-        course.stageId === 'produccion'
+        course.stageId === 'escritura'
           ? 'En curso'
-          : course.stageId === 'lms' || course.stageId === 'calidad'
+          : course.stageId === 'validacion' || course.stageId === 'multimedia' || course.stageId === 'lms' || course.stageId === 'calidad'
             ? 'Listo'
             : 'Pendiente',
-      summary: 'La producción académica reúne contenidos, instrucciones y entregables listos para revisión.',
+      summary: 'La escritura reúne contenidos, instrucciones y entregables listos para revisión.',
       evidence: course.deliverables.slice(0, 3).map((item) => item.title),
       blockers: course.deliverables
         .filter((item) => item.status === 'Bloqueado')
         .map((item) => item.title),
       updatedAt: course.updatedAt,
     },
-    curation: {
-      owner: stageNoteDefinitions.curation.owner,
-      heading: stageNoteDefinitions.curation.heading,
-      status: course.stageId === 'arquitectura' || course.stageId === 'produccion' ? 'En curso' : 'Pendiente',
-      summary: 'La curación identifica y justifica fuentes externas, académicas y científicas por unidad.',
-      evidence: [
-        `${course.modules.reduce((sum, module) => sum + module.curatedResources, 0)} recurso(s) curado(s) asociados`,
-      ],
+    validacion: {
+      owner: stageNoteDefinitions.validacion.owner,
+      heading: stageNoteDefinitions.validacion.heading,
+      status: course.stageId === 'validacion' ? 'En curso' : 'Pendiente',
+      summary: 'Revisión pedagógica e instruccional antes de producción multimedia.',
+      evidence: [],
       blockers: [],
       updatedAt: course.updatedAt,
     },
@@ -617,6 +650,15 @@ function buildDefaultCourseStageNotes(
         .map((item) => item.title),
       updatedAt: course.updatedAt,
     },
+    entrega: {
+      owner: stageNoteDefinitions.entrega.owner,
+      heading: stageNoteDefinitions.entrega.heading,
+      status: course.status === 'Entregado' ? 'Listo' : 'Pendiente',
+      summary: 'Cierre operativo, notificación y entrega final del curso.',
+      evidence: [],
+      blockers: [],
+      updatedAt: course.updatedAt,
+    },
   };
 }
 
@@ -638,11 +680,11 @@ function buildDefaultCourseProducts(
 ): CourseProduct[] {
   return [
     {
-      id: `product-${course.slug}-general`,
+      id: `product-${course.slug}-microcurriculo`,
       title: 'Sílabus base del curso',
-      stage: 'general',
+      stage: 'microcurriculo',
       format: 'Sílabus',
-      owner: productStageOwners.general,
+      owner: productStageOwners.microcurriculo,
       status: 'Aprobado',
       summary: 'Documento base con la configuración académica y curricular del curso.',
       body: [
@@ -656,11 +698,11 @@ function buildDefaultCourseProducts(
       updatedAt: course.updatedAt,
     },
     {
-      id: `product-${course.slug}-architecture`,
+      id: `product-${course.slug}-arquitectura`,
       title: 'Lineamiento pedagógico',
-      stage: 'architecture',
+      stage: 'arquitectura',
       format: 'Lineamiento',
-      owner: productStageOwners.architecture,
+      owner: productStageOwners.arquitectura,
       status: course.stageId === 'arquitectura' ? 'En revisión' : 'Aprobado',
       summary: 'Criterio pedagógico, módulos y ruta de experiencia del curso.',
       body: course.modules
@@ -674,12 +716,12 @@ function buildDefaultCourseProducts(
       updatedAt: course.updatedAt,
     },
     {
-      id: `product-${course.slug}-production`,
+      id: `product-${course.slug}-escritura`,
       title: 'Guía de actividades y recursos',
-      stage: 'production',
+      stage: 'escritura',
       format: 'Actividad',
-      owner: productStageOwners.production,
-      status: course.stageId === 'produccion' ? 'En revisión' : 'Borrador',
+      owner: productStageOwners.escritura,
+      status: course.stageId === 'escritura' ? 'En revisión' : 'Borrador',
       summary: 'Documento vivo con actividades, instrucciones y recursos propios del curso.',
       body: course.deliverables
         .map(
@@ -692,20 +734,20 @@ function buildDefaultCourseProducts(
       updatedAt: course.updatedAt,
     },
     {
-      id: `product-${course.slug}-curation`,
-      title: 'Inventario de recursos curados',
-      stage: 'curation',
+      id: `product-${course.slug}-validacion`,
+      title: 'Informe de validación instruccional',
+      stage: 'validacion',
       format: 'Documento',
-      owner: productStageOwners.curation,
+      owner: productStageOwners.validacion,
       status: 'En revisión',
-      summary: 'Consolida fuentes externas y justificación de uso por unidad.',
+      summary: 'Consolida la revisión pedagógica e instruccional del curso.',
       body: course.modules
         .map(
           (module) =>
-            `${module.title}\nRecursos curados: ${module.curatedResources}\nJustificación: apoyo a ${module.learningGoal.toLowerCase()}.`,
+            `${module.title}\nObjetivo: ${module.learningGoal}\nActividades: ${module.activities}`,
         )
         .join('\n\n'),
-      tags: ['curación', 'fuentes'],
+      tags: ['validación', 'instruccional'],
       version: 'v0.8',
       updatedAt: course.updatedAt,
     },
@@ -722,6 +764,19 @@ function buildDefaultCourseProducts(
       body: ['HTML interactivo', 'Pódcast', 'Lectura extendida', 'Infografía'].join('\n'),
       tags: ['multimedia', 'html', 'propio'],
       version: 'v0.6',
+      updatedAt: course.updatedAt,
+    },
+    {
+      id: `product-${course.slug}-lms`,
+      title: 'Reporte de montaje técnico',
+      stage: 'lms',
+      format: 'Documento',
+      owner: productStageOwners.lms,
+      status: course.stageId === 'lms' ? 'En revisión' : 'Borrador',
+      summary: 'Consolida evidencias de implementación, navegación y comportamiento en plataforma.',
+      body: ['Navegación verificada', 'Enlaces operativos', 'Actividades configuradas'].join('\n'),
+      tags: ['lms', 'montaje', 'técnico'],
+      version: 'v1.0',
       updatedAt: course.updatedAt,
     },
     {
@@ -983,14 +1038,16 @@ function findCourseProduct(course: Course, productId: string) {
 
 function mapProductStageToAuditType(stage: CourseProductStage): CourseAuditEntry['type'] {
   switch (stage) {
-    case 'general':
+    case 'microcurriculo':
+    case 'planeacion':
       return 'course';
-    case 'architecture':
+    case 'arquitectura':
       return 'planning';
-    case 'production':
+    case 'escritura':
+    case 'validacion':
       return 'production';
-    case 'curation':
     case 'multimedia':
+    case 'entrega':
       return 'resource';
     case 'qa':
       return 'qa';
@@ -4444,7 +4501,13 @@ export async function updateCourseStageNoteRecord(
     },
     `${stageNoteDefinitions[key].heading} actualizada`,
     `Se actualizó la bitácora de ${stageNoteDefinitions[key].heading.toLowerCase()} con estado ${input.status}.`,
-    key === 'qa' ? 'qa' : key === 'production' ? 'production' : 'resource',
+    key === 'qa'
+      ? 'qa'
+      : ['microcurriculo', 'arquitectura', 'planeacion'].includes(key)
+        ? 'planning'
+        : key === 'entrega'
+          ? 'handoff'
+          : 'production',
   );
 
   await persistCourse(nextCourse);

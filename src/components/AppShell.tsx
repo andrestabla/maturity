@@ -76,13 +76,15 @@ const governmentTabLabels = {
 
 const courseSectionLabels = {
   summary: 'Workflow',
-  general: 'Microcurrículo',
-  architecture: 'Arquitectura',
-  planning: 'Planeación',
-  production: 'Producción',
-  resources: 'Recursos',
+  microcurriculo: 'Microcurrículo',
+  arquitectura: 'Arquitectura',
+  planeacion: 'Planeación',
+  escritura: 'Escritura',
+  validacion: 'Validación instruccional',
+  multimedia: 'Producción multimedia',
   lms: 'LMS',
-  qa: 'QA y validación',
+  qa: 'QA',
+  entrega: 'Entrega',
   history: 'Historial',
 } as const;
 

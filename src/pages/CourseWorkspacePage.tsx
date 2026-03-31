@@ -1,16 +1,11 @@
 import {
-  Bot,
-  CircleAlert,
-  Compass,
   Flag,
-  Layers3,
   MoveRight,
   PencilLine,
   Plus,
   Save,
   Settings,
   Trash2,
-  UsersRound,
   History,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -18,7 +13,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
-import { StageRail } from '../components/StageRail.js';
 import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
 import type {
   AppData,
@@ -26,26 +20,19 @@ import type {
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
+  CourseAuditEntry,
   CourseProductStage,
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
   CourseMutationInput,
-  Deliverable,
-  DeliverableMutationInput,
-  LearningModule,
-  LearningModuleMutationInput,
-  Observation,
-  ObservationMutationInput,
   Role,
   StageCheckpointStatus,
   Task,
   TaskMutationInput,
   TeamMember,
   TeamMemberMutationInput,
-  TimelineItem,
-  TimelineItemMutationInput,
 } from '../types.js';
-import { formatDate, formatLongDate } from '../utils/format.js';
+import { formatDate, formatDateTime } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
   getFirstInstitutionStructure,
@@ -56,24 +43,14 @@ import {
   getInstitutionPrograms,
 } from '../utils/institutions.js';
 import {
-  canCreateDeliverables,
-  canCreateObservations,
   canCreateCourseProducts,
   canCreateTasks,
   canDeleteCourseProducts,
-  canDeleteDeliverables,
-  canEditCourseProduct,
-  canEditCourseModules,
-  canEditStageNote,
-  canDeleteObservations,
   canDeleteTasks,
-  canEditDeliverable,
-  canEditObservation,
+  canEditCourseProduct,
+  canEditStageNote,
   canEditTask,
-  canManageHandoffs,
-  canManageCourseTeam,
   canManageCourses,
-  canOperateStageCheckpoint,
 } from '../utils/permissions.js';
 
 interface CourseWorkspacePageProps {
@@ -85,24 +62,28 @@ interface CourseWorkspacePageProps {
 
 type CourseSection =
   | 'summary'
-  | 'general'
-  | 'architecture'
-  | 'planning'
-  | 'production'
-  | 'resources'
+  | 'microcurriculo'
+  | 'arquitectura'
+  | 'planeacion'
+  | 'escritura'
+  | 'validacion'
+  | 'multimedia'
   | 'lms'
   | 'qa'
+  | 'entrega'
   | 'history';
 
 const validCourseSections: CourseSection[] = [
   'summary',
-  'general',
-  'architecture',
-  'planning',
-  'production',
-  'resources',
+  'microcurriculo',
+  'arquitectura',
+  'planeacion',
+  'escritura',
+  'validacion',
+  'multimedia',
   'lms',
   'qa',
+  'entrega',
   'history',
 ];
 
@@ -117,7 +98,6 @@ function buildCourseSectionPath(slug: string, section: CourseSection) {
 function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
-    case 'En curso':
     case 'Resuelta':
       return 'badge badge--sage';
     case 'En revisión':
@@ -159,6 +139,25 @@ function checkpointBadgeClass(status: StageCheckpointStatus) {
       return 'badge badge--outline';
   }
 }
+
+function historyTypeBadge(type: CourseAuditEntry['type']) {
+  switch (type) {
+    case 'course':
+      return 'badge badge--ocean';
+    case 'planning':
+      return 'badge badge--gold';
+    case 'production':
+      return 'badge badge--sage';
+    case 'resource':
+      return 'badge badge--lavender';
+    case 'qa':
+      return 'badge badge--ink';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+
 
 function uniqueOptions(values: string[]) {
   return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
@@ -271,55 +270,7 @@ function makeTaskDrafts(tasks: Task[]) {
   ) as Record<string, TaskMutationInput>;
 }
 
-function makeDeliverableForm(owner: Role): DeliverableMutationInput {
-  return {
-    title: '',
-    owner,
-    status: 'En curso',
-    dueDate: new Date().toISOString().slice(0, 10),
-    note: '',
-  };
-}
 
-function makeDeliverableDrafts(deliverables: Deliverable[]) {
-  return Object.fromEntries(
-    deliverables.map((deliverable) => [
-      deliverable.id,
-      {
-        title: deliverable.title,
-        owner: deliverable.owner,
-        status: deliverable.status,
-        dueDate: deliverable.dueDate,
-        note: deliverable.note,
-      },
-    ]),
-  ) as Record<string, DeliverableMutationInput>;
-}
-
-function makeObservationForm(role: Role): ObservationMutationInput {
-  return {
-    title: '',
-    role,
-    severity: 'Media',
-    status: 'Pendiente',
-    detail: '',
-  };
-}
-
-function makeObservationDrafts(observations: Observation[]) {
-  return Object.fromEntries(
-    observations.map((observation) => [
-      observation.id,
-      {
-        title: observation.title,
-        role: observation.role,
-        severity: observation.severity,
-        status: observation.status,
-        detail: observation.detail,
-      },
-    ]),
-  ) as Record<string, ObservationMutationInput>;
-}
 
 function makeMetadataForm(course: Course): CourseMetadataMutationInput {
   return {
@@ -340,26 +291,7 @@ function makeMetadataForm(course: Course): CourseMetadataMutationInput {
   };
 }
 
-function makeTimelineForm(): TimelineItemMutationInput {
-  return {
-    label: '',
-    dueDate: new Date().toISOString().slice(0, 10),
-    status: 'pending',
-  };
-}
 
-function makeTimelineDrafts(schedule: TimelineItem[]) {
-  return Object.fromEntries(
-    schedule.map((item) => [
-      item.id,
-      {
-        label: item.label,
-        dueDate: item.dueDate,
-        status: item.status,
-      },
-    ]),
-  ) as Record<string, TimelineItemMutationInput>;
-}
 
 function makeTeamMemberForm(): TeamMemberMutationInput {
   return {
@@ -384,47 +316,24 @@ function makeTeamMemberDrafts(team: TeamMember[]) {
   ) as Record<string, TeamMemberMutationInput>;
 }
 
-function makeLearningModuleForm(): LearningModuleMutationInput {
-  return {
-    title: '',
-    learningGoal: '',
-    activities: 1,
-    ownResources: 0,
-    curatedResources: 0,
-    completion: 0,
-  };
-}
 
-function makeLearningModuleDrafts(modules: LearningModule[]) {
-  return Object.fromEntries(
-    modules.map((module) => [
-      module.id,
-      {
-        title: module.title,
-        learningGoal: module.learningGoal,
-        activities: module.activities,
-        ownResources: module.ownResources,
-        curatedResources: module.curatedResources,
-        completion: module.completion,
-      },
-    ]),
-  ) as Record<string, LearningModuleMutationInput>;
-}
 
 function defaultProductFormat(stage: CourseProductStage): CourseProductMutationInput['format'] {
   switch (stage) {
-    case 'general':
+    case 'microcurriculo':
       return 'Sílabus';
-    case 'architecture':
+    case 'arquitectura':
       return 'Lineamiento';
-    case 'production':
+    case 'escritura':
       return 'Actividad';
-    case 'curation':
+    case 'validacion':
       return 'Documento';
     case 'multimedia':
       return 'HTML';
     case 'qa':
       return 'Rúbrica';
+    case 'entrega':
+      return 'Documento';
     default:
       return 'Documento';
   }
@@ -432,23 +341,26 @@ function defaultProductFormat(stage: CourseProductStage): CourseProductMutationI
 
 function defaultProductOwner(stage: CourseProductStage): Role {
   switch (stage) {
-    case 'general':
+    case 'microcurriculo':
       return 'Coordinador';
-    case 'architecture':
+    case 'arquitectura':
       return 'Diseñador instruccional';
-    case 'production':
-    case 'curation':
+    case 'escritura':
       return 'Experto';
+    case 'validacion':
+      return 'Diseñador instruccional';
     case 'multimedia':
       return 'Diseñador multimedia';
     case 'qa':
       return 'Analista QA';
+    case 'entrega':
+      return 'Coordinador';
     default:
       return 'Coordinador';
   }
 }
 
-function makeCourseProductForm(stage: CourseProductStage = 'general'): CourseProductMutationInput {
+function makeCourseProductForm(stage: CourseProductStage = 'microcurriculo'): CourseProductMutationInput {
   return {
     title: '',
     stage,
@@ -483,18 +395,22 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
 
 function productStageLabel(stage: CourseProductStage) {
   switch (stage) {
-    case 'general':
+    case 'microcurriculo':
       return 'Microcurrículo';
-    case 'architecture':
+    case 'arquitectura':
       return 'Arquitectura';
-    case 'production':
-      return 'Producción';
-    case 'curation':
-      return 'Curación';
+    case 'planeacion':
+      return 'Planeación';
+    case 'escritura':
+      return 'Escritura';
+    case 'validacion':
+      return 'Validación';
     case 'multimedia':
       return 'Multimedia';
     case 'qa':
       return 'QA';
+    case 'entrega':
+      return 'Entrega';
     default:
       return 'Producto';
   }
@@ -515,18 +431,20 @@ function productFormatsForStage(
   stage: CourseProductStage,
 ): CourseProductMutationInput['format'][] {
   switch (stage) {
-    case 'general':
+    case 'microcurriculo':
       return ['Sílabus', 'Documento'];
-    case 'architecture':
+    case 'arquitectura':
       return ['Lineamiento', 'Documento'];
-    case 'production':
+    case 'escritura':
       return ['Actividad', 'Recurso', 'Documento'];
-    case 'curation':
-      return ['Recurso', 'Lectura', 'Documento'];
+    case 'validacion':
+      return ['Lectura', 'Documento'];
     case 'multimedia':
       return ['HTML', 'Pódcast', 'Lectura', 'Infografía'];
     case 'qa':
       return ['Rúbrica', 'Documento'];
+    case 'entrega':
+      return ['Documento'];
     default:
       return ['Documento'];
   }
@@ -536,43 +454,58 @@ function joinTags(tags: string[]) {
   return tags.join(', ');
 }
 
-function splitTags(value: string) {
+function splitTags(value: string): string[] {
   return value
     .split(',')
-    .map((item) => item.trim())
+    .map((item: string) => item.trim())
     .filter(Boolean);
 }
 
 function makeStageNoteDrafts(course: Course | undefined) {
   if (!course) {
     return {
-      architecture: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
-      production: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
-      curation: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      microcurriculo: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      arquitectura: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      planeacion: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      escritura: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      validacion: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
       multimedia: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
       lms: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
       qa: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
+      entrega: { status: 'Pendiente', summary: '', evidence: [], blockers: [] },
     } satisfies Record<CourseStageNoteKey, CourseStageNoteMutationInput>;
   }
 
   return {
-    architecture: {
-      status: course.stageNotes.architecture.status,
-      summary: course.stageNotes.architecture.summary,
-      evidence: course.stageNotes.architecture.evidence,
-      blockers: course.stageNotes.architecture.blockers,
+    microcurriculo: {
+      status: 'Listo',
+      summary: 'Base curricular consolidada',
+      evidence: [],
+      blockers: [],
     },
-    production: {
-      status: course.stageNotes.production.status,
-      summary: course.stageNotes.production.summary,
-      evidence: course.stageNotes.production.evidence,
-      blockers: course.stageNotes.production.blockers,
+    arquitectura: {
+      status: course.stageNotes.arquitectura?.status ?? 'Pendiente',
+      summary: course.stageNotes.arquitectura?.summary ?? '',
+      evidence: course.stageNotes.arquitectura?.evidence ?? [],
+      blockers: course.stageNotes.arquitectura?.blockers ?? [],
     },
-    curation: {
-      status: course.stageNotes.curation.status,
-      summary: course.stageNotes.curation.summary,
-      evidence: course.stageNotes.curation.evidence,
-      blockers: course.stageNotes.curation.blockers,
+    planeacion: {
+      status: course.stageNotes.planeacion?.status ?? 'Pendiente',
+      summary: course.stageNotes.planeacion?.summary ?? '',
+      evidence: course.stageNotes.planeacion?.evidence ?? [],
+      blockers: course.stageNotes.planeacion?.blockers ?? [],
+    },
+    escritura: {
+      status: course.stageNotes.escritura?.status ?? 'Pendiente',
+      summary: course.stageNotes.escritura?.summary ?? '',
+      evidence: course.stageNotes.escritura?.evidence ?? [],
+      blockers: course.stageNotes.escritura?.blockers ?? [],
+    },
+    validacion: {
+      status: course.stageNotes.validacion?.status ?? 'Pendiente',
+      summary: course.stageNotes.validacion?.summary ?? '',
+      evidence: course.stageNotes.validacion?.evidence ?? [],
+      blockers: course.stageNotes.validacion?.blockers ?? [],
     },
     multimedia: {
       status: course.stageNotes.multimedia.status,
@@ -587,62 +520,33 @@ function makeStageNoteDrafts(course: Course | undefined) {
       blockers: course.stageNotes.lms.blockers,
     },
     qa: {
-      status: course.stageNotes.qa.status,
-      summary: course.stageNotes.qa.summary,
-      evidence: course.stageNotes.qa.evidence,
-      blockers: course.stageNotes.qa.blockers,
+      status: course.stageNotes.qa?.status ?? 'Pendiente',
+      summary: course.stageNotes.qa?.summary ?? '',
+      evidence: course.stageNotes.qa?.evidence ?? [],
+      blockers: course.stageNotes.qa?.blockers ?? [],
+    },
+    entrega: {
+      status: course.stageNotes.entrega?.status ?? 'Pendiente',
+      summary: course.stageNotes.entrega?.summary ?? '',
+      evidence: course.stageNotes.entrega?.evidence ?? [],
+      blockers: course.stageNotes.entrega?.blockers ?? [],
     },
   } satisfies Record<CourseStageNoteKey, CourseStageNoteMutationInput>;
 }
 
-function joinLines(values: string[]) {
+function joinLines(values: string[]): string {
   return values.join('\n');
 }
 
-function splitLines(value: string) {
+function splitLines(value: string): string[] {
   return value
     .split('\n')
-    .map((item) => item.trim())
+    .map((item: string) => item.trim())
     .filter(Boolean);
 }
 
-function historyTypeBadge(type: string) {
-  switch (type) {
-    case 'course':
-      return 'badge badge--ocean';
-    case 'planning':
-      return 'badge badge--gold';
-    case 'production':
-      return 'badge badge--sage';
-    case 'resource':
-      return 'badge badge--outline';
-    case 'qa':
-      return 'badge badge--coral';
-    case 'handoff':
-      return 'badge badge--ocean';
-    default:
-      return 'badge badge--outline';
-  }
-}
 
-function historyTypeLabel(type: string) {
-  switch (type) {
-    case 'course':
-      return 'Ficha';
-    case 'planning':
-      return 'Planeación';
-    case 'production':
-      return 'Producción';
-    case 'resource':
-      return 'Recursos';
-    case 'qa':
-      return 'QA';
-    case 'handoff':
-      return 'Handoff';
-    default:
-      return 'Historial';
-  }
-}
+
 
 export function CourseWorkspacePage({
   role,
@@ -667,46 +571,29 @@ export function CourseWorkspacePage({
       ? relatedTasks
       : relatedTasks.filter((task) => task.role === role);
   const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
-  const defaultDeliverableOwner = stage?.owner ?? role;
-  const defaultObservationRole = role;
-  const relatedAlerts = course
-    ? appData.alerts.filter((alert) => alert.courseSlug === course.slug)
-    : [];
+
 
   const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
-  const [isModuleComposerOpen, setIsModuleComposerOpen] = useState(false);
   const [productComposerStage, setProductComposerStage] = useState<CourseProductStage | null>(null);
-  const [isDeliverableComposerOpen, setIsDeliverableComposerOpen] = useState(false);
-  const [isObservationComposerOpen, setIsObservationComposerOpen] = useState(false);
-  const [isTimelineComposerOpen, setIsTimelineComposerOpen] = useState(false);
   const [activeWorkspaceOverlay, setActiveWorkspaceOverlay] = useState<string | null>(null);
   const [courseError, setCourseError] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
-  const [moduleError, setModuleError] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
   const [stageNoteError, setStageNoteError] = useState<string | null>(null);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-  const [deliverableError, setDeliverableError] = useState<string | null>(null);
-  const [observationError, setObservationError] = useState<string | null>(null);
-  const [checkpointError, setCheckpointError] = useState<string | null>(null);
-  const [handoffError, setHandoffError] = useState<string | null>(null);
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
-  const [isModuleSaving, setIsModuleSaving] = useState<string | null>(null);
   const [isProductSaving, setIsProductSaving] = useState<string | null>(null);
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
-  const [isTimelineSaving, setIsTimelineSaving] = useState<string | null>(null);
-  const [isDeliverableSaving, setIsDeliverableSaving] = useState(false);
-  const [isObservationSaving, setIsObservationSaving] = useState(false);
-  const [isCheckpointSaving, setIsCheckpointSaving] = useState<number | null>(null);
-  const [isHandoffSaving, setIsHandoffSaving] = useState(false);
+  const [stageNoteDrafts, setStageNoteDrafts] = useState<
+    Record<CourseStageNoteKey, CourseStageNoteMutationInput>
+  >(() => makeStageNoteDrafts(course));
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
     course
       ? syncCourseStructureFields(appData, makeCourseForm(course))
@@ -758,7 +645,16 @@ export function CourseWorkspacePage({
       },
       auditLog: [],
       stageNotes: {
-        architecture: {
+        microcurriculo: {
+          owner: 'Diseñador instruccional',
+          heading: 'Microcurrículo y base curricular',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        arquitectura: {
           owner: 'Diseñador instruccional',
           heading: 'Arquitectura de aprendizaje',
           status: 'Pendiente',
@@ -767,18 +663,27 @@ export function CourseWorkspacePage({
           blockers: [],
           updatedAt: new Date().toISOString().slice(0, 10),
         },
-        production: {
-          owner: 'Experto',
-          heading: 'Producción académica',
+        planeacion: {
+          owner: 'Coordinador',
+          heading: 'Planeación operativa',
           status: 'Pendiente',
           summary: '',
           evidence: [],
           blockers: [],
           updatedAt: new Date().toISOString().slice(0, 10),
         },
-        curation: {
+        escritura: {
           owner: 'Experto',
-          heading: 'Curación de contenidos',
+          heading: 'Escritura y autoría',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        validacion: {
+          owner: 'Diseñador instruccional',
+          heading: 'Validación instruccional',
           status: 'Pendiente',
           summary: '',
           evidence: [],
@@ -787,7 +692,7 @@ export function CourseWorkspacePage({
         },
         multimedia: {
           owner: 'Diseñador multimedia',
-          heading: 'Multimedia',
+          heading: 'Producción multimedia',
           status: 'Pendiente',
           summary: '',
           evidence: [],
@@ -805,7 +710,16 @@ export function CourseWorkspacePage({
         },
         qa: {
           owner: 'Analista QA',
-          heading: 'QA y validación',
+          heading: 'QA y validación final',
+          status: 'Pendiente',
+          summary: '',
+          evidence: [],
+          blockers: [],
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+        entrega: {
+          owner: 'Coordinador',
+          heading: 'Entrega final y cierre',
           status: 'Pendiente',
           summary: '',
           evidence: [],
@@ -816,23 +730,11 @@ export function CourseWorkspacePage({
       products: [],
     }),
   );
-  const [newTimelineForm, setNewTimelineForm] = useState<TimelineItemMutationInput>(() =>
-    makeTimelineForm(),
-  );
   const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
     makeTeamMemberForm(),
   );
-  const [newLearningModuleForm, setNewLearningModuleForm] = useState<LearningModuleMutationInput>(
-    () => makeLearningModuleForm(),
-  );
   const [newProductForm, setNewProductForm] = useState<CourseProductMutationInput>(() =>
     makeCourseProductForm(),
-  );
-  const [newDeliverableForm, setNewDeliverableForm] = useState<DeliverableMutationInput>(() =>
-    makeDeliverableForm(defaultDeliverableOwner),
-  );
-  const [newObservationForm, setNewObservationForm] = useState<ObservationMutationInput>(() =>
-    makeObservationForm(defaultObservationRole),
   );
   const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
     makeTaskDrafts(relatedTasks),
@@ -840,28 +742,8 @@ export function CourseWorkspacePage({
   const [teamDrafts, setTeamDrafts] = useState<Record<string, TeamMemberMutationInput>>(() =>
     makeTeamMemberDrafts(course?.team ?? []),
   );
-  const [moduleDrafts, setModuleDrafts] = useState<Record<string, LearningModuleMutationInput>>(() =>
-    makeLearningModuleDrafts(course?.modules ?? []),
-  );
   const [productDrafts, setProductDrafts] = useState<Record<string, CourseProductMutationInput>>(() =>
     makeCourseProductDrafts(course?.products ?? []),
-  );
-  const [stageNoteDrafts, setStageNoteDrafts] = useState<
-    Record<CourseStageNoteKey, CourseStageNoteMutationInput>
-  >(() => makeStageNoteDrafts(course));
-  const [timelineDrafts, setTimelineDrafts] = useState<Record<string, TimelineItemMutationInput>>(() =>
-    makeTimelineDrafts(course?.schedule ?? []),
-  );
-  const [deliverableDrafts, setDeliverableDrafts] = useState<
-    Record<string, DeliverableMutationInput>
-  >(() => makeDeliverableDrafts(course?.deliverables ?? []));
-  const [observationDrafts, setObservationDrafts] = useState<
-    Record<string, ObservationMutationInput>
-  >(() => makeObservationDrafts(course?.observations ?? []));
-  const [checkpointDrafts, setCheckpointDrafts] = useState<Record<number, StageCheckpointStatus>>(() =>
-    Object.fromEntries(
-      (course?.stageChecklist ?? []).map((checkpoint, index) => [index, checkpoint.status]),
-    ) as Record<number, StageCheckpointStatus>,
   );
   const currentInstitution =
     courseForm.institution ||
@@ -937,11 +819,7 @@ export function CourseWorkspacePage({
     setActiveWorkspaceOverlay(null);
     setIsTaskComposerOpen(false);
     setIsTeamComposerOpen(false);
-    setIsModuleComposerOpen(false);
     setProductComposerStage(null);
-    setIsDeliverableComposerOpen(false);
-    setIsObservationComposerOpen(false);
-    setIsTimelineComposerOpen(false);
   }
 
   useEffect(() => {
@@ -970,59 +848,29 @@ export function CourseWorkspacePage({
         priority: 'Media',
         riskLevel: 'Bajo',
       }));
-      setNewTaskForm(makeTaskForm(currentCourseSlug, currentStageId));
-      setNewTimelineForm(makeTimelineForm());
-      setNewTeamMemberForm(makeTeamMemberForm());
-      setNewLearningModuleForm(makeLearningModuleForm());
-      setNewProductForm(makeCourseProductForm());
-      setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
-      setNewObservationForm(makeObservationForm(defaultObservationRole));
       setTaskDrafts({});
       setTeamDrafts({});
-      setModuleDrafts({});
       setProductDrafts({});
       setProductComposerStage(null);
       setActiveWorkspaceOverlay(null);
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
-      setTimelineDrafts({});
-      setDeliverableDrafts({});
-      setObservationDrafts({});
-      setCheckpointDrafts({});
       return;
     }
 
     setCourseForm(syncCourseStructureFields(appData, makeCourseForm(course)));
     setMetadataForm(makeMetadataForm(course));
-    setNewTaskForm(makeTaskForm(course.slug, course.stageId));
-    setNewTimelineForm(makeTimelineForm());
-    setNewTeamMemberForm(makeTeamMemberForm());
-    setNewLearningModuleForm(makeLearningModuleForm());
-    setNewProductForm(makeCourseProductForm());
-    setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
-    setNewObservationForm(makeObservationForm(defaultObservationRole));
     setTaskDrafts(makeTaskDrafts(relatedTasks));
     setTeamDrafts(makeTeamMemberDrafts(course.team));
-    setModuleDrafts(makeLearningModuleDrafts(course.modules));
     setProductDrafts(makeCourseProductDrafts(course.products));
     setProductComposerStage(null);
     setActiveWorkspaceOverlay(null);
     setStageNoteDrafts(makeStageNoteDrafts(course));
-    setTimelineDrafts(makeTimelineDrafts(course.schedule));
-    setDeliverableDrafts(makeDeliverableDrafts(course.deliverables));
-    setObservationDrafts(makeObservationDrafts(course.observations));
-    setCheckpointDrafts(
-      Object.fromEntries(
-        course.stageChecklist.map((checkpoint, index) => [index, checkpoint.status]),
-      ) as Record<number, StageCheckpointStatus>,
-    );
   }, [
     appData,
     appData.tasks,
     course,
     currentCourseSlug,
     currentStageId,
-    defaultDeliverableOwner,
-    defaultObservationRole,
   ]);
 
   useEffect(() => {
@@ -1064,55 +912,19 @@ export function CourseWorkspacePage({
                 message: teamError,
                 clear: () => setTeamError(null),
               }
-            : moduleError
+            : productError
               ? {
-                  title: 'No fue posible completar la operación sobre el módulo',
-                  message: moduleError,
-                  clear: () => setModuleError(null),
+                  title: 'No fue posible completar la operación sobre el producto',
+                  message: productError,
+                  clear: () => setProductError(null),
                 }
-              : productError
+              : stageNoteError
                 ? {
-                    title: 'No fue posible completar la operación sobre el producto',
-                    message: productError,
-                    clear: () => setProductError(null),
+                    title: 'No fue posible guardar la bitácora de etapa',
+                    message: stageNoteError,
+                    clear: () => setStageNoteError(null),
                   }
-                : stageNoteError
-                  ? {
-                      title: 'No fue posible guardar la bitácora de etapa',
-                      message: stageNoteError,
-                      clear: () => setStageNoteError(null),
-                    }
-                  : timelineError
-                    ? {
-                        title: 'No fue posible completar la operación sobre el cronograma',
-                        message: timelineError,
-                        clear: () => setTimelineError(null),
-                      }
-                    : deliverableError
-                      ? {
-                          title: 'No fue posible completar la operación sobre el entregable',
-                          message: deliverableError,
-                          clear: () => setDeliverableError(null),
-                        }
-                      : observationError
-                        ? {
-                            title: 'No fue posible completar la operación sobre la observación',
-                            message: observationError,
-                            clear: () => setObservationError(null),
-                          }
-                        : checkpointError
-                          ? {
-                              title: 'No fue posible actualizar el checkpoint',
-                              message: checkpointError,
-                              clear: () => setCheckpointError(null),
-                            }
-                          : handoffError
-                            ? {
-                                title: 'No fue posible transferir el curso',
-                                message: handoffError,
-                                clear: () => setHandoffError(null),
-                              }
-                            : null;
+                : null;
 
     if (!nextError) {
       return;
@@ -1135,19 +947,13 @@ export function CourseWorkspacePage({
       active = false;
     };
   }, [
-    checkpointError,
     courseError,
-    deliverableError,
-    handoffError,
     metadataError,
-    moduleError,
-    observationError,
     productError,
     showAlert,
     stageNoteError,
     taskError,
     teamError,
-    timelineError,
   ]);
 
   if (!course) {
@@ -1168,7 +974,6 @@ export function CourseWorkspacePage({
   const workflowSettings = appData.workflow;
   const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
   const currentCheckpoint = currentCourse.stageChecklist[currentStageIndex];
-  const nextStage = currentStageIndex >= 0 ? appData.stages[currentStageIndex + 1] : undefined;
   const relatedResources = appData.libraryResources.filter(
     (resource) => resource.courseSlug === currentCourse.slug,
   );
@@ -1187,18 +992,9 @@ export function CourseWorkspacePage({
   const criticalObservationRequirementMet = workflowSettings.handoffBlocksOnCriticalObservations
     ? criticalObservations.length === 0
     : true;
-  const handoffBlockingReason =
-    workflowSettings.handoffBlocksOnBlockedCheckpoints && blockingCheckpoints.length > 0
-      ? `Hay ${blockingCheckpoints.length} checkpoint(s) bloqueado(s) antes de avanzar.`
-      : workflowSettings.handoffBlocksOnCriticalObservations && criticalObservations.length > 0
-        ? `Hay ${criticalObservations.length} observación(es) crítica(s) pendiente(s) por resolver.`
-        : null;
   const handoffBlockingCount =
     (workflowSettings.handoffBlocksOnBlockedCheckpoints ? blockingCheckpoints.length : 0) +
     (workflowSettings.handoffBlocksOnCriticalObservations ? criticalObservations.length : 0);
-  const handoffReadinessReason = !checkpointRequirementMet
-    ? 'La etapa activa todavía no está marcada como completada.'
-    : handoffBlockingReason;
   const isHandoffReady =
     checkpointRequirementMet &&
     blockedCheckpointRequirementMet &&
@@ -1232,7 +1028,7 @@ export function CourseWorkspacePage({
     return currentCourse.products.filter((product) => product.stage === stageId).length;
   }
 
-  const planningStatus =
+  const planeacionStatus =
     currentCourse.team.length === 0
       ? 'Pendiente'
       : upcomingMilestones.length === 0
@@ -1252,7 +1048,7 @@ export function CourseWorkspacePage({
     {
       key: 'microcurriculum',
       stageId: 'microcurriculo',
-      section: 'general' as CourseSection,
+      section: 'microcurriculo' as CourseSection,
       title: 'Microcurrículo',
       owner: 'Diseñador instruccional',
       status: 'Completado',
@@ -1260,52 +1056,52 @@ export function CourseWorkspacePage({
       actionLabel: 'Abrir microcurrículo',
     },
     {
-      key: 'architecture',
+      key: 'arquitectura',
       stageId: 'arquitectura',
-      section: 'architecture' as CourseSection,
+      section: 'arquitectura' as CourseSection,
       title: 'Arquitectura',
       owner: 'Diseñador instruccional',
-      status: currentCourse.stageNotes.architecture.status,
+      status: currentCourse.stageNotes.arquitectura?.status ?? 'Pendiente',
       summary: 'Estructura modular y blueprints',
       actionLabel: 'Abrir arquitectura',
     },
     {
-      key: 'planning',
+      key: 'planeacion',
       stageId: 'planeacion',
-      section: 'planning' as CourseSection,
+      section: 'planeacion' as CourseSection,
       title: 'Planeación',
       owner: 'Coordinador',
-      status: planningStatus,
+      status: planeacionStatus,
       summary: 'Hitos y asignaciones de equipo',
       actionLabel: 'Abrir planeación',
     },
     {
       key: 'writing',
-      stageId: 'produccion',
-      section: 'production' as CourseSection,
+      stageId: 'escritura',
+      section: 'escritura' as CourseSection,
       title: 'Escritura',
       owner: 'Experto / Autor',
-      status: 'En curso',
+      status: currentCourse.stageNotes.escritura?.status ?? 'En curso',
       summary: 'Producción de contenidos base',
       actionLabel: 'Abrir fase escritura',
     },
     {
       key: 'validation',
-      stageId: 'produccion',
-      section: 'production' as CourseSection,
+      stageId: 'validacion',
+      section: 'validacion' as CourseSection,
       title: 'Validación instruccional',
       owner: 'Diseñador instruccional',
-      status: 'Pendiente',
+      status: currentCourse.stageNotes.validacion?.status ?? 'Pendiente',
       summary: 'Revisión pedagógica',
       actionLabel: 'Abrir validación',
     },
     {
       key: 'multimedia',
-      stageId: 'produccion',
-      section: 'production' as CourseSection,
+      stageId: 'multimedia',
+      section: 'multimedia' as CourseSection,
       title: 'Producción multimedia',
       owner: 'Diseñador gráfico / Realizador',
-      status: 'Pendiente',
+      status: currentCourse.stageNotes.multimedia?.status ?? 'Pendiente',
       summary: 'Diseño y piezas audiovisuales',
       actionLabel: 'Abrir multimedia',
     },
@@ -1315,40 +1111,39 @@ export function CourseWorkspacePage({
       section: 'lms' as CourseSection,
       title: 'LMS',
       owner: 'Gestor LMS',
-      status: currentCourse.stageNotes.lms.status,
+      status: currentCourse.stageNotes.lms?.status ?? 'Pendiente',
       summary: 'Montaje en plataforma',
       actionLabel: 'Abrir montaje',
     },
     {
       key: 'qa',
-      stageId: 'calidad',
+      stageId: 'qa',
       section: 'qa' as CourseSection,
       title: 'QA',
       owner: 'Analista QA',
-      status: currentCourse.stageNotes.qa.status,
+      status: currentCourse.stageNotes.qa?.status ?? 'Pendiente',
       summary: 'Control de calidad final',
       actionLabel: 'Abrir QA',
     },
     {
       key: 'delivery',
-      stageId: null,
-      section: 'history' as CourseSection,
+      stageId: 'entrega',
+      section: 'entrega' as CourseSection,
       title: 'Entrega',
       owner: 'Coordinador',
-      status: notificationStatus,
+      status: currentCourse.stageNotes.entrega?.status ?? notificationStatus,
       summary: 'Cierre y notificación',
-      actionLabel: 'Abrir historial',
+      actionLabel: 'Abrir entrega',
     },
   ];
 
   const isWorkflowPage = activeSection === 'summary';
   const isFocusedStudio =
     !isWorkflowPage && experienceSettings.studioMode === 'Profundo';
-  const showStageRailOutsideSummary = experienceSettings.stageRailVisibility === 'Siempre';
   const focusedStageMeta =
     activeSection === 'summary'
       ? null
-      : activeSection === 'general'
+      : activeSection === 'microcurriculo'
         ? {
             eyebrow: 'Microcurrículo',
             title: 'Zona dedicada del microcurrículo',
@@ -1360,7 +1155,7 @@ export function CourseWorkspacePage({
               { label: 'Versión', value: currentCourse.metadata.currentVersion },
             ],
           }
-        : activeSection === 'architecture'
+        : activeSection === 'arquitectura'
           ? {
               eyebrow: 'Arquitectura',
               title: 'Zona dedicada de arquitectura',
@@ -1369,10 +1164,10 @@ export function CourseWorkspacePage({
               stats: [
                 { label: 'Módulos', value: String(currentCourse.modules.length) },
                 { label: 'Actividades', value: String(totalActivities) },
-                { label: 'Blueprints', value: String(countProductsByStage('architecture')) },
+                { label: 'Blueprints', value: String(countProductsByStage('arquitectura')) },
               ],
             }
-          : activeSection === 'planning'
+          : activeSection === 'planeacion'
             ? {
                 eyebrow: 'Planeación',
                 title: 'Zona dedicada de planeación',
@@ -1384,77 +1179,86 @@ export function CourseWorkspacePage({
                   { label: 'Hitos', value: String(upcomingMilestones.length) },
                 ],
               }
-            : activeSection === 'production'
-              ? {
-                  eyebrow: 'Producción',
-                  title: 'Zona dedicada de producción',
-                  description:
-                    'Escribe actividades, gestiona entregables y consolida productos de autoría dentro del curso.',
-                  stats: [
-                    { label: 'Entregables', value: String(deliverablesOpenCount) },
-                    { label: 'Actividades', value: String(totalActivities) },
-                    { label: 'Productos', value: String(countProductsByStage('production')) },
-                  ],
-                }
-              : activeSection === 'resources'
-                ? {
-                    eyebrow: 'Recursos',
-                    title: 'Zona dedicada de recursos',
-                    description:
-                      'Curación, multimedia y biblioteca asociada en una sola vista para trabajo editorial y documental.',
-                    stats: [
-                      { label: 'Curados', value: String(curatedResources.length) },
-                      { label: 'Propios', value: String(ownedResources.length) },
-                      {
-                        label: 'Productos',
-                        value: String(
-                          countProductsByStage('curation') + countProductsByStage('multimedia'),
-                        ),
-                      },
-                    ],
-                  }
-                : activeSection === 'lms'
-                  ? {
-                      eyebrow: 'LMS',
-                      title: 'Zona dedicada de montaje',
-                      description:
-                        'Implementa y documenta el montaje técnico del curso con evidencias, checklist y ajustes de plataforma.',
-                      stats: [
-                        {
-                          label: 'Checkpoints',
-                          value: String(
-                            currentCourse.stageChecklist.filter(
-                              (checkpoint) => checkpoint.owner === 'Gestor LMS',
-                            ).length,
-                          ),
-                        },
-                        { label: 'Bloqueos', value: String(currentCourse.stageNotes.lms.blockers.length) },
-                        { label: 'Evidencias', value: String(currentCourse.stageNotes.lms.evidence.length) },
-                      ],
-                    }
-                  : activeSection === 'qa'
-                    ? {
-                        eyebrow: 'QA y validación',
-                        title: 'Zona dedicada de QA',
-                        description:
-                          'Gestiona hallazgos, checkpoints y criterios de aprobación antes del cierre del curso.',
-                        stats: [
-                          { label: 'Observaciones', value: String(pendingObservationsCount) },
-                          { label: 'Bloqueos', value: String(blockingCheckpoints.length) },
-                          { label: 'Rúbricas', value: String(countProductsByStage('qa')) },
-                        ],
-                      }
-                    : {
-                        eyebrow: 'Historial',
-                        title: 'Zona dedicada de historial',
-                        description:
-                          'Consulta la trazabilidad del expediente y revisa cómo evolucionó el curso a lo largo del flujo.',
-                        stats: [
-                          { label: 'Movimientos', value: String(historyFeed.length) },
-                          { label: 'Versión', value: currentCourse.metadata.currentVersion },
-                          { label: 'Cierre', value: formatDate(currentCourse.metadata.targetCloseDate) },
-                        ],
-                      };
+          : activeSection === 'escritura'
+            ? {
+                eyebrow: 'Escritura',
+                title: 'Zona dedicada de escritura',
+                description:
+                  'Fase de redacción y desarrollo de contenidos instruccionales detallados.',
+                stats: [
+                  { label: 'Entregables', value: String(deliverablesOpenCount) },
+                  { label: 'Hitos', value: String(upcomingMilestones.length) },
+                  { label: 'Tareas', value: String(pendingTasksCount) },
+                ],
+              }
+          : activeSection === 'validacion'
+            ? {
+                eyebrow: 'Validación instruccional',
+                title: 'Zona dedicada de validación',
+                description:
+                  'Revisión pedagógica y de estilo para asegurar la calidad instruccional del contenido.',
+                stats: [
+                  { label: 'Observaciones', value: String(pendingObservationsCount) },
+                  { label: 'Correcciones', value: String(deliverablesOpenCount) },
+                  { label: 'Checkpoints', value: 'Revisado' },
+                ],
+              }
+          : activeSection === 'multimedia'
+            ? {
+                eyebrow: 'Producción multimedia',
+                title: 'Zona dedicada de producción',
+                description:
+                  'Diseño gráfico, piezas audiovisuales y recursos multimedia asociados al curso.',
+                stats: [
+                  { label: 'Recursos', value: String(curatedResources.length + ownedResources.length) },
+                  { label: 'Entregables', value: String(deliverablesOpenCount) },
+                  { label: 'Productos', value: String(countProductsByStage('escritura')) },
+                ],
+              }
+          : activeSection === 'lms'
+            ? {
+                eyebrow: 'LMS',
+                title: 'Zona dedicada de montaje',
+                description:
+                  'Implementa y documenta el montaje técnico del curso con evidencias, checklist y ajustes de plataforma.',
+                stats: [
+                  {
+                    label: 'Checkpoints',
+                    value: String(
+                      currentCourse.stageChecklist.filter(
+                        (checkpoint) => checkpoint.owner === 'Gestor LMS',
+                      ).length,
+                    ),
+                  },
+                  { label: 'Bloqueos', value: String(currentCourse.stageNotes.lms.blockers.length) },
+                  { label: 'Evidencias', value: String(currentCourse.stageNotes.lms.evidence.length) },
+                ],
+              }
+          : activeSection === 'qa'
+            ? {
+                eyebrow: 'QA',
+                title: 'Zona dedicada de control de calidad',
+                description:
+                  'Gestión de hallazgos finales y pruebas de usuario antes del lanzamiento oficial.',
+                stats: [
+                  { label: 'Observaciones', value: String(pendingObservationsCount) },
+                  { label: 'Bloqueos', value: String(blockingCheckpoints.length) },
+                  { label: 'Check', value: 'Auditado' },
+                ],
+              }
+          : activeSection === 'entrega'
+            ? {
+                eyebrow: 'Entrega',
+                title: 'Zona de entrega final',
+                description:
+                  'Cierre del proyecto, transferencia al cliente y notificación de culminación.',
+                stats: [
+                  { label: 'Estado', value: currentCourse.status },
+                  { label: 'Cierre', value: currentCourse.metadata.targetCloseDate },
+                  { label: 'Historial', value: 'Disponible' },
+                ],
+              }
+          : null;
   const showFocusedStageHeader =
     !isWorkflowPage && experienceSettings.showFocusedStageHeader && Boolean(focusedStageMeta);
 
@@ -1471,23 +1275,23 @@ export function CourseWorkspacePage({
       .trim();
   }
 
-  function extractPreviewItems(body: string) {
-    const lines = splitLines(body);
-    const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line));
-    const source = bulletLines.length > 0 ? bulletLines : lines;
+  function extractPreviewItems(body: string): string[] {
+    const lines: string[] = splitLines(body);
+    const bulletLines: string[] = lines.filter((line: string) => /^[-*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line));
+    const source: string[] = bulletLines.length > 0 ? bulletLines : lines;
 
-    return source.map(cleanPreviewLine).filter(Boolean);
+    return source.map((line: string) => cleanPreviewLine(line)).filter(Boolean);
   }
 
   function productTemplateActionLabel(stageId: CourseProductStage) {
     switch (stageId) {
-      case 'general':
+      case 'microcurriculo':
         return 'Cargar sílabus base';
-      case 'architecture':
+      case 'arquitectura':
         return 'Cargar blueprint';
-      case 'production':
+      case 'escritura':
         return 'Construir por módulos';
-      case 'curation':
+      case 'validacion':
         return 'Cargar inventario';
       case 'multimedia':
         return 'Cargar storyboard';
@@ -1500,13 +1304,13 @@ export function CourseWorkspacePage({
 
   function defaultProductSummary(stageId: CourseProductStage) {
     switch (stageId) {
-      case 'general':
+      case 'microcurriculo':
         return 'Documento marco del curso con ficha académica, resultados, metodología y referencias.';
-      case 'architecture':
+      case 'arquitectura':
         return 'Define la experiencia de aprendizaje, la secuencia pedagógica y la lógica modular del curso.';
-      case 'production':
+      case 'escritura':
         return 'Agrupa la autoría del curso: actividades, instrucciones, recursos y materiales de trabajo.';
-      case 'curation':
+      case 'validacion':
         return 'Consolida el inventario curado y su pertinencia pedagógica por módulo.';
       case 'multimedia':
         return 'Organiza piezas propias como HTML, audio, lecturas e infografías listas para producción.';
@@ -1520,9 +1324,9 @@ export function CourseWorkspacePage({
   function buildProductTemplate(
     stageId: CourseProductStage,
     format: CourseProductMutationInput['format'],
-  ) {
+  ): string {
     switch (stageId) {
-      case 'general':
+      case 'microcurriculo':
         return [
           '# Identificación del curso',
           `Institución: ${currentCourse.metadata.institution}`,
@@ -1533,10 +1337,10 @@ export function CourseWorkspacePage({
           `Créditos: ${currentCourse.credits}`,
           '',
           '# Resultados de aprendizaje',
-          ...currentCourse.metadata.learningOutcomes.map((item) => `- ${item}`),
+          ...currentCourse.metadata.learningOutcomes.map((item: string) => `- ${item}`),
           '',
           '# Temas clave',
-          ...currentCourse.metadata.topics.map((item) => `- ${item}`),
+          ...currentCourse.metadata.topics.map((item: string) => `- ${item}`),
           '',
           '# Metodología',
           currentCourse.metadata.methodology,
@@ -1545,9 +1349,9 @@ export function CourseWorkspacePage({
           currentCourse.metadata.evaluation,
           '',
           '# Bibliografía base',
-          ...currentCourse.metadata.bibliography.map((item) => `- ${item}`),
+          ...currentCourse.metadata.bibliography.map((item: string) => `- ${item}`),
         ].join('\n');
-      case 'architecture':
+      case 'arquitectura':
         return currentCourse.modules
           .map(
             (module, index) =>
@@ -1561,7 +1365,7 @@ export function CourseWorkspacePage({
               ].join('\n'),
           )
           .join('\n\n');
-      case 'production':
+      case 'escritura':
         return currentCourse.modules
           .map((module, index) => {
             const activities = Array.from(
@@ -1579,7 +1383,7 @@ export function CourseWorkspacePage({
             ].join('\n');
           })
           .join('\n\n');
-      case 'curation':
+      case 'validacion':
         return currentCourse.modules
           .map(
             (module, index) =>
@@ -1694,7 +1498,7 @@ export function CourseWorkspacePage({
           ) : null}
         </div>
 
-        {product.stage === 'general' ? (
+        {product.stage === 'microcurriculo' ? (
           <>
             <div className="module-grid module-grid--summary">
               <div className="module-card">
@@ -1733,7 +1537,7 @@ export function CourseWorkspacePage({
           </>
         ) : null}
 
-        {product.stage === 'architecture' ? (
+        {product.stage === 'arquitectura' ? (
           <div className="list-stack">
             {currentCourse.modules.map((module) => (
               <div key={module.id} className="list-item">
@@ -1750,7 +1554,7 @@ export function CourseWorkspacePage({
           </div>
         ) : null}
 
-        {product.stage === 'production' ? (
+        {product.stage === 'escritura' ? (
           <div className="list-stack">
             {currentCourse.modules.map((module) => (
               <div key={module.id} className="list-item">
@@ -1767,7 +1571,7 @@ export function CourseWorkspacePage({
           </div>
         ) : null}
 
-        {product.stage === 'curation' ? (
+        {product.stage === 'validacion' ? (
           <div className="list-stack">
             {currentCourse.modules.map((module) => (
               <div key={module.id} className="list-item">
@@ -1961,17 +1765,17 @@ export function CourseWorkspacePage({
   function parseProductionStructuredProduct(body: string) {
     const blocks = body
       .split(/\n(?=#\s+(?:Módulo|Unidad)\s+\d+:)/)
-      .map((block) => block.trim())
+      .map((block: string) => block.trim())
       .filter(Boolean);
 
-    return currentCourse.modules.map((module, index) => {
+    return currentCourse.modules.map((module, index: number) => {
       const block = blocks[index] ?? '';
       const lines = splitLines(block);
-      const activitiesStart = lines.findIndex((line) => line.startsWith('Actividades:'));
+      const activitiesStart = lines.findIndex((line: string) => line.startsWith('Actividades:'));
       const activities = lines
         .slice(activitiesStart >= 0 ? activitiesStart + 1 : 0)
-        .filter((line) => /^[-*]\s+/.test(line))
-        .map((line) =>
+        .filter((line: string) => /^[-*]\s+/.test(line))
+        .map((line: string) =>
           cleanPreviewLine(line)
             .replace(/^Actividad\s+\d+:\s*/i, '')
             .trim(),
@@ -1987,7 +1791,7 @@ export function CourseWorkspacePage({
         activities:
           activities.length > 0
             ? activities
-            : Array.from({ length: Math.max(module.activities, 1) }, (_, activityIndex) =>
+            : Array.from({ length: Math.max(module.activities, 1) }, (_: unknown, activityIndex: number) =>
                 `Actividad ${activityIndex + 1} por desarrollar`,
               ),
       };
@@ -2004,12 +1808,12 @@ export function CourseWorkspacePage({
     }>,
   ) {
     return modules
-      .map((module, index) =>
+      .map((module: { title: string; objective: string; ownResources: number; curatedResources: number; activities: string[] }, index: number) =>
         [
           `# Módulo ${index + 1}: ${module.title}`,
           `Objetivo: ${module.objective}`,
           'Actividades:',
-          ...module.activities.map((activity) => `- ${activity}`),
+          ...module.activities.map((activity: string) => `- ${activity}`),
           `Recursos propios de apoyo: ${module.ownResources}`,
           `Recursos curados de apoyo: ${module.curatedResources}`,
         ].join('\n'),
@@ -2021,8 +1825,8 @@ export function CourseWorkspacePage({
 
   function parseQaStructuredProduct(body: string) {
     const criteria = splitLines(body)
-      .filter((line) => /^[-*]\s+/.test(line))
-      .map((line) => {
+      .filter((line: string) => /^[-*]\s+/.test(line))
+      .map((line: string) => {
         const cleaned = line.replace(/^[-*]\s*/, '').trim();
         const match = cleaned.match(/^\[(Pendiente|Ajuste|Cumple)\|([0-4])\]\s+(.+)$/);
 
@@ -2040,7 +1844,7 @@ export function CourseWorkspacePage({
           label: cleaned,
         };
       })
-      .filter((criterion) => criterion.label);
+      .filter((criterion: { label: string }) => criterion.label);
 
     return criteria.length > 0
       ? criteria
@@ -2060,7 +1864,7 @@ export function CourseWorkspacePage({
   ) {
     return [
       '# Rúbrica de validación',
-      ...criteria.map((criterion) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
+      ...criteria.map((criterion: { status: QaCriterionStatus; score: number; label: string }) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
     ].join('\n');
   }
 
@@ -2068,7 +1872,7 @@ export function CourseWorkspacePage({
     product: CourseProductMutationInput,
     onPatch: (patch: Partial<CourseProductMutationInput>) => void,
   ) {
-    if (product.stage === 'general') {
+    if (product.stage === 'microcurriculo') {
       const structured = parseGeneralStructuredProduct(product.body);
 
       return (
@@ -2190,7 +1994,7 @@ export function CourseWorkspacePage({
       );
     }
 
-    if (product.stage === 'production') {
+    if (product.stage === 'escritura') {
       const modules = parseProductionStructuredProduct(product.body);
 
       return (
@@ -2226,11 +2030,11 @@ export function CourseWorkspacePage({
                             rows={3}
                             value={activity}
                             onChange={(event) => {
-                              const nextModules = modules.map((currentModule, currentIndex) =>
+                              const nextModules = modules.map((currentModule: { moduleId: string; title: string; objective: string; ownResources: number; curatedResources: number; activities: string[] }, currentIndex: number) =>
                                 currentIndex === moduleIndex
                                   ? {
                                       ...currentModule,
-                                      activities: currentModule.activities.map((item, currentActivityIndex) =>
+                                      activities: currentModule.activities.map((item: string, currentActivityIndex: number) =>
                                         currentActivityIndex === activityIndex ? event.target.value : item,
                                       ),
                                     }
@@ -2251,12 +2055,12 @@ export function CourseWorkspacePage({
                           className="danger-button danger-button--ghost"
                           disabled={module.activities.length <= 1}
                           onClick={() => {
-                            const nextModules = modules.map((currentModule, currentIndex) =>
+                            const nextModules = modules.map((currentModule: { moduleId: string; title: string; objective: string; ownResources: number; curatedResources: number; activities: string[] }, currentIndex: number) =>
                               currentIndex === moduleIndex
                                 ? {
                                     ...currentModule,
                                     activities: currentModule.activities.filter(
-                                      (_, currentActivityIndex) => currentActivityIndex !== activityIndex,
+                                      (_: string, currentActivityIndex: number) => currentActivityIndex !== activityIndex,
                                     ),
                                   }
                                 : currentModule,
@@ -2312,7 +2116,7 @@ export function CourseWorkspacePage({
       const criteria = parseQaStructuredProduct(product.body);
       const averageScore =
         criteria.length > 0
-          ? (criteria.reduce((sum, criterion) => sum + criterion.score, 0) / criteria.length).toFixed(1)
+          ? (criteria.reduce((sum: number, criterion: { score: number }) => sum + criterion.score, 0) / criteria.length).toFixed(1)
           : '0.0';
 
       return (
@@ -2334,7 +2138,7 @@ export function CourseWorkspacePage({
                     <input
                       value={criterion.label}
                       onChange={(event) => {
-                        const nextCriteria = criteria.map((item, currentIndex) =>
+                        const nextCriteria = criteria.map((item: { label: string; status: QaCriterionStatus; score: number }, currentIndex: number) =>
                           currentIndex === index ? { ...item, label: event.target.value } : item,
                         );
 
@@ -2353,7 +2157,7 @@ export function CourseWorkspacePage({
                       <select
                         value={criterion.status}
                         onChange={(event) => {
-                          const nextCriteria = criteria.map((item, currentIndex) =>
+                          const nextCriteria = criteria.map((item: { label: string; status: QaCriterionStatus; score: number }, currentIndex: number) =>
                             currentIndex === index
                               ? { ...item, status: event.target.value as QaCriterionStatus }
                               : item,
@@ -2379,7 +2183,7 @@ export function CourseWorkspacePage({
                       <select
                         value={criterion.score}
                         onChange={(event) => {
-                          const nextCriteria = criteria.map((item, currentIndex) =>
+                          const nextCriteria = criteria.map((item: { label: string; status: QaCriterionStatus; score: number }, currentIndex: number) =>
                             currentIndex === index
                               ? {
                                   ...item,
@@ -2409,7 +2213,7 @@ export function CourseWorkspacePage({
                     className="danger-button danger-button--ghost"
                     disabled={criteria.length <= 1}
                     onClick={() => {
-                      const nextCriteria = criteria.filter((_, currentIndex) => currentIndex !== index);
+                      const nextCriteria = criteria.filter((_: unknown, currentIndex: number) => currentIndex !== index);
 
                       onPatch({
                         body: buildQaStructuredBody(nextCriteria),
@@ -2660,134 +2464,7 @@ export function CourseWorkspacePage({
     }));
   }
 
-  async function handleTimelineCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setTimelineError(null);
-    setIsTimelineSaving('new');
 
-    try {
-      const response = await fetch('/api/timeline', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          ...newTimelineForm,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible crear el hito.');
-      }
-
-      refreshAppData();
-      setNewTimelineForm(makeTimelineForm());
-      setIsTimelineComposerOpen(false);
-    } catch (error) {
-      setTimelineError(error instanceof Error ? error.message : 'No fue posible crear el hito.');
-    } finally {
-      setIsTimelineSaving(null);
-    }
-  }
-
-  async function handleTimelineSave(timelineItemId: string) {
-    const draft = timelineDrafts[timelineItemId];
-
-    if (!draft) {
-      return;
-    }
-
-    setTimelineError(null);
-    setIsTimelineSaving(timelineItemId);
-
-    try {
-      const response = await fetch('/api/timeline', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: timelineItemId,
-          ...draft,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible guardar el hito.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setTimelineError(error instanceof Error ? error.message : 'No fue posible guardar el hito.');
-    } finally {
-      setIsTimelineSaving(null);
-    }
-  }
-
-  async function handleTimelineDelete(timelineItemId: string) {
-    const confirmed = await showConfirm({
-      title: 'Eliminar hito',
-      message: 'El hito será retirado del cronograma visible del curso. ¿Quieres continuar?',
-      tone: 'warning',
-      confirmLabel: 'Eliminar hito',
-      cancelLabel: 'Cancelar',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    setTimelineError(null);
-    setIsTimelineSaving(timelineItemId);
-
-    try {
-      const response = await fetch('/api/timeline', {
-        method: 'DELETE',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: timelineItemId,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible eliminar el hito.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setTimelineError(error instanceof Error ? error.message : 'No fue posible eliminar el hito.');
-    } finally {
-      setIsTimelineSaving(null);
-    }
-  }
-
-  function updateTimelineDraft<Key extends keyof TimelineItemMutationInput>(
-    timelineItemId: string,
-    key: Key,
-    value: TimelineItemMutationInput[Key],
-  ) {
-    setTimelineDrafts((current) => ({
-      ...current,
-      [timelineItemId]: {
-        ...current[timelineItemId],
-        [key]: value,
-      },
-    }));
-  }
 
   async function handleTeamMemberCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2924,134 +2601,7 @@ export function CourseWorkspacePage({
     }));
   }
 
-  async function handleModuleCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setModuleError(null);
-    setIsModuleSaving('new');
 
-    try {
-      const response = await fetch('/api/learning-modules', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          ...newLearningModuleForm,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible crear el módulo.');
-      }
-
-      refreshAppData();
-      setNewLearningModuleForm(makeLearningModuleForm());
-      setIsModuleComposerOpen(false);
-    } catch (error) {
-      setModuleError(error instanceof Error ? error.message : 'No fue posible crear el módulo.');
-    } finally {
-      setIsModuleSaving(null);
-    }
-  }
-
-  async function handleModuleSave(moduleId: string) {
-    const draft = moduleDrafts[moduleId];
-
-    if (!draft) {
-      return;
-    }
-
-    setModuleError(null);
-    setIsModuleSaving(moduleId);
-
-    try {
-      const response = await fetch('/api/learning-modules', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: moduleId,
-          ...draft,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible guardar el módulo.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setModuleError(error instanceof Error ? error.message : 'No fue posible guardar el módulo.');
-    } finally {
-      setIsModuleSaving(null);
-    }
-  }
-
-  async function handleModuleDelete(moduleId: string) {
-    const confirmed = await showConfirm({
-      title: 'Eliminar módulo',
-      message: 'El módulo será retirado de la arquitectura del curso. ¿Quieres continuar?',
-      tone: 'warning',
-      confirmLabel: 'Eliminar módulo',
-      cancelLabel: 'Cancelar',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    setModuleError(null);
-    setIsModuleSaving(moduleId);
-
-    try {
-      const response = await fetch('/api/learning-modules', {
-        method: 'DELETE',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: moduleId,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible eliminar el módulo.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setModuleError(error instanceof Error ? error.message : 'No fue posible eliminar el módulo.');
-    } finally {
-      setIsModuleSaving(null);
-    }
-  }
-
-  function updateModuleDraft<Key extends keyof LearningModuleMutationInput>(
-    moduleId: string,
-    key: Key,
-    value: LearningModuleMutationInput[Key],
-  ) {
-    setModuleDrafts((current) => ({
-      ...current,
-      [moduleId]: {
-        ...current[moduleId],
-        [key]: value,
-      },
-    }));
-  }
 
   async function handleProductCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3242,316 +2792,9 @@ export function CourseWorkspacePage({
     }));
   }
 
-  async function handleCheckpointSave(checkpointIndex: number) {
-    const status = checkpointDrafts[checkpointIndex];
 
-    if (!status) {
-      return;
-    }
 
-    setCheckpointError(null);
-    setIsCheckpointSaving(checkpointIndex);
 
-    try {
-      const response = await fetch('/api/checkpoints', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          checkpointIndex,
-          status,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible actualizar el checkpoint.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setCheckpointError(
-        error instanceof Error ? error.message : 'No fue posible actualizar el checkpoint.',
-      );
-    } finally {
-      setIsCheckpointSaving(null);
-    }
-  }
-
-  async function handleHandoff() {
-    setHandoffError(null);
-    setIsHandoffSaving(true);
-
-    try {
-      const response = await fetch('/api/handoffs', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible transferir el curso.');
-      }
-
-      refreshAppData();
-    } catch (error) {
-      setHandoffError(error instanceof Error ? error.message : 'No fue posible transferir el curso.');
-    } finally {
-      setIsHandoffSaving(false);
-    }
-  }
-
-  function updateCheckpointDraft(index: number, status: StageCheckpointStatus) {
-    setCheckpointDrafts((current) => ({
-      ...current,
-      [index]: status,
-    }));
-  }
-
-  async function handleDeliverableCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsDeliverableSaving(true);
-    setDeliverableError(null);
-
-    try {
-      const response = await fetch('/api/deliverables', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          ...newDeliverableForm,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible crear el entregable.');
-      }
-
-      refreshAppData();
-      setNewDeliverableForm(makeDeliverableForm(defaultDeliverableOwner));
-      setIsDeliverableComposerOpen(false);
-    } catch (error) {
-      setDeliverableError(
-        error instanceof Error ? error.message : 'No fue posible crear el entregable.',
-      );
-    } finally {
-      setIsDeliverableSaving(false);
-    }
-  }
-
-  async function handleDeliverableSave(deliverableId: string) {
-    const draft = deliverableDrafts[deliverableId];
-
-    if (!draft) {
-      return;
-    }
-
-    setDeliverableError(null);
-
-    const response = await fetch('/api/deliverables', {
-      method: 'PATCH',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        courseSlug: currentCourse.slug,
-        id: deliverableId,
-        ...draft,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      setDeliverableError(payload.error ?? 'No fue posible guardar el entregable.');
-      return;
-    }
-
-    refreshAppData();
-  }
-
-  async function handleDeliverableDelete(deliverableId: string) {
-    const confirmed = await showConfirm({
-      title: 'Eliminar entregable',
-      message: 'El entregable será eliminado del curso. Esta acción no se puede deshacer.',
-      tone: 'warning',
-      confirmLabel: 'Eliminar entregable',
-      cancelLabel: 'Cancelar',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const response = await fetch('/api/deliverables', {
-      method: 'DELETE',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        courseSlug: currentCourse.slug,
-        id: deliverableId,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      setDeliverableError(payload.error ?? 'No fue posible eliminar el entregable.');
-      return;
-    }
-
-    refreshAppData();
-  }
-
-  function updateDeliverableDraft<Key extends keyof DeliverableMutationInput>(
-    deliverableId: string,
-    key: Key,
-    value: DeliverableMutationInput[Key],
-  ) {
-    setDeliverableDrafts((current) => ({
-      ...current,
-      [deliverableId]: {
-        ...current[deliverableId],
-        [key]: value,
-      },
-    }));
-  }
-
-  async function handleObservationCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsObservationSaving(true);
-    setObservationError(null);
-
-    try {
-      const response = await fetch('/api/observations', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          ...newObservationForm,
-        }),
-      });
-
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible registrar la observación.');
-      }
-
-      refreshAppData();
-      setNewObservationForm(makeObservationForm(defaultObservationRole));
-      setIsObservationComposerOpen(false);
-    } catch (error) {
-      setObservationError(
-        error instanceof Error ? error.message : 'No fue posible registrar la observación.',
-      );
-    } finally {
-      setIsObservationSaving(false);
-    }
-  }
-
-  async function handleObservationSave(observationId: string) {
-    const draft = observationDrafts[observationId];
-
-    if (!draft) {
-      return;
-    }
-
-    setObservationError(null);
-
-    const response = await fetch('/api/observations', {
-      method: 'PATCH',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        courseSlug: currentCourse.slug,
-        id: observationId,
-        ...draft,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      setObservationError(payload.error ?? 'No fue posible guardar la observación.');
-      return;
-    }
-
-    refreshAppData();
-  }
-
-  async function handleObservationDelete(observationId: string) {
-    const confirmed = await showConfirm({
-      title: 'Eliminar observación',
-      message: 'La observación será eliminada del seguimiento del curso. ¿Quieres continuar?',
-      tone: 'warning',
-      confirmLabel: 'Eliminar observación',
-      cancelLabel: 'Cancelar',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const response = await fetch('/api/observations', {
-      method: 'DELETE',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        courseSlug: currentCourse.slug,
-        id: observationId,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      setObservationError(payload.error ?? 'No fue posible eliminar la observación.');
-      return;
-    }
-
-    refreshAppData();
-  }
-
-  function updateObservationDraft<Key extends keyof ObservationMutationInput>(
-    observationId: string,
-    key: Key,
-    value: ObservationMutationInput[Key],
-  ) {
-    setObservationDrafts((current) => ({
-      ...current,
-      [observationId]: {
-        ...current[observationId],
-        [key]: value,
-      },
-    }));
-  }
 
   function renderStageNoteEditor(
     noteKey: CourseStageNoteKey,
@@ -4089,7 +3332,8 @@ export function CourseWorkspacePage({
                                 ...patch,
                               },
                             }))
-                          )}
+                          )
+                          }
 
                           <div className="form-grid">
                             <label className="field">
@@ -4290,13 +3534,15 @@ export function CourseWorkspacePage({
         <div className="segmented-control segmented-control--wide">
           {[
             ['summary', 'Workflow'],
-            ['general', 'Microcurrículo'],
-            ['architecture', 'Arquitectura'],
-            ['planning', 'Planeación'],
-            ['production', 'Producción'],
-            ['resources', 'Recursos'],
+            ['microcurriculo', 'Microcurrículo'],
+            ['arquitectura', 'Arquitectura'],
+            ['planeacion', 'Planeación'],
+            ['escritura', 'Escritura'],
+            ['validacion', 'Validación instruccional'],
+            ['multimedia', 'Producción multimedia'],
             ['lms', 'LMS'],
-            ['qa', 'QA y validación'],
+            ['qa', 'QA'],
+            ['entrega', 'Entrega'],
             ['history', 'Historial'],
           ].map(([value, label]) => (
             <button
@@ -4330,7 +3576,7 @@ export function CourseWorkspacePage({
             </div>
 
             <div className="workspace-focus-head__actions">
-              {activeSection === 'general' && canManageCourses(userRole) ? (
+              {activeSection === 'microcurriculo' && canManageCourses(userRole) ? (
                 <button
                   type="button"
                   className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
@@ -4384,7 +3630,7 @@ export function CourseWorkspacePage({
             <div className="summary-actions-card">
               <div className="section-heading section-heading--compact">
                 <div>
-                  <span className="eyebrow">Estado general</span>
+                  <span className="eyebrow">Estado microcurriculo</span>
                   <h3>Progreso de avance</h3>
                 </div>
               </div>
@@ -4419,10 +3665,10 @@ export function CourseWorkspacePage({
       ) : null}
 
 
-      {activeSection === 'general' ? (
+      {activeSection === 'microcurriculo' ? (
         <section className="workspace-grid">
           {renderProductStudio(
-            'general',
+            'microcurriculo',
             'Microcurrículo y base curricular',
             'Productos nucleares del curso',
             'Aquí se crean, editan y versionan el sílabus, microcurrículo y demás documentos fundacionales del curso.',
@@ -4430,904 +3676,79 @@ export function CourseWorkspacePage({
         </section>
       ) : null}
 
-      {activeSection === 'qa' ? (
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Flujo</span>
-            <h3>Ruta completa del curso</h3>
-          </div>
-          <Compass size={18} />
-        </div>
-
-        {showStageRailOutsideSummary ? <StageRail items={currentCourse.stageChecklist} /> : null}
-
-        <div className="handoff-grid">
-          <article className="surface-muted handoff-card">
-            <div className="section-heading section-heading--compact">
-              <div>
-                <span className="eyebrow">HANDOFF</span>
-                <h3>Transferencia entre etapas</h3>
-              </div>
-            </div>
-
-            <div className="handoff-metrics">
-              <div className="handoff-metric">
-                <span>Etapa actual</span>
-                <strong>{stage?.name ?? currentCourse.stageId}</strong>
-              </div>
-              <div className="handoff-metric">
-                <span>Siguiente responsable</span>
-                <strong>{nextStage?.owner ?? 'Cierre final'}</strong>
-              </div>
-              <div className="handoff-metric">
-                <span>Bloqueos</span>
-                <strong>{handoffBlockingCount}</strong>
-              </div>
-              <div className="handoff-metric">
-                <span>Alertas del curso</span>
-                <strong>{relatedAlerts.length}</strong>
-              </div>
-            </div>
-
-            <p className="handoff-copy">
-              {nextStage
-                ? `Cuando la etapa actual quede completa, el curso puede transferirse a ${nextStage.name} y se notificará al siguiente responsable.`
-                : 'Este curso está en la última etapa. Al cerrar el handoff quedará listo para publicación o activación.'}
-            </p>
-
-            {handoffReadinessReason ? (
-              <div className="empty-state handoff-state">
-                <strong>El handoff todavía no está listo</strong>
-                <p>{handoffReadinessReason}</p>
-              </div>
-            ) : (
-              <div className="empty-state handoff-state">
-                <strong>Ruta despejada para la transferencia</strong>
-                <p>
-                  Marca la etapa activa como completada y luego transfiere el curso para generar la siguiente activación.
-                </p>
-              </div>
-            )}
-
-            {handoffError ? <p className="form-error">{handoffError}</p> : null}
-
-            {canManageHandoffs(userRole) ? (
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="cta-button"
-                  disabled={!isHandoffReady || isHandoffSaving}
-                  onClick={() => void handleHandoff()}
-                >
-                  <span>
-                    {isHandoffSaving
-                      ? 'Transfiriendo…'
-                      : nextStage
-                        ? `Transferir a ${nextStage.name}`
-                        : 'Cerrar curso'}
-                  </span>
-                </button>
-              </div>
-            ) : null}
-          </article>
-
-          <div className="section-heading section-heading--compact">
-            <div>
-              <span className="eyebrow">Checkpoints</span>
-              <h3>Control por etapa</h3>
-            </div>
-            {currentCourse.stageChecklist.some((checkpoint) =>
-              canOperateStageCheckpoint(userRole, checkpoint.owner),
-            ) ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setActiveWorkspaceOverlay('checkpoints')}
-              >
-                <PencilLine size={16} />
-                <span>Gestionar checkpoints</span>
-              </button>
-            ) : null}
-          </div>
-
-          <div className="list-stack checkpoint-stack">
-            {currentCourse.stageChecklist.map((checkpoint, index) => {
-              const draftStatus = checkpointDrafts[index] ?? checkpoint.status;
-              const stageMeta = appData.stages[index];
-
-              return (
-                <div key={checkpoint.id} className="list-item">
-                  <div>
-                    <span className={checkpointBadgeClass(draftStatus)}>
-                      {checkpointStatusLabel(draftStatus)}
-                    </span>
-                    <strong>{checkpoint.label}</strong>
-                    <p>{stageMeta?.description ?? 'Punto de control de la etapa actual del curso.'}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{checkpoint.owner}</span>
-                    <span>Fase {index + 1}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {checkpointError ? <p className="form-error">{checkpointError}</p> : null}
-
-        {activeWorkspaceOverlay === 'checkpoints' ? (
-          <ModalFrame
-            eyebrow="Workflow"
-            title="Gestionar checkpoints"
-            description="Los puntos de control se administran en modal para no recargar la vista principal del curso."
-            width="xl"
-            onClose={closeWorkspaceOverlay}
-          >
-            <div className="list-stack checkpoint-stack">
-              {currentCourse.stageChecklist.map((checkpoint, index) => {
-                const draftStatus = checkpointDrafts[index] ?? checkpoint.status;
-                const isEditable = canOperateStageCheckpoint(userRole, checkpoint.owner);
-                const stageMeta = appData.stages[index];
-
-                return (
-                  <div key={checkpoint.id} className="task-editor checkpoint-editor">
-                    <div>
-                      <div className="task-editor__header">
-                        <span className={checkpointBadgeClass(draftStatus)}>
-                          {checkpointStatusLabel(draftStatus)}
-                        </span>
-                        <strong>{checkpoint.label}</strong>
-                      </div>
-
-                      <p>{stageMeta?.description ?? 'Punto de control de la etapa actual del curso.'}</p>
-
-                      <div className="list-item__meta">
-                        <span>{checkpoint.owner}</span>
-                        <span>Fase {index + 1}</span>
-                      </div>
-                    </div>
-
-                    <div className="task-editor__sidebar">
-                      {isEditable ? (
-                        <>
-                          <label className="field">
-                            <span>Estado</span>
-                            <div className="field__control">
-                              <select
-                                value={draftStatus}
-                                onChange={(event) =>
-                                  updateCheckpointDraft(
-                                    index,
-                                    event.target.value as StageCheckpointStatus,
-                                  )
-                                }
-                              >
-                                {[
-                                  ['pending', 'Pendiente'],
-                                  ['active', 'Activa'],
-                                  ['done', 'Completada'],
-                                  ['blocked', 'Bloqueada'],
-                                ].map(([value, label]) => (
-                                  <option key={value} value={value}>
-                                    {label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </label>
-
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            disabled={isCheckpointSaving === index}
-                            onClick={() => void handleCheckpointSave(index)}
-                          >
-                            <Save size={16} />
-                            <span>{isCheckpointSaving === index ? 'Guardando…' : 'Guardar'}</span>
-                          </button>
-                        </>
-                      ) : (
-                        <div className="task-item__meta">
-                          <span>{checkpoint.owner}</span>
-                          <span>{checkpointStatusLabel(draftStatus)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </ModalFrame>
-        ) : null}
-      </section>
+      {activeSection === 'arquitectura' ? (
+        <section className="workspace-grid">
+           {renderProductStudio(
+            'arquitectura',
+            'Arquitectura instruccional',
+            'Blueprints y estructura de aprendizaje',
+            'Aquí se definen los módulos, la lógica pedagógica y la ruta de aprendizaje del curso.',
+          )}
+          {renderStageNoteEditor(
+            'arquitectura',
+            'Arquitectura',
+            'Decisiones de diseño',
+            'Registra decisiones sobre la estructura modular y la propuesta instruccional.',
+          )}
+        </section>
       ) : null}
 
-      {['architecture', 'planning', 'production', 'resources', 'lms', 'qa'].includes(activeSection) ? (
-      <section className="workspace-grid">
-        {activeSection === 'production' ? (
-        <>
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Entrega</span>
-              <h3>Entregables activos</h3>
-            </div>
-            <div className="action-row">
-              {canCreateDeliverables(userRole) ? (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setActiveWorkspaceOverlay('deliverables')}
-                >
-                  <PencilLine size={16} />
-                  <span>Gestionar entregables</span>
-                </button>
-              ) : null}
-              <Flag size={18} />
-            </div>
-          </div>
+      {activeSection === 'planeacion' ? (
+        <section className="workspace-grid">
+           {renderStageNoteEditor(
+            'planeacion',
+            'Operación',
+            'Bitácora de planeación',
+            'Seguimiento a hitos operativos y coordinación de recursos del equipo.',
+          )}
 
-          <div className="list-stack">
-            {course.deliverables.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin entregables registrados</strong>
-                <p>Cuando el curso tenga piezas activas, aparecerán aquí con responsable y fecha.</p>
+          <article className="surface section-card section-card--compact">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Tareas</span>
+                <h3>Tablero operativo del curso</h3>
               </div>
-            ) : (
-              course.deliverables.map((deliverable) => {
-                return (
-                  <div key={deliverable.id} className="list-item">
-                    <div>
-                      <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
-                      <strong>{deliverable.title}</strong>
-                      <p>{deliverable.note}</p>
-                    </div>
-                    <div className="list-item__meta">
-                      <span>{deliverable.owner}</span>
-                      <span>Vence {formatDate(deliverable.dueDate)}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </article>
-
-        {activeWorkspaceOverlay === 'deliverables' ? (
-          <ModalFrame
-            eyebrow="Producción"
-            title="Gestionar entregables"
-            description="Los entregables se crean y editan en modal para no saturar la vista operativa."
-            width="xl"
-            onClose={closeWorkspaceOverlay}
-          >
-            <div className="page-stack">
-              <div className="toolbar-header">
-                <button
-                  type="button"
-                  className={
-                    isDeliverableComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
-                  }
-                  onClick={() => setIsDeliverableComposerOpen((current) => !current)}
-                >
-                  <Plus size={16} />
-                  <span>{isDeliverableComposerOpen ? 'Ocultar formulario' : 'Nuevo entregable'}</span>
-                </button>
-              </div>
-
-              {isDeliverableComposerOpen ? (
-                <form className="editor-card editor-card--task" onSubmit={handleDeliverableCreate}>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Título</span>
-                      <div className="field__control">
-                        <input
-                          value={newDeliverableForm.title}
-                          onChange={(event) =>
-                            setNewDeliverableForm((current) => ({
-                              ...current,
-                              title: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Responsable</span>
-                      <div className="field__control">
-                        <select
-                          value={newDeliverableForm.owner}
-                          onChange={(event) =>
-                            setNewDeliverableForm((current) => ({
-                              ...current,
-                              owner: event.target.value as Role,
-                            }))
-                          }
-                        >
-                          {appData.roles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={newDeliverableForm.status}
-                          onChange={(event) =>
-                            setNewDeliverableForm((current) => ({
-                              ...current,
-                              status: event.target.value as DeliverableMutationInput['status'],
-                            }))
-                          }
-                        >
-                          {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Vence</span>
-                      <div className="field__control">
-                        <input
-                          type="date"
-                          value={newDeliverableForm.dueDate}
-                          onChange={(event) =>
-                            setNewDeliverableForm((current) => ({
-                              ...current,
-                              dueDate: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field field--full">
-                      <span>Nota operativa</span>
-                      <div className="field__control field__control--textarea">
-                        <textarea
-                          rows={3}
-                          value={newDeliverableForm.note}
-                          onChange={(event) =>
-                            setNewDeliverableForm((current) => ({
-                              ...current,
-                              note: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isDeliverableSaving}>
-                      <span>{isDeliverableSaving ? 'Creando…' : 'Crear entregable'}</span>
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-
-              {deliverableError ? <p className="form-error">{deliverableError}</p> : null}
-
-              <div className="list-stack">
-                {course.deliverables.map((deliverable) => {
-                  const draft = deliverableDrafts[deliverable.id];
-                  const isEditable = canEditDeliverable(userRole, deliverable.owner);
-
-                  if (!isEditable || !draft) {
-                    return (
-                      <div key={deliverable.id} className="list-item">
-                        <div>
-                          <span className={badgeClass(deliverable.status)}>{deliverable.status}</span>
-                          <strong>{deliverable.title}</strong>
-                          <p>{deliverable.note}</p>
-                        </div>
-                        <div className="list-item__meta">
-                          <span>{deliverable.owner}</span>
-                          <span>Vence {formatDate(deliverable.dueDate)}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={deliverable.id} className="task-editor">
-                      <div>
-                        <div className="task-editor__header">
-                          <span className={badgeClass(draft.status)}>{draft.status}</span>
-                          <strong>{deliverable.title}</strong>
-                        </div>
-
-                        <div className="form-grid">
-                          <label className="field">
-                            <span>Título</span>
-                            <div className="field__control">
-                              <input
-                                value={draft.title}
-                                onChange={(event) =>
-                                  updateDeliverableDraft(deliverable.id, 'title', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Responsable</span>
-                            <div className="field__control">
-                              <select
-                                value={draft.owner}
-                                onChange={(event) =>
-                                  updateDeliverableDraft(
-                                    deliverable.id,
-                                    'owner',
-                                    event.target.value as Role,
-                                  )
-                                }
-                              >
-                                {appData.roles.map((item) => (
-                                  <option key={item} value={item}>
-                                    {item}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Estado</span>
-                            <div className="field__control">
-                              <select
-                                value={draft.status}
-                                onChange={(event) =>
-                                  updateDeliverableDraft(
-                                    deliverable.id,
-                                    'status',
-                                    event.target.value as DeliverableMutationInput['status'],
-                                  )
-                                }
-                              >
-                                {['En curso', 'En revisión', 'Listo', 'Bloqueado'].map((item) => (
-                                  <option key={item} value={item}>
-                                    {item}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Vence</span>
-                            <div className="field__control">
-                              <input
-                                type="date"
-                                value={draft.dueDate}
-                                onChange={(event) =>
-                                  updateDeliverableDraft(
-                                    deliverable.id,
-                                    'dueDate',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field field--full">
-                            <span>Nota operativa</span>
-                            <div className="field__control field__control--textarea">
-                              <textarea
-                                rows={3}
-                                value={draft.note}
-                                onChange={(event) =>
-                                  updateDeliverableDraft(deliverable.id, 'note', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="task-editor__sidebar">
-                        <div className="task-item__meta">
-                          <span>{draft.owner}</span>
-                          <span>Vence {formatDate(draft.dueDate)}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => void handleDeliverableSave(deliverable.id)}
-                        >
-                          <Save size={16} />
-                          <span>Guardar</span>
-                        </button>
-
-                        {canDeleteDeliverables(userRole) ? (
-                          <button
-                            type="button"
-                            className="danger-button danger-button--ghost"
-                            onClick={() => void handleDeliverableDelete(deliverable.id)}
-                          >
-                            <Trash2 size={16} />
-                            <span>Eliminar</span>
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="action-row">
+                {canCreateTasks(userRole) ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setActiveWorkspaceOverlay('tasks')}
+                  >
+                    <PencilLine size={16} />
+                    <span>Gestionar tareas</span>
+                  </button>
+                ) : null}
               </div>
             </div>
-          </ModalFrame>
-        ) : null}
-        </>
-        ) : null}
 
-        {activeSection === 'qa'
-          ? renderStageNoteEditor(
-              'qa',
-              'QA',
-              'Revisión, hallazgos y aprobación',
-              'La bitácora de QA concentra control de calidad, devoluciones y criterio de cierre.',
-            )
-          : null}
-
-        {activeSection === 'qa' ? (
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Alertas</span>
-              <h3>Riesgos y bloqueos del curso</h3>
-            </div>
-            <CircleAlert size={18} />
-          </div>
-
-          <div className="list-stack">
-            {relatedAlerts.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin alertas activas</strong>
-                <p>Los riesgos operativos y llamados de atención aparecerán aquí cuando existan.</p>
-              </div>
-            ) : (
-              relatedAlerts.map((alert) => (
-                <div key={alert.id} className="list-item">
-                  <div>
-                    <span className={`badge badge--${alert.tone}`}>{alert.owner}</span>
-                    <strong>{alert.title}</strong>
-                    <p>{alert.detail}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{stage?.name ?? currentCourse.stageId}</span>
-                    <span>{currentCourse.status}</span>
-                  </div>
+            <div className="list-stack">
+              {visibleTasks.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin tareas visibles en este curso</strong>
+                  <p>Cuando el flujo avance o se registren nuevas asignaciones aparecerán aquí.</p>
                 </div>
-              ))
-            )}
-          </div>
-        </article>
-        ) : null}
-
-        {activeSection === 'planning' ? (
-        <div className="page-stack">
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Agenda</span>
-              <h3>Cronograma operativo</h3>
-            </div>
-            <div className="action-row">
-              {canCreateTasks(userRole) ? (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setActiveWorkspaceOverlay('timeline')}
-                >
-                  <PencilLine size={16} />
-                  <span>Gestionar cronograma</span>
-                </button>
-              ) : null}
-              <Compass size={18} />
-            </div>
-          </div>
-
-          <div className="timeline-stack">
-            {course.schedule.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin hitos registrados</strong>
-                <p>La planeación del curso todavía no tiene cronograma visible.</p>
-              </div>
-            ) : (
-              course.schedule.map((item) => {
-                return (
-                  <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
-                    <span className="timeline-item__dot" />
-                    <div>
-                      <strong>{item.label}</strong>
-                      <p>{formatLongDate(item.dueDate)}</p>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </article>
-
-        {activeWorkspaceOverlay === 'timeline' ? (
-          <ModalFrame
-            eyebrow="Planeación"
-            title="Gestionar cronograma operativo"
-            description="Los hitos y fechas objetivo se administran en un modal dedicado."
-            width="xl"
-            onClose={closeWorkspaceOverlay}
-          >
-            <div className="page-stack">
-              <div className="toolbar-header">
-                <button
-                  type="button"
-                  className={isTimelineComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsTimelineComposerOpen((current) => !current)}
-                >
-                  <Plus size={16} />
-                  <span>{isTimelineComposerOpen ? 'Ocultar formulario' : 'Nuevo hito'}</span>
-                </button>
-              </div>
-
-              {isTimelineComposerOpen ? (
-                <form className="editor-card editor-card--task" onSubmit={handleTimelineCreate}>
-                  <div className="form-grid">
-                    <label className="field field--full">
-                      <span>Nombre del hito</span>
-                      <div className="field__control">
-                        <input
-                          value={newTimelineForm.label}
-                          onChange={(event) =>
-                            setNewTimelineForm((current) => ({
-                              ...current,
-                              label: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Fecha objetivo</span>
-                      <div className="field__control">
-                        <input
-                          type="date"
-                          value={newTimelineForm.dueDate}
-                          onChange={(event) =>
-                            setNewTimelineForm((current) => ({
-                              ...current,
-                              dueDate: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={newTimelineForm.status}
-                          onChange={(event) =>
-                            setNewTimelineForm((current) => ({
-                              ...current,
-                              status: event.target.value as TimelineItemMutationInput['status'],
-                            }))
-                          }
-                        >
-                          {[
-                            ['pending', 'Pendiente'],
-                            ['active', 'Activo'],
-                            ['done', 'Completado'],
-                          ].map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isTimelineSaving === 'new'}>
-                      <span>{isTimelineSaving === 'new' ? 'Creando…' : 'Agregar hito'}</span>
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-
-              {timelineError ? <p className="form-error">{timelineError}</p> : null}
-
-              <div className="timeline-stack">
-                {course.schedule.map((item) => {
-                  const draft = timelineDrafts[item.id];
+              ) : (
+                visibleTasks.map((task) => {
+                  const draft = taskDrafts[task.id];
+                  const isEditable = canEditTask(userRole, task.role);
 
                   if (!draft) {
                     return null;
                   }
 
-                  if (!canCreateTasks(userRole)) {
-                    return (
-                      <div key={item.id} className={`timeline-item timeline-item--${item.status}`}>
-                        <span className="timeline-item__dot" />
-                        <div>
-                          <strong>{item.label}</strong>
-                          <p>{formatLongDate(item.dueDate)}</p>
-                        </div>
-                      </div>
-                    );
-                  }
-
                   return (
-                    <div key={item.id} className="task-editor task-editor--timeline">
-                      <div className="form-grid">
-                        <label className="field field--full">
-                          <span>Hito</span>
-                          <div className="field__control">
-                            <input
-                              value={draft.label}
-                              onChange={(event) =>
-                                updateTimelineDraft(item.id, 'label', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Fecha</span>
-                          <div className="field__control">
-                            <input
-                              type="date"
-                              value={draft.dueDate}
-                              onChange={(event) =>
-                                updateTimelineDraft(item.id, 'dueDate', event.target.value)
-                              }
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={draft.status}
-                              onChange={(event) =>
-                                updateTimelineDraft(
-                                  item.id,
-                                  'status',
-                                  event.target.value as TimelineItemMutationInput['status'],
-                                )
-                              }
-                            >
-                              {[
-                                ['pending', 'Pendiente'],
-                                ['active', 'Activo'],
-                                ['done', 'Completado'],
-                              ].map(([value, label]) => (
-                                <option key={value} value={value}>
-                                  {label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
+                    <div key={task.id} className="list-item">
+                      <div>
+                        <span className={badgeClass(draft.status)}>{draft.status}</span>
+                        <strong>{task.title}</strong>
+                        <p>{draft.summary}</p>
                       </div>
-
-                      <div className="task-editor__sidebar">
-                        <div className="task-item__meta">
-                          <span>{formatDate(draft.dueDate)}</span>
-                          <span>{draft.status}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          disabled={isTimelineSaving === item.id}
-                          onClick={() => void handleTimelineSave(item.id)}
-                        >
-                          <Save size={16} />
-                          <span>{isTimelineSaving === item.id ? 'Guardando…' : 'Guardar'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          disabled={isTimelineSaving === item.id}
-                          onClick={() => void handleTimelineDelete(item.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </ModalFrame>
-        ) : null}
-        </div>
-        ) : null}
-
-        {activeSection === 'architecture' ? (
-        <>
-          {renderProductStudio(
-            'architecture',
-            'Producto pedagógico',
-            'Lineamientos y diseño instruccional',
-            'La arquitectura del curso se expresa aquí como documentos y lineamientos editables por versión.',
-          )}
-
-          {renderStageNoteEditor(
-            'architecture',
-            'Arquitectura',
-            'Lectura de diseño instruccional',
-            'Aquí vive la intención de diseño del curso: módulos, progresión, actividades y criterio pedagógico.',
-          )}
-
-          <article className="surface section-card">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Módulos</span>
-                <h3>Mapa de experiencia</h3>
-              </div>
-              <div className="action-row">
-                {canEditCourseModules(userRole) ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => setActiveWorkspaceOverlay('modules')}
-                  >
-                    <PencilLine size={16} />
-                    <span>Gestionar módulos</span>
-                  </button>
-                ) : null}
-                <Layers3 size={18} />
-              </div>
-            </div>
-
-            <div className="list-stack">
-              {currentCourse.modules.length === 0 ? (
-                <div className="empty-state">
-                  <strong>Sin módulos registrados</strong>
-                  <p>La arquitectura del curso todavía no tiene unidades o módulos visibles.</p>
-                </div>
-              ) : (
-                currentCourse.modules.map((module) => {
-                  return (
-                    <div key={module.id} className="module-card">
-                      <div className="module-card__top">
-                        <strong>{module.title}</strong>
-                        <span>{module.completion}%</span>
-                      </div>
-                      <p>{module.learningGoal}</p>
-                      <div className="module-card__meta">
-                        <span>{module.activities} actividades</span>
-                        <span>{module.ownResources} propios</span>
-                        <span>{module.curatedResources} curados</span>
-                      </div>
-                      <div className="progress-bar">
-                        <span style={{ width: `${module.completion}%` }} />
+                      <div className="list-item__meta">
+                        <span>{task.role}</span>
+                        <span>{draft.priority}</span>
+                        <span>Vence {formatDate(task.dueDate)}</span>
+                        {!canCreateTasks(userRole) ? <span>{isEditable ? 'Editable' : 'Solo seguimiento'}</span> : null}
                       </div>
                     </div>
                   );
@@ -5335,1053 +3756,69 @@ export function CourseWorkspacePage({
               )}
             </div>
           </article>
-
-          {activeWorkspaceOverlay === 'modules' ? (
-            <ModalFrame
-              eyebrow="Arquitectura"
-              title="Gestionar módulos"
-              description="La edición detallada de módulos se resuelve en modal."
-              width="xl"
-              onClose={closeWorkspaceOverlay}
-            >
-              <div className="page-stack">
-                <div className="toolbar-header">
-                  <button
-                    type="button"
-                    className={isModuleComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                    onClick={() => setIsModuleComposerOpen((current) => !current)}
-                  >
-                    <Plus size={16} />
-                    <span>{isModuleComposerOpen ? 'Ocultar formulario' : 'Nuevo módulo'}</span>
-                  </button>
-                </div>
-
-                {isModuleComposerOpen ? (
-                  <form className="editor-card editor-card--task" onSubmit={handleModuleCreate}>
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Título</span>
-                        <div className="field__control">
-                          <input
-                            value={newLearningModuleForm.title}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                title: event.target.value,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Avance</span>
-                        <div className="field__control">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={newLearningModuleForm.completion}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                completion: Number.parseInt(event.target.value, 10) || 0,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field field--full">
-                        <span>Objetivo de aprendizaje</span>
-                        <div className="field__control field__control--textarea">
-                          <textarea
-                            rows={3}
-                            value={newLearningModuleForm.learningGoal}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                learningGoal: event.target.value,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Actividades</span>
-                        <div className="field__control">
-                          <input
-                            type="number"
-                            min={0}
-                            value={newLearningModuleForm.activities}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                activities: Number.parseInt(event.target.value, 10) || 0,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Recursos propios</span>
-                        <div className="field__control">
-                          <input
-                            type="number"
-                            min={0}
-                            value={newLearningModuleForm.ownResources}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                ownResources: Number.parseInt(event.target.value, 10) || 0,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-
-                      <label className="field">
-                        <span>Recursos curados</span>
-                        <div className="field__control">
-                          <input
-                            type="number"
-                            min={0}
-                            value={newLearningModuleForm.curatedResources}
-                            onChange={(event) =>
-                              setNewLearningModuleForm((current) => ({
-                                ...current,
-                                curatedResources: Number.parseInt(event.target.value, 10) || 0,
-                              }))
-                            }
-                            required
-                          />
-                        </div>
-                      </label>
-                    </div>
-
-                    <div className="action-row">
-                      <button type="submit" className="cta-button" disabled={isModuleSaving === 'new'}>
-                        <span>{isModuleSaving === 'new' ? 'Creando…' : 'Crear módulo'}</span>
-                      </button>
-                    </div>
-                  </form>
-                ) : null}
-
-                {moduleError ? <p className="form-error">{moduleError}</p> : null}
-
-                <div className="list-stack">
-                  {currentCourse.modules.map((module) => {
-                    const draft = moduleDrafts[module.id];
-
-                    if (!draft) {
-                      return null;
-                    }
-
-                    return (
-                      <div key={module.id} className="task-editor">
-                        <div>
-                          <div className="task-editor__header">
-                            <span className="badge badge--outline">{draft.completion}%</span>
-                            <strong>{module.title}</strong>
-                          </div>
-
-                          <div className="form-grid">
-                            <label className="field">
-                              <span>Título</span>
-                              <div className="field__control">
-                                <input
-                                  value={draft.title}
-                                  onChange={(event) =>
-                                    updateModuleDraft(module.id, 'title', event.target.value)
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Avance</span>
-                              <div className="field__control">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  value={draft.completion}
-                                  onChange={(event) =>
-                                    updateModuleDraft(
-                                      module.id,
-                                      'completion',
-                                      Number.parseInt(event.target.value, 10) || 0,
-                                    )
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field field--full">
-                              <span>Objetivo de aprendizaje</span>
-                              <div className="field__control field__control--textarea">
-                                <textarea
-                                  rows={3}
-                                  value={draft.learningGoal}
-                                  onChange={(event) =>
-                                    updateModuleDraft(module.id, 'learningGoal', event.target.value)
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Actividades</span>
-                              <div className="field__control">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={draft.activities}
-                                  onChange={(event) =>
-                                    updateModuleDraft(
-                                      module.id,
-                                      'activities',
-                                      Number.parseInt(event.target.value, 10) || 0,
-                                    )
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Propios</span>
-                              <div className="field__control">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={draft.ownResources}
-                                  onChange={(event) =>
-                                    updateModuleDraft(
-                                      module.id,
-                                      'ownResources',
-                                      Number.parseInt(event.target.value, 10) || 0,
-                                    )
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Curados</span>
-                              <div className="field__control">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={draft.curatedResources}
-                                  onChange={(event) =>
-                                    updateModuleDraft(
-                                      module.id,
-                                      'curatedResources',
-                                      Number.parseInt(event.target.value, 10) || 0,
-                                    )
-                                  }
-                                />
-                              </div>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div className="task-editor__sidebar">
-                          <div className="task-item__meta">
-                            <span>{draft.activities} actividades</span>
-                            <span>{draft.ownResources + draft.curatedResources} recursos</span>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            disabled={isModuleSaving === module.id}
-                            onClick={() => void handleModuleSave(module.id)}
-                          >
-                            <Save size={16} />
-                            <span>{isModuleSaving === module.id ? 'Guardando…' : 'Guardar'}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="danger-button danger-button--ghost"
-                            disabled={isModuleSaving === module.id}
-                            onClick={() => void handleModuleDelete(module.id)}
-                          >
-                            <Trash2 size={16} />
-                            <span>Eliminar</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </ModalFrame>
-          ) : null}
-        </>
-        ) : null}
-
-        {activeSection === 'production'
-          ? renderStageNoteEditor(
-              'production',
-              'Producción',
-              'Autoría, entregables y desarrollo académico',
-              'Esta bitácora concentra el estado de autoría y producción académica del curso.',
-            )
-          : null}
-
-        {activeSection === 'production'
-          ? renderProductStudio(
-              'production',
-              'Producto de autoría',
-              'Actividades, guías y recursos propios',
-              'La etapa de producción ahora permite desarrollar directamente los materiales académicos dentro del expediente.',
-            )
-          : null}
-
-        {activeSection === 'qa' ? (
-          <>
-            <article className="surface section-card">
-              <div className="section-heading">
-                <div>
-                  <span className="eyebrow">Observaciones</span>
-                  <h3>Puntos abiertos</h3>
-                </div>
-                <div className="action-row">
-                  {canCreateObservations(userRole) ? (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => {
-                        setObservationError(null);
-                        setIsObservationComposerOpen(false);
-                        setActiveWorkspaceOverlay('observations');
-                      }}
-                    >
-                      <PencilLine size={16} />
-                      <span>Gestionar observaciones</span>
-                    </button>
-                  ) : null}
-                  <CircleAlert size={18} />
-                </div>
-              </div>
-
-              <div className="module-grid module-grid--summary">
-                <div className="module-card">
-                  <div className="module-card__top">
-                    <strong>{pendingObservationsCount}</strong>
-                    <span>pendientes</span>
-                  </div>
-                  <p>QA y equipo visualizan aquí los puntos abiertos sin entrar al detalle de edición.</p>
-                </div>
-
-                <div className="module-card">
-                  <div className="module-card__top">
-                    <strong>{resolvedObservationsCount}</strong>
-                    <span>resueltas</span>
-                  </div>
-                  <p>El cierre queda trazado por severidad, emisor y estado de la observación.</p>
-                </div>
-              </div>
-
-              <div className="list-stack">
-                {course.observations.length === 0 ? (
-                  <div className="empty-state">
-                    <strong>Sin observaciones abiertas</strong>
-                    <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
-                  </div>
-                ) : (
-                  course.observations.map((observation) => (
-                    <div key={observation.id} className="list-item">
-                      <div>
-                        <span className={badgeClass(observation.status)}>{observation.status}</span>
-                        <strong>{observation.title}</strong>
-                        <p>{observation.detail}</p>
-                      </div>
-                      <div className="list-item__meta">
-                        <span>{observation.role}</span>
-                        <span>{observation.severity}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </article>
-
-            {activeWorkspaceOverlay === 'observations' ? (
-              <ModalFrame
-                eyebrow="QA"
-                title="Gestionar observaciones"
-                description="Las observaciones y devoluciones se editan fuera de la página principal."
-                width="xl"
-                onClose={closeWorkspaceOverlay}
-              >
-                <div className="page-stack">
-                  {canCreateObservations(userRole) ? (
-                    <div className="toolbar-header">
-                      <button
-                        type="button"
-                        className={
-                          isObservationComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'
-                        }
-                        onClick={() => setIsObservationComposerOpen((current) => !current)}
-                      >
-                        <Plus size={16} />
-                        <span>{isObservationComposerOpen ? 'Cerrar formulario' : 'Nueva observación'}</span>
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {isObservationComposerOpen ? (
-                    <form className="editor-card editor-card--task" onSubmit={handleObservationCreate}>
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Título</span>
-                          <div className="field__control">
-                            <input
-                              value={newObservationForm.title}
-                              onChange={(event) =>
-                                setNewObservationForm((current) => ({
-                                  ...current,
-                                  title: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Rol emisor</span>
-                          <div className="field__control">
-                            <select
-                              value={newObservationForm.role}
-                              onChange={(event) =>
-                                setNewObservationForm((current) => ({
-                                  ...current,
-                                  role: event.target.value as Role,
-                                }))
-                              }
-                            >
-                              {appData.roles.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Severidad</span>
-                          <div className="field__control">
-                            <select
-                              value={newObservationForm.severity}
-                              onChange={(event) =>
-                                setNewObservationForm((current) => ({
-                                  ...current,
-                                  severity: event.target.value as ObservationMutationInput['severity'],
-                                }))
-                              }
-                            >
-                              {['Alta', 'Media', 'Baja'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field">
-                          <span>Estado</span>
-                          <div className="field__control">
-                            <select
-                              value={newObservationForm.status}
-                              onChange={(event) =>
-                                setNewObservationForm((current) => ({
-                                  ...current,
-                                  status: event.target.value as ObservationMutationInput['status'],
-                                }))
-                              }
-                            >
-                              {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </label>
-
-                        <label className="field field--full">
-                          <span>Detalle</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={3}
-                              value={newObservationForm.detail}
-                              onChange={(event) =>
-                                setNewObservationForm((current) => ({
-                                  ...current,
-                                  detail: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                        </label>
-                      </div>
-
-                      <div className="action-row">
-                        <button type="submit" className="cta-button" disabled={isObservationSaving}>
-                          <span>{isObservationSaving ? 'Registrando…' : 'Registrar observación'}</span>
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-
-                  {observationError ? <p className="form-error">{observationError}</p> : null}
-
-                  <div className="list-stack">
-                    {course.observations.length === 0 ? (
-                      <div className="empty-state">
-                        <strong>Sin observaciones abiertas</strong>
-                        <p>Las alertas, hallazgos y devoluciones aparecerán aquí para darles seguimiento.</p>
-                      </div>
-                    ) : (
-                      course.observations.map((observation) => {
-                        const draft = observationDrafts[observation.id];
-                        const isEditable = canEditObservation(userRole, observation.role);
-
-                        if (!isEditable || !draft) {
-                          return (
-                            <div key={observation.id} className="list-item">
-                              <div>
-                                <span className={badgeClass(observation.status)}>{observation.status}</span>
-                                <strong>{observation.title}</strong>
-                                <p>{observation.detail}</p>
-                              </div>
-                              <div className="list-item__meta">
-                                <span>{observation.role}</span>
-                                <span>{observation.severity}</span>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div key={observation.id} className="task-editor">
-                            <div>
-                              <div className="task-editor__header">
-                                <span className={badgeClass(draft.status)}>{draft.status}</span>
-                                <strong>{observation.title}</strong>
-                              </div>
-
-                              <div className="form-grid">
-                                <label className="field">
-                                  <span>Título</span>
-                                  <div className="field__control">
-                                    <input
-                                      value={draft.title}
-                                      onChange={(event) =>
-                                        updateObservationDraft(observation.id, 'title', event.target.value)
-                                      }
-                                    />
-                                  </div>
-                                </label>
-
-                                <label className="field">
-                                  <span>Rol emisor</span>
-                                  <div className="field__control">
-                                    <select
-                                      value={draft.role}
-                                      onChange={(event) =>
-                                        updateObservationDraft(
-                                          observation.id,
-                                          'role',
-                                          event.target.value as Role,
-                                        )
-                                      }
-                                    >
-                                      {appData.roles.map((item) => (
-                                        <option key={item} value={item}>
-                                          {item}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </label>
-
-                                <label className="field">
-                                  <span>Severidad</span>
-                                  <div className="field__control">
-                                    <select
-                                      value={draft.severity}
-                                      onChange={(event) =>
-                                        updateObservationDraft(
-                                          observation.id,
-                                          'severity',
-                                          event.target.value as ObservationMutationInput['severity'],
-                                        )
-                                      }
-                                    >
-                                      {['Alta', 'Media', 'Baja'].map((item) => (
-                                        <option key={item} value={item}>
-                                          {item}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </label>
-
-                                <label className="field">
-                                  <span>Estado</span>
-                                  <div className="field__control">
-                                    <select
-                                      value={draft.status}
-                                      onChange={(event) =>
-                                        updateObservationDraft(
-                                          observation.id,
-                                          'status',
-                                          event.target.value as ObservationMutationInput['status'],
-                                        )
-                                      }
-                                    >
-                                      {['Pendiente', 'En ajuste', 'Resuelta'].map((item) => (
-                                        <option key={item} value={item}>
-                                          {item}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                </label>
-
-                                <label className="field field--full">
-                                  <span>Detalle</span>
-                                  <div className="field__control field__control--textarea">
-                                    <textarea
-                                      rows={3}
-                                      value={draft.detail}
-                                      onChange={(event) =>
-                                        updateObservationDraft(
-                                          observation.id,
-                                          'detail',
-                                          event.target.value,
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                </label>
-                              </div>
-                            </div>
-
-                            <div className="task-editor__sidebar">
-                              <div className="task-item__meta">
-                                <span>{draft.role}</span>
-                                <span>{draft.severity}</span>
-                              </div>
-
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => void handleObservationSave(observation.id)}
-                              >
-                                <Save size={16} />
-                                <span>Guardar</span>
-                              </button>
-
-                              {canDeleteObservations(userRole) ? (
-                                <button
-                                  type="button"
-                                  className="danger-button danger-button--ghost"
-                                  onClick={() => void handleObservationDelete(observation.id)}
-                                >
-                                  <Trash2 size={16} />
-                                  <span>Eliminar</span>
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              </ModalFrame>
-            ) : null}
-          </>
-        ) : null}
-
-        {activeSection === 'planning' ? (
-        <div className="page-stack">
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Equipo</span>
-              <h3>Núcleo del proyecto</h3>
-            </div>
-            <div className="action-row">
-              {canManageCourseTeam(userRole) ? (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setActiveWorkspaceOverlay('team')}
-                >
-                  <PencilLine size={16} />
-                  <span>Gestionar equipo</span>
-                </button>
-              ) : null}
-              <UsersRound size={18} />
-            </div>
-          </div>
-
-          <div className="list-stack">
-            {course.team.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin responsables asignados</strong>
-                <p>La planeación del curso todavía no tiene equipo visible.</p>
-              </div>
-            ) : (
-              course.team.map((member) => {
-                return (
-                  <div key={member.id} className="team-list__item">
-                    <span className="avatar-pill">{member.initials}</span>
-                    <div>
-                      <strong>{member.name}</strong>
-                      <p>{member.role}</p>
-                    </div>
-                    <span>{member.focus}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </article>
-
-        {activeWorkspaceOverlay === 'team' ? (
-          <ModalFrame
-            eyebrow="Planeación"
-            title="Gestionar equipo del curso"
-            description="La asignación y edición de responsables se resuelve en modal para mantener la vista principal limpia."
-            width="xl"
-            onClose={closeWorkspaceOverlay}
-          >
-            <div className="page-stack">
-              <div className="toolbar-header">
-                <button
-                  type="button"
-                  className={isTeamComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsTeamComposerOpen((current) => !current)}
-                >
-                  <Plus size={16} />
-                  <span>{isTeamComposerOpen ? 'Ocultar formulario' : 'Agregar responsable'}</span>
-                </button>
-              </div>
-
-              {isTeamComposerOpen ? (
-                <form className="editor-card editor-card--task" onSubmit={handleTeamMemberCreate}>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Nombre</span>
-                      <div className="field__control">
-                        <input
-                          value={newTeamMemberForm.name}
-                          onChange={(event) =>
-                            setNewTeamMemberForm((current) => ({
-                              ...current,
-                              name: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Rol</span>
-                      <div className="field__control">
-                        <select
-                          value={newTeamMemberForm.role}
-                          onChange={(event) =>
-                            setNewTeamMemberForm((current) => ({
-                              ...current,
-                              role: event.target.value as Role,
-                            }))
-                          }
-                        >
-                          {appData.roles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Iniciales</span>
-                      <div className="field__control">
-                        <input
-                          value={newTeamMemberForm.initials}
-                          onChange={(event) =>
-                            setNewTeamMemberForm((current) => ({
-                              ...current,
-                              initials: event.target.value,
-                            }))
-                          }
-                          placeholder="Ej. AT"
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field field--full">
-                      <span>Foco de trabajo</span>
-                      <div className="field__control">
-                        <input
-                          value={newTeamMemberForm.focus}
-                          onChange={(event) =>
-                            setNewTeamMemberForm((current) => ({
-                              ...current,
-                              focus: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isTeamSaving === 'new'}>
-                      <span>{isTeamSaving === 'new' ? 'Agregando…' : 'Agregar responsable'}</span>
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-
-              {teamError ? <p className="form-error">{teamError}</p> : null}
-
-              <div className="list-stack">
-                {course.team.map((member) => {
-                  const draft = teamDrafts[member.id];
-
-                  if (!draft) {
-                    return null;
-                  }
-
-                  return (
-                    <div key={member.id} className="task-editor">
-                      <div>
-                        <div className="task-editor__header">
-                          <span className="avatar-pill">{draft.initials || member.initials}</span>
-                          <strong>{member.name}</strong>
-                        </div>
-
-                        <div className="form-grid">
-                          <label className="field">
-                            <span>Nombre</span>
-                            <div className="field__control">
-                              <input
-                                value={draft.name}
-                                onChange={(event) =>
-                                  updateTeamDraft(member.id, 'name', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Rol</span>
-                            <div className="field__control">
-                              <select
-                                value={draft.role}
-                                onChange={(event) =>
-                                  updateTeamDraft(member.id, 'role', event.target.value as Role)
-                                }
-                              >
-                                {appData.roles.map((item) => (
-                                  <option key={item} value={item}>
-                                    {item}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </label>
-
-                          <label className="field">
-                            <span>Iniciales</span>
-                            <div className="field__control">
-                              <input
-                                value={draft.initials}
-                                onChange={(event) =>
-                                  updateTeamDraft(member.id, 'initials', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-
-                          <label className="field field--full">
-                            <span>Foco</span>
-                            <div className="field__control">
-                              <input
-                                value={draft.focus}
-                                onChange={(event) =>
-                                  updateTeamDraft(member.id, 'focus', event.target.value)
-                                }
-                              />
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="task-editor__sidebar">
-                        <div className="task-item__meta">
-                          <span>{draft.role}</span>
-                          <span>{draft.focus}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          disabled={isTeamSaving === member.id}
-                          onClick={() => void handleTeamMemberSave(member.id)}
-                        >
-                          <Save size={16} />
-                          <span>{isTeamSaving === member.id ? 'Guardando…' : 'Guardar'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          disabled={isTeamSaving === member.id}
-                          onClick={() => void handleTeamMemberDelete(member.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </ModalFrame>
-        ) : null}
-        </div>
-        ) : null}
-
-        {activeSection === 'resources' ? (
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Recursos</span>
-              <h3>Curación y biblioteca asociada</h3>
-            </div>
-            <Layers3 size={18} />
-          </div>
-
-          <div className="list-stack">
-            {relatedResources.length === 0 ? (
-              <div className="empty-state">
-                <strong>Sin recursos asociados todavía</strong>
-                <p>La curación y los recursos propios vinculados al curso aparecerán aquí.</p>
-              </div>
-            ) : (
-              relatedResources.map((resource) => (
-                <div key={resource.id} className="list-item">
-                  <div>
-                    <span className={resource.kind === 'Curado' ? 'badge badge--ocean' : 'badge badge--sage'}>
-                      {resource.kind}
-                    </span>
-                    <strong>{resource.title}</strong>
-                    <p>{resource.summary}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{resource.unit}</span>
-                    <span>{resource.status}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="action-row">
-            <Link to="/library" className="ghost-button">
-              <span>Ir a biblioteca</span>
-            </Link>
-          </div>
-        </article>
-        ) : null}
-
-        {activeSection === 'resources' ? (
-        <>
+        </section>
+      ) : null}
+
+      {activeSection === 'escritura' ? (
+        <section className="workspace-grid">
           {renderProductStudio(
-            'curation',
-            'Producto curado',
-            'Inventario y validación de recursos curados',
-            'Esta etapa conserva el inventario curado, las lecturas seleccionadas y su justificación de uso dentro del curso.',
+            'escritura',
+            'Escritura y autoría',
+            'Desarrollo de contenidos y guías',
+            'En esta etapa se redactan las actividades, guiones, instrucciones y materiales base para el curso.',
           )}
-
           {renderStageNoteEditor(
-            'curation',
-            'Curación',
-            'Fuentes y referentes',
-            'La curación documenta qué fuentes externas entran al curso y por qué.',
+            'escritura',
+            'Autoría',
+            'Avances y borradores',
+            'Registra aquí el progreso de la redacción académica y técnica.',
           )}
+        </section>
+      ) : null}
 
+      {activeSection === 'validacion' ? (
+        <section className="workspace-grid">
+          {renderStageNoteEditor(
+            'validacion',
+            'Validación instruccional',
+            'Ajustes y observaciones pedagógicas',
+            'Esta bitácora captura la revisión experta sobre la pertinencia y calidad instruccional.',
+          )}
+          {renderProductStudio(
+            'validacion',
+            'Producto QA',
+            'Rúbricas y criterio de aprobación',
+            'La validación final ya no depende solo de observaciones: aquí también se construyen y versionan las rúbricas de calidad.',
+          )}
+        </section>
+      ) : null}
+
+      {activeSection === 'multimedia' ? (
+        <section className="workspace-grid">
           {renderProductStudio(
             'multimedia',
-            'Producto multimedia',
-            'Piezas propias para desarrollo del curso',
-            'Aquí se desarrollan HTML, pódcast, lecturas extendidas e infografías como productos internos del expediente.',
+            'Producción multimedia',
+            'Piezas y recursos gráficos',
+            'Gestión de la producción visual, audiovisual e interactiva del curso.',
           )}
-
           {renderStageNoteEditor(
             'multimedia',
             'Multimedia',
-            'Piezas, versiones y observaciones',
-            'La capa multimedia conserva recursos propios, observaciones y avances para móvil y LMS.',
+            'Avances de producción',
+            'Reportes sobre la producción de piezas gráficas y video.',
           )}
+        </section>
+      ) : null}
 
-          <article className="surface section-card">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">IA especializada</span>
-                <h3>Asistentes sugeridos</h3>
-              </div>
-              <Bot size={18} />
-            </div>
-
-            <div className="assistant-grid">
-              {course.assistants.map((assistant) => (
-                <div key={assistant.id} className={`assistant-card assistant-card--${assistant.tone}`}>
-                  <strong>{assistant.name}</strong>
-                  <p>{assistant.mission}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-        </>
-        ) : null}
-
-        {activeSection === 'lms' ? (
-        <>
-          {renderStageNoteEditor(
+      {activeSection === 'lms' ? (
+        <section className="workspace-grid">
+           {renderStageNoteEditor(
             'lms',
             'LMS',
-            'Montaje e implementación',
-            'Esta bitácora conserva incidencias, evidencias de implementación y checklist del entorno LMS.',
+            'Montaje técnico',
+            'Registro técnico del despliegue en plataforma educativa.',
           )}
-
-          <article className="surface section-card">
+           <article className="surface section-card">
             <div className="section-heading">
               <div>
                 <span className="eyebrow">Checklist técnico</span>
@@ -6400,245 +3837,363 @@ export function CourseWorkspacePage({
                         {checkpointStatusLabel(checkpoint.status)}
                       </span>
                       <strong>{checkpoint.label}</strong>
-                      <p>El punto técnico permanece asociado al flujo general del curso.</p>
                     </div>
                     <div className="list-item__meta">
                       <span>{checkpoint.owner}</span>
-                      <span>{stage?.name ?? currentCourse.stageId}</span>
                     </div>
                   </div>
                 ))}
             </div>
           </article>
-        </>
-        ) : null}
-
-        {activeSection === 'qa'
-          ? renderProductStudio(
-              'qa',
-              'Producto QA',
-              'Rúbricas y criterio de aprobación',
-              'La validación final ya no depende solo de observaciones: aquí también se construyen y versionan las rúbricas de calidad.',
-            )
-          : null}
-      </section>
+        </section>
       ) : null}
 
-      {activeSection === 'planning' ? (
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Tareas</span>
-            <h3>Tablero operativo del curso</h3>
+      {activeSection === 'qa' ? (
+        <section className="workspace-grid">
+           {renderStageNoteEditor(
+            'qa',
+            'QA',
+            'Validación final',
+            'Control de errores, ajustes técnicos y validación instruccional previa al lanzamiento.',
+          )}
+          {renderProductStudio(
+            'qa',
+            'QA Lab',
+            'Validación y rúbricas',
+            'Gestión de criterios de calidad y versionamiento de rúbricas instruccionales.',
+          )}
+        </section>
+      ) : null}
+
+      {activeSection === 'entrega' ? (
+        <section className="workspace-grid">
+           {renderStageNoteEditor(
+            'entrega',
+            'Entrega',
+            'Cierre del curso',
+            'Documentación del expediente final y transferencia oficial del curso.',
+          )}
+        </section>
+      ) : null}
+
+      {activeSection === 'history' ? (
+        <section className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Cronología</span>
+              <h3>Historial de maduración</h3>
+            </div>
+            <History size={18} />
           </div>
-          <div className="action-row">
-            {canCreateTasks(userRole) ? (
+          <div className="list-stack">
+            {historyFeed.length === 0 ? (
+              <div className="empty-state">
+                <strong>Sin eventos registrados</strong>
+              </div>
+            ) : (
+              historyFeed.map((entry) => (
+                <div key={entry.id} className="list-item">
+                  <div className="list-item__visual">
+                    <span className={historyTypeBadge(entry.type)}>{entry.type}</span>
+                  </div>
+                  <div>
+                    <strong>{entry.title}</strong>
+                    <p>{entry.detail}</p>
+                    <span className="text-muted text-xs">{formatDateTime(entry.happenedAt)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeWorkspaceOverlay === 'metadata' ? (
+        <ModalFrame
+          eyebrow="Configuración"
+          title="Metadatos generales"
+          description="Edita la información base del curso que alimenta reportes y buscadores."
+          onClose={() => setActiveWorkspaceOverlay(null)}
+          footer={
+            <div className="form-actions">
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => setActiveWorkspaceOverlay('tasks')}
+                onClick={() => setActiveWorkspaceOverlay(null)}
               >
-                <PencilLine size={16} />
-                <span>Gestionar tareas</span>
+                Cancelar
               </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="list-stack">
-          {visibleTasks.length === 0 ? (
-            <div className="empty-state">
-              <strong>Sin tareas visibles en este curso</strong>
-              <p>Cuando el flujo avance o se registren nuevas asignaciones aparecerán aquí.</p>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  void handleMetadataSave(new Event('submit') as any);
+                  setActiveWorkspaceOverlay(null);
+                }}
+              >
+                Actualizar información
+              </button>
             </div>
-          ) : (
-            visibleTasks.map((task) => {
-              const draft = taskDrafts[task.id];
-              const isEditable = canEditTask(userRole, task.role);
+          }
+        >
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="inst">Institución</label>
+              <input
+                id="inst"
+                value={metadataForm.institution}
+                onChange={(e) => setMetadataForm({ ...metadataForm, institution: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="semester">Semestre</label>
+              <input
+                id="semester"
+                value={metadataForm.semester}
+                onChange={(e) => setMetadataForm({ ...metadataForm, semester: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="period">Periodo académico</label>
+              <input
+                id="period"
+                value={metadataForm.academicPeriod}
+                onChange={(e) => setMetadataForm({ ...metadataForm, academicPeriod: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label htmlFor="ctype">Tipo de curso</label>
+              <select
+                id="ctype"
+                value={metadataForm.courseType}
+                onChange={(e) => setMetadataForm({ ...metadataForm, courseType: e.target.value })}
+              >
+                <option value="Pregrado">Pregrado</option>
+                <option value="Posgrado">Posgrado</option>
+                <option value="Diplomado">Diplomado</option>
+                <option value="Extensión">Extensión</option>
+              </select>
+            </div>
+          </div>
+        </ModalFrame>
+      ) : null}
 
-              if (!draft) {
-                return null;
-              }
 
-              return (
-                <div key={task.id} className="list-item">
-                  <div>
-                    <span className={badgeClass(draft.status)}>{draft.status}</span>
-                    <strong>{task.title}</strong>
-                    <p>{draft.summary}</p>
-                  </div>
-                  <div className="list-item__meta">
-                    <span>{task.role}</span>
-                    <span>{draft.priority}</span>
-                    <span>Vence {formatDate(task.dueDate)}</span>
-                    {!canCreateTasks(userRole) ? <span>{isEditable ? 'Editable' : 'Solo seguimiento'}</span> : null}
-                  </div>
+      {activeWorkspaceOverlay === 'team' ? (
+        <ModalFrame
+          eyebrow="Equipo"
+          title="Responsables del curso"
+          description="Asigna y coordina a los integrantes del equipo de maduración del curso."
+          width="xl"
+          onClose={() => setActiveWorkspaceOverlay(null)}
+        >
+          <div className="page-stack">
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={isTeamComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsTeamComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isTeamComposerOpen ? 'Ocultar formulario' : 'Nuevo integrante'}</span>
+              </button>
+            </div>
+
+            {isTeamComposerOpen ? (
+              <form className="editor-card" onSubmit={handleTeamMemberCreate}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Nombre completo</span>
+                    <div className="field__control">
+                      <input
+                        value={newTeamMemberForm.name}
+                        onChange={(event) =>
+                          setNewTeamMemberForm((current) => ({ ...current, name: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Rol</span>
+                    <div className="field__control">
+                      <select
+                        value={newTeamMemberForm.role}
+                        onChange={(event) =>
+                          setNewTeamMemberForm((current) => ({
+                            ...current,
+                            role: event.target.value as Role,
+                          }))
+                        }
+                      >
+                        {appData.roles.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
                 </div>
-              );
-            })
-          )}
-        </div>
 
-        {activeWorkspaceOverlay === 'tasks' ? (
-          <ModalFrame
-            eyebrow="Planeación"
-            title="Gestionar tareas"
-            description="Las tareas se crean y editan fuera de la página principal para reducir la carga cognitiva."
-            width="xl"
-            onClose={closeWorkspaceOverlay}
-          >
-            <div className="page-stack">
-              <div className="toolbar-header">
-                <button
-                  type="button"
-                  className={isTaskComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsTaskComposerOpen((current) => !current)}
-                >
-                  <Plus size={16} />
-                  <span>{isTaskComposerOpen ? 'Ocultar formulario' : 'Nueva tarea'}</span>
-                </button>
-              </div>
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isTeamSaving === 'new'}>
+                    <span>{isTeamSaving === 'new' ? 'Agregando…' : 'Agregar integrante'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : null}
 
-              {isTaskComposerOpen ? (
-                <form className="editor-card editor-card--task" onSubmit={handleTaskCreate}>
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Título</span>
-                      <div className="field__control">
-                        <input
-                          value={newTaskForm.title}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({ ...current, title: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
+            {teamError ? <p className="form-error">{teamError}</p> : null}
 
-                    <label className="field">
-                      <span>Rol responsable</span>
-                      <div className="field__control">
-                        <select
-                          value={newTaskForm.role}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({
-                              ...current,
-                              role: event.target.value as Role,
-                            }))
-                          }
-                        >
-                          {appData.roles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
+            <div className="list-stack">
+              {currentCourse.team.map((member) => {
+                const draft = teamDrafts[member.id];
 
-                    <label className="field">
-                      <span>Etapa</span>
-                      <div className="field__control">
-                        <select
-                          value={newTaskForm.stageId}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({ ...current, stageId: event.target.value }))
-                          }
-                        >
-                          {appData.stages.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
+                if (!draft) {
+                  return null;
+                }
 
-                    <label className="field">
-                      <span>Vence</span>
-                      <div className="field__control">
-                        <input
-                          type="date"
-                          value={newTaskForm.dueDate}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({ ...current, dueDate: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
+                return (
+                  <div key={member.id} className="team-editor">
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Nombre</span>
+                        <div className="field__control">
+                          <input
+                            value={draft.name}
+                            onChange={(event) => updateTeamDraft(member.id, 'name', event.target.value)}
+                          />
+                        </div>
+                      </label>
 
-                    <label className="field">
-                      <span>Prioridad</span>
-                      <div className="field__control">
-                        <select
-                          value={newTaskForm.priority}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({
-                              ...current,
-                              priority: event.target.value as TaskMutationInput['priority'],
-                            }))
-                          }
-                        >
-                          {['Alta', 'Media', 'Baja'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
+                      <label className="field">
+                        <span>Rol</span>
+                        <div className="field__control">
+                          <select
+                            value={draft.role}
+                            onChange={(event) =>
+                              updateTeamDraft(member.id, 'role', event.target.value as Role)
+                            }
+                          >
+                            {appData.roles.map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                    </div>
 
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={newTaskForm.status}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({
-                              ...current,
-                              status: event.target.value as TaskMutationInput['status'],
-                            }))
-                          }
-                        >
-                          {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
+                    <div className="team-editor__actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void handleTeamMemberSave(member.id)}
+                        disabled={isTeamSaving === member.id}
+                      >
+                        <Save size={16} />
+                        <span>{isTeamSaving === member.id ? 'Guardando…' : 'Guardar'}</span>
+                      </button>
 
-                    <label className="field field--full">
-                      <span>Resumen</span>
-                      <div className="field__control field__control--textarea">
-                        <textarea
-                          rows={3}
-                          value={newTaskForm.summary}
-                          onChange={(event) =>
-                            setNewTaskForm((current) => ({ ...current, summary: event.target.value }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
+                      <button
+                        type="button"
+                        className="danger-button danger-button--ghost"
+                        onClick={() => void handleTeamMemberDelete(member.id)}
+                        disabled={isTeamSaving === member.id}
+                      >
+                        <Trash2 size={16} />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        </ModalFrame>
+      ) : null}
 
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isTaskSaving}>
-                      <span>{isTaskSaving ? 'Creando…' : 'Crear tarea'}</span>
-                    </button>
-                  </div>
-                </form>
-              ) : null}
+      {activeWorkspaceOverlay === 'tasks' ? (
+        <ModalFrame
+          eyebrow="Operación"
+          title="Gestión de tareas"
+          description="Organiza y asigna el trabajo pendiente del curso para asegurar el avance por etapas."
+          width="xl"
+          onClose={() => setActiveWorkspaceOverlay(null)}
+        >
+          <div className="page-stack">
+            <div className="toolbar-header">
+              <button
+                type="button"
+                className={isTaskComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsTaskComposerOpen((current) => !current)}
+              >
+                <Plus size={16} />
+                <span>{isTaskComposerOpen ? 'Ocultar formulario' : 'Nueva tarea'}</span>
+              </button>
+            </div>
 
-              {taskError ? <p className="form-error">{taskError}</p> : null}
+            {isTaskComposerOpen ? (
+              <form className="editor-card" onSubmit={handleTaskCreate}>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Título de la tarea</span>
+                    <div className="field__control">
+                      <input
+                        value={newTaskForm.title}
+                        onChange={(event) =>
+                          setNewTaskForm((current) => ({ ...current, title: event.target.value }))
+                        }
+                        required
+                        placeholder="Ej: Revisar guiones finales"
+                      />
+                    </div>
+                  </label>
 
-              <div className="list-stack">
-                {visibleTasks.map((task) => {
+                  <label className="field">
+                    <span>Responsable (Rol)</span>
+                    <div className="field__control">
+                      <select
+                        value={newTaskForm.role}
+                        onChange={(event) =>
+                          setNewTaskForm((current) => ({
+                            ...current,
+                            role: event.target.value as Role,
+                          }))
+                        }
+                      >
+                        {appData.roles.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="action-row">
+                  <button type="submit" className="cta-button" disabled={isTaskSaving}>
+                    <span>{isTaskSaving ? 'Creando…' : 'Crear tarea'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {taskError ? <p className="form-error">{taskError}</p> : null}
+
+            <div className="list-stack">
+              {visibleTasks.length === 0 ? (
+                <div className="empty-state">
+                  <strong>Sin tareas registradas</strong>
+                  <p>Presiona "Nueva tarea" para comenzar a organizar el trabajo.</p>
+                </div>
+              ) : (
+                visibleTasks.map((task) => {
                   const draft = taskDrafts[task.id];
-                  const isEditable = canEditTask(userRole, task.role);
 
                   if (!draft) {
                     return null;
@@ -6646,188 +4201,44 @@ export function CourseWorkspacePage({
 
                   return (
                     <div key={task.id} className="task-editor">
-                      <div>
-                        <div className="task-editor__header">
-                          <span className={badgeClass(draft.status)}>{draft.status}</span>
-                          <strong>{task.title}</strong>
-                        </div>
-
-                        {canCreateTasks(userRole) ? (
-                          <div className="form-grid">
-                            <label className="field">
-                              <span>Título</span>
-                              <div className="field__control">
-                                <input
-                                  value={draft.title}
-                                  onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Rol</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.role}
-                                  onChange={(event) =>
-                                    updateTaskDraft(task.id, 'role', event.target.value as Role)
-                                  }
-                                >
-                                  {appData.roles.map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Etapa</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.stageId}
-                                  onChange={(event) =>
-                                    updateTaskDraft(task.id, 'stageId', event.target.value)
-                                  }
-                                >
-                                  {appData.stages.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Vence</span>
-                              <div className="field__control">
-                                <input
-                                  type="date"
-                                  value={draft.dueDate}
-                                  onChange={(event) =>
-                                    updateTaskDraft(task.id, 'dueDate', event.target.value)
-                                  }
-                                />
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Prioridad</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.priority}
-                                  onChange={(event) =>
-                                    updateTaskDraft(
-                                      task.id,
-                                      'priority',
-                                      event.target.value as TaskMutationInput['priority'],
-                                    )
-                                  }
-                                >
-                                  {['Alta', 'Media', 'Baja'].map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
-
-                            <label className="field">
-                              <span>Estado</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.status}
-                                  onChange={(event) =>
-                                    updateTaskDraft(
-                                      task.id,
-                                      'status',
-                                      event.target.value as TaskMutationInput['status'],
-                                    )
-                                  }
-                                >
-                                  {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
-
-                            <label className="field field--full">
-                              <span>Resumen</span>
-                              <div className="field__control field__control--textarea">
-                                <textarea
-                                  rows={3}
-                                  value={draft.summary}
-                                  onChange={(event) =>
-                                    updateTaskDraft(task.id, 'summary', event.target.value)
-                                  }
-                                />
-                              </div>
-                            </label>
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Título</span>
+                          <div className="field__control">
+                            <input
+                              value={draft.title}
+                              onChange={(event) => updateTaskDraft(task.id, 'title', event.target.value)}
+                            />
                           </div>
-                        ) : (
-                          <div className="form-grid">
-                            <label className="field">
-                              <span>Estado</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.status}
-                                  onChange={(event) =>
-                                    updateTaskDraft(
-                                      task.id,
-                                      'status',
-                                      event.target.value as TaskMutationInput['status'],
-                                    )
-                                  }
-                                  disabled={!isEditable}
-                                >
-                                  {['Pendiente', 'En revisión', 'Bloqueada', 'Lista'].map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
+                        </label>
 
-                            <label className="field field--full">
-                              <span>Resumen</span>
-                              <div className="field__control field__control--textarea">
-                                <textarea
-                                  rows={3}
-                                  value={draft.summary}
-                                  onChange={(event) =>
-                                    updateTaskDraft(task.id, 'summary', event.target.value)
-                                  }
-                                  disabled={!isEditable}
-                                />
-                              </div>
-                            </label>
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.status}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'status', event.target.value as any)
+                              }
+                            >
+                              <option value="Pendiente">Pendiente</option>
+                              <option value="En proceso">En proceso</option>
+                              <option value="Completada">Completada</option>
+                              <option value="Bloqueada">Bloqueada</option>
+                            </select>
                           </div>
-                        )}
+                        </label>
                       </div>
 
-                      <div className="task-editor__sidebar">
-                        <div className="task-item__meta">
-                          <span>{task.role}</span>
-                          <span>Vence {formatDate(task.dueDate)}</span>
-                        </div>
-
-                        {isEditable ? (
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => void handleTaskSave(task.id)}
-                          >
-                            <Save size={16} />
-                            <span>Guardar</span>
-                          </button>
-                        ) : null}
+                      <div className="task-editor__actions">
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => void handleTaskSave(task.id)}
+                        >
+                          <Save size={16} />
+                          <span>Guardar</span>
+                        </button>
 
                         {canDeleteTasks(userRole) ? (
                           <button
@@ -6842,33 +4253,13 @@ export function CourseWorkspacePage({
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
-          </ModalFrame>
-        ) : null}
-      </section>
+          </div>
+        </ModalFrame>
       ) : null}
 
-      {activeSection === 'history' ? (
-        <section className="surface section-card section-card--compact">
-          <div className="timeline-stack timeline-stack--history">
-            {historyFeed.map((event) => (
-              <div key={event.id} className="timeline-item timeline-item--active">
-                <span className="timeline-item__dot" />
-                <div>
-                  <span className={historyTypeBadge(event.type)}>{historyTypeLabel(event.type)}</span>
-                  <strong>{event.title}</strong>
-                  <p>{event.detail}</p>
-                  <span className="timeline-item__meta">
-                    Fecha de referencia: {formatDate(event.happenedAt)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
       {isCourseEditorOpen ? (
         <ModalFrame
           eyebrow="Curso"
@@ -7486,7 +4877,7 @@ export function CourseWorkspacePage({
                           rows={4}
                           value={joinLines(metadataForm.learningOutcomes)}
                           onChange={(event) =>
-                            setMetadataForm((current) => ({
+                            setMetadataForm((current: CourseMetadataMutationInput) => ({
                               ...current,
                               learningOutcomes: splitLines(event.target.value),
                             }))
@@ -7522,7 +4913,7 @@ export function CourseWorkspacePage({
                           rows={4}
                           value={joinLines(metadataForm.bibliography)}
                           onChange={(event) =>
-                            setMetadataForm((current) => ({
+                            setMetadataForm((current: CourseMetadataMutationInput) => ({
                               ...current,
                               bibliography: splitLines(event.target.value),
                             }))

@@ -28,8 +28,8 @@ export const platformRoles: Role[] = [
 
 export const platformStages: StageDefinition[] = [
   {
-    id: 'configuracion',
-    name: 'Configuración',
+    id: 'microcurriculo',
+    name: 'Microcurrículo',
     description: 'Carga del sílabus, datos estructurales y ficha base del curso.',
     owner: 'Coordinador',
     tone: 'coral',
@@ -49,25 +49,46 @@ export const platformStages: StageDefinition[] = [
     tone: 'ocean',
   },
   {
-    id: 'produccion',
-    name: 'Producción',
-    description: 'Autoría, validación, curación y desarrollo multimedia.',
+    id: 'escritura',
+    name: 'Escritura',
+    description: 'Producción de contenidos base, guiones e instrucciones.',
     owner: 'Experto',
     tone: 'sage',
   },
   {
+    id: 'validacion',
+    name: 'Validación instruccional',
+    description: 'Revisión pedagógica y ajuste de contenidos.',
+    owner: 'Diseñador instruccional',
+    tone: 'ocean',
+  },
+  {
+    id: 'multimedia',
+    name: 'Producción multimedia',
+    description: 'Diseño visual, piezas gráficas y recursos audiovisuales.',
+    owner: 'Diseñador multimedia',
+    tone: 'gold',
+  },
+  {
     id: 'lms',
     name: 'Montaje LMS',
-    description: 'Implementación técnica, navegación y comportamiento en plataforma.',
+    description: 'Implementación técnica y configuración en plataforma LMS.',
     owner: 'Gestor LMS',
     tone: 'ocean',
   },
   {
-    id: 'calidad',
-    name: 'Calidad',
-    description: 'Checklist final, hallazgos, auditoría y liberación.',
+    id: 'qa',
+    name: 'QA',
+    description: 'Control de calidad final, hallazgos y correcciones.',
     owner: 'Analista QA',
     tone: 'ink',
+  },
+  {
+    id: 'entrega',
+    name: 'Entrega',
+    description: 'Cierre operativo, notificación y entrega final del curso.',
+    owner: 'Coordinador',
+    tone: 'sage',
   },
 ];
 

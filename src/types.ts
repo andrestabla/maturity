@@ -57,19 +57,25 @@ export type AdminLogCategory =
   | 'Administración';
 export type AdminAuditClassification = 'Funcional' | 'Técnica' | 'Administrativa';
 export type CourseStageNoteKey =
-  | 'architecture'
-  | 'production'
-  | 'curation'
+  | 'microcurriculo'
+  | 'arquitectura'
+  | 'planeacion'
+  | 'escritura'
+  | 'validacion'
   | 'multimedia'
   | 'lms'
-  | 'qa';
+  | 'qa'
+  | 'entrega';
 export type CourseProductStage =
-  | 'general'
-  | 'architecture'
-  | 'production'
-  | 'curation'
+  | 'microcurriculo'
+  | 'arquitectura'
+  | 'planeacion'
+  | 'escritura'
+  | 'validacion'
   | 'multimedia'
-  | 'qa';
+  | 'lms'
+  | 'qa'
+  | 'entrega';
 export type CourseProductFormat =
   | 'Sílabus'
   | 'Lineamiento'
@@ -185,12 +191,15 @@ export interface CourseStageNote {
 }
 
 export interface CourseStageNotes {
-  architecture: CourseStageNote;
-  production: CourseStageNote;
-  curation: CourseStageNote;
+  microcurriculo: CourseStageNote;
+  arquitectura: CourseStageNote;
+  planeacion: CourseStageNote;
+  escritura: CourseStageNote;
+  validacion: CourseStageNote;
   multimedia: CourseStageNote;
   lms: CourseStageNote;
   qa: CourseStageNote;
+  entrega: CourseStageNote;
 }
 
 export interface CourseProduct {
