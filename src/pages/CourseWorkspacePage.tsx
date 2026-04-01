@@ -3038,8 +3038,8 @@ export function CourseWorkspacePage({
   async function handleMicroAnalysis() {
     if (!uploadedFile) return;
     setIsAnalyzing(true);
-    setAnalysisProgress(0);
-    setAnalysisStatus('Inicializando análisis estructurado...');
+    setAnalysisProgress(5);
+    setAnalysisStatus('Estableciendo conexión segura...');
     
     try {
       const response = await fetch('/api/analyze-microcurriculo', {
@@ -3169,20 +3169,20 @@ export function CourseWorkspacePage({
                 </button>
               </div>
 
-              <div className="flex flex-col items-center justify-center py-12 gap-6">
+              <div className="flex flex-col items-center justify-center py-12 gap-6 w-full">
                 <p className="text-center text-muted max-w-md">
-                  {isAnalyzing ? 'Procesando el documento a través del modelo de lenguaje...' : 'El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.'}
+                  {isAnalyzing ? 'El sistema está procesando el archivo en tiempo real. Por favor, manten la ventana abierta.' : 'El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.'}
                 </p>
                 
-                {isAnalyzing && analysisProgress > 0 && (
-                  <div className="w-full max-w-sm mb-2">
-                    <div className="flex justify-between text-sm mb-1">
+                {isAnalyzing && (
+                  <div className="w-full max-w-sm mb-2 animate-in fade-in duration-500">
+                    <div className="flex justify-between text-sm mb-2">
                       <span className="text-ocean font-medium">{analysisStatus}</span>
-                      <span className="text-muted">{analysisProgress}%</span>
+                      <span className="text-ocean font-bold">{analysisProgress}%</span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
                       <div 
-                        className="bg-ocean h-2 rounded-full transition-all duration-300" 
+                        className="bg-ocean h-full rounded-full transition-all duration-300 ease-out" 
                         style={{ width: `${analysisProgress}%` }}
                       />
                     </div>
@@ -3190,12 +3190,12 @@ export function CourseWorkspacePage({
                 )}
                 
                 <button 
-                  className="cta-button cta-button--large" 
+                  className="cta-button cta-button--large outline-none" 
                   onClick={handleMicroAnalysis}
                   disabled={isAnalyzing}
                 >
                   {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                  <span>{isAnalyzing ? (analysisProgress > 0 ? analysisStatus : 'Analizando documento...') : 'Importar y Analizar Datos'}</span>
+                  <span>{isAnalyzing ? analysisStatus : 'Importar y Analizar Datos'}</span>
                 </button>
               </div>
             </div>
