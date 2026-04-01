@@ -5581,14 +5581,20 @@ export function CourseWorkspacePage({
                           academicPeriod: course.metadata.academicPeriod,
                           courseType: analysisResult.tipoCurso || course.metadata.courseType,
                           learningOutcomes: analysisResult.resultadosAprendizaje || course.metadata.learningOutcomes,
-                          topics: analysisResult.unidades?.map((u: any) => u.title) || course.metadata.topics,
+                          topics: analysisResult.unidades?.map((u: any) => u.tituloUnidad) || course.metadata.topics,
+                          units: analysisResult.unidades || course.metadata.units,
                           methodology: analysisResult.metodologia || course.metadata.methodology,
                           evaluation: analysisResult.evaluacion || course.metadata.evaluation,
                           bibliography: analysisResult.bibliografia || course.metadata.bibliography,
                           targetCloseDate: course.metadata.targetCloseDate,
                           currentVersion: course.metadata.currentVersion,
                           priority: course.metadata.priority,
-                          riskLevel: course.metadata.riskLevel
+                          riskLevel: course.metadata.riskLevel,
+                          // Sync master fields
+                          faculty: analysisResult.facultad || course.faculty,
+                          program: analysisResult.programa || course.program,
+                          credits: Number(analysisResult.creditos) || course.credits,
+                          summary: analysisResult.descripcionCurso || course.summary
                         })
                       });
 

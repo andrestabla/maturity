@@ -574,6 +574,11 @@ export interface CourseMetadataMutationInput {
   currentVersion: string;
   priority: Priority;
   riskLevel: RiskLevel;
+  // Master record fields (optional sync)
+  faculty?: string;
+  program?: string;
+  credits?: number;
+  summary?: string;
 }
 
 export interface TimelineItemMutationInput {

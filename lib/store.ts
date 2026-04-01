@@ -4008,6 +4008,10 @@ export async function updateCourseMetadataRecord(
   const nextCourse = appendAuditEntry(
     {
       ...course,
+      faculty: input.faculty ?? course.faculty,
+      program: input.program ?? course.program,
+      credits: input.credits ?? course.credits,
+      summary: input.summary ?? course.summary,
       metadata: mergeCourseMetadata(course, input),
     },
     'Ficha operativa actualizada',
