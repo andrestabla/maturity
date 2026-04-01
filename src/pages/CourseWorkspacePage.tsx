@@ -828,6 +828,31 @@ export function CourseWorkspacePage({
   }
 
   useEffect(() => {
+    if (activeSection === 'microcurriculo' && course && !analysisResult) {
+      if (
+        (course.metadata.learningOutcomes && course.metadata.learningOutcomes.length > 0) ||
+        (course.metadata.units && course.metadata.units.length > 0) ||
+        (course.summary && course.summary.trim() !== '')
+      ) {
+        setMicroStep(3);
+        setAnalysisResult({
+          facultad: course.faculty || '',
+          programa: course.program || '',
+          semestre: course.metadata.semester || '',
+          tipoCurso: course.metadata.courseType || '',
+          creditos: course.credits || 0,
+          descripcionCurso: course.summary || '',
+          resultadosAprendizaje: Array.isArray(course.metadata.learningOutcomes) ? course.metadata.learningOutcomes : [],
+          unidades: Array.isArray(course.metadata.units) ? course.metadata.units : [],
+          metodologia: course.metadata.methodology || '',
+          evaluacion: Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : [],
+          bibliografia: Array.isArray(course.metadata.bibliography) ? course.metadata.bibliography : [],
+        });
+      }
+    }
+  }, [activeSection, course, analysisResult]);
+
+  useEffect(() => {
     if (!course) {
       const fallbackInstitution =
         getFirstInstitutionStructure(appData.institution)?.institution ||
@@ -3240,14 +3265,17 @@ export function CourseWorkspacePage({
           )}
 
           {microStep === 3 && analysisResult && (
-            <div className="success-board">
-              <div className="flex flex-col items-center justify-center py-8 gap-4">
-                <div className="success-icon-anim flex justify-center w-full">
-                  <CheckCircle2 size={72} className="text-sage animate-bounce" />
+            <div className="success-board flex items-center justify-center min-h-[400px] w-full bg-white rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col items-center justify-center py-12 gap-5 w-full max-w-md animate-in zoom-in-95 duration-500">
+                <div className="flex justify-center w-full mb-2">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-sage rounded-full opacity-20 animate-ping"></div>
+                    <CheckCircle2 size={96} className="text-sage relative z-10 animate-bounce" />
+                  </div>
                 </div>
                 <div className="text-center">
-                  <h4 className="text-xl">Análisis Completado</h4>
-                  <p className="text-muted">Se han extraído todos los campos identificados en el documento.</p>
+                  <h4 className="text-2xl text-secondary mb-2">Análisis Completado</h4>
+                  <p className="text-muted leading-relaxed">Se ha extraído, depurado y validado la información académica del microcurrículo exitosamente.</p>
                 </div>
                 <div className="flex gap-4 mt-6">
                    <button className="ghost-button" onClick={() => setMicroStep(2)}>
@@ -5292,7 +5320,7 @@ export function CourseWorkspacePage({
           eyebrow="IA de OpenAI"
           title="Verificar Información Extraída"
           description="Asegura que los datos capturados literalmente del documento sean correctos antes de guardarlos en el expediente."
-          width="xl"
+          width="full"
           onClose={() => setIsVerifyingAnalysis(false)}
         >
           <div className="page-stack">

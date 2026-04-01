@@ -7488,6 +7488,11 @@ body::after {
   max-height: calc(100vh - 48px);
 }
 
+.modal-panel--full {
+  width: 95vw;
+  max-width: 100vw;
+}
+
 .modal-panel__head,
 .modal-panel__foot,
 .system-dialog__actions {

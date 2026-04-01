@@ -6,7 +6,7 @@ interface ModalFrameProps {
   eyebrow?: string;
   title: ReactNode;
   description?: ReactNode;
-  width?: 'sm' | 'md' | 'lg' | 'xl';
+  width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
