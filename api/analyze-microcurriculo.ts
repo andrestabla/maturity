@@ -11,12 +11,20 @@ export const config = {
   runtime: 'nodejs',
 };
 
-export default async function handler(request: Request) {
+export default async function handler(request: Request | any) {
   if (request.method !== 'POST') {
     return errorResponse(405, 'Método no permitido');
   }
 
-  const { key } = await request.json();
+  // Soporte universal para Vercel Serverless (req.body) vs Standard Request (await req.json())
+  let body: any = {};
+  if (typeof request.json === 'function') {
+    body = await request.json();
+  } else if (request.body) {
+    body = typeof request.body === 'string' ? JSON.parse(request.body) : request.body;
+  }
+
+  const { key } = body || {};
 
   if (!key) {
     return errorResponse(400, 'Se requiere la clave del archivo en R2.');
