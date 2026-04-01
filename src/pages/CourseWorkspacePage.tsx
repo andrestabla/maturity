@@ -3278,6 +3278,18 @@ export function CourseWorkspacePage({
                   <p className="text-muted leading-relaxed">Se ha extraído, depurado y validado la información académica del microcurrículo exitosamente.</p>
                 </div>
                 <div className="flex gap-4 mt-6">
+                   <button 
+                     className="ghost-button" 
+                     onClick={() => {
+                       if (confirm('¿Estás seguro que deseas reiniciar el análisis y descartar los datos extraídos?')) {
+                         setMicroStep(1);
+                         setAnalysisResult(null);
+                         setUploadedFile(null);
+                       }
+                     }}
+                   >
+                    Reiniciar análisis
+                  </button>
                    <button className="ghost-button" onClick={() => setMicroStep(2)}>
                     Revisar archivo
                   </button>
