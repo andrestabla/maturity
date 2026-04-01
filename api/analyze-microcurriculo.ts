@@ -1,6 +1,6 @@
 import { getIntegrationConfig } from '../lib/admin-center.js';
 import { getR2Object } from '../lib/r2.js';
-import { errorResponse, jsonResponse } from '../lib/http.js';
+import { errorResponse } from '../lib/http.js';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
