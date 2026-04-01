@@ -603,6 +603,7 @@ export function CourseWorkspacePage({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [hasRestartedAnalysis, setHasRestartedAnalysis] = useState(false);
   const [isVerifyingAnalysis, setIsVerifyingAnalysis] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStatus, setAnalysisStatus] = useState('');
@@ -828,7 +829,7 @@ export function CourseWorkspacePage({
   }
 
   useEffect(() => {
-    if (activeSection === 'microcurriculo' && course && !analysisResult) {
+    if (activeSection === 'microcurriculo' && course && !analysisResult && !hasRestartedAnalysis) {
       if (
         (course.metadata.learningOutcomes && course.metadata.learningOutcomes.length > 0) ||
         (course.metadata.units && course.metadata.units.length > 0) ||
@@ -850,7 +851,7 @@ export function CourseWorkspacePage({
         });
       }
     }
-  }, [activeSection, course, analysisResult]);
+  }, [activeSection, course, analysisResult, hasRestartedAnalysis]);
 
   useEffect(() => {
     if (!course) {
@@ -3283,11 +3284,12 @@ export function CourseWorkspacePage({
                      onClick={async () => {
                        const confirmed = await showConfirm({
                          title: 'Reiniciar Análisis',
-                         message: '¿Estás seguro que deseas reiniciar el análisis y descartar los datos extraídos?',
+                         message: 'El análisis actual se eliminará de forma permanente y se iniciará un proceso nuevo en el paso 1. ¿Estás seguro que deseas continuar?',
                          confirmLabel: 'Aceptar',
                          tone: 'warning'
                        });
                        if (confirmed) {
+                         setHasRestartedAnalysis(true);
                          setMicroStep(1);
                          setAnalysisResult(null);
                          setUploadedFile(null);
