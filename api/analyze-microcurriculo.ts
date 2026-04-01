@@ -4,7 +4,7 @@ import { errorResponse, jsonResponse } from '../lib/http.js';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-import { PDFParse } from 'pdf-parse';
+import pdf from 'pdf-parse';
 
 export const config = {
   runtime: 'nodejs',
@@ -36,8 +36,7 @@ export default async function handler(request: Request) {
     let extractedText = '';
 
     if (contentType.includes('pdf')) {
-      const parser = new PDFParse({ data: buffer });
-      const data = await parser.getText();
+      const data = await pdf(buffer);
       extractedText = data.text;
     } else if (contentType.includes('word') || key.endsWith('.doc') || key.endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer });
