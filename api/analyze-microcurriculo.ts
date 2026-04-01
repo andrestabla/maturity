@@ -22,7 +22,7 @@ export default async function handler(request: Request | any, response?: any) {
 
   let body: any = {};
   if (typeof request.json === 'function') {
-    try { body = await request.json(); } catch(e){}
+    try { body = await request.json(); } catch (e) { }
   } else if (request.body) {
     body = typeof request.body === 'string' ? JSON.parse(request.body) : request.body;
   }
@@ -41,7 +41,7 @@ export default async function handler(request: Request | any, response?: any) {
     response.setHeader('Connection', 'keep-alive');
     response.setHeader('X-Accel-Buffering', 'no');
     response.setHeader('Content-Encoding', 'none');
-    
+
     // Nginx padding for forcing First-Byte buffer flush
     response.write(': ' + Array(2048).join(' ') + '\n\n');
   }

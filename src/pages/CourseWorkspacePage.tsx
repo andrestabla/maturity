@@ -3280,8 +3280,14 @@ export function CourseWorkspacePage({
                 <div className="flex gap-4 mt-6">
                    <button 
                      className="ghost-button" 
-                     onClick={() => {
-                       if (confirm('¿Estás seguro que deseas reiniciar el análisis y descartar los datos extraídos?')) {
+                     onClick={async () => {
+                       const confirmed = await showConfirm({
+                         title: 'Reiniciar Análisis',
+                         message: '¿Estás seguro que deseas reiniciar el análisis y descartar los datos extraídos?',
+                         confirmLabel: 'Aceptar',
+                         tone: 'warning'
+                       });
+                       if (confirmed) {
                          setMicroStep(1);
                          setAnalysisResult(null);
                          setUploadedFile(null);
