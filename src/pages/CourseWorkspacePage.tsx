@@ -612,6 +612,9 @@ export function CourseWorkspacePage({
   const [isVerifyingAnalysis, setIsVerifyingAnalysis] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStatus, setAnalysisStatus] = useState('');
+  const [isGeneratingArchitecture, setIsGeneratingArchitecture] = useState(false);
+  const [architectureStep, setArchitectureStep] = useState('');
+  const [architectureProgress, setArchitectureProgress] = useState(0);
   const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
     course ? makeMetadataForm(course) : makeMetadataForm({
       id: '',
@@ -2725,6 +2728,141 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function handleGenerateArchitecture() {
+    if (!currentCourse) return;
+
+    const confirmed = await showConfirm({
+      title: 'Actualizar arquitectura con IA',
+      message: 'La IA analizará el microcurrículo y los lineamientos pedagógicos para proponer una estructura de productos. Los productos actuales se mantendrán y se añadirán los nuevos sugeridos.',
+      tone: 'default',
+      confirmLabel: 'Generar Arquitectura',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) return;
+
+    setIsGeneratingArchitecture(true);
+    setArchitectureProgress(5);
+    setArchitectureStep('Iniciando diseño instruccional...');
+
+    try {
+      const response = await fetch('/api/generate-architecture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          courseSlug: currentCourse.slug,
+          institutionStructureId: currentCourse.institutionStructureId 
+        }),
+      });
+
+      if (!response.ok) throw new Error('Error al conectar con el Arquitecto IA');
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error('No fue posible abrir el canal de la IA.');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunks = decoder.decode(value, { stream: true }).split('\n\n');
+        for (const chunk of chunks) {
+          if (!chunk.trim() || !chunk.startsWith('data: ')) continue;
+          
+          try {
+            const payload = JSON.parse(chunk.replace('data: ', '').trim());
+            if (payload.progress) setArchitectureProgress(payload.progress);
+            if (payload.step) setArchitectureStep(payload.step);
+            
+            if (payload.complete && payload.data) {
+              const suggested = payload.data as { 
+                introduccion: any[], 
+                unidades: any[], 
+                cierre: any[] 
+              };
+
+              // Aplanamos todas las sugerencias
+              const allSuggested = [
+                ...suggested.introduccion,
+                ...suggested.unidades,
+                ...suggested.cierre
+              ];
+
+              // Creamos los productos en lote (secuencial para evitar colisiones de estado en demo)
+              for (const item of allSuggested) {
+                await fetch('/api/course-products', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    courseSlug: currentCourse.slug,
+                    title: item.title,
+                    summary: item.summary,
+                    format: item.format,
+                    stage: 'arquitectura',
+                    owner: userRole,
+                    status: 'Borrador',
+                    version: '1.0'
+                  })
+                });
+              }
+
+              refreshAppData();
+              await showAlert({
+                tone: 'success',
+                title: 'Arquitectura Actualizada',
+                message: `Se han integrado ${allSuggested.length} productos sugeridos a la arquitectura del curso.`
+              });
+            }
+
+            if (payload.error) throw new Error(payload.error);
+          } catch (e) {
+            console.error('Architecture event parse error:', e);
+          }
+        }
+      }
+    } catch (error) {
+       const message = error instanceof Error ? error.message : 'Falla crítica en el Arquitecto IA.';
+       await showAlert({ tone: 'error', title: 'Error de Arquitectura', message });
+    } finally {
+      setIsGeneratingArchitecture(false);
+      setArchitectureStep('');
+      setArchitectureProgress(0);
+    }
+  }
+
+  async function handleQuickAddProduct(sectionName: string) {
+    if (!currentCourse) return;
+
+    const title = window.prompt(`Nuevo producto para ${sectionName}. Ingresa el nombre:`);
+
+    if (!title) return;
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          title,
+          summary: `Producto agregado manualmente a la sección ${sectionName}`,
+          format: 'DIGITAL',
+          stage: 'arquitectura',
+          owner: userRole,
+          status: 'Borrador',
+          version: '1.0'
+        })
+      });
+
+      if (!response.ok) throw new Error('Error al crear el producto');
+      refreshAppData();
+    } catch (error) {
+      await showAlert({
+        tone: 'error',
+        title: 'Error al agregar',
+        message: 'No fue posible crear el producto manual.'
+      });
+    }
+  }
+
   async function handleProductSave(productId: string) {
     const draft = productDrafts[productId];
 
@@ -3862,87 +4000,113 @@ export function CourseWorkspacePage({
     const products = currentCourse.products || [];
     const units = currentCourse.metadata.units || [];
     
-    // Categorización de productos para el mapa
-    const foundationProducts = products.filter(p => !p.title.toLocaleLowerCase().includes('unidad') && !p.title.toLocaleLowerCase().includes('examen'));
-    const evaluationProducts = products.filter(p => p.title.toLocaleLowerCase().includes('examen') || p.title.toLocaleLowerCase().includes('final'));
+    // Categorización de productos estricta
+    const introProducts = products.filter(p => 
+      p.title.toLocaleLowerCase().includes('introducción') || 
+      p.title.toLocaleLowerCase().includes('bienvenida') ||
+      p.summary?.toLocaleLowerCase().includes('introducción')
+    );
+    
+    const closureProducts = products.filter(p => 
+      p.title.toLocaleLowerCase().includes('cierre') || 
+      p.title.toLocaleLowerCase().includes('final') || 
+      p.title.toLocaleLowerCase().includes('examen') ||
+      p.summary?.toLocaleLowerCase().includes('cierre')
+    );
+
+    const unitProductsMap = units.map((unit, idx) => {
+       const uNumber = idx + 1;
+       return {
+         unit,
+         products: products.filter(p => 
+           p.title.toLocaleLowerCase().includes(`unidad ${uNumber}`) || 
+           p.summary?.toLocaleLowerCase().includes(`unidad ${uNumber}`) ||
+           (p.summary && p.summary.includes(unit.tituloUnidad))
+         )
+       };
+    });
 
     return (
-      <div className="architecture-map animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="architecture-map architecture-map--full animate-in fade-in slide-in-from-bottom-4 duration-700">
         <header className="architecture-header">
-          <div className="flex justify-between items-start">
-            <div>
+          <div className="flex justify-between items-start gap-6">
+            <div className="flex-1">
               <span className="eyebrow">Arquitectura del Curso</span>
-              <h2 className="text-2xl font-bold text-secondary mt-1">Mapa Instruccional</h2>
+              <h2 className="text-3xl font-bold text-secondary mt-1">Mapa de Diseño Instruccional</h2>
+              <div className="architecture-guidelines mt-4">
+                {institutionGuidelines.map((guideline, idx) => (
+                  <div key={idx} className="guideline-tag">
+                    <ClipboardCheck size={10} className="inline mr-1" />
+                    {guideline}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-3">
-               <button className="ghost-button" onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}>
-                <PencilLine size={14} />
-                <span>Gestionar productos</span>
+            
+            <div className="flex flex-col items-end gap-3">
+              <button 
+                className="cta-button shadow-lg shadow-ocean/20" 
+                onClick={() => void handleGenerateArchitecture()}
+                disabled={isGeneratingArchitecture}
+              >
+                {isGeneratingArchitecture ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                <span>{isGeneratingArchitecture ? 'Procesando...' : 'Actualizar arquitectura (IA)'}</span>
               </button>
-            </div>
-          </div>
-          
-          <div className="mt-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted block mb-3">Lineamientos de la Institución</span>
-            <div className="architecture-guidelines">
-              {institutionGuidelines.map((guideline, idx) => (
-                <div key={idx} className="guideline-tag">
-                  <ClipboardCheck size={10} className="inline mr-1" />
-                  {guideline}
-                </div>
-              ))}
+              <button className="ghost-button" onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}>
+                <PencilLine size={14} />
+                <span>Gestionar inventario</span>
+              </button>
             </div>
           </div>
         </header>
 
-        <div className="architecture-grid">
-          {/* Columna 1: Fundamentos */}
+        <div className="architecture-grid architecture-grid--tripartite">
+          {/* Columna 1: Introducción */}
           <div className="architecture-column">
             <div className="architecture-group">
               <div className="architecture-group__head">
-                <h4 className="flex items-center"><BookOpen size={16} className="mr-2 text-ocean" /> Fundamentos</h4>
+                <h4 className="flex items-center"><BookOpen size={18} className="mr-2 text-ocean" /> Introducción</h4>
+                <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Introducción')}>
+                  <Plus size={14} />
+                </button>
               </div>
               <div className="flex flex-col gap-3">
-                 {foundationProducts.length > 0 ? (
-                   foundationProducts.map(product => renderArchitectureProductCard(product))
+                 {introProducts.length > 0 ? (
+                   introProducts.map(product => renderArchitectureProductCard(product))
                  ) : (
-                   <div className="text-[10px] text-muted p-4 border border-dashed rounded-lg text-center">
-                     Sin productos base definidos
-                   </div>
+                   <div className="empty-block">Sin recursos de inicio</div>
                  )}
               </div>
             </div>
           </div>
 
-          {/* Columna 2: Unidades de Aprendizaje (Centro) */}
-          <div className="architecture-column">
-             <div className="grid grid-cols-2 gap-4">
-                {units.map((unit, unitIdx) => {
-                  const unitProducts = products.filter(p => p.title.includes(`Unidad ${unitIdx + 1}`) || (p.summary && p.summary.includes(unit.tituloUnidad)));
-                  return (
-                    <div key={unitIdx} className="architecture-group">
+          {/* Columna 2: Desarrollo (Unidades Académicas) */}
+          <div className="architecture-column architecture-column--main">
+             <div className="grid grid-cols-2 gap-6">
+                {unitProductsMap.map((entry, idx) => (
+                    <div key={idx} className="architecture-group">
                       <div className="architecture-group__head">
                         <h4 className="flex items-center truncate">
-                          <Layers size={16} className="mr-2 text-gold shrink-0" />
-                          <span className="truncate">Unidad {unitIdx + 1}</span>
+                          <Layers size={18} className="mr-2 text-gold shrink-0" />
+                          <span className="truncate">Unidad {idx + 1}</span>
                         </h4>
+                        <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct(`Unidad ${idx + 1}`)}>
+                          <Plus size={14} />
+                        </button>
                       </div>
                       <div className="flex flex-col gap-3">
-                        {unitProducts.length > 0 ? (
-                          unitProducts.map(product => renderArchitectureProductCard(product))
+                        {entry.products.length > 0 ? (
+                          entry.products.map(product => renderArchitectureProductCard(product))
                         ) : (
-                          <div className="text-[10px] text-muted p-3 border border-dashed rounded-lg text-center">
-                            Pendiente recursos
-                          </div>
+                          <div className="empty-block">Pendiente recursos</div>
                         )}
                       </div>
                     </div>
-                  );
-                })}
+                ))}
                 {units.length === 0 && (
-                   <div className="col-span-2 architecture-group items-center py-10 opacity-60">
-                      <Sparkles size={24} className="text-muted mb-2" />
-                      <p className="text-xs text-center text-muted">Extrae los datos del microcurrículo primero para mapear las unidades aquí.</p>
+                   <div className="col-span-2 empty-state-block">
+                      <Sparkles size={32} className="text-muted mb-4 opacity-40" />
+                      <p>Extrae los datos del microcurrículo para mapear el desarrollo aquí.</p>
                    </div>
                 )}
              </div>
@@ -3952,20 +4116,57 @@ export function CourseWorkspacePage({
           <div className="architecture-column">
             <div className="architecture-group">
               <div className="architecture-group__head">
-                <h4 className="flex items-center"><MonitorPlay size={16} className="mr-2 text-sage" /> Cierre</h4>
+                <h4 className="flex items-center"><MonitorPlay size={18} className="mr-2 text-sage" /> Cierre</h4>
+                <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Cierre')}>
+                  <Plus size={14} />
+                </button>
               </div>
               <div className="flex flex-col gap-3">
-                {evaluationProducts.length > 0 ? (
-                   evaluationProducts.map(product => renderArchitectureProductCard(product))
+                {closureProducts.length > 0 ? (
+                   closureProducts.map(product => renderArchitectureProductCard(product))
                 ) : (
-                   <div className="text-[10px] text-muted p-4 border border-dashed rounded-lg text-center">
-                     Pendiente evaluación final
-                   </div>
+                   <div className="empty-block">Pendiente cierre</div>
                 )}
               </div>
             </div>
           </div>
         </div>
+
+        {isGeneratingArchitecture && (
+          <div className="architecture-overlay animate-in fade-in duration-500">
+             <div className="extraction-status-card surface shadow-2xl p-10 rounded-3xl flex flex-col items-center gap-8 max-w-md w-full">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full border-4 border-panel flex items-center justify-center">
+                     <Sparkles size={40} className="text-ocean animate-pulse" />
+                  </div>
+                  <svg className="absolute top-0 left-0 w-24 h-24 -rotate-90">
+                    <circle
+                      cx="48"
+                      cy="48"
+                      r="44"
+                      fill="none"
+                      stroke="var(--ocean)"
+                      strokeWidth="6"
+                      strokeDasharray="276.46"
+                      strokeDashoffset={276.46 - (276.46 * architectureProgress) / 100}
+                      className="transition-all duration-700 ease-out"
+                    />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <span className="eyebrow block mb-2">Diseño Arquitectónico IA</span>
+                  <h3 className="text-xl font-bold text-secondary mb-3">{architectureStep}</h3>
+                  <p className="text-sm text-muted">Sincronizando productos con lineamientos pedagógicos institucionales.</p>
+                </div>
+                <div className="w-full bg-panel rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-ocean h-full transition-all duration-700" 
+                    style={{ width: `${architectureProgress}%` }}
+                  />
+                </div>
+             </div>
+          </div>
+        )}
       </div>
     );
   }
