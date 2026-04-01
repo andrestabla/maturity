@@ -14,6 +14,11 @@ import {
   CheckCircle2,
   FileText,
   RefreshCcw,
+  Layers,
+  BookOpen,
+  MonitorPlay,
+  ClipboardCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -3851,6 +3856,145 @@ export function CourseWorkspacePage({
     );
   }
 
+  function renderArchitectureVisualizer() {
+    if (!currentCourse) return null;
+
+    const products = currentCourse.products || [];
+    const units = currentCourse.metadata.units || [];
+    
+    // Categorización de productos para el mapa
+    const foundationProducts = products.filter(p => !p.title.toLocaleLowerCase().includes('unidad') && !p.title.toLocaleLowerCase().includes('examen'));
+    const evaluationProducts = products.filter(p => p.title.toLocaleLowerCase().includes('examen') || p.title.toLocaleLowerCase().includes('final'));
+
+    return (
+      <div className="architecture-map animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <header className="architecture-header">
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="eyebrow">Arquitectura del Curso</span>
+              <h2 className="text-2xl font-bold text-secondary mt-1">Mapa Instruccional</h2>
+            </div>
+            <div className="flex gap-3">
+               <button className="ghost-button" onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}>
+                <PencilLine size={14} />
+                <span>Gestionar productos</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted block mb-3">Lineamientos de la Institución</span>
+            <div className="architecture-guidelines">
+              {institutionGuidelines.map((guideline, idx) => (
+                <div key={idx} className="guideline-tag">
+                  <ClipboardCheck size={10} className="inline mr-1" />
+                  {guideline}
+                </div>
+              ))}
+            </div>
+          </div>
+        </header>
+
+        <div className="architecture-grid">
+          {/* Columna 1: Fundamentos */}
+          <div className="architecture-column">
+            <div className="architecture-group">
+              <div className="architecture-group__head">
+                <h4 className="flex items-center"><BookOpen size={16} className="mr-2 text-ocean" /> Fundamentos</h4>
+              </div>
+              <div className="flex flex-col gap-3">
+                 {foundationProducts.length > 0 ? (
+                   foundationProducts.map(product => renderArchitectureProductCard(product))
+                 ) : (
+                   <div className="text-[10px] text-muted p-4 border border-dashed rounded-lg text-center">
+                     Sin productos base definidos
+                   </div>
+                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Columna 2: Unidades de Aprendizaje (Centro) */}
+          <div className="architecture-column">
+             <div className="grid grid-cols-2 gap-4">
+                {units.map((unit, unitIdx) => {
+                  const unitProducts = products.filter(p => p.title.includes(`Unidad ${unitIdx + 1}`) || (p.summary && p.summary.includes(unit.tituloUnidad)));
+                  return (
+                    <div key={unitIdx} className="architecture-group">
+                      <div className="architecture-group__head">
+                        <h4 className="flex items-center truncate">
+                          <Layers size={16} className="mr-2 text-gold shrink-0" />
+                          <span className="truncate">Unidad {unitIdx + 1}</span>
+                        </h4>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {unitProducts.length > 0 ? (
+                          unitProducts.map(product => renderArchitectureProductCard(product))
+                        ) : (
+                          <div className="text-[10px] text-muted p-3 border border-dashed rounded-lg text-center">
+                            Pendiente recursos
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {units.length === 0 && (
+                   <div className="col-span-2 architecture-group items-center py-10 opacity-60">
+                      <Sparkles size={24} className="text-muted mb-2" />
+                      <p className="text-xs text-center text-muted">Extrae los datos del microcurrículo primero para mapear las unidades aquí.</p>
+                   </div>
+                )}
+             </div>
+          </div>
+
+          {/* Columna 3: Cierre */}
+          <div className="architecture-column">
+            <div className="architecture-group">
+              <div className="architecture-group__head">
+                <h4 className="flex items-center"><MonitorPlay size={16} className="mr-2 text-sage" /> Cierre</h4>
+              </div>
+              <div className="flex flex-col gap-3">
+                {evaluationProducts.length > 0 ? (
+                   evaluationProducts.map(product => renderArchitectureProductCard(product))
+                ) : (
+                   <div className="text-[10px] text-muted p-4 border border-dashed rounded-lg text-center">
+                     Pendiente evaluación final
+                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderArchitectureProductCard(product: CourseProduct) {
+    const isDone = product.status === 'Aprobado';
+    const isActive = product.status === 'Borrador' || product.status === 'En revisión';
+    
+    return (
+      <div 
+        key={product.id} 
+        className={`product-block ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : 'is-pending'}`}
+        onClick={() => {
+           setActiveWorkspaceOverlay(`products:arquitectura`);
+        }}
+      >
+        <div className="product-block__head">
+          <span className="product-block__type">{product.format || 'DIGITAL'}</span>
+          <ExternalLink size={10} className="text-muted" />
+        </div>
+        <h5 className="product-block__title line-clamp-2">{product.title}</h5>
+        <div className="product-block__meta">
+          <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+          <span>v{product.version}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
 
@@ -4025,19 +4169,8 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'arquitectura' ? (
-        <section className="workspace-grid">
-           {renderProductStudio(
-            'arquitectura',
-            'Arquitectura instruccional',
-            'Blueprints y estructura de aprendizaje',
-            'Aquí se definen los módulos, la lógica pedagógica y la ruta de aprendizaje del curso.',
-          )}
-          {renderStageNoteEditor(
-            'arquitectura',
-            'Arquitectura',
-            'Decisiones de diseño',
-            'Registra decisiones sobre la estructura modular y la propuesta instruccional.',
-          )}
+        <section className="workspace-grid workspace-grid--full">
+           {renderArchitectureVisualizer()}
         </section>
       ) : null}
 
