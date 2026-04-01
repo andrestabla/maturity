@@ -3859,13 +3859,6 @@ export function CourseWorkspacePage({
         <section className="summary-workspace-grid">
           <div className="page-stack">
             {renderMicrocurriculoWizard()}
-            
-            {renderProductStudio(
-              'microcurriculo',
-              'Productos del Microcurrículo',
-              'Artefactos validados',
-              'Gestión de versiones del sílabus y documentos curriculares una vez consolidados.',
-            )}
           </div>
           
           <aside className="summary-sidebar">
