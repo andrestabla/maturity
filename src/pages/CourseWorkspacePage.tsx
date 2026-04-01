@@ -5555,11 +5555,14 @@ export function CourseWorkspacePage({
                               faculty: analysisResult.facultad || c.faculty,
                               program: analysisResult.programa || c.program,
                               credits: Number(analysisResult.creditos) || c.credits,
+                              summary: analysisResult.descripcionCurso || c.summary,
                               metadata: {
                                 ...c.metadata,
                                 semester: analysisResult.semestre || c.metadata.semester,
                                 courseType: analysisResult.tipoCurso || c.metadata.courseType,
                                 learningOutcomes: analysisResult.resultadosAprendizaje || c.metadata.learningOutcomes,
+                                topics: analysisResult.unidades?.map((u: any) => u.tituloUnidad) || c.metadata.topics,
+                                units: analysisResult.unidades || c.metadata.units,
                                 methodology: analysisResult.metodologia || c.metadata.methodology,
                                 evaluation: analysisResult.evaluacion || c.metadata.evaluation,
                                 bibliography: analysisResult.bibliografia || c.metadata.bibliography,
@@ -5600,13 +5603,11 @@ export function CourseWorkspacePage({
 
                       refreshAppData();
                       setIsVerifyingAnalysis(false);
-                      setMicroStep(1);
-                      setUploadedFile(null);
-                      setAnalysisResult(null);
+                      setMicroStep(3); // Mantener en éxito
                       
                       showAlert({
                         title: 'Expediente Actualizado',
-                        message: 'La información del microcurrículo ha sido integrada exitosamente.',
+                        message: 'La información del microcurrículo ha sido integrada exitosamente. El curso ahora refleja el estado real.',
                         tone: 'success'
                       });
                     } catch (err: any) {
