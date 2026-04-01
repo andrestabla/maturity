@@ -9,6 +9,7 @@ import {
   List,
   Plus,
   Search,
+  ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
@@ -1103,56 +1104,75 @@ export function CoursesPage({
                     <h5>Estructura institucional y ubicación</h5>
                   </div>
 
-                  <label className="field">
-                    <span>Institución</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.institution}
-                        onChange={(event) => updateCourseField('institution', event.target.value)}
-                        required
-                      >
-                        {composerInstitutionOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="form-group">
+                  <label className="form-label">Institución</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={courseForm.institution}
+                      onChange={(event) => updateCourseField('institution', event.target.value)}
+                      required
+                    >
+                      {composerInstitutionOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={18} />
+                  </div>
+                </div>
 
-                  <label className="field">
-                    <span>Facultad</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.faculty}
-                        onChange={(event) => updateCourseField('faculty', event.target.value)}
-                        required
-                      >
-                        {composerFacultyOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
+                <div className="form-group">
+                  <label className="form-label">Facultad</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={courseForm.faculty}
+                      onChange={(event) => updateCourseField('faculty', event.target.value)}
+                      required
+                    >
+                      {composerFacultyOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={18} />
+                  </div>
+                </div>
 
-                  <label className="field">
-                    <span>Programa</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.program}
-                        onChange={(event) => updateCourseField('program', event.target.value)}
-                        required
-                      >
-                        {composerProgramOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="form-group">
+                  <label className="form-label">Programa</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={courseForm.program}
+                      onChange={(event) => updateCourseField('program', event.target.value)}
+                      required
+                    >
+                      {composerProgramOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={18} />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label flex items-center justify-between">
+                    <span>Créditos</span>
+                    <span className="text-[10px] font-bold text-ocean">ECTS / Institucional</span>
                   </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      className="modern-input"
+                      value={courseForm.credits || ''}
+                      onChange={(event) => updateCourseField('credits', Number(event.target.value))}
+                      placeholder="Ej: 3"
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted/30">pts</div>
+                  </div>
+                </div>
+              </div>
 
                   <label className="field">
                     <span>Periodo académico</span>

@@ -15,10 +15,18 @@ import {
   FileText,
   RefreshCcw,
   Layers,
+  BarChart3,
+  Globe,
+  PenTool,
   BookOpen,
+  Target,
+  File,
+  AlertCircle,
+  Video,
+  Mic,
   MonitorPlay,
   ClipboardCheck,
-  ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -4202,12 +4210,14 @@ export function CourseWorkspacePage({
         {/* Modal: Agregar Producto Manual */}
         {isAddProductModalOpen && (
           <ModalFrame
+            eyebrow="Arquitectura"
             title={`Nuevo producto - ${activeAddSection}`}
+            width="md"
             onClose={() => setIsAddProductModalOpen(false)}
             footer={
               <div className="flex justify-end gap-3 w-full">
                 <button 
-                  className="ghost-button" 
+                  className="filter-chip" 
                   onClick={() => setIsAddProductModalOpen(false)}
                   disabled={isProductSaving === 'new'}
                 >
@@ -4223,18 +4233,17 @@ export function CourseWorkspacePage({
                   ) : (
                     <Plus size={16} className="mr-2" />
                   )}
-                  Crear Producto
+                  <span>Crear Producto</span>
                 </button>
               </div>
             }
-            width="md"
           >
             <div className="p-6 space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nombre del producto</label>
+              <div className="form-group">
+                <label className="form-label">Nombre del producto</label>
                 <input
                   type="text"
-                  className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all font-medium text-lg"
+                  className="modern-input !text-lg"
                   value={newProductForm.title}
                   onChange={(e) => setNewProductForm({ ...newProductForm, title: e.target.value })}
                   placeholder="Ej: Video tutorial sobre X"
@@ -4242,38 +4251,43 @@ export function CourseWorkspacePage({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo / Formato</label>
-                  <select
-                    className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all appearance-none cursor-pointer"
-                    value={newProductForm.format}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, format: e.target.value as any })}
-                  >
-                    <option value="Video">🎥 Video</option>
-                    <option value="Pódcast">🎙️ Pódcast</option>
-                    <option value="Infografía">📊 Infografía</option>
-                    <option value="RED">🌐 RED (Recurso Digital)</option>
-                    <option value="Documento">📄 Documento / PDF</option>
-                    <option value="Actividad">📝 Actividad / Taller</option>
-                    <option value="Lectura">📖 Lectura</option>
-                    <option value="Evaluación">🎯 Evaluación / Examen</option>
-                  </select>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="form-group">
+                  <label className="form-label">Formato</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={newProductForm.format}
+                      onChange={(e) => setNewProductForm({ ...newProductForm, format: e.target.value as any })}
+                    >
+                      <option value="">Seleccionar formato</option>
+                      <option value="Video">Video</option>
+                      <option value="Pódcast">Pódcast</option>
+                      <option value="Infografía">Infografía</option>
+                      <option value="RED">RED</option>
+                      <option value="Documento">Documento</option>
+                      <option value="PDF">PDF</option>
+                      <option value="Taller">Taller</option>
+                      <option value="Lectura">Lectura</option>
+                      <option value="Evaluación">Evaluación</option>
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={18} />
+                  </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Estado Inicial</label>
-                  <div className="flex items-center h-[52px] px-4 bg-muted/30 rounded-xl border border-border/50 text-muted-foreground italic text-sm">
+                <div className="form-group">
+                  <label className="form-label">Estado Inicial</label>
+                  <div className="modern-input bg-muted/5 font-bold text-muted/50 italic select-none">
                     Borrador (Predeterminado)
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descripción / Propósito</label>
+              <div className="form-group">
+                <label className="form-label">Descripción / Propósito</label>
                 <textarea
                   rows={4}
-                  className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all resize-none"
+                  className="modern-textarea"
                   value={newProductForm.summary}
                   onChange={(e) => setNewProductForm({ ...newProductForm, summary: e.target.value })}
                   placeholder="Describe brevemente qué se espera de este producto..."
@@ -4281,8 +4295,9 @@ export function CourseWorkspacePage({
               </div>
 
               {productError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
-                  {productError}
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex items-center gap-3">
+                  <AlertCircle size={18} />
+                  <span>{productError}</span>
                 </div>
               )}
             </div>
@@ -4328,17 +4343,17 @@ export function CourseWorkspacePage({
     );
   }
 
-  function renderProductFormatIcon(format: string) {
+  function renderProductFormatIcon(format: string, size = 16) {
     const f = format.toLocaleLowerCase();
-    if (f.includes('video')) return '🎥';
-    if (f.includes('pódcast')) return '🎙️';
-    if (f.includes('infografía')) return '📊';
-    if (f.includes('red')) return '🌐';
-    if (f.includes('documento') || f.includes('pdf')) return '📄';
-    if (f.includes('actividad') || f.includes('taller')) return '📝';
-    if (f.includes('lectura')) return '📖';
-    if (f.includes('evaluación') || f.includes('examen')) return '🎯';
-    return '📦';
+    if (f.includes('video')) return <Video size={size} className="text-ocean" />;
+    if (f.includes('pódcast')) return <Mic size={size} className="text-coral" />;
+    if (f.includes('infografía')) return <BarChart3 size={size} className="text-gold" />;
+    if (f.includes('red')) return <Globe size={size} className="text-ocean" />;
+    if (f.includes('documento') || f.includes('pdf')) return <FileText size={size} className="text-muted" />;
+    if (f.includes('actividad') || f.includes('taller')) return <PenTool size={size} className="text-sage" />;
+    if (f.includes('lectura')) return <BookOpen size={size} className="text-ocean" />;
+    if (f.includes('evaluación') || f.includes('examen')) return <Target size={size} className="text-coral" />;
+    return <File size={size} className="text-muted" />;
   }
 
   function renderArchitectureProductCard(product: CourseProduct) {
@@ -4348,27 +4363,37 @@ export function CourseWorkspacePage({
     return (
       <div 
         key={product.id} 
-        className={`product-block ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : 'is-pending'} group transition-all hover:scale-[1.02] active:scale-95`}
+        className={`architecture-card group animate-in fade-in transition-all duration-300 cursor-pointer ${isDone ? 'opacity-70' : ''}`}
         onClick={() => {
            setActiveWorkspaceOverlay(`products:arquitectura`);
         }}
       >
-        <div className="product-block__head">
-          <span className="product-block__type flex items-center gap-1.5 leading-none">
-            <span className="text-sm">{renderProductFormatIcon(product.format)}</span>
-            <span className="uppercase tracking-tight opacity-80">{product.format}</span>
-          </span>
-          <ExternalLink size={10} className="text-muted group-hover:text-ocean transition-colors" />
-        </div>
-        <h5 className="product-block__title line-clamp-2 title-sm mt-1">{product.title}</h5>
-        {product.summary && (
-          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {product.summary}
-          </p>
-        )}
-        <div className="product-block__meta mt-2 pt-2 border-t border-border/10">
-          <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
-          <span className="text-[10px] opacity-40">v{product.version}</span>
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 p-2.5 bg-white rounded-xl shadow-sm border border-line-strong group-hover:scale-110 transition-transform duration-300">
+            {renderProductFormatIcon(product.format, 18)}
+          </div>
+          <div className="min-w-0 flex-grow">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <strong className="text-sm font-bold truncate group-hover:text-ocean transition-colors duration-300">
+                {product.title}
+              </strong>
+              {isDone && <CheckCircle2 size={12} className="text-sage" />}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted/40">
+                {product.format}
+              </span>
+              <div className="h-1 w-1 rounded-full bg-line" />
+              <span className={`text-[10px] font-bold ${isActive ? 'text-ocean' : 'text-muted/60'}`}>
+                {product.status}
+              </span>
+            </div>
+            {product.summary && (
+              <p className="text-[10px] text-muted-foreground line-clamp-1 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0">
+                {product.summary}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );

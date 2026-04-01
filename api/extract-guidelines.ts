@@ -95,7 +95,13 @@ export default async function handler(request: Request | any, response?: any) {
       notify({ progress: 60, step: 'IA analizando lineamientos y políticas...' });
 
       const openaiConfig = await getIntegrationConfig('openai');
-      const openai = new OpenAI({ apiKey: openaiConfig.apiKey });
+      const apiKey = openaiConfig.openaiApiKey || openaiConfig.apiKey || process.env.OPENAI_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error('No se encontró una API Key de OpenAI válida para la extracción.');
+      }
+
+      const openai = new OpenAI({ apiKey: apiKey.trim() });
 
       const systemPrompt = `Eres un experto en currículo y diseño instruccional. 
       Tu tarea es extraer LINEAMIENTOS PEDAGÓGICOS, REGLAS OPERATIVAS y ESTÁNDARES DE CALIDAD del texto proporcionado.

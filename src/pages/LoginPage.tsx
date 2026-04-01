@@ -81,40 +81,42 @@ export function LoginPage({
           <p>{branding.loginMessage}</p>
         </div>
 
-        <form className="access-screen__form" onSubmit={handleSubmit}>
-          <label className="access-screen__field">
-            <span>Correo</span>
-            <div className="access-screen__input">
-              <Mail size={16} />
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Correo institucional</label>
+            <div className="modern-select-wrapper">
               <input
                 type="email"
+                className="modern-input !bg-white/5 !border-white/10 !text-white focus:!border-ocean/40 focus:!ring-4 focus:!ring-ocean/10 placeholder:text-white/20"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="nombre@institucion.edu"
                 autoComplete="username"
                 required
               />
+              <Mail size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20" />
             </div>
-          </label>
+          </div>
 
-          <label className="access-screen__field">
-            <span>Contraseña</span>
-            <div className="access-screen__input">
-              <LockKeyhole size={16} />
+          <div className="form-group">
+            <label className="form-label">Contraseña</label>
+            <div className="modern-select-wrapper">
               <input
                 type="password"
+                className="modern-input !bg-white/5 !border-white/10 !text-white focus:!border-ocean/40 focus:!ring-4 focus:!ring-ocean/10 placeholder:text-white/20"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Tu clave actual"
+                placeholder="Tu clave segura"
                 autoComplete="current-password"
                 required
               />
+              <LockKeyhole size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20" />
             </div>
-          </label>
+          </div>
 
-          <button type="submit" className="access-screen__button" disabled={isLoading}>
+          <button type="submit" className="cta-button w-full mt-4" disabled={isLoading}>
             <span>{isLoading ? 'Conectando sesión…' : `Entrar a ${branding.platformName}`}</span>
-            <ArrowRight size={16} />
+            <ArrowRight size={18} />
           </button>
         </form>
 
