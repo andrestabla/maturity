@@ -8317,3 +8317,112 @@ body::after {
     position: static;
   }
 }
+
+/* Microcurriculo Wizard Styles */
+.wizard-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  transition: all 400ms var(--ease-premium);
+}
+
+.step-dot.is-active {
+  background: var(--ocean);
+  box-shadow: 0 0 12px var(--ocean-soft);
+  scale: 1.2;
+}
+
+.step-line {
+  width: 40px;
+  height: 2px;
+  background: var(--line);
+  transition: all 400ms var(--ease-premium);
+}
+
+.step-line.is-active {
+  background: var(--ocean);
+}
+
+.assistant-dropzone {
+  position: relative;
+  border: 2px dashed var(--line-strong);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.4);
+  transition: all 300ms var(--ease-premium);
+  overflow: hidden;
+}
+
+.assistant-dropzone:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--ocean);
+  box-shadow: var(--shadow);
+}
+
+.dropzone-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 32px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.dropzone-icon {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  background: var(--ocean-soft);
+  margin-bottom: 24px;
+  transition: transform 300ms var(--ease-premium);
+}
+
+.assistant-dropzone:hover .dropzone-icon {
+  transform: translateY(-8px) scale(1.05);
+}
+
+.analysis-board {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.analysis-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.success-icon-anim {
+  animation: success-bounce 1s var(--ease-premium) infinite alternate;
+}
+
+@keyframes success-bounce {
+  from { transform: scale(1); filter: drop-shadow(0 0 0px var(--sage-soft)); }
+  to { transform: scale(1.1); filter: drop-shadow(0 0 20px var(--sage-soft)); }
+}
+
+.wizard-content {
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hidden {
+  display: none;
+}

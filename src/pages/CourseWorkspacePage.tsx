@@ -7,6 +7,12 @@ import {
   Settings,
   Trash2,
   History,
+  FileUp,
+  Search,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  FileText,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -587,6 +593,13 @@ export function CourseWorkspacePage({
   const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
     makeTaskForm(currentCourseSlug, currentStageId),
   );
+
+  // Microcurriculo Assistant States
+  const [microStep, setMicroStep] = useState<1 | 2 | 3>(1);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string } | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [isVerifyingAnalysis, setIsVerifyingAnalysis] = useState(false);
   const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
     course ? makeMetadataForm(course) : makeMetadataForm({
       id: '',
@@ -2992,6 +3005,165 @@ export function CourseWorkspacePage({
     );
   }
 
+  async function handleMicroFileDelete() {
+    if (!uploadedFile) return;
+    try {
+      await fetch(`/api/files?key=${encodeURIComponent(uploadedFile.key)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      setUploadedFile(null);
+      setMicroStep(1);
+    } catch (error) {
+      console.error('Delete error:', error);
+    }
+  }
+
+  async function handleMicroAnalysis() {
+    if (!uploadedFile) return;
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('/api/analyze-microcurriculo', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: uploadedFile.key }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Fallo en análisis.');
+      
+      setAnalysisResult(payload.data);
+      setMicroStep(3);
+    } catch (error) {
+      showAlert({
+        title: 'Error de Análisis',
+        message: error instanceof Error ? error.message : 'No fue posible analizar el archivo.',
+        tone: 'error'
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  function renderMicrocurriculoWizard() {
+    if (!course) return null;
+
+    return (
+      <div className="surface section-card">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Paso {microStep} de 3</span>
+            <h3>Configuración del Microcurrículo</h3>
+          </div>
+          <div className="wizard-stepper">
+            <div className={`step-dot ${microStep >= 1 ? 'is-active' : ''}`} />
+            <div className={`step-line ${microStep >= 2 ? 'is-active' : ''}`} />
+            <div className={`step-dot ${microStep >= 2 ? 'is-active' : ''}`} />
+            <div className={`step-line ${microStep >= 3 ? 'is-active' : ''}`} />
+            <div className={`step-dot ${microStep >= 3 ? 'is-active' : ''}`} />
+          </div>
+        </div>
+
+        <div className="wizard-content py-8">
+          {microStep === 1 && (
+            <div className="assistant-dropzone">
+              <input
+                type="file"
+                id="micro-upload"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  formData.append('scope', 'course');
+                  formData.append('folder', course.slug);
+
+                  try {
+                    setIsAnalyzing(true);
+                    const res = await fetch('/api/uploads', {
+                      method: 'POST',
+                      body: formData
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    
+                    setUploadedFile({ url: data.url, key: data.key });
+                    setMicroStep(2);
+                  } catch (err: any) {
+                    showAlert({ title: 'Error de Carga', message: err.message, tone: 'error' });
+                  } finally {
+                    setIsAnalyzing(false);
+                  }
+                }}
+              />
+              <label htmlFor="micro-upload" className="dropzone-label">
+                <div className="dropzone-icon">
+                  <FileUp size={48} className="text-ocean" />
+                </div>
+                <strong>Arrastre aquí o cargue el microcurrículo del curso</strong>
+                <p className="text-muted text-sm mt-2">Soporta PDF, Word (DOC/DOCX) y Excel (XLS/XLSX)</p>
+              </label>
+            </div>
+          )}
+
+          {microStep === 2 && uploadedFile && (
+            <div className="analysis-board">
+              <div className="analysis-card">
+                <FileText size={32} className="text-ocean" />
+                <div className="flex-1">
+                  <strong>Documento cargado correctamente</strong>
+                  <p className="text-xs text-muted font-mono">{uploadedFile.key.split('/').pop()}</p>
+                </div>
+                <button className="danger-button danger-button--ghost" onClick={handleMicroFileDelete}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center justify-center py-12 gap-6">
+                <p className="text-center text-muted max-w-md">
+                  El motor de IA está listo para extraer parámetros académicos, resultados de aprendizaje e indicadores del documento.
+                </p>
+                <button 
+                  className="cta-button cta-button--large" 
+                  onClick={handleMicroAnalysis}
+                  disabled={isAnalyzing}
+                >
+                  {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                  <span>{isAnalyzing ? 'Analizando documento...' : 'Importar y Analizar Datos'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {microStep === 3 && analysisResult && (
+            <div className="success-board">
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <div className="success-icon-anim">
+                  <CheckCircle2 size={64} className="text-sage" />
+                </div>
+                <div className="text-center">
+                  <h4 className="text-xl">Análisis Completado</h4>
+                  <p className="text-muted">Se han extraído todos los campos identificados en el documento.</p>
+                </div>
+                <div className="flex gap-4 mt-6">
+                   <button className="ghost-button" onClick={() => setMicroStep(2)}>
+                    Revisar archivo
+                  </button>
+                  <button className="cta-button" onClick={() => setIsVerifyingAnalysis(true)}>
+                    <Search size={16} />
+                    <span>Verificar / Editar Información</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function renderProductStudio(
     productStage: CourseProductStage,
     eyebrow: string,
@@ -3684,13 +3856,28 @@ export function CourseWorkspacePage({
 
 
       {activeSection === 'microcurriculo' ? (
-        <section className="workspace-grid">
-          {renderProductStudio(
-            'microcurriculo',
-            'Microcurrículo y base curricular',
-            'Productos nucleares del curso',
-            'Aquí se crean, editan y versionan el sílabus, microcurrículo y demás documentos fundacionales del curso.',
-          )}
+        <section className="summary-workspace-grid">
+          <div className="page-stack">
+            {renderMicrocurriculoWizard()}
+            
+            {renderProductStudio(
+              'microcurriculo',
+              'Productos del Microcurrículo',
+              'Artefactos validados',
+              'Gestión de versiones del sílabus y documentos curriculares una vez consolidados.',
+            )}
+          </div>
+          
+          <aside className="summary-sidebar">
+             <div className="surface section-card section-card--compact">
+               <div className="section-heading">
+                 <h3>Asistencias de IA</h3>
+               </div>
+               <p className="text-sm text-muted">
+                 El asistente de microcurrículo utiliza GPT-4o para asegurar que los resultados de aprendizaje y la bibliografía cumplan con los estándares institucionales.
+               </p>
+             </div>
+          </aside>
         </section>
       ) : null}
 
@@ -5002,6 +5189,170 @@ export function CourseWorkspacePage({
                 </form>
               </>
             )}
+          </div>
+        </ModalFrame>
+      ) : null}
+      {isVerifyingAnalysis && analysisResult ? (
+        <ModalFrame
+          eyebrow="IA de OpenAI"
+          title="Verificar Información Extraída"
+          description="Asegura que los datos capturados literalmente del documento sean correctos antes de guardarlos en el expediente."
+          width="xl"
+          onClose={() => setIsVerifyingAnalysis(false)}
+        >
+          <div className="page-stack">
+             <div className="management-layout">
+                <main className="page-stack">
+                  <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Metadatos del curso</h3>
+                    </div>
+                    <div className="form-grid form-grid--three">
+                      <label className="field">
+                        <span>Facultad</span>
+                        <input value={analysisResult.facultad} onChange={(e) => setAnalysisResult({ ...analysisResult, facultad: e.target.value })} />
+                      </label>
+                      <label className="field">
+                        <span>Programa</span>
+                        <input value={analysisResult.programa} onChange={(e) => setAnalysisResult({ ...analysisResult, programa: e.target.value })} />
+                      </label>
+                      <label className="field">
+                        <span>Semestre</span>
+                        <input value={analysisResult.semestre} onChange={(e) => setAnalysisResult({ ...analysisResult, semestre: e.target.value })} />
+                      </label>
+                      <label className="field">
+                        <span>Tipo de curso</span>
+                        <input value={analysisResult.tipoCurso} onChange={(e) => setAnalysisResult({ ...analysisResult, tipoCurso: e.target.value })} />
+                      </label>
+                      <label className="field">
+                        <span>Créditos</span>
+                        <input type="number" value={analysisResult.creditos} onChange={(e) => setAnalysisResult({ ...analysisResult, creditos: Number(e.target.value) })} />
+                      </label>
+                    </div>
+                  </article>
+
+                  <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Académico y Resultados de Aprendizaje</h3>
+                    </div>
+                    <div className="form-grid">
+                      <label className="field field--full">
+                        <span>Descripción del curso</span>
+                        <textarea rows={4} value={analysisResult.descripcionCurso} onChange={(e) => setAnalysisResult({ ...analysisResult, descripcionCurso: e.target.value })} />
+                      </label>
+                      <label className="field field--full">
+                         <span>Resultados de aprendizaje (uno por línea)</span>
+                         <textarea rows={6} value={analysisResult.resultadosAprendizaje?.join('\n')} onChange={(e) => setAnalysisResult({ ...analysisResult, resultadosAprendizaje: e.target.value.split('\n') })} />
+                      </label>
+                    </div>
+                  </article>
+
+                   <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Metodología y Evaluación</h3>
+                    </div>
+                    <div className="form-grid">
+                      <label className="field field--full">
+                        <span>Metodología</span>
+                        <textarea rows={3} value={analysisResult.metodologia} onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} />
+                      </label>
+                      <label className="field field--full">
+                        <span>Evaluación</span>
+                        <textarea rows={3} value={analysisResult.evaluacion} onChange={(e) => setAnalysisResult({ ...analysisResult, evaluacion: e.target.value })} />
+                      </label>
+                    </div>
+                  </article>
+
+                  <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Bibliografía</h3>
+                    </div>
+                    <label className="field field--full">
+                       <textarea rows={5} value={analysisResult.bibliografia?.join('\n')} onChange={(e) => setAnalysisResult({ ...analysisResult, bibliografia: e.target.value.split('\n') })} />
+                    </label>
+                  </article>
+                </main>
+             </div>
+
+             <div className="form-actions">
+                <button type="button" className="ghost-button" onClick={() => setIsVerifyingAnalysis(false)}>Cancelar</button>
+                <button 
+                  type="button" 
+                  className="cta-button" 
+                  disabled={isMetadataSaving}
+                  onClick={async () => {
+                    if (!course) return;
+                    setIsMetadataSaving(true);
+                    
+                    // Actualización optimista del curso
+                    mutateAppData((current) => ({
+                      ...current,
+                      courses: current.courses.map((c) =>
+                        c.slug === course.slug
+                          ? {
+                              ...c,
+                              faculty: analysisResult.facultad || c.faculty,
+                              program: analysisResult.programa || c.program,
+                              credits: Number(analysisResult.creditos) || c.credits,
+                              metadata: {
+                                ...c.metadata,
+                                semester: analysisResult.semestre || c.metadata.semester,
+                                courseType: analysisResult.tipoCurso || c.metadata.courseType,
+                                learningOutcomes: analysisResult.resultadosAprendizaje || c.metadata.learningOutcomes,
+                                methodology: analysisResult.metodologia || c.metadata.methodology,
+                                evaluation: analysisResult.evaluacion || c.metadata.evaluation,
+                                bibliography: analysisResult.bibliografia || c.metadata.bibliography,
+                              }
+                            }
+                          : c
+                      )
+                    }));
+
+                    try {
+                      // Sincronizar con backend (Metadata)
+                      await fetch(`/api/course-metadata?slug=${course.slug}`, {
+                        method: 'PATCH',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({
+                          institution: course.metadata.institution,
+                          shortName: course.title,
+                          semester: analysisResult.semestre || course.metadata.semester,
+                          academicPeriod: course.metadata.academicPeriod,
+                          courseType: analysisResult.tipoCurso || course.metadata.courseType,
+                          learningOutcomes: analysisResult.resultadosAprendizaje || course.metadata.learningOutcomes,
+                          topics: analysisResult.unidades?.map((u: any) => u.title) || course.metadata.topics,
+                          methodology: analysisResult.metodologia || course.metadata.methodology,
+                          evaluation: analysisResult.evaluacion || course.metadata.evaluation,
+                          bibliography: analysisResult.bibliografia || course.metadata.bibliography,
+                          targetCloseDate: course.metadata.targetCloseDate,
+                          currentVersion: course.metadata.currentVersion,
+                          priority: course.metadata.priority,
+                          riskLevel: course.metadata.riskLevel
+                        })
+                      });
+
+                      refreshAppData();
+                      setIsVerifyingAnalysis(false);
+                      setMicroStep(1);
+                      setUploadedFile(null);
+                      setAnalysisResult(null);
+                      
+                      showAlert({
+                        title: 'Expediente Actualizado',
+                        message: 'La información del microcurrículo ha sido integrada exitosamente.',
+                        tone: 'success'
+                      });
+                    } catch (err: any) {
+                       showAlert({ title: 'Error al guardar', message: err.message, tone: 'error' });
+                    } finally {
+                      setIsMetadataSaving(false);
+                    }
+                  }}
+                >
+                  <Save size={16} />
+                  <span>{isMetadataSaving ? 'Guardando...' : 'Guardar en Expediente'}</span>
+                </button>
+             </div>
           </div>
         </ModalFrame>
       ) : null}
