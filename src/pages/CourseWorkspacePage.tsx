@@ -62,6 +62,7 @@ interface CourseWorkspacePageProps {
   role: Role;
   userRole: Role;
   appData: AppData;
+  isLoading?: boolean;
   refreshAppData: () => void;
   mutateAppData: (nextData: AppData | ((current: AppData) => AppData)) => void;
 }
@@ -541,6 +542,7 @@ export function CourseWorkspacePage({
   role,
   userRole,
   appData,
+  isLoading,
   refreshAppData,
   mutateAppData,
 }: CourseWorkspacePageProps) {
@@ -600,6 +602,8 @@ export function CourseWorkspacePage({
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isVerifyingAnalysis, setIsVerifyingAnalysis] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStatus, setAnalysisStatus] = useState('');
   const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
     course ? makeMetadataForm(course) : makeMetadataForm({
       id: '',
@@ -955,6 +959,18 @@ export function CourseWorkspacePage({
   ]);
 
   if (!course) {
+    if (isLoading) {
+      return (
+        <section className="flex h-[80vh] w-full flex-col items-center justify-center gap-4 text-center animate-in fade-in duration-500">
+          <Loader2 className="animate-spin text-ocean w-12 h-12" />
+          <div className="flex flex-col gap-1">
+            <h3 className="font-medium text-lg text-primary">Cargando expediente del curso...</h3>
+            <p className="text-sm text-secondary max-w-[300px]">Conectando de forma segura con la base de datos.</p>
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section className="surface empty-state">
         <strong>Curso no encontrado</strong>
@@ -3022,6 +3038,9 @@ export function CourseWorkspacePage({
   async function handleMicroAnalysis() {
     if (!uploadedFile) return;
     setIsAnalyzing(true);
+    setAnalysisProgress(0);
+    setAnalysisStatus('Inicializando análisis estructurado...');
+    
     try {
       const response = await fetch('/api/analyze-microcurriculo', {
         method: 'POST',
@@ -3029,22 +3048,45 @@ export function CourseWorkspacePage({
         body: JSON.stringify({ key: uploadedFile.key }),
       });
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('El servidor devolvió un error inesperado. Por favor, revisa que el archivo sea válido o intenta de nuevo más tarde.');
+      if (!response.ok || !response.body) {
+        throw new Error('El servidor devolvió un error inesperado al conectar el stream de datos.');
       }
 
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Fallo en análisis.');
-      
-      setAnalysisResult(payload.data);
-      setMicroStep(3);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const messages = buffer.split('\n\n');
+        buffer = messages.pop() || ''; 
+
+        for (const msg of messages) {
+          if (msg.startsWith('data: ')) {
+            const payload = JSON.parse(msg.substring(6));
+            
+            if (payload.error) throw new Error(payload.error);
+            
+            if (payload.complete || payload.progress === 100) {
+              setAnalysisResult(payload.data);
+              setMicroStep(3);
+            } else if (payload.progress) {
+              setAnalysisProgress(payload.progress);
+              setAnalysisStatus(payload.step);
+            }
+          }
+        }
+      }
     } catch (error) {
       showAlert({
         title: 'Error de Análisis',
         message: error instanceof Error ? error.message : 'No fue posible analizar el archivo.',
         tone: 'error'
       });
+      setMicroStep(1);
     } finally {
       setIsAnalyzing(false);
     }
@@ -3060,7 +3102,7 @@ export function CourseWorkspacePage({
             <span className="eyebrow">Paso {microStep} de 3</span>
             <h3>Configuración del Microcurrículo</h3>
           </div>
-          <div className="wizard-stepper">
+            <div className="wizard-stepper">
             <div className={`step-dot ${microStep >= 1 ? 'is-active' : ''}`} />
             <div className={`step-line ${microStep >= 2 ? 'is-active' : ''}`} />
             <div className={`step-dot ${microStep >= 2 ? 'is-active' : ''}`} />
@@ -3129,15 +3171,31 @@ export function CourseWorkspacePage({
 
               <div className="flex flex-col items-center justify-center py-12 gap-6">
                 <p className="text-center text-muted max-w-md">
-                  El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.
+                  {isAnalyzing ? 'Procesando el documento a través del modelo de lenguaje...' : 'El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.'}
                 </p>
+                
+                {isAnalyzing && analysisProgress > 0 && (
+                  <div className="w-full max-w-sm mb-2">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-ocean font-medium">{analysisStatus}</span>
+                      <span className="text-muted">{analysisProgress}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                      <div 
+                        className="bg-ocean h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${analysisProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                
                 <button 
                   className="cta-button cta-button--large" 
                   onClick={handleMicroAnalysis}
                   disabled={isAnalyzing}
                 >
                   {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                  <span>{isAnalyzing ? 'Analizando documento...' : 'Importar y Analizar Datos'}</span>
+                  <span>{isAnalyzing ? (analysisProgress > 0 ? analysisStatus : 'Analizando documento...') : 'Importar y Analizar Datos'}</span>
                 </button>
               </div>
             </div>

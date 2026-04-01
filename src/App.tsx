@@ -260,6 +260,7 @@ export default function App() {
                 role={activeRole}
                 userRole={session.user.role}
                 appData={appData}
+                isLoading={isLoading}
                 refreshAppData={refreshAppData}
                 mutateAppData={mutateAppData}
               />
@@ -272,6 +273,7 @@ export default function App() {
                 role={activeRole}
                 userRole={session.user.role}
                 appData={appData}
+                isLoading={isLoading}
                 refreshAppData={refreshAppData}
                 mutateAppData={mutateAppData}
               />
