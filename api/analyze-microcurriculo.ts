@@ -105,7 +105,20 @@ export default async function handler(request: Request | any, response?: any) {
       const openai = new OpenAI({ apiKey: openaiConfig.apiKey });
 
       const systemPrompt = `Eres un experto en currículo académico. Extrae literalmente la información del microcurrículo y devuélvela en JSON estructurado. 
-      Requeridos: \n- facultad: string\n- programa: string\n- semestre: string\n- tipoCurso: string\n- creditos: number\n- resultadosAprendizaje: string[]\n- descripcionCurso: string\n- unidades: { title: string; objective: string; topics: string[] }[]\n- metodologia: string\n- evaluacion: string\n- bibliografia: string[]`;
+      REGLA VITAL: Si un campo no se encuentra en la información, asigna el valor "No especificado" si es texto, 0 si es número, o [] si es un arreglo. 
+      
+      Esquema estricto:
+      - facultad: string
+      - programa: string
+      - semestre: string
+      - tipoCurso: string
+      - creditos: number
+      - descripcionCurso: string
+      - resultadosAprendizaje: string[] (uno por campo independiente)
+      - unidades: { tituloUnidad: string; tematicas: string[] }[] (módulos y sus temáticas separadas)
+      - metodologia: string
+      - evaluacion: string[] (discriminada en ítems separados)
+      - bibliografia: string[] (ítems separados por campos)`;
 
       notify({ progress: 75, step: 'Sintetizando unidades y estructurando curso...' });
 

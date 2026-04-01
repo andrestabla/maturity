@@ -469,9 +469,11 @@ function buildDefaultCourseMetadata(
     courseType: course.courseType?.trim() || 'Curso',
     learningOutcomes: [course.summary],
     topics: course.modules.map((module) => module.title),
+    units: [],
     methodology: `${course.modality} con seguimiento por etapas y expediente persistente.`,
-    evaluation:
+    evaluation: [
       'Seguimiento por entregables, validación por etapa y observaciones trazables dentro del expediente.',
+    ],
     bibliography: ['Documento base del curso', 'Biblioteca asociada al expediente'],
     targetCloseDate,
     currentVersion: 'v1.0',

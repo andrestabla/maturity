@@ -13,6 +13,7 @@ import {
   Loader2,
   CheckCircle2,
   FileText,
+  RefreshCcw,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -271,8 +272,9 @@ function makeMetadataForm(course: Course): CourseMetadataMutationInput {
     courseType: course.metadata.courseType,
     learningOutcomes: course.metadata.learningOutcomes,
     topics: course.metadata.topics,
+    units: Array.isArray(course.metadata.units) ? course.metadata.units : [],
     methodology: course.metadata.methodology,
-    evaluation: course.metadata.evaluation,
+    evaluation: Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : typeof course.metadata.evaluation === 'string' ? [course.metadata.evaluation] : [],
     bibliography: course.metadata.bibliography,
     targetCloseDate: course.metadata.targetCloseDate,
     currentVersion: course.metadata.currentVersion,
@@ -636,8 +638,9 @@ export function CourseWorkspacePage({
         courseType: '',
         learningOutcomes: [],
         topics: [],
+        units: [],
         methodology: '',
-        evaluation: '',
+        evaluation: [],
         bibliography: [],
         targetCloseDate: new Date().toISOString().slice(0, 10),
         currentVersion: 'v1.0',
@@ -842,8 +845,9 @@ export function CourseWorkspacePage({
         courseType: getInstitutionCourseTypes(appData.institution, fallbackInstitution)[0] || '',
         learningOutcomes: [],
         topics: [],
+        units: [],
         methodology: '',
-        evaluation: '',
+        evaluation: [],
         bibliography: [],
         targetCloseDate: new Date().toISOString().slice(0, 10),
         currentVersion: 'v1.0',
@@ -1736,7 +1740,9 @@ export function CourseWorkspacePage({
       methodology:
         sections['Metodología']?.join('\n').trim() || currentCourse.metadata.methodology,
       evaluation:
-        sections['Evaluación']?.join('\n').trim() || currentCourse.metadata.evaluation,
+        extractPreviewItems(sections['Evaluación']?.join('\n') ?? '').length > 0
+          ? extractPreviewItems(sections['Evaluación']?.join('\n') ?? '')
+          : Array.isArray(currentCourse.metadata.evaluation) ? currentCourse.metadata.evaluation : typeof currentCourse.metadata.evaluation === 'string' ? [currentCourse.metadata.evaluation] : [],
       bibliography:
         parsedBibliography.length > 0 ? parsedBibliography : currentCourse.metadata.bibliography,
     };
@@ -1746,7 +1752,7 @@ export function CourseWorkspacePage({
     outcomes: string[];
     topics: string[];
     methodology: string;
-    evaluation: string;
+    evaluation: string[];
     bibliography: string[];
   }) {
     return [
@@ -1768,7 +1774,7 @@ export function CourseWorkspacePage({
       input.methodology,
       '',
       '# Evaluación',
-      input.evaluation,
+      ...input.evaluation.map((item) => `- ${item}`),
       '',
       '# Bibliografía base',
       ...input.bibliography.map((item) => `- ${item}`),
@@ -1972,12 +1978,12 @@ export function CourseWorkspacePage({
               <div className="field__control field__control--textarea">
                 <textarea
                   rows={4}
-                  value={structured.evaluation}
+                  value={joinLines(structured.evaluation)}
                   onChange={(event) =>
                     onPatch({
                       body: buildGeneralStructuredBody({
                         ...structured,
-                        evaluation: event.target.value,
+                        evaluation: splitLines(event.target.value),
                       }),
                     })
                   }
@@ -3104,12 +3110,26 @@ export function CourseWorkspacePage({
             <span className="eyebrow">Paso {microStep} de 3</span>
             <h3>Configuración del Microcurrículo</h3>
           </div>
-            <div className="wizard-stepper">
-            <div className={`step-dot ${microStep >= 1 ? 'is-active' : ''}`} />
+          <div className="wizard-stepper">
+            <button 
+              type="button"
+              className={`step-dot ${microStep >= 1 ? 'is-active' : ''} cursor-pointer transition-transform hover:scale-110`} 
+              onClick={() => setMicroStep(1)} 
+            />
             <div className={`step-line ${microStep >= 2 ? 'is-active' : ''}`} />
-            <div className={`step-dot ${microStep >= 2 ? 'is-active' : ''}`} />
+            <button 
+              type="button"
+              className={`step-dot ${microStep >= 2 ? 'is-active' : ''} ${uploadedFile ? 'cursor-pointer transition-transform hover:scale-110' : 'opacity-50 cursor-not-allowed'}`} 
+              disabled={!uploadedFile}
+              onClick={() => { if (uploadedFile) setMicroStep(2); }} 
+            />
             <div className={`step-line ${microStep >= 3 ? 'is-active' : ''}`} />
-            <div className={`step-dot ${microStep >= 3 ? 'is-active' : ''}`} />
+            <button 
+              type="button"
+              className={`step-dot ${microStep >= 3 ? 'is-active' : ''} ${analysisResult ? 'cursor-pointer transition-transform hover:scale-110' : 'opacity-50 cursor-not-allowed'}`} 
+              disabled={!analysisResult}
+              onClick={() => { if (analysisResult) setMicroStep(3); }} 
+            />
           </div>
         </div>
 
@@ -3172,33 +3192,49 @@ export function CourseWorkspacePage({
               </div>
 
               <div className="flex flex-col items-center justify-center py-12 gap-6 w-full">
-                <p className="text-center text-muted max-w-md">
-                  {isAnalyzing ? 'El sistema está procesando el archivo en tiempo real. Por favor, manten la ventana abierta.' : 'El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.'}
-                </p>
-                
-                {isAnalyzing && (
-                  <div className="w-full max-w-sm mb-2 animate-in fade-in duration-500">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-ocean font-medium">{analysisStatus}</span>
-                      <span className="text-ocean font-bold">{analysisProgress}%</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
-                      <div 
-                        className="bg-ocean h-full rounded-full transition-all duration-300 ease-out" 
-                        style={{ width: `${analysisProgress}%` }}
-                      />
-                    </div>
+                {analysisResult && !isAnalyzing ? (
+                  <div className="w-full max-w-sm mb-4 animate-in fade-in py-6 px-4 bg-sage/10 rounded-xl border border-sage/20 text-center flex flex-col items-center">
+                    <CheckCircle2 size={32} className="mb-2 text-sage" />
+                    <strong className="text-secondary text-lg">Análisis estructurado listo</strong>
+                    <p className="text-sm text-muted mt-1 mb-6">El documento ya fue analizado previamente.</p>
+                    <button className="cta-button w-full justify-center" onClick={() => setMicroStep(3)}>
+                      Continuar a revisión final <MoveRight size={16} className="ml-2" />
+                    </button>
+                    <button className="ghost-button w-full justify-center mt-3 text-xs" onClick={handleMicroAnalysis}>
+                      <RefreshCcw size={14} className="mr-1 inline-block" /> Extraer de nuevo
+                    </button>
                   </div>
+                ) : (
+                  <>
+                    <p className="text-center text-muted max-w-md">
+                      {isAnalyzing ? 'El sistema está procesando el archivo en tiempo real. Por favor, manten la ventana abierta.' : 'El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.'}
+                    </p>
+                    
+                    {isAnalyzing && (
+                      <div className="w-full max-w-sm mb-2 animate-in fade-in duration-500">
+                        <div className="flex justify-between text-sm mb-2">
+                          <span className="text-ocean font-medium">{analysisStatus}</span>
+                          <span className="text-ocean font-bold">{analysisProgress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                          <div 
+                            className="bg-ocean h-full rounded-full transition-all duration-300 ease-out" 
+                            style={{ width: `${analysisProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <button 
+                      className="cta-button cta-button--large outline-none" 
+                      onClick={handleMicroAnalysis}
+                      disabled={isAnalyzing}
+                    >
+                      {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                      <span>{isAnalyzing ? analysisStatus : 'Importar y Analizar Datos'}</span>
+                    </button>
+                  </>
                 )}
-                
-                <button 
-                  className="cta-button cta-button--large outline-none" 
-                  onClick={handleMicroAnalysis}
-                  disabled={isAnalyzing}
-                >
-                  {isAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
-                  <span>{isAnalyzing ? analysisStatus : 'Importar y Analizar Datos'}</span>
-                </button>
               </div>
             </div>
           )}
@@ -3206,8 +3242,8 @@ export function CourseWorkspacePage({
           {microStep === 3 && analysisResult && (
             <div className="success-board">
               <div className="flex flex-col items-center justify-center py-8 gap-4">
-                <div className="success-icon-anim">
-                  <CheckCircle2 size={64} className="text-sage" />
+                <div className="success-icon-anim flex justify-center w-full">
+                  <CheckCircle2 size={72} className="text-sage animate-bounce" />
                 </div>
                 <div className="text-center">
                   <h4 className="text-xl">Análisis Completado</h4>
@@ -5168,11 +5204,11 @@ export function CourseWorkspacePage({
                       <div className="field__control field__control--textarea">
                         <textarea
                           rows={3}
-                          value={metadataForm.evaluation}
+                          value={joinLines(metadataForm.evaluation)}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
                               ...current,
-                              evaluation: event.target.value,
+                              evaluation: splitLines(event.target.value),
                             }))
                           }
                           required
@@ -5299,25 +5335,125 @@ export function CourseWorkspacePage({
                         <span>Descripción del curso</span>
                         <textarea rows={4} value={analysisResult.descripcionCurso} onChange={(e) => setAnalysisResult({ ...analysisResult, descripcionCurso: e.target.value })} />
                       </label>
-                      <label className="field field--full">
-                         <span>Resultados de aprendizaje (uno por línea)</span>
-                         <textarea rows={6} value={analysisResult.resultadosAprendizaje?.join('\n')} onChange={(e) => setAnalysisResult({ ...analysisResult, resultadosAprendizaje: e.target.value.split('\n') })} />
+                      <label className="field field--full mb-6 relative">
+                         <span className="mb-2 block font-medium">Resultados de aprendizaje</span>
+                         <div className="flex flex-col gap-2">
+                            {Array.isArray(analysisResult.resultadosAprendizaje) && analysisResult.resultadosAprendizaje.map((res: string, idx: number) => (
+                              <div key={idx} className="flex gap-2 items-start">
+                                <textarea rows={2} className="flex-1 min-h-[60px]" value={res} onChange={(e) => {
+                                  const arr = [...analysisResult.resultadosAprendizaje];
+                                  arr[idx] = e.target.value;
+                                  setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
+                                }} />
+                                <button className="danger-button danger-button--ghost mt-2 shrink-0" onClick={() => {
+                                  const arr = [...analysisResult.resultadosAprendizaje];
+                                  arr.splice(idx, 1);
+                                  setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
+                                }}><Trash2 size={16} /></button>
+                              </div>
+                            ))}
+                            <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, resultadosAprendizaje: [...(analysisResult.resultadosAprendizaje||[]), '']})}>
+                              <Plus size={14} className="mr-1 inline-block" /> Agregar resultado
+                            </button>
+                         </div>
                       </label>
                     </div>
                   </article>
 
-                   <article className="detail-section">
+                  <article className="detail-section">
+                    <div className="section-heading">
+                      <h3>Estructura Curricular (Unidades y Temáticas)</h3>
+                    </div>
+                    <div className="flex flex-col gap-6">
+                      {Array.isArray(analysisResult.unidades) && analysisResult.unidades.map((unidad: any, idx: number) => (
+                        <div key={idx} className="surface section-card" style={{ padding: '16px' }}>
+                          <div className="flex items-start gap-4 mb-4">
+                             <label className="field flex-1">
+                               <span className="text-secondary text-sm font-medium">Nombre de la Unidad o Módulo</span>
+                               <input value={unidad.tituloUnidad || ''} onChange={(e) => {
+                                   const arr = [...analysisResult.unidades];
+                                   arr[idx] = { ...arr[idx], tituloUnidad: e.target.value };
+                                   setAnalysisResult({ ...analysisResult, unidades: arr });
+                                 }} 
+                               />
+                             </label>
+                             <button className="danger-button danger-button--ghost mt-6 shrink-0" onClick={() => {
+                                  const arr = [...analysisResult.unidades];
+                                  arr.splice(idx, 1);
+                                  setAnalysisResult({ ...analysisResult, unidades: arr });
+                                }}><Trash2 size={16} /></button>
+                          </div>
+                          <label className="field field--full">
+                            <span className="text-secondary text-sm font-medium mb-2 block">Temáticas Específicas</span>
+                            <div className="flex flex-col gap-2">
+                              {Array.isArray(unidad.tematicas) && unidad.tematicas.map((tema: string, tIdx: number) => (
+                                <div key={tIdx} className="flex gap-2">
+                                   <input className="flex-1" value={tema} onChange={(e) => {
+                                       const arr = [...analysisResult.unidades];
+                                       const newTemas = [...arr[idx].tematicas];
+                                       newTemas[tIdx] = e.target.value;
+                                       arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                       setAnalysisResult({ ...analysisResult, unidades: arr });
+                                     }}
+                                   />
+                                   <button className="danger-button danger-button--ghost shrink-0" onClick={() => {
+                                         const arr = [...analysisResult.unidades];
+                                         const newTemas = [...arr[idx].tematicas];
+                                         newTemas.splice(tIdx, 1);
+                                         arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                         setAnalysisResult({ ...analysisResult, unidades: arr });
+                                      }}><Trash2 size={16} /></button>
+                                </div>
+                              ))}
+                              <button className="ghost-button self-start text-xs mt-1" onClick={() => {
+                                   const arr = [...analysisResult.unidades];
+                                   const newTemas = Array.isArray(arr[idx].tematicas) ? [...arr[idx].tematicas] : [];
+                                   newTemas.push('');
+                                   arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                   setAnalysisResult({ ...analysisResult, unidades: arr });
+                                }}>
+                                <Plus size={14} className="mr-1 inline-block" /> Añadir tema
+                              </button>
+                            </div>
+                          </label>
+                        </div>
+                      ))}
+                      <button className="ghost-button self-start" onClick={() => setAnalysisResult({...analysisResult, unidades: [...(analysisResult.unidades||[]), { tituloUnidad: 'Nueva Unidad', tematicas: [''] }]})}>
+                        <Plus size={16} className="mr-1 inline-block" /> Agregar Unidad Curricular
+                      </button>
+                    </div>
+                  </article>
+
+                  <article className="detail-section">
                     <div className="section-heading">
                       <h3>Metodología y Evaluación</h3>
                     </div>
                     <div className="form-grid">
                       <label className="field field--full">
-                        <span>Metodología</span>
-                        <textarea rows={3} value={analysisResult.metodologia} onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} />
+                        <span>Metodología de impartición</span>
+                        <textarea rows={4} value={analysisResult.metodologia} onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} />
                       </label>
-                      <label className="field field--full">
-                        <span>Evaluación</span>
-                        <textarea rows={3} value={analysisResult.evaluacion} onChange={(e) => setAnalysisResult({ ...analysisResult, evaluacion: e.target.value })} />
+                      <label className="field field--full relative">
+                        <span className="mb-2 block font-medium">Ítems de evaluación y rúbrica</span>
+                        <div className="flex flex-col gap-2">
+                            {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
+                              <div key={idx} className="flex gap-2 items-start">
+                                <textarea rows={1} className="flex-1 min-h-[40px]" value={ev} onChange={(e) => {
+                                  const arr = [...analysisResult.evaluacion];
+                                  arr[idx] = e.target.value;
+                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                                }} />
+                                <button className="danger-button danger-button--ghost mt-1 shrink-0" onClick={() => {
+                                  const arr = [...analysisResult.evaluacion];
+                                  arr.splice(idx, 1);
+                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                                }}><Trash2 size={16} /></button>
+                              </div>
+                            ))}
+                            <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, evaluacion: [...(analysisResult.evaluacion||[]), '']})}>
+                              <Plus size={14} className="mr-1 inline-block" /> Agregar ítem de evaluación
+                            </button>
+                         </div>
                       </label>
                     </div>
                   </article>
@@ -5327,7 +5463,25 @@ export function CourseWorkspacePage({
                       <h3>Bibliografía</h3>
                     </div>
                     <label className="field field--full">
-                       <textarea rows={5} value={analysisResult.bibliografia?.join('\n')} onChange={(e) => setAnalysisResult({ ...analysisResult, bibliografia: e.target.value.split('\n') })} />
+                       <div className="flex flex-col gap-2">
+                          {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.map((bib: string, idx: number) => (
+                            <div key={idx} className="flex gap-2 items-start">
+                              <textarea rows={2} className="flex-1 min-h-[60px]" value={bib} onChange={(e) => {
+                                const arr = [...analysisResult.bibliografia];
+                                arr[idx] = e.target.value;
+                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                              }} />
+                              <button className="danger-button danger-button--ghost mt-2 shrink-0" onClick={() => {
+                                const arr = [...analysisResult.bibliografia];
+                                arr.splice(idx, 1);
+                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                              }}><Trash2 size={16} /></button>
+                            </div>
+                          ))}
+                          <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, bibliografia: [...(analysisResult.bibliografia||[]), '']})}>
+                            <Plus size={14} className="mr-1 inline-block" /> Agregar referencia
+                          </button>
+                       </div>
                     </label>
                   </article>
                 </main>

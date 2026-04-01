@@ -155,8 +155,9 @@ export interface CourseMetadata {
   courseType: string;
   learningOutcomes: string[];
   topics: string[];
+  units: { tituloUnidad: string; tematicas: string[] }[];
   methodology: string;
-  evaluation: string;
+  evaluation: string[];
   bibliography: string[];
   targetCloseDate: string;
   currentVersion: string;
@@ -565,8 +566,9 @@ export interface CourseMetadataMutationInput {
   courseType: string;
   learningOutcomes: string[];
   topics: string[];
+  units: { tituloUnidad: string; tematicas: string[] }[];
   methodology: string;
-  evaluation: string;
+  evaluation: string[];
   bibliography: string[];
   targetCloseDate: string;
   currentVersion: string;
