@@ -86,7 +86,9 @@ export type CourseProductFormat =
   | 'Pódcast'
   | 'Lectura'
   | 'Infografía'
-  | 'Rúbrica';
+  | 'Rúbrica'
+  | 'Video'
+  | 'RED';
 export type CourseProductStatus = 'Borrador' | 'En revisión' | 'Aprobado';
 
 export interface StageDefinition {
@@ -214,6 +216,7 @@ export interface CourseProduct {
   body: string;
   tags: string[];
   version: string;
+  section?: string;
   updatedAt: string;
 }
 
@@ -620,6 +623,7 @@ export interface CourseProductMutationInput {
   body: string;
   tags: string[];
   version: string;
+  section?: string;
 }
 
 export interface DeliverableMutationInput {

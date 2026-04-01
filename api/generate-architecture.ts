@@ -107,13 +107,17 @@ export default async function handler(request: Request | any, response?: any) {
 
       REGLA DE SALIDA:
       Devuelve un JSON estrictamente estructurado en tres bloques: "introduccion", "unidades" y "cierre".
-      Cada bloque es un arreglo de productos con: title, summary, format (ej: VIDEO, SCORM, PDF), y section (nombre de la sección o unidad).
+      Cada bloque es un arreglo de productos con: title, summary, format (ej: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación), y section (nombre de la sección o unidad).
+
+      Asegúrate de que el campo "format" coincida EXACTAMENTE con uno de estos valores: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación.
+
+      Asegúrate de que el campo "section" sea "Introducción", "Cierre" o el nombre de la unidad (ej: "Unidad 1").
 
       Ejemplo de formato:
       {
-        "introduccion": [{ "title": "Video de presentación", "summary": "...", "format": "VIDEO", "section": "Introducción" }],
-        "unidades": [{ "title": "Lectura fundamental U1", "summary": "...", "format": "PDF", "section": "Unidad 1" }],
-        "cierre": [{ "title": "Examen final", "summary": "...", "format": "SCORM", "section": "Cierre" }]
+        "introduccion": [{ "title": "Video de presentación", "summary": "...", "format": "Video", "section": "Introducción" }],
+        "unidades": [{ "title": "Lectura fundamental U1", "summary": "...", "format": "Documento", "section": "Unidad 1" }],
+        "cierre": [{ "title": "Examen final", "summary": "...", "format": "Evaluación", "section": "Cierre" }]
       }`;
 
       notify({ progress: 40, step: 'IA diseñando ruta instruccional...' });

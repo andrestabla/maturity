@@ -1030,6 +1030,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     body: input.body,
     tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
     version: input.version,
+    section: input.section,
     updatedAt: getTodayLabel(),
   };
 }
@@ -4428,7 +4429,8 @@ export async function updateCourseProductRecord(
     updatedProduct = {
       ...product,
       ...input,
-      tags: input.tags ? input.tags.map((tag) => tag.trim()).filter(Boolean) : product.tags,
+      tags: input.tags ? (input.tags as string[]).map((tag) => tag.trim()).filter(Boolean) : product.tags,
+      section: input.section ?? product.section,
       updatedAt: getTodayLabel(),
     };
 

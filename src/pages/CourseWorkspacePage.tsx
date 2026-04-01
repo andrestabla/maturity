@@ -599,6 +599,9 @@ export function CourseWorkspacePage({
       ? syncCourseStructureFields(appData, makeCourseForm(course))
       : syncCourseStructureFields(appData, buildEmptyCourseForm(currentStageId)),
   );
+
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [activeAddSection, setActiveAddSection] = useState<string>('');
   const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
     makeTaskForm(currentCourseSlug, currentStageId),
   );
@@ -2791,19 +2794,19 @@ export function CourseWorkspacePage({
 
               // Creamos los productos en lote (secuencial para evitar colisiones de estado en demo)
               for (const item of allSuggested) {
-                const sectionPrefix = item.section ? `[${item.section}] ` : '';
                 await fetch('/api/course-products', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     courseSlug: currentCourse.slug,
-                    title: `${sectionPrefix}${item.title}`,
+                    title: item.title,
                     summary: item.summary,
                     format: item.format,
                     stage: 'arquitectura',
                     owner: userRole,
                     status: 'Borrador',
-                    version: '1.0'
+                    version: '1.0',
+                    section: item.section
                   })
                 });
               }
@@ -2832,38 +2835,49 @@ export function CourseWorkspacePage({
     }
   }
 
-  async function handleQuickAddProduct(sectionName: string) {
+  function handleQuickAddProduct(sectionName: string) {
     if (!currentCourse) return;
 
-    const title = window.prompt(`Nuevo producto para ${sectionName}. Ingresa el nombre:`);
+    setNewProductForm({
+      title: '',
+      summary: '',
+      format: 'Video',
+      stage: 'arquitectura',
+      owner: userRole,
+      status: 'Borrador',
+      body: '',
+      tags: [],
+      version: '1.0',
+      section: sectionName,
+    });
+    setActiveAddSection(sectionName);
+    setIsAddProductModalOpen(true);
+  }
 
-    if (!title) return;
+  async function handleCreateProduct() {
+     if (!currentCourse || !newProductForm.title) return;
 
-    try {
-      const response = await fetch('/api/course-products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          title,
-          summary: `Producto agregado manualmente a la sección ${sectionName}`,
-          format: 'DIGITAL',
-          stage: 'arquitectura',
-          owner: userRole,
-          status: 'Borrador',
-          version: '1.0'
-        })
-      });
+     setIsProductSaving('new');
+     try {
+       const response = await fetch('/api/course-products', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           courseSlug: currentCourse.slug,
+           ...newProductForm,
+         })
+       });
 
-      if (!response.ok) throw new Error('Error al crear el producto');
-      refreshAppData();
-    } catch (error) {
-      await showAlert({
-        tone: 'error',
-        title: 'Error al agregar',
-        message: 'No fue posible crear el producto manual.'
-      });
-    }
+       if (!response.ok) throw new Error('Error al crear el producto');
+       
+       setIsAddProductModalOpen(false);
+       refreshAppData();
+     } catch (error) {
+       const message = error instanceof Error ? error.message : 'Error al crear producto';
+       setProductError(message);
+     } finally {
+       setIsProductSaving(null);
+     }
   }
 
   async function handleProductSave(productId: string) {
@@ -4004,31 +4018,37 @@ export function CourseWorkspacePage({
     const units = currentCourse.metadata.units || [];
     
     // Categorización de productos estricta
+    // Categorización de productos estricta por campo 'section'
     const introProducts = products.filter(p => 
-      p.title.toLocaleLowerCase().includes('introducción') || 
-      p.title.toLocaleLowerCase().includes('bienvenida') ||
-      p.title.toLocaleLowerCase().includes('[introducción]') ||
-      p.summary?.toLocaleLowerCase().includes('introducción')
+      p.section === 'Introducción' || 
+      (!p.section && (
+        p.title.toLocaleLowerCase().includes('introducción') || 
+        p.title.toLocaleLowerCase().includes('bienvenida') ||
+        p.title.toLocaleLowerCase().includes('[introducción]')
+      ))
     );
     
     const closureProducts = products.filter(p => 
-      p.title.toLocaleLowerCase().includes('cierre') || 
-      p.title.toLocaleLowerCase().includes('final') || 
-      p.title.toLocaleLowerCase().includes('examen') ||
-      p.title.toLocaleLowerCase().includes('[cierre]') ||
-      p.summary?.toLocaleLowerCase().includes('cierre')
+      p.section === 'Cierre' || 
+      (!p.section && (
+        p.title.toLocaleLowerCase().includes('cierre') || 
+        p.title.toLocaleLowerCase().includes('final') || 
+        p.title.toLocaleLowerCase().includes('examen') ||
+        p.title.toLocaleLowerCase().includes('[cierre]')
+      ))
     );
 
     const unitProductsMap = units.map((unit, idx) => {
        const uNumber = idx + 1;
-       const unitTag = `[unidad ${uNumber}]`;
+       const unitLabel = `Unidad ${uNumber}`;
        return {
          unit,
          products: products.filter(p => 
-           p.title.toLocaleLowerCase().includes(`unidad ${uNumber}`) || 
-           p.title.toLocaleLowerCase().includes(unitTag) ||
-           p.summary?.toLocaleLowerCase().includes(`unidad ${uNumber}`) ||
-           (p.summary && p.summary.includes(unit.tituloUnidad))
+           p.section === unitLabel || 
+           (!p.section && (
+             p.title.toLocaleLowerCase().includes(`unidad ${uNumber}`) || 
+             p.title.toLocaleLowerCase().includes(`[unidad ${uNumber}]`)
+           ))
          )
        };
     });
@@ -4179,6 +4199,96 @@ export function CourseWorkspacePage({
           </ModalFrame>
         ) : null}
 
+        {/* Modal: Agregar Producto Manual */}
+        {isAddProductModalOpen && (
+          <ModalFrame
+            title={`Nuevo producto - ${activeAddSection}`}
+            onClose={() => setIsAddProductModalOpen(false)}
+            footer={
+              <div className="flex justify-end gap-3 w-full">
+                <button 
+                  className="ghost-button" 
+                  onClick={() => setIsAddProductModalOpen(false)}
+                  disabled={isProductSaving === 'new'}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  className="cta-button" 
+                  onClick={() => void handleCreateProduct()}
+                  disabled={isProductSaving === 'new' || !newProductForm.title}
+                >
+                  {isProductSaving === 'new' ? (
+                    <RefreshCcw size={16} className="animate-spin mr-2" />
+                  ) : (
+                    <Plus size={16} className="mr-2" />
+                  )}
+                  Crear Producto
+                </button>
+              </div>
+            }
+            width="md"
+          >
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nombre del producto</label>
+                <input
+                  type="text"
+                  className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all font-medium text-lg"
+                  value={newProductForm.title}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, title: e.target.value })}
+                  placeholder="Ej: Video tutorial sobre X"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo / Formato</label>
+                  <select
+                    className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all appearance-none cursor-pointer"
+                    value={newProductForm.format}
+                    onChange={(e) => setNewProductForm({ ...newProductForm, format: e.target.value as any })}
+                  >
+                    <option value="Video">🎥 Video</option>
+                    <option value="Pódcast">🎙️ Pódcast</option>
+                    <option value="Infografía">📊 Infografía</option>
+                    <option value="RED">🌐 RED (Recurso Digital)</option>
+                    <option value="Documento">📄 Documento / PDF</option>
+                    <option value="Actividad">📝 Actividad / Taller</option>
+                    <option value="Lectura">📖 Lectura</option>
+                    <option value="Evaluación">🎯 Evaluación / Examen</option>
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Estado Inicial</label>
+                  <div className="flex items-center h-[52px] px-4 bg-muted/30 rounded-xl border border-border/50 text-muted-foreground italic text-sm">
+                    Borrador (Predeterminado)
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descripción / Propósito</label>
+                <textarea
+                  rows={4}
+                  className="w-full bg-input border border-border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-ocean/50 transition-all resize-none"
+                  value={newProductForm.summary}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, summary: e.target.value })}
+                  placeholder="Describe brevemente qué se espera de este producto..."
+                />
+              </div>
+
+              {productError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
+                  {productError}
+                </div>
+              )}
+            </div>
+          </ModalFrame>
+        )}
+
         {isGeneratingArchitecture && (
           <div className="architecture-overlay animate-in fade-in duration-500">
              <div className="extraction-status-card surface shadow-2xl p-10 rounded-3xl flex flex-col items-center gap-8 max-w-md w-full">
@@ -4218,6 +4328,19 @@ export function CourseWorkspacePage({
     );
   }
 
+  function renderProductFormatIcon(format: string) {
+    const f = format.toLocaleLowerCase();
+    if (f.includes('video')) return '🎥';
+    if (f.includes('pódcast')) return '🎙️';
+    if (f.includes('infografía')) return '📊';
+    if (f.includes('red')) return '🌐';
+    if (f.includes('documento') || f.includes('pdf')) return '📄';
+    if (f.includes('actividad') || f.includes('taller')) return '📝';
+    if (f.includes('lectura')) return '📖';
+    if (f.includes('evaluación') || f.includes('examen')) return '🎯';
+    return '📦';
+  }
+
   function renderArchitectureProductCard(product: CourseProduct) {
     const isDone = product.status === 'Aprobado';
     const isActive = product.status === 'Borrador' || product.status === 'En revisión';
@@ -4225,19 +4348,27 @@ export function CourseWorkspacePage({
     return (
       <div 
         key={product.id} 
-        className={`product-block ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : 'is-pending'}`}
+        className={`product-block ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : 'is-pending'} group transition-all hover:scale-[1.02] active:scale-95`}
         onClick={() => {
            setActiveWorkspaceOverlay(`products:arquitectura`);
         }}
       >
         <div className="product-block__head">
-          <span className="product-block__type">{product.format || 'DIGITAL'}</span>
-          <ExternalLink size={10} className="text-muted" />
+          <span className="product-block__type flex items-center gap-1.5 leading-none">
+            <span className="text-sm">{renderProductFormatIcon(product.format)}</span>
+            <span className="uppercase tracking-tight opacity-80">{product.format}</span>
+          </span>
+          <ExternalLink size={10} className="text-muted group-hover:text-ocean transition-colors" />
         </div>
-        <h5 className="product-block__title line-clamp-2">{product.title}</h5>
-        <div className="product-block__meta">
+        <h5 className="product-block__title line-clamp-2 title-sm mt-1">{product.title}</h5>
+        {product.summary && (
+          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {product.summary}
+          </p>
+        )}
+        <div className="product-block__meta mt-2 pt-2 border-t border-border/10">
           <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
-          <span>v{product.version}</span>
+          <span className="text-[10px] opacity-40">v{product.version}</span>
         </div>
       </div>
     );
