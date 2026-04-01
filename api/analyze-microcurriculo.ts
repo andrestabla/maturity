@@ -4,7 +4,8 @@ import { errorResponse, jsonResponse } from '../lib/http.js';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-import pdf from 'pdf-parse';
+// @ts-expect-error Importación directa para sortear bug de Vercel Serverless (fs ENOENT)
+import pdf from 'pdf-parse/lib/pdf-parse.js';
 
 export const config = {
   runtime: 'nodejs',
