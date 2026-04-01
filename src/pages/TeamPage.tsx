@@ -18,6 +18,8 @@ import {
   UserPlus,
   UsersRound,
   Waypoints,
+  FileUp,
+  Sparkles,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ModalFrame } from '../components/ModalFrame.js';
@@ -391,6 +393,11 @@ export function TeamPage({
   );
   const logoFileInputRef = useRef<HTMLInputElement | null>(null);
   const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
+  const guidelinesFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isExtractingGuidelines, setIsExtractingGuidelines] = useState(false);
+  const [extractionStep, setExtractionStep] = useState('');
+  const [extractionProgress, setExtractionProgress] = useState(0);
+
   const activeStructureRouteId =
     institutionStructureEditMatch?.params.structureId ??
     institutionStructureDetailMatch?.params.structureId ??
@@ -1380,6 +1387,105 @@ export function TeamPage({
       if (slot === 'favicon' && faviconFileInputRef.current) {
         faviconFileInputRef.current.value = '';
       }
+    }
+  }
+
+  async function handleGuidelinesExtract(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file || !structureDraft) {
+      return;
+    }
+
+    setIsExtractingGuidelines(true);
+    setExtractionProgress(5);
+    setExtractionStep('Iniciando carga...');
+    setSettingsError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const responseUpload = await fetch('/api/uploads', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData,
+      });
+
+      const uploadPayload = (await responseUpload.json()) as UploadResponse | { error?: string };
+
+      if (!responseUpload.ok) {
+        throw new Error((uploadPayload as { error?: string }).error ?? 'Error al subir documento.');
+      }
+
+      const { key } = uploadPayload as UploadResponse;
+      setExtractionStep('Documento en la nube. Solicitando análisis IA...');
+      setExtractionProgress(30);
+
+      const responseAI = await fetch('/api/extract-guidelines', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+
+      if (!responseAI.ok) {
+        throw new Error('Error al conectar con la IA de extracción.');
+      }
+
+      const reader = responseAI.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) throw new Error('No fue posible abrir el canal de la IA.');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunks = decoder.decode(value, { stream: true }).split('\n\n');
+
+        for (const chunk of chunks) {
+          if (!chunk.trim() || !chunk.startsWith('data: ')) continue;
+          
+          try {
+            const payload = JSON.parse(chunk.replace('data: ', '').trim());
+            
+            if (payload.progress) setExtractionProgress(payload.progress);
+            if (payload.step) setExtractionStep(payload.step);
+            
+            if (payload.complete && payload.data) {
+              const extracted = payload.data as string[];
+              setStructureDraft(current => {
+                if (!current) return current;
+                const existing = current.pedagogicalGuidelines.filter(Boolean);
+                const next = Array.from(new Set([...existing, ...extracted])).filter(Boolean);
+                return {
+                  ...current,
+                  pedagogicalGuidelines: next.length > 0 ? next : ['']
+                };
+              });
+
+              await showAlert({
+                tone: 'success',
+                title: 'Lineamientos extraídos',
+                message: `Se han identificado ${extracted.length} reglas pedagógicas en el documento y se han integrado a la estructura.`
+              });
+            }
+
+            if (payload.error) throw new Error(payload.error);
+          } catch (e) {
+            console.error('Extraction event parse error:', e);
+          }
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falla crítica en la extracción IA.';
+      setSettingsError(message);
+      await showAlert({ tone: 'error', title: 'Error de extracción', message });
+    } finally {
+      setIsExtractingGuidelines(false);
+      setExtractionStep('');
+      setExtractionProgress(0);
+      if (guidelinesFileInputRef.current) guidelinesFileInputRef.current.value = '';
     }
   }
 
@@ -2390,14 +2496,35 @@ export function TeamPage({
               </div>
             ))}
 
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => appendStructureDraftListField(key)}
-            >
-              <Plus size={16} />
-              <span>{addLabel}</span>
-            </button>
+            <div className="action-row" style={{ marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={() => appendStructureDraftListField(key)}
+              >
+                <Plus size={14} />
+                <span>{addLabel}</span>
+              </button>
+
+              {key === 'pedagogicalGuidelines' && (
+                <button
+                  type="button"
+                  className="filter-chip filter-chip--active"
+                  onClick={() => guidelinesFileInputRef.current?.click()}
+                  disabled={isExtractingGuidelines}
+                >
+                  {isExtractingGuidelines ? (
+                    <RefreshCcw size={14} className="animate-spin" />
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <FileUp size={14} />
+                      <Sparkles size={14} />
+                    </div>
+                  )}
+                  <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -4732,6 +4859,50 @@ export function TeamPage({
       {activeTab === 'services' ? renderServicesTab() : null}
       {activeTab === 'logs' ? renderLogsTab() : null}
       {activeTab === 'audit' ? renderAuditTab() : null}
+
+      <input
+        ref={guidelinesFileInputRef}
+        type="file"
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+        onChange={handleGuidelinesExtract}
+      />
+
+      {isExtractingGuidelines && (
+        <div className="system-overlay animate-in fade-in duration-300">
+           <div className="extraction-status-card surface shadow-2xl p-8 rounded-2xl flex flex-col items-center gap-6 max-w-sm w-full mx-auto">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full border-4 border-panel flex items-center justify-center">
+                   <Sparkles size={32} className="text-ocean animate-pulse" />
+                </div>
+                <svg className="absolute top-0 left-0 w-20 h-20 -rotate-90">
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="38"
+                    fill="none"
+                    stroke="var(--ocean)"
+                    strokeWidth="4"
+                    strokeDasharray="238.76"
+                    strokeDashoffset={238.76 - (238.76 * extractionProgress) / 100}
+                    className="transition-all duration-500 ease-out"
+                  />
+                </svg>
+              </div>
+              <div className="text-center">
+                <span className="eyebrow block mb-1">Extracción Inteligente</span>
+                <h4 className="text-lg font-bold text-secondary">{extractionStep}</h4>
+                <p className="text-xs text-muted mt-2">Analizando semántica pedagógica del documento.</p>
+              </div>
+              <div className="w-full bg-panel rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className="bg-ocean h-full transition-all duration-500" 
+                  style={{ width: `${extractionProgress}%` }}
+                />
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 }
