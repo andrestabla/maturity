@@ -1,8 +1,11 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
+
 import { getIntegrationConfig } from '../lib/admin-center.js';
 import { getR2Object } from '../lib/r2.js';
 import { errorResponse, jsonResponse } from '../lib/http.js';
 import OpenAI from 'openai';
-import * as pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
@@ -36,8 +39,7 @@ export default async function handler(request: Request) {
     let extractedText = '';
 
     if (contentType.includes('pdf')) {
-      const pdfParser = (pdf as any).default || pdf;
-      const data = await pdfParser(buffer);
+      const data = await pdf(buffer);
       extractedText = data.text;
     } else if (contentType.includes('word') || key.endsWith('.doc') || key.endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer });
@@ -84,18 +86,30 @@ export default async function handler(request: Request) {
       response_format: { type: 'json_object' },
     });
 
-    const result = JSON.parse(chatCompletion.choices[0].message.content || '{}');
+    const rawResult = chatCompletion.choices[0].message.content || '{}';
+    let result;
+    try {
+      result = JSON.parse(rawResult);
+    } catch (e) {
+      console.error('OpenAI returned invalid JSON:', rawResult);
+      throw new Error('La IA no devolvió un formato válido de datos.');
+    }
 
     return jsonResponse({
       data: result,
       textPreview: extractedText.slice(0, 500) + '...',
     });
 
-  } catch (error) {
-    console.error('Análisis error:', error);
+  } catch (error: any) {
+    console.error('Microcurriculo analyze breakdown:', {
+      error: error.message,
+      stack: error.stack,
+      key
+    });
+
     return errorResponse(
       500,
-      error instanceof Error ? error.message : 'No fue posible analizar el microcurrículo.'
+      typeof error === 'string' ? error : (error.message || 'Error interno durante el análisis.')
     );
   }
 }

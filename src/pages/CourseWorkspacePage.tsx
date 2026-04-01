@@ -3028,6 +3028,12 @@ export function CourseWorkspacePage({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: uploadedFile.key }),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('El servidor devolvió un error inesperado. Por favor, revisa que el archivo sea válido o intenta de nuevo más tarde.');
+      }
+
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Fallo en análisis.');
       
@@ -3123,7 +3129,7 @@ export function CourseWorkspacePage({
 
               <div className="flex flex-col items-center justify-center py-12 gap-6">
                 <p className="text-center text-muted max-w-md">
-                  El motor de IA está listo para extraer parámetros académicos, resultados de aprendizaje e indicadores del documento.
+                  El asistente de IA está listo para extraer la información académica, resultados de aprendizaje y unidades del documento.
                 </p>
                 <button 
                   className="cta-button cta-button--large" 
@@ -3867,7 +3873,7 @@ export function CourseWorkspacePage({
                  <h3>Asistencias de IA</h3>
                </div>
                <p className="text-sm text-muted">
-                 El asistente de microcurrículo utiliza GPT-4o para asegurar que los resultados de aprendizaje y la bibliografía cumplan con los estándares institucionales.
+                 El asistente de microcurrículo utiliza GPT-4o para extraer automáticamente la información base del curso desde tus documentos.
                </p>
              </div>
           </aside>
