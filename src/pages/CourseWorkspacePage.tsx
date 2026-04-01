@@ -615,6 +615,7 @@ export function CourseWorkspacePage({
   const [isGeneratingArchitecture, setIsGeneratingArchitecture] = useState(false);
   const [architectureStep, setArchitectureStep] = useState('');
   const [architectureProgress, setArchitectureProgress] = useState(0);
+  const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
     course ? makeMetadataForm(course) : makeMetadataForm({
       id: '',
@@ -4026,33 +4027,49 @@ export function CourseWorkspacePage({
        };
     });
 
+    const institutionStructure = appData.institution.structures.find(
+      (s) => s.id === currentCourse.institutionStructureId,
+    );
+    const guidelines = institutionStructure?.pedagogicalGuidelines || [];
+
     return (
       <div className="architecture-map architecture-map--full animate-in fade-in slide-in-from-bottom-4 duration-700">
         <header className="architecture-header">
-          <div className="flex justify-between items-start gap-6">
-            <div className="flex-1">
+          <div className="flex justify-between items-center">
+            <div>
               <span className="eyebrow">Arquitectura del Curso</span>
-              <h2 className="text-3xl font-bold text-secondary mt-1">Mapa de Diseño Instruccional</h2>
-              <div className="architecture-guidelines mt-4">
-                {institutionGuidelines.map((guideline, idx) => (
-                  <div key={idx} className="guideline-tag">
-                    <ClipboardCheck size={10} className="inline mr-1" />
-                    {guideline}
-                  </div>
-                ))}
-              </div>
+              <h2 className="text-2xl font-bold text-secondary mt-1">Mapa de Diseño Instruccional</h2>
             </div>
             
-            <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-3">
               <button 
+                type="button"
+                className="ghost-button" 
+                onClick={() => setIsGuidelinesModalOpen(true)}
+              >
+                <ClipboardCheck size={16} />
+                <span>Ver lineamientos</span>
+              </button>
+
+              <button 
+                type="button"
                 className="cta-button shadow-lg shadow-ocean/20" 
                 onClick={() => void handleGenerateArchitecture()}
                 disabled={isGeneratingArchitecture}
               >
-                {isGeneratingArchitecture ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {isGeneratingArchitecture ? (
+                  <RefreshCcw size={16} className="animate-spin" />
+                ) : (
+                  <Sparkles size={16} />
+                )}
                 <span>{isGeneratingArchitecture ? 'Procesando...' : 'Actualizar arquitectura (IA)'}</span>
               </button>
-              <button className="ghost-button" onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}>
+
+              <button 
+                type="button"
+                className="ghost-button" 
+                onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}
+              >
                 <PencilLine size={14} />
                 <span>Gestionar inventario</span>
               </button>
@@ -4131,6 +4148,35 @@ export function CourseWorkspacePage({
             </div>
           </div>
         </div>
+        
+        {isGuidelinesModalOpen ? (
+          <ModalFrame
+            eyebrow="Pedagogía"
+            title="Lineamientos institucionales"
+            description="Marco normativo y pedagógico que rige el diseño de productos para este curso."
+            width="md"
+            onClose={() => setIsGuidelinesModalOpen(false)}
+          >
+            <div className="page-stack">
+              <div className="list-stack">
+                {guidelines.length > 0 ? (
+                  guidelines.map((text, index) => (
+                    <div key={index} className="list-item">
+                      <div className="flex items-start gap-3">
+                        <div className="status-dot status-dot--history mt-1" />
+                        <p className="text-sm leading-relaxed">{text}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="empty-block">
+                    No hay lineamientos específicos configurados para esta institución.
+                  </div>
+                )}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
 
         {isGeneratingArchitecture && (
           <div className="architecture-overlay animate-in fade-in duration-500">
@@ -4370,7 +4416,7 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'arquitectura' ? (
-        <section className="workspace-grid workspace-grid--full">
+        <section className="workspace-grid workspace-grid--full architecture-viewport">
            {renderArchitectureVisualizer()}
         </section>
       ) : null}

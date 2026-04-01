@@ -8431,6 +8431,27 @@ body::after {
   flex-direction: column;
   justify-content: center;
 }
+/* Layout Overrides for Full Width Architecture */
+.workspace-grid--full {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.architecture-viewport {
+  width: 100vw !important;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  padding: 0 48px 48px 48px !important;
+  background: var(--panel-strong);
+  min-height: calc(100vh - 120px);
+}
+
 /* Architecture Visualizer Styles - High Density & 100% Width */
 .architecture-map {
   display: flex;
