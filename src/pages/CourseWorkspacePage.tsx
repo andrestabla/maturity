@@ -2791,11 +2791,13 @@ export function CourseWorkspacePage({
 
               // Creamos los productos en lote (secuencial para evitar colisiones de estado en demo)
               for (const item of allSuggested) {
+                const sectionPrefix = item.section ? `[${item.section}] ` : '';
                 await fetch('/api/course-products', {
                   method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     courseSlug: currentCourse.slug,
-                    title: item.title,
+                    title: `${sectionPrefix}${item.title}`,
                     summary: item.summary,
                     format: item.format,
                     stage: 'arquitectura',
@@ -4005,6 +4007,7 @@ export function CourseWorkspacePage({
     const introProducts = products.filter(p => 
       p.title.toLocaleLowerCase().includes('introducción') || 
       p.title.toLocaleLowerCase().includes('bienvenida') ||
+      p.title.toLocaleLowerCase().includes('[introducción]') ||
       p.summary?.toLocaleLowerCase().includes('introducción')
     );
     
@@ -4012,15 +4015,18 @@ export function CourseWorkspacePage({
       p.title.toLocaleLowerCase().includes('cierre') || 
       p.title.toLocaleLowerCase().includes('final') || 
       p.title.toLocaleLowerCase().includes('examen') ||
+      p.title.toLocaleLowerCase().includes('[cierre]') ||
       p.summary?.toLocaleLowerCase().includes('cierre')
     );
 
     const unitProductsMap = units.map((unit, idx) => {
        const uNumber = idx + 1;
+       const unitTag = `[unidad ${uNumber}]`;
        return {
          unit,
          products: products.filter(p => 
            p.title.toLocaleLowerCase().includes(`unidad ${uNumber}`) || 
+           p.title.toLocaleLowerCase().includes(unitTag) ||
            p.summary?.toLocaleLowerCase().includes(`unidad ${uNumber}`) ||
            (p.summary && p.summary.includes(unit.tituloUnidad))
          )
@@ -4033,47 +4039,42 @@ export function CourseWorkspacePage({
     const guidelines = institutionStructure?.pedagogicalGuidelines || [];
 
     return (
-      <div className="architecture-map architecture-map--full animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="architecture-viewport-full architecture-map animate-in fade-in slide-in-from-bottom-4 duration-700">
         <header className="architecture-header">
-          <div className="flex justify-between items-center">
-            <div>
-              <span className="eyebrow">Arquitectura del Curso</span>
-              <h2 className="text-2xl font-bold text-secondary mt-1">Mapa de Diseño Instruccional</h2>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button 
-                type="button"
-                className="ghost-button" 
-                onClick={() => setIsGuidelinesModalOpen(true)}
-              >
-                <ClipboardCheck size={16} />
-                <span>Ver lineamientos</span>
-              </button>
+          <div className="flex items-center gap-4">
+             <button 
+               type="button"
+               className="action-pill action-pill--guidelines" 
+               onClick={() => setIsGuidelinesModalOpen(true)}
+             >
+               <ClipboardCheck size={16} />
+               <span>Lineamientos Institucionales</span>
+             </button>
 
-              <button 
-                type="button"
-                className="cta-button shadow-lg shadow-ocean/20" 
-                onClick={() => void handleGenerateArchitecture()}
-                disabled={isGeneratingArchitecture}
-              >
-                {isGeneratingArchitecture ? (
-                  <RefreshCcw size={16} className="animate-spin" />
-                ) : (
-                  <Sparkles size={16} />
-                )}
-                <span>{isGeneratingArchitecture ? 'Procesando...' : 'Actualizar arquitectura (IA)'}</span>
-              </button>
+             <div className="h-6 w-px bg-border/40 mx-2" />
 
-              <button 
-                type="button"
-                className="ghost-button" 
-                onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}
-              >
-                <PencilLine size={14} />
-                <span>Gestionar inventario</span>
-              </button>
-            </div>
+             <button 
+               type="button"
+               className="cta-button shadow-lg shadow-ocean/20" 
+               onClick={() => void handleGenerateArchitecture()}
+               disabled={isGeneratingArchitecture}
+             >
+               {isGeneratingArchitecture ? (
+                 <RefreshCcw size={16} className="animate-spin" />
+               ) : (
+                 <Sparkles size={16} />
+               )}
+               <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
+             </button>
+
+             <button 
+               type="button"
+               className="ghost-button ml-auto" 
+               onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}
+             >
+               <PencilLine size={14} />
+               <span>Inventario de productos</span>
+             </button>
           </div>
         </header>
 
@@ -4292,7 +4293,7 @@ export function CourseWorkspacePage({
         </div>
       </section>
 
-      {showFocusedStageHeader && focusedStageMeta ? (
+      {activeSection !== 'arquitectura' && showFocusedStageHeader && focusedStageMeta ? (
         <section className="surface section-card section-card--compact workspace-focus-head">
           <div className="workspace-focus-head__top">
             <div className="workspace-focus-head__copy">
@@ -4349,20 +4350,21 @@ export function CourseWorkspacePage({
               </div>
             </div>
 
-            <VerticalStageTimeline
-              stages={workflowStages}
-              currentStageId={currentStageId}
-              courseSlug={currentCourse.slug}
-              badgeClass={badgeClass}
-            />
+            <div className="timeline-rail">
+              <VerticalStageTimeline
+                stages={workflowStages as any}
+                currentStageId={currentStageId}
+                courseSlug={currentCourseSlug}
+                badgeClass={badgeClass}
+              />
+            </div>
           </div>
 
           <aside className="summary-sidebar">
-            <div className="summary-actions-card">
-              <div className="section-heading section-heading--compact">
+            <div className="surface section-card summary-actions-card">
+              <div className="section-heading mb-4">
                 <div>
-                  <span className="eyebrow">Estado microcurriculo</span>
-                  <h3>Progreso de avance</h3>
+                  <h4 className="text-sm font-semibold text-muted uppercase tracking-wider">Gestión</h4>
                 </div>
               </div>
 
@@ -4398,10 +4400,9 @@ export function CourseWorkspacePage({
 
       {activeSection === 'microcurriculo' ? (
         <section className="summary-workspace-grid">
-          <div className="page-stack">
+          <div className="surface section-card">
             {renderMicrocurriculoWizard()}
           </div>
-          
           <aside className="summary-sidebar">
              <div className="surface section-card section-card--compact">
                <div className="section-heading">
@@ -4411,14 +4412,20 @@ export function CourseWorkspacePage({
                  El asistente de microcurrículo utiliza GPT-4o para extraer automáticamente la información base del curso desde tus documentos.
                </p>
              </div>
+             {renderStageNoteEditor(
+               'microcurriculo', 
+               'Análisis', 
+               'Bitácora pedagógica', 
+               'Reflexiones sobre la coherencia del microcurrículo y hallazgos en la extracción de datos.'
+             )}
           </aside>
         </section>
       ) : null}
 
       {activeSection === 'arquitectura' ? (
-        <section className="workspace-grid workspace-grid--full architecture-viewport">
+        <div className="architecture-viewport-full animate-in fade-in duration-700">
            {renderArchitectureVisualizer()}
-        </section>
+        </div>
       ) : null}
 
       {activeSection === 'planeacion' ? (

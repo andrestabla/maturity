@@ -8452,6 +8452,90 @@ body::after {
   min-height: calc(100vh - 120px);
 }
 
+/* Architecture Full Panoramic View - BREAKOUT */
+.architecture-viewport-full {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: var(--panel-strong);
+  min-height: calc(100vh - 120px);
+  position: relative;
+  z-index: 10;
+}
+
+/* Force parent to be full width when architecture is active */
+.main-panel:has(.architecture-viewport-full),
+.content-stage:has(.architecture-viewport-full) {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    width: 100% !important;
+}
+
+.architecture-header {
+  padding: 16px 40px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(16px);
+}
+
+.action-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--secondary);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.action-pill:hover {
+  background: var(--surface);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-pill--guidelines {
+    background: rgba(var(--ocean-rgb), 0.05);
+    color: var(--ocean);
+    border-color: rgba(var(--ocean-rgb), 0.1);
+}
+
+.action-pill--guidelines:hover {
+    background: rgba(var(--ocean-rgb), 0.1);
+}
+
+.architecture-grid--tripartite {
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  gap: 40px;
+  padding: 40px;
+  align-items: start;
+}
+
+/* High density cards for architecture */
+.architecture-product-card {
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+    cursor: default;
+}
+
+.architecture-product-card:hover {
+    border-color: var(--ocean);
+    box-shadow: var(--shadow-md);
+}
 /* Architecture Visualizer Styles - High Density & 100% Width */
 .architecture-map {
   display: flex;
