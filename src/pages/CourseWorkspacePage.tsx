@@ -961,13 +961,15 @@ export function CourseWorkspacePage({
   if (!course) {
     if (isLoading) {
       return (
-        <section className="flex h-[80vh] w-full flex-col items-center justify-center gap-4 text-center animate-in fade-in duration-500">
-          <Loader2 className="animate-spin text-ocean w-12 h-12" />
-          <div className="flex flex-col gap-1">
-            <h3 className="font-medium text-lg text-primary">Cargando expediente del curso...</h3>
-            <p className="text-sm text-secondary max-w-[300px]">Conectando de forma segura con la base de datos.</p>
-          </div>
-        </section>
+        <div className="page-stack h-full min-h-[80vh] flex flex-col items-center justify-center">
+          <section className="flex w-full flex-col items-center justify-center gap-4 text-center animate-in fade-in duration-500">
+            <Loader2 className="animate-spin text-ocean w-12 h-12" />
+            <div className="flex flex-col gap-1">
+              <h3 className="font-medium text-lg text-primary">Cargando expediente del curso...</h3>
+              <p className="text-sm text-secondary max-w-[300px]">Conectando de forma segura con la base de datos.</p>
+            </div>
+          </section>
+        </div>
       );
     }
 
