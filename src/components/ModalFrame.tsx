@@ -55,15 +55,24 @@ export function ModalFrame({
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm animate-in fade-in transition-all" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-md animate-in fade-in transition-all" onClick={onClose}>
       <section
-        className={`relative w-full shadow-2xl rounded-3xl bg-white border border-line-strong overflow-hidden animate-in scale-in duration-500 flex flex-col max-h-[90vh] ${width === 'sm' ? 'max-w-md' : width === 'md' ? 'max-w-lg' : width === 'xl' ? 'max-w-6xl' : width === 'full' ? 'max-w-[95vw]' : 'max-w-3xl'}`}
+        className={`relative w-full shadow-2xl rounded-3xl bg-gradient-to-br from-white to-[#fbf7f2] border border-line-strong overflow-hidden animate-in scale-in duration-500 flex flex-col max-h-[95vh] ${width === 'sm' ? 'max-w-md' : width === 'md' ? 'max-w-xl' : width === 'xl' ? 'max-w-7xl' : width === 'full' ? 'max-w-[98vw]' : 'max-w-4xl'}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="px-8 py-6 border-b border-line flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
+        <button 
+          type="button" 
+          className="absolute top-6 right-8 p-3 rounded-2xl bg-black/5 hover:bg-black/10 text-muted hover:text-ink transition-all active:scale-90 z-20" 
+          onClick={onClose} 
+          aria-label={closeLabel}
+        >
+          <X size={20} />
+        </button>
+
+        <header className="px-8 py-7 border-b border-line flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10 pr-24">
           <div>
             {eyebrow && (
               <span className="block font-mono text-[10px] font-bold uppercase tracking-widest text-ocean mb-1 opacity-80">
@@ -75,15 +84,6 @@ export function ModalFrame({
             </h3>
             {description && <p className="text-sm text-muted mt-1">{description}</p>}
           </div>
-
-          <button 
-            type="button" 
-            className="p-2.5 rounded-xl hover:bg-black/5 text-muted hover:text-ink transition-all active:scale-90" 
-            onClick={onClose} 
-            aria-label={closeLabel}
-          >
-            <X size={20} />
-          </button>
         </header>
 
         <div className="modal-panel__body flex-grow overflow-y-auto p-8 custom-scrollbar">

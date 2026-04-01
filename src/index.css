@@ -167,13 +167,19 @@
 .justify-center { justify-content: center; }
 .p-4 { padding: 1rem; }
 .bg-ink\/40 { background-color: rgba(4, 10, 20, 0.4); }
+.bg-ink\/60 { background-color: rgba(4, 10, 20, 0.62); }
 .backdrop-blur-sm { backdrop-filter: blur(4px); }
+.backdrop-blur-md { backdrop-filter: blur(12px); }
+.backdrop-blur-xl { backdrop-filter: blur(24px); }
 .space-y-6 > * + * { margin-top: 1.5rem; }
 .space-y-2 > * + * { margin-top: 0.5rem; }
 .max-w-md { max-width: 28rem; }
 .max-w-lg { max-width: 32rem; }
+.max-w-xl { max-width: 42rem; }
 .max-w-3xl { max-width: 48rem; }
+.max-w-4xl { max-width: 56rem; }
 .max-w-6xl { max-width: 72rem; }
+.max-w-7xl { max-width: 84rem; }
 .max-w-\[95vw\] { max-width: 95vw; }
 .max-h-\[90vh\] { max-height: 90vh; }
 .overflow-hidden { overflow: hidden; }
