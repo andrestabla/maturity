@@ -793,7 +793,7 @@ export function CourseWorkspacePage({
   const courseTypeOptions = uniqueOptions(
     getInstitutionCourseTypes(appData.institution, currentInstitution),
   );
-  const institutionGuidelines = getInstitutionPedagogicalGuidelines(
+  getInstitutionPedagogicalGuidelines(
     appData.institution,
     currentInstitution,
   );
@@ -1964,96 +1964,111 @@ export function CourseWorkspacePage({
             </div>
           </div>
 
-          <div className="form-grid">
-            <label className="field field--full">
-              <span>Resultados de aprendizaje</span>
-              <div className="field__control field__control--textarea">
-                <textarea
-                  rows={4}
-                  value={joinLines(structured.outcomes)}
-                  onChange={(event) =>
-                    onPatch({
-                      body: buildGeneralStructuredBody({
-                        ...structured,
-                        outcomes: splitLines(event.target.value),
-                      }),
-                    })
-                  }
-                />
-              </div>
-            </label>
+          <div className="space-y-6">
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <Target size={14} className="text-coral" />
+                <span>Resultados de aprendizaje</span>
+              </label>
+              <textarea
+                rows={4}
+                className="modern-textarea"
+                value={joinLines(structured.outcomes)}
+                onChange={(event) =>
+                  onPatch({
+                    body: buildGeneralStructuredBody({
+                      ...structured,
+                      outcomes: splitLines(event.target.value),
+                    }),
+                  })
+                }
+                placeholder="Un resultado por línea..."
+              />
+            </div>
 
-            <label className="field field--full">
-              <span>Temas clave</span>
-              <div className="field__control field__control--textarea">
-                <textarea
-                  rows={4}
-                  value={joinLines(structured.topics)}
-                  onChange={(event) =>
-                    onPatch({
-                      body: buildGeneralStructuredBody({
-                        ...structured,
-                        topics: splitLines(event.target.value),
-                      }),
-                    })
-                  }
-                />
-              </div>
-            </label>
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <Layers size={14} className="text-ocean" />
+                <span>Temas clave / Núcleos temáticos</span>
+              </label>
+              <textarea
+                rows={4}
+                className="modern-textarea"
+                value={joinLines(structured.topics)}
+                onChange={(event) =>
+                  onPatch({
+                    body: buildGeneralStructuredBody({
+                      ...structured,
+                      topics: splitLines(event.target.value),
+                    }),
+                  })
+                }
+                placeholder="Un tema por línea..."
+              />
+            </div>
 
-            <label className="field field--full">
-              <span>Metodología</span>
-              <div className="field__control field__control--textarea">
-                <textarea
-                  rows={4}
-                  value={structured.methodology}
-                  onChange={(event) =>
-                    onPatch({
-                      body: buildGeneralStructuredBody({
-                        ...structured,
-                        methodology: event.target.value,
-                      }),
-                    })
-                  }
-                />
-              </div>
-            </label>
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <PenTool size={14} className="text-sage" />
+                <span>Metodología pedagógica</span>
+              </label>
+              <textarea
+                rows={4}
+                className="modern-textarea"
+                value={structured.methodology}
+                onChange={(event) =>
+                  onPatch({
+                    body: buildGeneralStructuredBody({
+                      ...structured,
+                      methodology: event.target.value,
+                    }),
+                  })
+                }
+                placeholder="Descripción de la estrategia de enseñanza..."
+              />
+            </div>
 
-            <label className="field field--full">
-              <span>Evaluación</span>
-              <div className="field__control field__control--textarea">
-                <textarea
-                  rows={4}
-                  value={joinLines(structured.evaluation)}
-                  onChange={(event) =>
-                    onPatch({
-                      body: buildGeneralStructuredBody({
-                        ...structured,
-                        evaluation: splitLines(event.target.value),
-                      }),
-                    })
-                  }
-                />
-              </div>
-            </label>
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <ClipboardCheck size={14} className="text-gold" />
+                <span>Evaluación y seguimiento</span>
+              </label>
+              <textarea
+                rows={4}
+                className="modern-textarea"
+                value={joinLines(structured.evaluation)}
+                onChange={(event) =>
+                  onPatch({
+                    body: buildGeneralStructuredBody({
+                      ...structured,
+                      evaluation: splitLines(event.target.value),
+                    }),
+                  })
+                }
+                placeholder="Criterios y momentos de evaluación..."
+              />
+            </div>
 
-            <label className="field field--full">
-              <span>Bibliografía base</span>
-              <div className="field__control field__control--textarea">
-                <textarea
-                  rows={4}
-                  value={joinLines(structured.bibliography)}
-                  onChange={(event) =>
-                    onPatch({
-                      body: buildGeneralStructuredBody({
-                        ...structured,
-                        bibliography: splitLines(event.target.value),
-                      }),
-                    })
-                  }
-                />
-              </div>
-            </label>
+            <div className="form-group">
+              <label className="form-label flex items-center gap-2">
+                <BookOpen size={14} className="text-ink" />
+                <span>Bibliografía base</span>
+              </label>
+              <textarea
+                rows={4}
+                className="modern-textarea italic"
+                value={joinLines(structured.bibliography)}
+                onChange={(event) =>
+                  onPatch({
+                    body: buildGeneralStructuredBody({
+                      ...structured,
+                      bibliography: splitLines(event.target.value),
+                    }),
+                  })
+                }
+                placeholder="Referencias principales..."
+              />
+            </div>
           </div>
         </div>
       );
@@ -5055,26 +5070,26 @@ export function CourseWorkspacePage({
             </div>
 
             {isTaskComposerOpen ? (
-              <form className="editor-card" onSubmit={handleTaskCreate}>
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Título de la tarea</span>
-                    <div className="field__control">
-                      <input
-                        value={newTaskForm.title}
-                        onChange={(event) =>
-                          setNewTaskForm((current) => ({ ...current, title: event.target.value }))
-                        }
-                        required
-                        placeholder="Ej: Revisar guiones finales"
-                      />
-                    </div>
-                  </label>
+              <form className="editor-card animate-in fade-in slide-in-from-top-2" onSubmit={handleTaskCreate}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="form-group">
+                    <label className="form-label">Título de la tarea</label>
+                    <input
+                      className="modern-input"
+                      value={newTaskForm.title}
+                      onChange={(event) =>
+                        setNewTaskForm((current) => ({ ...current, title: event.target.value }))
+                      }
+                      required
+                      placeholder="Ej: Revisar guiones finales"
+                    />
+                  </div>
 
-                  <label className="field">
-                    <span>Responsable (Rol)</span>
-                    <div className="field__control">
+                  <div className="form-group">
+                    <label className="form-label">Responsable (Rol)</label>
+                    <div className="modern-select-wrapper">
                       <select
+                        className="modern-select"
                         value={newTaskForm.role}
                         onChange={(event) =>
                           setNewTaskForm((current) => ({
@@ -5089,12 +5104,14 @@ export function CourseWorkspacePage({
                           </option>
                         ))}
                       </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
                     </div>
-                  </label>
+                  </div>
                 </div>
 
-                <div className="action-row">
+                <div className="flex justify-end mt-6">
                   <button type="submit" className="cta-button" disabled={isTaskSaving}>
+                    <Plus size={18} />
                     <span>{isTaskSaving ? 'Creando…' : 'Crear tarea'}</span>
                   </button>
                 </div>
@@ -5189,60 +5206,72 @@ export function CourseWorkspacePage({
           <div className="page-stack">
             {!isEditingCourse ? (
               <div className="management-layout">
-                <main className="page-stack">
-                  <div className="detail-row">
+                <main className="page-stack gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <article className="detail-section">
-                      <div className="section-heading">
-                        <h3>Información general</h3>
+                      <div className="section-heading mb-6 border-b border-line pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                            <FileText size={20} />
+                          </div>
+                          <h3 className="text-xl font-semibold tracking-tight">Información principal</h3>
+                        </div>
                       </div>
-                      <div className="form-grid">
-                        <div className="field field--full">
-                          <span>Título</span>
-                          <p className="text-xl font-semibold">{currentCourse.title}</p>
+                      <div className="space-y-6">
+                        <div className="form-group">
+                          <label className="form-label">Título del curso</label>
+                          <p className="text-2xl font-bold text-ink tracking-tight">{currentCourse.title}</p>
                         </div>
-                        <div className="field">
-                          <span>Código</span>
-                          <p className="font-mono">{currentCourse.code}</p>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="form-group">
+                            <label className="form-label">Código</label>
+                            <p className="font-mono text-ocean font-semibold bg-ocean/5 px-3 py-1 rounded-lg w-fit">{currentCourse.code}</p>
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">Institución</label>
+                            <p className="font-medium">{currentCourse.metadata.institution}</p>
+                          </div>
                         </div>
-                        <div className="field">
-                          <span>Institución</span>
-                          <p>{currentCourse.metadata.institution}</p>
-                        </div>
-                        <div className="field field--full">
-                          <span>Resumen</span>
-                          <p className="text-muted leading-relaxed">{currentCourse.summary}</p>
+                        <div className="form-group">
+                          <label className="form-label">Resumen ejecutivo</label>
+                          <p className="text-muted leading-relaxed italic border-l-4 border-line pl-4 py-2">{currentCourse.summary || 'Sin resumen definido.'}</p>
                         </div>
                       </div>
                     </article>
 
                     <article className="detail-section">
-                      <div className="section-heading">
-                        <h3>Perfil académico</h3>
+                      <div className="section-heading mb-6 border-b border-line pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-sage/10 text-sage rounded-lg">
+                            <BarChart3 size={20} />
+                          </div>
+                          <h3 className="text-xl font-semibold tracking-tight">Perfil académico</h3>
+                        </div>
                       </div>
-                      <div className="form-grid form-grid--three">
-                        <div className="field">
-                          <span>Facultad</span>
-                          <p>{currentCourse.faculty}</p>
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                        <div className="form-group">
+                          <label className="form-label">Facultad</label>
+                          <p className="font-medium">{currentCourse.faculty}</p>
                         </div>
-                        <div className="field">
-                          <span>Programa</span>
-                          <p>{currentCourse.program}</p>
+                        <div className="form-group">
+                          <label className="form-label">Programa</label>
+                          <p className="font-medium">{currentCourse.program}</p>
                         </div>
-                        <div className="field">
-                          <span>Créditos</span>
-                          <p>{currentCourse.credits}</p>
+                        <div className="form-group">
+                          <label className="form-label">Créditos</label>
+                          <p className="font-bold text-lg text-sage">{currentCourse.credits}</p>
                         </div>
-                        <div className="field">
-                          <span>Semestre</span>
-                          <p>{currentCourse.metadata.semester}</p>
+                        <div className="form-group">
+                          <label className="form-label">Semestre</label>
+                          <p className="font-medium">{currentCourse.metadata.semester}</p>
                         </div>
-                        <div className="field">
-                          <span>Modalidad</span>
-                          <p>{currentCourse.modality}</p>
+                        <div className="form-group">
+                          <label className="form-label">Modalidad</label>
+                          <p className="font-medium">{currentCourse.modality}</p>
                         </div>
-                        <div className="field">
-                          <span>Periodo</span>
-                          <p>{currentCourse.metadata.academicPeriod}</p>
+                        <div className="form-group">
+                          <label className="form-label">Periodo</label>
+                          <p className="font-medium">{currentCourse.metadata.academicPeriod}</p>
                         </div>
                       </div>
                     </article>
@@ -5351,262 +5380,250 @@ export function CourseWorkspacePage({
                 </aside>
               </div>
             ) : (
-              <>
-                <form className="editor-card" onSubmit={handleCourseSave}>
-                  <div className="editor-card__header">
-                    <div>
-                      <span className="eyebrow">Edición</span>
-                      <h3>Ajustar ficha del curso</h3>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <form className="page-stack gap-10" onSubmit={handleCourseSave}>
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-coral/10 text-coral rounded-lg">
+                          <PencilLine size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Editar ficha técnica</h3>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="form-grid form-grid--three">
-                    <label className="field">
-                      <span>Título</span>
-                      <div className="field__control">
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="form-group lg:col-span-2">
+                        <label className="form-label">Título del curso</label>
                         <input
+                          className="modern-input"
                           value={courseForm.title}
                           onChange={(event) => updateCourseDraftField('title', event.target.value)}
                           required
                         />
                       </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Código</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Código</label>
                         <input
+                          className="modern-input font-mono"
                           value={courseForm.code}
                           onChange={(event) => updateCourseDraftField('code', event.target.value)}
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Institución</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.institution}
-                          onChange={(event) => updateCourseDraftField('institution', event.target.value)}
-                          required
-                        >
-                          {institutionOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Institución</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.institution}
+                            onChange={(event) => updateCourseDraftField('institution', event.target.value)}
+                            required
+                          >
+                            <option value="">Seleccionar institución</option>
+                            {institutionOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Facultad</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.faculty}
-                          onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
-                          required
-                        >
-                          {facultyOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Facultad</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.faculty}
+                            onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
+                            required
+                          >
+                            <option value="">Seleccionar facultad</option>
+                            {facultyOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Programa</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.program}
-                          onChange={(event) => updateCourseDraftField('program', event.target.value)}
-                          required
-                        >
-                          {programOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Programa</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.program}
+                            onChange={(event) => updateCourseDraftField('program', event.target.value)}
+                            required
+                          >
+                            <option value="">Seleccionar programa</option>
+                            {programOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Periodo académico</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.academicPeriod}
-                          onChange={(event) => updateCourseDraftField('academicPeriod', event.target.value)}
-                          required
-                        >
-                          {academicPeriodOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Tipo de curso</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.courseType}
-                          onChange={(event) => updateCourseDraftField('courseType', event.target.value)}
-                          required
-                        >
-                          {courseTypeOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Modalidad</span>
-                      <div className="field__control">
-                        <input
-                          value={courseForm.modality}
-                          onChange={(event) => updateCourseDraftField('modality', event.target.value)}
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Créditos</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Créditos</label>
                         <input
                           type="number"
-                          min={1}
-                          max={12}
+                          className="modern-input"
                           value={courseForm.credits}
                           onChange={(event) =>
-                            updateCourseDraftField(
-                              'credits',
-                              Number.parseInt(event.target.value, 10) || 1,
-                            )
+                            updateCourseDraftField('credits', parseInt(event.target.value, 10))
                           }
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Etapa</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.stageId}
-                          onChange={(event) => updateCourseDraftField('stageId', event.target.value)}
-                        >
-                          {appData.stages.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Modalidad</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.modality}
+                            onChange={(event) => updateCourseDraftField('modality', event.target.value)}
+                            required
+                          >
+                            {['Virtual', 'Presencial', 'Híbrida'].map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={courseForm.status}
-                          onChange={(event) =>
-                            updateCourseDraftField(
-                              'status',
-                              event.target.value as CourseMutationInput['status'],
-                            )
-                          }
-                        >
-                          {['En curso', 'En QA', 'En riesgo', 'Bloqueado', 'Entregado'].map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Etapa actual</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.stageId}
+                            onChange={(event) => updateCourseDraftField('stageId', event.target.value)}
+                          >
+                            {appData.stages.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Próximo hito</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Estado oficial</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={courseForm.status}
+                            onChange={(event) =>
+                              updateCourseDraftField(
+                                'status',
+                                event.target.value as CourseMutationInput['status'],
+                              )
+                            }
+                          >
+                            {['En curso', 'En QA', 'En riesgo', 'Bloqueado', 'Entregado'].map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
+                      </div>
+
+                      <div className="form-group lg:col-span-2">
+                        <label className="form-label">Próximo hito o entrega</label>
                         <input
+                          className="modern-input"
                           value={courseForm.nextMilestone}
                           onChange={(event) => updateCourseDraftField('nextMilestone', event.target.value)}
+                          placeholder="Ej: Entrega de microcurrículo verificado"
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Resumen</span>
-                      <div className="field__control field__control--textarea">
+                      <div className="form-group lg:col-span-3">
+                        <label className="form-label">Resumen ejecutivo del curso</label>
                         <textarea
                           rows={4}
+                          className="modern-textarea"
                           value={courseForm.summary}
                           onChange={(event) => updateCourseDraftField('summary', event.target.value)}
+                          placeholder="Breve descripción del propósito y alcance del curso..."
                           required
                         />
                       </div>
-                    </label>
-                  </div>
+                    </div>
 
-                  {courseError ? <p className="form-error">{courseError}</p> : null}
+                    {courseError ? <p className="form-error mt-4">{courseError}</p> : null}
 
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isCourseSaving}>
-                      <span>{isCourseSaving ? 'Guardando…' : 'Guardar cambios'}</span>
-                    </button>
-                    <button type="button" className="filter-chip" onClick={() => setIsEditingCourse(false)}>
-                      <span>Volver</span>
-                    </button>
-                  </div>
-                 </form>
+                    <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                      <button type="submit" className="cta-button" disabled={isCourseSaving}>
+                        <Save size={18} />
+                        <span>{isCourseSaving ? 'Guardando…' : 'Guardar cambios básicos'}</span>
+                      </button>
+                    </div>
+                  </article>
+                </form>
 
-                 <form className="editor-card" onSubmit={handleMetadataSave}>
-                   <div className="editor-card__header">
-                     <div>
-                       <span className="eyebrow">Ficha operativa</span>
-                       <h3>Metadatos y criterios académicos</h3>
-                     </div>
-                   </div>
-
-                   <div className="form-grid form-grid--three">
-                    <label className="field">
-                      <span>Institución</span>
-                      <div className="field__control">
-                        <select
-                          value={metadataForm.institution}
-                          onChange={(event) => {
-                            updateCourseDraftField('institution', event.target.value);
-                            setMetadataForm((current) => ({
-                              ...current,
-                              institution: event.target.value,
-                            }));
-                          }}
-                          required
-                        >
-                          {institutionOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                <form className="page-stack gap-10 mt-12 bg-white/30 p-8 rounded-3xl border border-line" onSubmit={handleMetadataSave}>
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gold/10 text-gold rounded-lg">
+                          <ClipboardCheck size={20} />
+                        </div>
+                        <div>
+                          <span className="eyebrow">Criterios Pedagógicos</span>
+                          <h3 className="text-xl font-semibold tracking-tight">Ficha operativa profunda</h3>
+                        </div>
                       </div>
-                    </label>
+                    </div>
 
-                    <label className="field">
-                      <span>Nombre corto</span>
-                      <div className="field__control">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      <div className="form-group">
+                        <label className="form-label">Institución operativa</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={metadataForm.institution}
+                            onChange={(event) => {
+                              updateCourseDraftField('institution', event.target.value);
+                              setMetadataForm((current) => ({
+                                ...current,
+                                institution: event.target.value,
+                              }));
+                            }}
+                            required
+                          >
+                            {institutionOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Nombre corto / Alias</label>
                         <input
+                          className="modern-input"
                           value={metadataForm.shortName}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5617,12 +5634,11 @@ export function CourseWorkspacePage({
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Semestre</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Semestre / Módulo</label>
                         <input
+                          className="modern-input"
                           value={metadataForm.semester}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5630,62 +5646,66 @@ export function CourseWorkspacePage({
                               semester: event.target.value,
                             }))
                           }
+                          placeholder="Ej: 1er Semestre"
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Periodo académico</span>
-                      <div className="field__control">
-                        <select
-                          value={metadataForm.academicPeriod}
-                          onChange={(event) => {
-                            updateCourseDraftField('academicPeriod', event.target.value);
-                            setMetadataForm((current) => ({
-                              ...current,
-                              academicPeriod: event.target.value,
-                            }));
-                          }}
-                          required
-                        >
-                          {academicPeriodOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Periodo académico</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={metadataForm.academicPeriod}
+                            onChange={(event) => {
+                              updateCourseDraftField('academicPeriod', event.target.value);
+                              setMetadataForm((current) => ({
+                                ...current,
+                                academicPeriod: event.target.value,
+                              }));
+                            }}
+                            required
+                          >
+                            {academicPeriodOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Tipo de curso</span>
-                      <div className="field__control">
-                        <select
-                          value={metadataForm.courseType}
-                          onChange={(event) => {
-                            updateCourseDraftField('courseType', event.target.value);
-                            setMetadataForm((current) => ({
-                              ...current,
-                              courseType: event.target.value,
-                            }));
-                          }}
-                          required
-                        >
-                          {courseTypeOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Tipo de curso</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={metadataForm.courseType}
+                            onChange={(event) => {
+                              updateCourseDraftField('courseType', event.target.value);
+                              setMetadataForm((current) => ({
+                                ...current,
+                                courseType: event.target.value,
+                              }));
+                            }}
+                            required
+                          >
+                            {courseTypeOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Cierre objetivo</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Fecha de cierre objetivo</label>
                         <input
                           type="date"
+                          className="modern-input"
                           value={metadataForm.targetCloseDate}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5696,12 +5716,11 @@ export function CourseWorkspacePage({
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Versión</span>
-                      <div className="field__control">
+                      <div className="form-group">
+                        <label className="form-label">Versión de diseño</label>
                         <input
+                          className="modern-input"
                           value={metadataForm.currentVersion}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5712,72 +5731,63 @@ export function CourseWorkspacePage({
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Prioridad</span>
-                      <div className="field__control">
-                        <select
-                          value={metadataForm.priority}
-                          onChange={(event) =>
-                            setMetadataForm((current) => ({
-                              ...current,
-                              priority: event.target.value as CourseMetadataMutationInput['priority'],
-                            }))
-                          }
-                        >
-                          {['Alta', 'Media', 'Baja'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="form-group">
+                        <label className="form-label">Nivel de Prioridad</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={metadataForm.priority}
+                            onChange={(event) =>
+                              setMetadataForm((current) => ({
+                                ...current,
+                                priority: event.target.value as CourseMetadataMutationInput['priority'],
+                              }))
+                            }
+                          >
+                            {['Alta', 'Media', 'Baja'].map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
-                    </label>
 
-                    <label className="field">
-                      <span>Riesgo</span>
-                      <div className="field__control">
-                        <select
-                          value={metadataForm.riskLevel}
-                          onChange={(event) =>
-                            setMetadataForm((current) => ({
-                              ...current,
-                              riskLevel: event.target.value as CourseMetadataMutationInput['riskLevel'],
-                            }))
-                          }
-                        >
-                          {['Bajo', 'Medio', 'Alto'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <div className="field field--full">
-                      <span>Lineamientos pedagógicos activos</span>
-                      <div className="list-stack">
-                        {institutionGuidelines.length > 0 ? (
-                          institutionGuidelines.map((guideline) => (
-                            <p key={guideline} className="institution-structure-summary">
-                              {guideline}
-                            </p>
-                          ))
-                        ) : (
-                          <p className="institution-structure-summary">
-                            Esta institución no tiene lineamientos pedagógicos configurados todavía.
-                          </p>
-                        )}
+                      <div className="form-group">
+                        <label className="form-label">Riesgo identificado</label>
+                        <div className="modern-select-wrapper">
+                          <select
+                            className="modern-select"
+                            value={metadataForm.riskLevel}
+                            onChange={(event) =>
+                              setMetadataForm((current) => ({
+                                ...current,
+                                riskLevel: event.target.value as CourseMetadataMutationInput['riskLevel'],
+                              }))
+                            }
+                          >
+                            {['Bajo', 'Medio', 'Alto'].map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="modern-select-icon" size={16} />
+                        </div>
                       </div>
                     </div>
 
-                    <label className="field field--full">
-                      <span>Metodología</span>
-                      <div className="field__control field__control--textarea">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mt-12">
+                      <div className="form-group">
+                        <label className="form-label flex items-center gap-2">
+                           <PenTool size={14} />
+                           <span>Metodología pedagógica</span>
+                        </label>
                         <textarea
-                          rows={3}
+                          rows={5}
+                          className="modern-textarea"
                           value={metadataForm.methodology}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5785,16 +5795,19 @@ export function CourseWorkspacePage({
                               methodology: event.target.value,
                             }))
                           }
+                          placeholder="Estrategias de enseñanza, aprendizaje autónomo..."
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Evaluación</span>
-                      <div className="field__control field__control--textarea">
+                      <div className="form-group">
+                        <label className="form-label flex items-center gap-2">
+                           <ClipboardCheck size={14} />
+                           <span>Criterios de Evaluación</span>
+                        </label>
                         <textarea
-                          rows={3}
+                          rows={5}
+                          className="modern-textarea"
                           value={joinLines(metadataForm.evaluation)}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5802,16 +5815,19 @@ export function CourseWorkspacePage({
                               evaluation: splitLines(event.target.value),
                             }))
                           }
+                          placeholder="Ponderación, rúbricas, momentos de evaluación... (uno por línea)"
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Resultados de aprendizaje</span>
-                      <div className="field__control field__control--textarea">
+                      <div className="form-group">
+                        <label className="form-label flex items-center gap-2">
+                           <Target size={14} />
+                           <span>Resultados de aprendizaje (RAE)</span>
+                        </label>
                         <textarea
-                          rows={4}
+                          rows={6}
+                          className="modern-textarea"
                           value={joinLines(metadataForm.learningOutcomes)}
                           onChange={(event) =>
                             setMetadataForm((current: CourseMetadataMutationInput) => ({
@@ -5819,17 +5835,19 @@ export function CourseWorkspacePage({
                               learningOutcomes: splitLines(event.target.value),
                             }))
                           }
-                          placeholder="Un resultado por línea"
+                          placeholder="Defina sus resultados esperados, uno por línea..."
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Temas clave</span>
-                      <div className="field__control field__control--textarea">
+                      <div className="form-group">
+                        <label className="form-label flex items-center gap-2">
+                           <Layers size={14} />
+                           <span>Núcleos temáticos / Temas clave</span>
+                        </label>
                         <textarea
-                          rows={3}
+                          rows={6}
+                          className="modern-textarea"
                           value={joinLines(metadataForm.topics)}
                           onChange={(event) =>
                             setMetadataForm((current) => ({
@@ -5837,17 +5855,19 @@ export function CourseWorkspacePage({
                               topics: splitLines(event.target.value),
                             }))
                           }
-                          placeholder="Un tema por línea"
+                          placeholder="Ejes de formación, módulos principales... (uno por línea)"
                           required
                         />
                       </div>
-                    </label>
 
-                    <label className="field field--full">
-                      <span>Bibliografía base</span>
-                      <div className="field__control field__control--textarea">
+                      <div className="form-group lg:col-span-2">
+                        <label className="form-label flex items-center gap-2">
+                           <BookOpen size={14} />
+                           <span>Bibliografía base y complementaria</span>
+                        </label>
                         <textarea
-                          rows={4}
+                          rows={6}
+                          className="modern-textarea italic"
                           value={joinLines(metadataForm.bibliography)}
                           onChange={(event) =>
                             setMetadataForm((current: CourseMetadataMutationInput) => ({
@@ -5855,29 +5875,31 @@ export function CourseWorkspacePage({
                               bibliography: splitLines(event.target.value),
                             }))
                           }
-                          placeholder="Una referencia por línea"
+                          placeholder="Normas APA, enlaces, recursos físicos... (uno por línea)"
                           required
                         />
                       </div>
-                    </label>
-                  </div>
+                    </div>
 
-                  {metadataError ? <p className="form-error">{metadataError}</p> : null}
+                    {metadataError ? <p className="form-error mt-4">{metadataError}</p> : null}
 
-                  <div className="action-row">
-                    <button type="submit" className="cta-button" disabled={isMetadataSaving}>
-                      <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
-                    </button>
-                    <button type="button" className="filter-chip" onClick={() => setIsEditingCourse(false)}>
-                      <span>Volver</span>
-                    </button>
-                  </div>
+                    <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                      <button type="submit" className="cta-button" disabled={isMetadataSaving}>
+                        <Save size={18} />
+                        <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
+                      </button>
+                      <button type="button" className="filter-chip px-6 py-3" onClick={() => setIsEditingCourse(false)}>
+                        <span>Terminar edición</span>
+                      </button>
+                    </div>
+                  </article>
                 </form>
-              </>
+              </div>
             )}
           </div>
         </ModalFrame>
       ) : null}
+
       {isVerifyingAnalysis && analysisResult ? (
         <ModalFrame
           eyebrow="IA de OpenAI"
@@ -5885,285 +5907,420 @@ export function CourseWorkspacePage({
           description="Asegura que los datos capturados literalmente del documento sean correctos antes de guardarlos en el expediente."
           width="full"
           onClose={() => setIsVerifyingAnalysis(false)}
-        >
-          <div className="page-stack">
-             <div className="management-layout">
-                <main className="page-stack">
-                  <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Metadatos del curso</h3>
-                    </div>
-                    <div className="form-grid form-grid--three">
-                      <label className="field">
-                        <span>Facultad</span>
-                        <input value={analysisResult.facultad} onChange={(e) => setAnalysisResult({ ...analysisResult, facultad: e.target.value })} />
-                      </label>
-                      <label className="field">
-                        <span>Programa</span>
-                        <input value={analysisResult.programa} onChange={(e) => setAnalysisResult({ ...analysisResult, programa: e.target.value })} />
-                      </label>
-                      <label className="field">
-                        <span>Semestre</span>
-                        <input value={analysisResult.semestre} onChange={(e) => setAnalysisResult({ ...analysisResult, semestre: e.target.value })} />
-                      </label>
-                      <label className="field">
-                        <span>Tipo de curso</span>
-                        <input value={analysisResult.tipoCurso} onChange={(e) => setAnalysisResult({ ...analysisResult, tipoCurso: e.target.value })} />
-                      </label>
-                      <label className="field">
-                        <span>Créditos</span>
-                        <input type="number" value={analysisResult.creditos} onChange={(e) => setAnalysisResult({ ...analysisResult, creditos: Number(e.target.value) })} />
-                      </label>
-                    </div>
-                  </article>
+          footer={
+            <div className="flex justify-end gap-3 w-full">
+               <button 
+                type="button" 
+                className="filter-chip px-6 py-2.5" 
+                onClick={() => setIsVerifyingAnalysis(false)}
+               >
+                 <span>Cancelar</span>
+               </button>
+               <button 
+                type="button" 
+                className="cta-button shadow-lg shadow-ocean/20" 
+                disabled={isMetadataSaving}
+                onClick={async () => {
+                  if (!currentCourse) return;
+                  setIsMetadataSaving(true);
+                  
+                  const originalAppData = { ...appData };
+                  const metadataUpdate = {
+                    semester: analysisResult.semestre || '',
+                    courseType: analysisResult.tipoCurso || '',
+                    learningOutcomes: analysisResult.resultadosAprendizaje || [],
+                    topics: (analysisResult.unidades || []).map((u: any) => u.tituloUnidad).filter(Boolean),
+                    units: analysisResult.unidades || [],
+                    methodology: analysisResult.metodologia || '',
+                    evaluation: analysisResult.evaluacion || [],
+                    bibliography: analysisResult.bibliografia || [],
+                  };
 
-                  <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Académico y Resultados de Aprendizaje</h3>
-                    </div>
-                    <div className="form-grid">
-                      <label className="field field--full">
-                        <span>Descripción del curso</span>
-                        <textarea rows={4} value={analysisResult.descripcionCurso} onChange={(e) => setAnalysisResult({ ...analysisResult, descripcionCurso: e.target.value })} />
-                      </label>
-                      <label className="field field--full mb-6 relative">
-                         <span className="mb-2 block font-medium">Resultados de aprendizaje</span>
-                         <div className="flex flex-col gap-2">
-                            {Array.isArray(analysisResult.resultadosAprendizaje) && analysisResult.resultadosAprendizaje.map((res: string, idx: number) => (
-                              <div key={idx} className="flex gap-2 items-start">
-                                <textarea rows={2} className="flex-1 min-h-[60px]" value={res} onChange={(e) => {
-                                  const arr = [...analysisResult.resultadosAprendizaje];
-                                  arr[idx] = e.target.value;
-                                  setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
-                                }} />
-                                <button className="danger-button danger-button--ghost mt-2 shrink-0" onClick={() => {
-                                  const arr = [...analysisResult.resultadosAprendizaje];
-                                  arr.splice(idx, 1);
-                                  setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
-                                }}><Trash2 size={16} /></button>
-                              </div>
-                            ))}
-                            <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, resultadosAprendizaje: [...(analysisResult.resultadosAprendizaje||[]), '']})}>
-                              <Plus size={14} className="mr-1 inline-block" /> Agregar resultado
-                            </button>
-                         </div>
-                      </label>
-                    </div>
-                  </article>
-
-                  <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Estructura Curricular (Unidades y Temáticas)</h3>
-                    </div>
-                    <div className="flex flex-col gap-6">
-                      {Array.isArray(analysisResult.unidades) && analysisResult.unidades.map((unidad: any, idx: number) => (
-                        <div key={idx} className="surface section-card" style={{ padding: '16px' }}>
-                          <div className="flex items-start gap-4 mb-4">
-                             <label className="field flex-1">
-                               <span className="text-secondary text-sm font-medium">Nombre de la Unidad o Módulo</span>
-                               <input value={unidad.tituloUnidad || ''} onChange={(e) => {
-                                   const arr = [...analysisResult.unidades];
-                                   arr[idx] = { ...arr[idx], tituloUnidad: e.target.value };
-                                   setAnalysisResult({ ...analysisResult, unidades: arr });
-                                 }} 
-                               />
-                             </label>
-                             <button className="danger-button danger-button--ghost mt-6 shrink-0" onClick={() => {
-                                  const arr = [...analysisResult.unidades];
-                                  arr.splice(idx, 1);
-                                  setAnalysisResult({ ...analysisResult, unidades: arr });
-                                }}><Trash2 size={16} /></button>
-                          </div>
-                          <label className="field field--full">
-                            <span className="text-secondary text-sm font-medium mb-2 block">Temáticas Específicas</span>
-                            <div className="flex flex-col gap-2">
-                              {Array.isArray(unidad.tematicas) && unidad.tematicas.map((tema: string, tIdx: number) => (
-                                <div key={tIdx} className="flex gap-2">
-                                   <input className="flex-1" value={tema} onChange={(e) => {
-                                       const arr = [...analysisResult.unidades];
-                                       const newTemas = [...arr[idx].tematicas];
-                                       newTemas[tIdx] = e.target.value;
-                                       arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                       setAnalysisResult({ ...analysisResult, unidades: arr });
-                                     }}
-                                   />
-                                   <button className="danger-button danger-button--ghost shrink-0" onClick={() => {
-                                         const arr = [...analysisResult.unidades];
-                                         const newTemas = [...arr[idx].tematicas];
-                                         newTemas.splice(tIdx, 1);
-                                         arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                         setAnalysisResult({ ...analysisResult, unidades: arr });
-                                      }}><Trash2 size={16} /></button>
-                                </div>
-                              ))}
-                              <button className="ghost-button self-start text-xs mt-1" onClick={() => {
-                                   const arr = [...analysisResult.unidades];
-                                   const newTemas = Array.isArray(arr[idx].tematicas) ? [...arr[idx].tematicas] : [];
-                                   newTemas.push('');
-                                   arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                   setAnalysisResult({ ...analysisResult, unidades: arr });
-                                }}>
-                                <Plus size={14} className="mr-1 inline-block" /> Añadir tema
-                              </button>
-                            </div>
-                          </label>
-                        </div>
-                      ))}
-                      <button className="ghost-button self-start" onClick={() => setAnalysisResult({...analysisResult, unidades: [...(analysisResult.unidades||[]), { tituloUnidad: 'Nueva Unidad', tematicas: [''] }]})}>
-                        <Plus size={16} className="mr-1 inline-block" /> Agregar Unidad Curricular
-                      </button>
-                    </div>
-                  </article>
-
-                  <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Metodología y Evaluación</h3>
-                    </div>
-                    <div className="form-grid">
-                      <label className="field field--full">
-                        <span>Metodología de impartición</span>
-                        <textarea rows={4} value={analysisResult.metodologia} onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} />
-                      </label>
-                      <label className="field field--full relative">
-                        <span className="mb-2 block font-medium">Ítems de evaluación y rúbrica</span>
-                        <div className="flex flex-col gap-2">
-                            {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
-                              <div key={idx} className="flex gap-2 items-start">
-                                <textarea rows={1} className="flex-1 min-h-[40px]" value={ev} onChange={(e) => {
-                                  const arr = [...analysisResult.evaluacion];
-                                  arr[idx] = e.target.value;
-                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                }} />
-                                <button className="danger-button danger-button--ghost mt-1 shrink-0" onClick={() => {
-                                  const arr = [...analysisResult.evaluacion];
-                                  arr.splice(idx, 1);
-                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                }}><Trash2 size={16} /></button>
-                              </div>
-                            ))}
-                            <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, evaluacion: [...(analysisResult.evaluacion||[]), '']})}>
-                              <Plus size={14} className="mr-1 inline-block" /> Agregar ítem de evaluación
-                            </button>
-                         </div>
-                      </label>
-                    </div>
-                  </article>
-
-                  <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Bibliografía</h3>
-                    </div>
-                    <label className="field field--full">
-                       <div className="flex flex-col gap-2">
-                          {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.map((bib: string, idx: number) => (
-                            <div key={idx} className="flex gap-2 items-start">
-                              <textarea rows={2} className="flex-1 min-h-[60px]" value={bib} onChange={(e) => {
-                                const arr = [...analysisResult.bibliografia];
-                                arr[idx] = e.target.value;
-                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
-                              }} />
-                              <button className="danger-button danger-button--ghost mt-2 shrink-0" onClick={() => {
-                                const arr = [...analysisResult.bibliografia];
-                                arr.splice(idx, 1);
-                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
-                              }}><Trash2 size={16} /></button>
-                            </div>
-                          ))}
-                          <button className="ghost-button self-start mt-1 text-xs" onClick={() => setAnalysisResult({...analysisResult, bibliografia: [...(analysisResult.bibliografia||[]), '']})}>
-                            <Plus size={14} className="mr-1 inline-block" /> Agregar referencia
-                          </button>
-                       </div>
-                    </label>
-                  </article>
-                </main>
-             </div>
-
-             <div className="form-actions">
-                <button type="button" className="ghost-button" onClick={() => setIsVerifyingAnalysis(false)}>Cancelar</button>
-                <button 
-                  type="button" 
-                  className="cta-button" 
-                  disabled={isMetadataSaving}
-                  onClick={async () => {
-                    if (!course) return;
-                    setIsMetadataSaving(true);
-                    
-                    // Actualización optimista del curso
+                  try {
+                    // 1. Optimistic update
                     mutateAppData((current) => ({
                       ...current,
                       courses: current.courses.map((c) =>
-                        c.slug === course.slug
+                        c.slug === currentCourse.slug
                           ? {
                               ...c,
                               faculty: analysisResult.facultad || c.faculty,
                               program: analysisResult.programa || c.program,
                               credits: Number(analysisResult.creditos) || c.credits,
-                              summary: analysisResult.descripcionCurso || c.summary,
+                              summary: (analysisResult.descripcionCurso || c.summary).slice(0, 500), // Limit summary length
                               metadata: {
                                 ...c.metadata,
-                                semester: analysisResult.semestre || c.metadata.semester,
-                                courseType: analysisResult.tipoCurso || c.metadata.courseType,
-                                learningOutcomes: analysisResult.resultadosAprendizaje || c.metadata.learningOutcomes,
-                                topics: analysisResult.unidades?.map((u: any) => u.tituloUnidad) || c.metadata.topics,
-                                units: analysisResult.unidades || c.metadata.units,
-                                methodology: analysisResult.metodologia || c.metadata.methodology,
-                                evaluation: analysisResult.evaluacion || c.metadata.evaluation,
-                                bibliography: analysisResult.bibliografia || c.metadata.bibliography,
+                                ...metadataUpdate
                               }
                             }
                           : c
                       )
                     }));
 
-                    try {
-                      // Sincronizar con backend (Metadata)
-                      await fetch(`/api/course-metadata?slug=${course.slug}`, {
+                    // 2. Persist to API
+                    const [resCourse, resMeta] = await Promise.all([
+                      fetch(`/api/courses?slug=${encodeURIComponent(currentCourse.slug)}`, {
                         method: 'PATCH',
                         headers: { 'content-type': 'application/json' },
                         body: JSON.stringify({
-                          institution: course.metadata.institution,
-                          shortName: course.title,
-                          semester: analysisResult.semestre || course.metadata.semester,
-                          academicPeriod: course.metadata.academicPeriod,
-                          courseType: analysisResult.tipoCurso || course.metadata.courseType,
-                          learningOutcomes: analysisResult.resultadosAprendizaje || course.metadata.learningOutcomes,
-                          topics: analysisResult.unidades?.map((u: any) => u.tituloUnidad) || course.metadata.topics,
-                          units: analysisResult.unidades || course.metadata.units,
-                          methodology: analysisResult.metodologia || course.metadata.methodology,
-                          evaluation: analysisResult.evaluacion || course.metadata.evaluation,
-                          bibliography: analysisResult.bibliografia || course.metadata.bibliography,
-                          targetCloseDate: course.metadata.targetCloseDate,
-                          currentVersion: course.metadata.currentVersion,
-                          priority: course.metadata.priority,
-                          riskLevel: course.metadata.riskLevel,
-                          // Sync master fields
-                          faculty: analysisResult.facultad || course.faculty,
-                          program: analysisResult.programa || course.program,
-                          credits: Number(analysisResult.creditos) || course.credits,
-                          summary: analysisResult.descripcionCurso || course.summary
+                          faculty: analysisResult.facultad,
+                          program: analysisResult.programa,
+                          credits: Number(analysisResult.creditos),
+                          summary: analysisResult.descripcionCurso
                         })
-                      });
+                      }),
+                      fetch(`/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`, {
+                        method: 'PATCH',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify(metadataUpdate)
+                      })
+                    ]);
 
-                      refreshAppData();
-                      setIsVerifyingAnalysis(false);
-                      setMicroStep(3); // Mantener en éxito
-                      
-                      showAlert({
-                        title: 'Expediente Actualizado',
-                        message: 'La información del microcurrículo ha sido integrada exitosamente. El curso ahora refleja el estado real.',
-                        tone: 'success'
-                      });
-                    } catch (err: any) {
-                       showAlert({ title: 'Error al guardar', message: err.message, tone: 'error' });
-                    } finally {
-                      setIsMetadataSaving(false);
-                    }
-                  }}
-                >
-                  <Save size={16} />
-                  <span>{isMetadataSaving ? 'Guardando...' : 'Guardar en Expediente'}</span>
-                </button>
-             </div>
+                    if (!resCourse.ok || !resMeta.ok) throw new Error('Error al sincronizar con el servidor.');
+
+                    refreshAppData();
+                    setIsVerifyingAnalysis(false);
+                    showAlert({
+                      title: 'Expediente actualizado',
+                      message: 'La información del microcurrículo se ha guardado correctamente.',
+                      tone: 'success'
+                    });
+                  } catch (error) {
+                    mutateAppData(originalAppData);
+                    showAlert({ 
+                      title: 'Error al guardar', 
+                      message: 'No se pudo actualizar el expediente operativo. Verifique la conexión.', 
+                      tone: 'error' 
+                    });
+                  } finally {
+                    setIsMetadataSaving(false);
+                  }
+                }}
+               >
+                 {isMetadataSaving ? <RefreshCcw size={18} className="animate-spin mr-2" /> : <Save size={18} className="mr-2" />}
+                 <span>{isMetadataSaving ? 'Guardando...' : 'Guardar en Expediente'}</span>
+               </button>
+            </div>
+          }
+        >
+          <div className="page-stack max-w-5xl mx-auto py-4">
+             <div className="management-layout">
+                <main className="page-stack gap-10">
+                  {/* METADATOS PRINCIPALES */}
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                          <Settings size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Metodatos del curso</h3>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      <div className="form-group">
+                        <label className="form-label">Facultad / Escuela</label>
+                        <input 
+                          className="modern-input"
+                          value={analysisResult.facultad || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, facultad: e.target.value })} 
+                          placeholder="Ej: Facultad de Ingeniería"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Programa Académico</label>
+                        <input 
+                          className="modern-input"
+                          value={analysisResult.programa || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, programa: e.target.value })} 
+                          placeholder="Ej: Maestría en IA"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Semestre / Ciclo</label>
+                        <input 
+                          className="modern-input"
+                          value={analysisResult.semestre || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, semestre: e.target.value })} 
+                          placeholder="Ej: Segundo Semestre"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Tipo de curso</label>
+                        <input 
+                          className="modern-input"
+                          value={analysisResult.tipoCurso || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, tipoCurso: e.target.value })} 
+                          placeholder="Ej: Teórico-Práctico"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Créditos Académicos</label>
+                        <input 
+                          type="number" 
+                          className="modern-input"
+                          value={analysisResult.creditos || 0} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, creditos: Number(e.target.value) })} 
+                        />
+                      </div>
+                    </div>
+                  </article>
+
+                  {/* DESCRIPCIÓN Y RESULTADOS */}
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-sage/10 text-sage rounded-lg">
+                          <Target size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Académico y Resultados de Aprendizaje</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-8">
+                      <div className="form-group">
+                        <label className="form-label">Descripción o Justificación del curso</label>
+                        <textarea 
+                          rows={4} 
+                          className="modern-textarea"
+                          value={analysisResult.descripcionCurso || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, descripcionCurso: e.target.value })} 
+                          placeholder="Resumen del propósito del curso..."
+                        />
+                      </div>
+                      <div className="form-group">
+                         <label className="form-label">Resultados de aprendizaje esperados (RAE)</label>
+                         <div className="grid gap-3">
+                            {Array.isArray(analysisResult.resultadosAprendizaje) && analysisResult.resultadosAprendizaje.map((res: string, idx: number) => (
+                              <div key={idx} className="flex gap-3 items-start group animate-in slide-in-from-left-2" style={{ animationDelay: `${idx * 50}ms` }}>
+                                <textarea 
+                                  rows={2} 
+                                  className="modern-textarea flex-1 min-h-[70px] bg-white/50 focus:bg-white" 
+                                  value={res} 
+                                  onChange={(e) => {
+                                    const arr = [...analysisResult.resultadosAprendizaje];
+                                    arr[idx] = e.target.value;
+                                    setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
+                                  }} 
+                                />
+                                <button 
+                                  className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100" 
+                                  onClick={() => {
+                                    const arr = [...analysisResult.resultadosAprendizaje];
+                                    arr.splice(idx, 1);
+                                    setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
+                                  }}
+                                  title="Eliminar resultado"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            ))}
+                            <button 
+                              className="filter-chip w-fit mt-2 hover:bg-ocean/5 hover:text-ocean border-dashed border-2 px-6 py-3" 
+                              onClick={() => setAnalysisResult({...analysisResult, resultadosAprendizaje: [...(analysisResult.resultadosAprendizaje||[]), '']})}
+                            >
+                              <Plus size={16} className="mr-2" /> 
+                              <span>Agregar nuevo resultado</span>
+                            </button>
+                         </div>
+                      </div>
+                    </div>
+                  </article>
+
+                  {/* UNIDADES CURRICULARES */}
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-coral/10 text-coral rounded-lg">
+                          <Layers size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Estructura Curricular (Unidades y Temáticas)</h3>
+                      </div>
+                    </div>
+                    <div className="grid gap-6">
+                      {Array.isArray(analysisResult.unidades) && analysisResult.unidades.map((unidad: any, idx: number) => (
+                        <div key={idx} className="surface border border-line-strong rounded-3xl p-8 group transition-all hover:border-ocean/30 hover:shadow-xl hover:shadow-ocean/5 bg-white/40">
+                          <div className="flex items-start gap-6 mb-8">
+                             <div className="form-group flex-1">
+                               <label className="form-label text-ocean font-bold">Título de la Unidad {idx + 1}</label>
+                               <input 
+                                 className="modern-input text-lg font-semibold bg-white"
+                                 value={unidad.tituloUnidad || ''} 
+                                 onChange={(e) => {
+                                   const arr = [...analysisResult.unidades];
+                                   arr[idx] = { ...arr[idx], tituloUnidad: e.target.value };
+                                   setAnalysisResult({ ...analysisResult, unidades: arr });
+                                 }} 
+                               />
+                             </div>
+                             <button 
+                               className="p-3.5 rounded-2xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 mt-8" 
+                               onClick={() => {
+                                  const arr = [...analysisResult.unidades];
+                                  arr.splice(idx, 1);
+                                  setAnalysisResult({ ...analysisResult, unidades: arr });
+                                }}
+                                title="Eliminar unidad"
+                              >
+                                <Trash2 size={20} />
+                             </button>
+                          </div>
+                          
+                          <div className="form-group">
+                            <label className="form-label uppercase tracking-widest text-[10px] opacity-60">Temáticas y Subtemas</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                              {Array.isArray(unidad.tematicas) && unidad.tematicas.map((tema: string, tIdx: number) => (
+                                <div key={tIdx} className="flex gap-2 items-center group/tema animate-in fade-in">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-line-strong group-focus-within/tema:bg-ocean transition-colors" />
+                                   <input 
+                                     className="modern-input flex-1 py-2.5 text-sm bg-white/70" 
+                                     value={tema} 
+                                     onChange={(e) => {
+                                       const arr = [...analysisResult.unidades];
+                                       const newTemas = [...(arr[idx].tematicas || [])];
+                                       newTemas[tIdx] = e.target.value;
+                                       arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                       setAnalysisResult({ ...analysisResult, unidades: arr });
+                                     }}
+                                   />
+                                   <button 
+                                      className="p-2 rounded-xl text-muted hover:text-red-500 transition-all opacity-0 group-hover/tema:opacity-100" 
+                                      onClick={() => {
+                                         const arr = [...analysisResult.unidades];
+                                         const newTemas = [...(arr[idx].tematicas || [])];
+                                         newTemas.splice(tIdx, 1);
+                                         arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                         setAnalysisResult({ ...analysisResult, unidades: arr });
+                                      }}
+                                    >
+                                      <Trash2 size={14} />
+                                   </button>
+                                </div>
+                              ))}
+                              <button 
+                                className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean py-2.5 px-4 border-dashed" 
+                                onClick={() => {
+                                   const arr = [...analysisResult.unidades];
+                                   const newTemas = Array.isArray(arr[idx].tematicas) ? [...arr[idx].tematicas] : [];
+                                   newTemas.push('');
+                                   arr[idx] = { ...arr[idx], tematicas: newTemas };
+                                   setAnalysisResult({ ...analysisResult, unidades: arr });
+                                }}
+                              >
+                                <Plus size={14} className="mr-2" /> 
+                                <span className="text-xs font-bold">Añadir tema</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button 
+                        className="cta-button bg-none border-2 border-dashed border-ocean/30 !text-ocean bg-ocean/5 hover:bg-ocean/10 shadow-none px-8 py-5 mt-4 group" 
+                        onClick={() => setAnalysisResult({...analysisResult, unidades: [...(analysisResult.unidades||[]), { tituloUnidad: 'Nueva Unidad', tematicas: [''] }]})}
+                      >
+                        <Plus size={22} className="mr-3 group-hover:rotate-90 transition-transform" /> 
+                        <span className="text-lg">Agregar Unidad Curricular</span>
+                      </button>
+                    </div>
+                  </article>
+
+                  {/* METODOLOGÍA Y EVALUACIÓN */}
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gold/10 text-gold rounded-lg">
+                          <ClipboardCheck size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Metodología y Evaluación</h3>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                      <div className="form-group border-r border-line pr-8">
+                        <label className="form-label">Estrategia Metodológica</label>
+                        <textarea 
+                          rows={10} 
+                          className="modern-textarea"
+                          value={analysisResult.metodologia || ''} 
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} 
+                          placeholder="Describe cómo se impartirá el curso..."
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Esquema de Evaluación</label>
+                        <div className="grid gap-3">
+                            {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
+                              <div key={idx} className="flex gap-3 items-start group">
+                                <input 
+                                  className="modern-input flex-1 py-3 bg-white/50" 
+                                  value={ev} 
+                                  onChange={(e) => {
+                                    const arr = [...analysisResult.evaluacion];
+                                    arr[idx] = e.target.value;
+                                    setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                                  }} 
+                                />
+                                <button className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100" onClick={() => {
+                                  const arr = [...analysisResult.evaluacion];
+                                  arr.splice(idx, 1);
+                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                                }}><Trash2 size={18} /></button>
+                              </div>
+                            ))}
+                            <button 
+                              className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean border-dashed py-3 px-6" 
+                              onClick={() => setAnalysisResult({...analysisResult, evaluacion: [...(analysisResult.evaluacion||[]), '']})}
+                            >
+                              <Plus size={16} className="mr-2" /> 
+                              <span>Agregar ítem de evaluación</span>
+                            </button>
+                         </div>
+                      </div>
+                    </div>
+                  </article>
+
+                  {/* BIBLIOGRAFÍA */}
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-ink/10 text-ink rounded-lg">
+                          <BookOpen size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Referencias Bibliográficas</h3>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                       <label className="form-label">Fuentes y Bibliografía base</label>
+                       <div className="grid gap-4">
+                          {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.map((bib: string, idx: number) => (
+                            <div key={idx} className="flex gap-4 items-start group animate-in slide-in-from-bottom-2" style={{ animationDelay: `${idx * 40}ms` }}>
+                              <textarea 
+                                rows={2} 
+                                className="modern-textarea flex-1 min-h-[60px] bg-white/60 focus:bg-white italic text-sm" 
+                                value={bib} 
+                                onChange={(e) => {
+                                  const arr = [...analysisResult.bibliografia];
+                                  arr[idx] = e.target.value;
+                                  setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                                }} 
+                              />
+                              <button className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 mt-2" onClick={() => {
+                                const arr = [...analysisResult.bibliografia];
+                                arr.splice(idx, 1);
+                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                              }}><Trash2 size={18} /></button>
+                            </div>
+                          ))}
+                          <button 
+                            className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean border-dashed py-4 px-8 mt-2" 
+                            onClick={() => setAnalysisResult({...analysisResult, bibliografia: [...(analysisResult.bibliografia||[]), '']})}
+                          >
+                            <Plus size={18} className="mr-3" /> 
+                            <span className="text-base">Agregar referencia bibliográfica</span>
+                          </button>
+                       </div>
+                    </div>
+                  </article>
+                </main>
+              </div>
           </div>
         </ModalFrame>
       ) : null}
