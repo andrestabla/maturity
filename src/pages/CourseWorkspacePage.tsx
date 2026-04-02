@@ -553,6 +553,14 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .trim();
+}
+
 function normalizeArchitectureProductFormat(rawFormat: string): CourseProductMutationInput['format'] {
   const value = rawFormat.trim().toLocaleLowerCase();
 
@@ -573,6 +581,72 @@ function normalizeArchitectureProductFormat(rawFormat: string): CourseProductMut
   if (value.includes('recurso')) return 'Recurso';
   if (value.includes('red')) return 'RED';
   return 'Documento';
+}
+
+function resolveArchitectureSectionLabel(
+  rawSection: string,
+  title: string,
+  summary: string,
+  unitLabels: string[],
+  unitTitleHints: string[],
+  fallbackUnitIndex?: number,
+) {
+  const normalizedSection = normalizeSearchText(rawSection);
+  const normalizedTitle = normalizeSearchText(title);
+  const normalizedSummary = normalizeSearchText(summary);
+  const combined = [normalizedSection, normalizedTitle, normalizedSummary].filter(Boolean).join(' ');
+
+  if (
+    combined.includes('introduccion') ||
+    combined.includes('bienvenida') ||
+    combined.includes('encuadre') ||
+    combined.includes('diagnostico') ||
+    combined.includes('diagnóstico')
+  ) {
+    return 'Introducción';
+  }
+
+  if (
+    combined.includes('cierre') ||
+    combined.includes('final') ||
+    combined.includes('despedida') ||
+    combined.includes('retroalimentacion final') ||
+    combined.includes('retroalimentación final')
+  ) {
+    return 'Cierre';
+  }
+
+  const explicitUnitMatch = normalizedSection.match(/unidad\s*(\d+)/);
+  if (explicitUnitMatch) {
+    const unitIndex = Number(explicitUnitMatch[1]) - 1;
+    if (unitIndex >= 0 && unitIndex < unitLabels.length) {
+      return unitLabels[unitIndex];
+    }
+  }
+
+  for (let index = 0; index < unitLabels.length; index += 1) {
+    const label = unitLabels[index];
+    const normalizedLabel = normalizeSearchText(label);
+    const normalizedUnitTitle = normalizeSearchText(unitTitleHints[index] ?? '');
+
+    if (
+      normalizedSection === normalizedLabel ||
+      normalizedTitle.includes(normalizedLabel) ||
+      normalizedSummary.includes(normalizedLabel) ||
+      (normalizedUnitTitle &&
+        (normalizedSection.includes(normalizedUnitTitle) ||
+          normalizedTitle.includes(normalizedUnitTitle) ||
+          normalizedSummary.includes(normalizedUnitTitle)))
+    ) {
+      return label;
+    }
+  }
+
+  if (typeof fallbackUnitIndex === 'number' && unitLabels[fallbackUnitIndex]) {
+    return unitLabels[fallbackUnitIndex];
+  }
+
+  return rawSection.trim() || 'Introducción';
 }
 
 
@@ -2828,6 +2902,14 @@ export function CourseWorkspacePage({
 
       let streamBuffer = '';
       let generatedCount = 0;
+      const unitLabels = (currentCourse.metadata.units ?? []).map((_, index) => `Unidad ${index + 1}`);
+      const unitTitleHints = (currentCourse.metadata.units ?? []).map((unit) => unit.tituloUnidad ?? '');
+      type SuggestedArchitectureItem = {
+        title?: unknown;
+        summary?: unknown;
+        format?: unknown;
+        section?: unknown;
+      };
 
       const processArchitectureEvent = async (rawChunk: string) => {
         if (!rawChunk.trim()) {
@@ -2875,10 +2957,36 @@ export function CourseWorkspacePage({
 
         if (payload.complete && payload.data) {
           const suggested = payload.data;
+          const introSuggested: SuggestedArchitectureItem[] = (suggested.introduccion ?? []).map((item) => ({
+            ...item,
+            section: 'Introducción',
+          }));
+          const closureSuggested: SuggestedArchitectureItem[] = (suggested.cierre ?? []).map((item) => ({
+            ...item,
+            section: 'Cierre',
+          }));
+          const rawUnitSuggested = [...(suggested.unidades ?? [])] as SuggestedArchitectureItem[];
+
+          const normalizedUnitSuggested: SuggestedArchitectureItem[] = rawUnitSuggested.map((item, index) => {
+            const normalizedSection = resolveArchitectureSectionLabel(
+              String(item.section ?? ''),
+              String(item.title ?? ''),
+              String(item.summary ?? ''),
+              unitLabels,
+              unitTitleHints,
+              unitLabels.length > 0 ? index % unitLabels.length : undefined,
+            );
+
+            return {
+              ...item,
+              section: normalizedSection,
+            };
+          });
+
           const allSuggested = [
-            ...(suggested.introduccion ?? []),
-            ...(suggested.unidades ?? []),
-            ...(suggested.cierre ?? []),
+            ...introSuggested,
+            ...normalizedUnitSuggested,
+            ...closureSuggested,
           ];
 
           generatedCount = allSuggested.length;
@@ -4140,40 +4248,28 @@ export function CourseWorkspacePage({
 
     const products = currentCourse.products || [];
     const units = currentCourse.metadata.units || [];
+    const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
+    const unitTitleHints = units.map((unit) => unit.tituloUnidad ?? '');
     
-    // Categorización de productos estricta
-    // Categorización de productos estricta por campo 'section'
-    const introProducts = products.filter(p => 
-      p.section === 'Introducción' || 
-      (!p.section && (
-        p.title.toLocaleLowerCase().includes('introducción') || 
-        p.title.toLocaleLowerCase().includes('bienvenida') ||
-        p.title.toLocaleLowerCase().includes('[introducción]')
-      ))
-    );
+    const getResolvedSection = (product: CourseProduct) =>
+      resolveArchitectureSectionLabel(
+        product.section ?? '',
+        product.title,
+        product.summary,
+        unitLabels,
+        unitTitleHints,
+      );
+
+    const introProducts = products.filter((product) => getResolvedSection(product) === 'Introducción');
     
-    const closureProducts = products.filter(p => 
-      p.section === 'Cierre' || 
-      (!p.section && (
-        p.title.toLocaleLowerCase().includes('cierre') || 
-        p.title.toLocaleLowerCase().includes('final') || 
-        p.title.toLocaleLowerCase().includes('examen') ||
-        p.title.toLocaleLowerCase().includes('[cierre]')
-      ))
-    );
+    const closureProducts = products.filter((product) => getResolvedSection(product) === 'Cierre');
 
     const unitProductsMap = units.map((unit, idx) => {
        const uNumber = idx + 1;
        const unitLabel = `Unidad ${uNumber}`;
        return {
          unit,
-         products: products.filter(p => 
-           p.section === unitLabel || 
-           (!p.section && (
-             p.title.toLocaleLowerCase().includes(`unidad ${uNumber}`) || 
-             p.title.toLocaleLowerCase().includes(`[unidad ${uNumber}]`)
-           ))
-         )
+         products: products.filter((product) => getResolvedSection(product) === unitLabel),
        };
     });
 
@@ -4232,7 +4328,7 @@ export function CourseWorkspacePage({
                   <Plus size={14} />
                 </button>
               </div>
-              <div className="flex flex-col gap-3">
+              <div className="architecture-product-list">
                  {introProducts.length > 0 ? (
                    introProducts.map(product => renderArchitectureProductCard(product))
                  ) : (
@@ -4256,7 +4352,7 @@ export function CourseWorkspacePage({
                           <Plus size={14} />
                         </button>
                       </div>
-                      <div className="flex flex-col gap-3">
+                      <div className="architecture-product-list">
                         {entry.products.length > 0 ? (
                           entry.products.map(product => renderArchitectureProductCard(product))
                         ) : (
@@ -4283,7 +4379,7 @@ export function CourseWorkspacePage({
                   <Plus size={14} />
                 </button>
               </div>
-              <div className="flex flex-col gap-3">
+              <div className="architecture-product-list">
                 {closureProducts.length > 0 ? (
                    closureProducts.map(product => renderArchitectureProductCard(product))
                 ) : (
@@ -4488,28 +4584,28 @@ export function CourseWorkspacePage({
            openModal(`products:arquitectura`);
         }}
       >
-        <div className="flex items-start gap-4">
-          <div className="shrink-0 p-2.5 bg-white rounded-xl shadow-sm border border-line-strong group-hover:scale-110 transition-transform duration-300">
+        <div className="architecture-card__inner">
+          <div className="architecture-card__icon">
             {renderProductFormatIcon(product.format, 18)}
           </div>
-          <div className="min-w-0 flex-grow">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <strong className="text-sm font-bold truncate group-hover:text-ocean transition-colors duration-300">
+          <div className="architecture-card__copy">
+            <div className="architecture-card__title-row">
+              <strong className="architecture-card__title">
                 {product.title}
               </strong>
               {isDone && <CheckCircle2 size={12} className="text-sage" />}
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted/40">
+            <div className="architecture-card__meta">
+              <span className="architecture-card__format">
                 {product.format}
               </span>
               <div className="h-1 w-1 rounded-full bg-line" />
-              <span className={`text-[10px] font-bold ${isActive ? 'text-ocean' : 'text-muted/60'}`}>
+              <span className={`architecture-card__status ${isActive ? 'is-active' : 'is-muted'}`}>
                 {product.status}
               </span>
             </div>
             {product.summary && (
-              <p className="text-[10px] text-muted-foreground line-clamp-1 mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0">
+              <p className="architecture-card__summary">
                 {product.summary}
               </p>
             )}

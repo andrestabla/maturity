@@ -88,6 +88,18 @@ export default async function handler(request: Request | any, response?: any) {
       }
 
       const openai = new OpenAI({ apiKey });
+      const units = Array.isArray(course.metadata.units) ? course.metadata.units : [];
+      const unitBlueprint =
+        units.length > 0
+          ? units
+              .map((unit: any, index: number) => {
+                const topics = Array.isArray(unit.tematicas) && unit.tematicas.length > 0
+                  ? unit.tematicas.join(', ')
+                  : 'Sin temáticas explícitas';
+                return `- Unidad ${index + 1}: ${unit.tituloUnidad || `Unidad ${index + 1}`} | Temáticas: ${topics}`;
+              })
+              .join('\n')
+          : '- El curso no tiene unidades extraídas; evita inventar más de una unidad.';
 
       const systemPrompt = `Eres un Arquitecto Instruccional Senior. Tu objetivo es proponer la arquitectura de productos de un curso basado en su microcurrículo y los lineamientos pedagógicos de la institución.
       
@@ -96,13 +108,23 @@ export default async function handler(request: Request | any, response?: any) {
       2. Sección "Unidades": Productos por cada unidad/módulo extraído del microcurrículo.
       3. Sección "Cierre": Productos finales (ej. Evaluación final, Video de cierre).
 
+      REGLAS CRÍTICAS DE DISTRIBUCIÓN:
+      - NO pongas productos de bienvenida, encuadre, reglamento o diagnóstico dentro de las unidades.
+      - NO pongas productos de cierre o evaluación final dentro de las unidades.
+      - La sección "introduccion" solo contiene productos de arranque del curso.
+      - La sección "cierre" solo contiene productos de cierre.
+      - La sección "unidades" debe incluir productos repartidos entre TODAS las unidades listadas abajo.
+      - Si existen 3 unidades, debes incluir productos con section "Unidad 1", "Unidad 2" y "Unidad 3".
+      - Propón al menos 2 productos por unidad cuando el microcurrículo tenga unidades definidas.
+
       LINEAMIENTOS PEDAGÓGICOS (Asegúrate de que los productos cumplan esto):
       ${guidelines.length > 0 ? guidelines.map(g => `- ${g}`).join('\n') : '- Seguir estándares generales de diseño instruccional.'}
 
       DATOS DEL CURSO:
       Título: ${course.title}
       Resumen: ${course.summary}
-      Unidades/Módulos: ${JSON.stringify(course.metadata.units || [])}
+      Unidades/Módulos:
+      ${unitBlueprint}
 
       REGLA DE SALIDA:
       Devuelve un JSON estrictamente estructurado en tres bloques: "introduccion", "unidades" y "cierre".
@@ -110,12 +132,16 @@ export default async function handler(request: Request | any, response?: any) {
 
       Asegúrate de que el campo "format" coincida EXACTAMENTE con uno de estos valores: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación.
 
-      Asegúrate de que el campo "section" sea "Introducción", "Cierre" o el nombre de la unidad (ej: "Unidad 1").
+      Asegúrate de que el campo "section" sea "Introducción", "Cierre" o exactamente una de estas unidades:
+      ${units.length > 0 ? units.map((_: any, index: number) => `- Unidad ${index + 1}`).join('\n') : '- Unidad 1'}
 
       Ejemplo de formato:
       {
         "introduccion": [{ "title": "Video de presentación", "summary": "...", "format": "Video", "section": "Introducción" }],
-        "unidades": [{ "title": "Lectura fundamental U1", "summary": "...", "format": "Documento", "section": "Unidad 1" }],
+        "unidades": [
+          { "title": "Lectura fundamental U1", "summary": "...", "format": "Documento", "section": "Unidad 1" },
+          { "title": "Actividad aplicada U2", "summary": "...", "format": "Actividad", "section": "Unidad 2" }
+        ],
         "cierre": [{ "title": "Examen final", "summary": "...", "format": "Evaluación", "section": "Cierre" }]
       }`;
 
