@@ -80,15 +80,14 @@ export default async function handler(request: Request | any, response?: any) {
 
       notify({ progress: 10, step: 'Conectando con el Arquitecto IA...' });
 
-      const openaiConfig = await getIntegrationConfig('openai');
-      // Recuperación robusta: Configuración DB o Variable de Entorno
-      const apiKey = openaiConfig.openaiApiKey || openaiConfig.apiKey || process.env.OPENAI_API_KEY;
+      await getIntegrationConfig('openai');
+      const apiKey = process.env.OPENAI_API_KEY?.trim();
       
       if (!apiKey) {
-        throw new Error('No se encontró una API Key de OpenAI válida en la configuración ni en el entorno.');
+        throw new Error('No se encontró OPENAI_API_KEY en runtime para generar la arquitectura.');
       }
 
-      const openai = new OpenAI({ apiKey: apiKey.trim() });
+      const openai = new OpenAI({ apiKey });
 
       const systemPrompt = `Eres un Arquitecto Instruccional Senior. Tu objetivo es proponer la arquitectura de productos de un curso basado en su microcurrículo y los lineamientos pedagógicos de la institución.
       

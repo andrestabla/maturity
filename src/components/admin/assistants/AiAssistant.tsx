@@ -34,15 +34,15 @@ export function AiAssistant({ integrationId, config, onConfigChange }: AiAssista
           <div className="integration-assistant__steps">
             <div className="integration-assistant__step">
               <span>1</span>
-              <p>Obtén tu API Key desde el portal de {isOpenAI ? 'OpenAI' : 'Google AI Studio'}.</p>
+              <p>Genera una API Key nueva desde el portal de {isOpenAI ? 'OpenAI' : 'Google AI Studio'}.</p>
             </div>
             <div className="integration-assistant__step">
               <span>2</span>
-              <p>Ingresa la llave abajo. Se guardará de forma segura en la base de datos.</p>
+              <p>Regístrala como variable privada del entorno en Vercel. No se guarda en Gobierno ni en base de datos.</p>
             </div>
             <div className="integration-assistant__step">
               <span>3</span>
-              <p>Selecciona el modelo por defecto para la asistencia académica.</p>
+              <p>Vuelve aquí para elegir el modelo por defecto y ejecutar la validación de runtime.</p>
             </div>
           </div>
         </div>
@@ -50,18 +50,15 @@ export function AiAssistant({ integrationId, config, onConfigChange }: AiAssista
         <div className="assistant-form-box">
           <h5>Configuración de Runtime</h5>
           <div className="form-grid">
-            <label className="field">
-              <span>API Key</span>
-              <div className="field__control">
+            <div className="field">
+              <span>Credencial</span>
+              <div className="field__control" style={{ minHeight: '52px' }}>
                 <Key size={16} className="field__icon" />
-                <input
-                  type="password"
-                  value={(isOpenAI ? config.openaiApiKey : config.geminiApiKey) || ''}
-                  onChange={(e) => onConfigChange(isOpenAI ? 'openaiApiKey' : 'geminiApiKey', e.target.value)}
-                  placeholder={isOpenAI ? 'sk-...' : 'AIza...'}
-                />
+                <div style={{ paddingLeft: '2.5rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {isOpenAI ? 'OPENAI_API_KEY' : 'GEMINI_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY'} en runtime privado
+                </div>
               </div>
-            </label>
+            </div>
 
             <label className="field">
               <span>Modelo por defecto</span>

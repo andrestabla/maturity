@@ -673,11 +673,35 @@ function getIntegrationConfigValue(
   envKey: string,
   configKey?: string,
 ) {
-  return cleanSecretCandidate(config[configKey || '']) || cleanSecretCandidate(process.env[envKey]);
+  return cleanSecretCandidate(process.env[envKey]) || cleanSecretCandidate(config[configKey || '']);
 }
 
 function cleanSecretCandidate(value?: string | null) {
   return value?.trim() ?? '';
+}
+
+function sanitizeSensitiveIntegrationConfig(
+  integrationId: string,
+  config: Record<string, string>,
+) {
+  const nextConfig = { ...config };
+
+  if (integrationId === 'openai') {
+    delete nextConfig.openaiApiKey;
+    delete nextConfig.apiKey;
+  }
+
+  if (integrationId === 'gemini') {
+    delete nextConfig.geminiApiKey;
+    delete nextConfig.apiKey;
+  }
+
+  if (integrationId === 'youtube-data-api') {
+    delete nextConfig.youtubeApiKey;
+    delete nextConfig.apiKey;
+  }
+
+  return nextConfig;
 }
 
 async function readResponseText(response: Response) {
@@ -688,13 +712,13 @@ async function readResponseText(response: Response) {
   }
 }
 
-async function verifyOpenAI(config: Record<string, string>): Promise<IntegrationTestResult> {
-  const apiKey = getIntegrationConfigValue(config, 'OPENAI_API_KEY', 'openaiApiKey');
+async function verifyOpenAI(_config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey = cleanSecretCandidate(process.env.OPENAI_API_KEY);
 
   if (!apiKey) {
     return {
       status: 'Con error',
-      detail: 'La integración de OpenAI no tiene API Key disponible.',
+      detail: 'La integración de OpenAI no tiene OPENAI_API_KEY disponible en runtime.',
       lastError: 'Missing OpenAI API key',
     };
   }
@@ -721,15 +745,15 @@ async function verifyOpenAI(config: Record<string, string>): Promise<Integration
   };
 }
 
-async function verifyGemini(config: Record<string, string>): Promise<IntegrationTestResult> {
+async function verifyGemini(_config: Record<string, string>): Promise<IntegrationTestResult> {
   const apiKey =
-    getIntegrationConfigValue(config, 'GEMINI_API_KEY', 'geminiApiKey') ||
-    getIntegrationConfigValue(config, 'GOOGLE_GENERATIVE_AI_API_KEY', 'geminiApiKey');
+    cleanSecretCandidate(process.env.GEMINI_API_KEY) ||
+    cleanSecretCandidate(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
   if (!apiKey) {
     return {
       status: 'Con error',
-      detail: 'La integración de Gemini no tiene API Key disponible.',
+      detail: 'La integración de Gemini no tiene API Key disponible en runtime.',
       lastError: 'Missing Gemini API key',
     };
   }
@@ -755,12 +779,12 @@ async function verifyGemini(config: Record<string, string>): Promise<Integration
 }
 
 async function verifyYoutube(config: Record<string, string>): Promise<IntegrationTestResult> {
-  const apiKey = getIntegrationConfigValue(config, 'YOUTUBE_API_KEY', 'youtubeApiKey');
+  const apiKey = cleanSecretCandidate(process.env.YOUTUBE_API_KEY);
 
   if (!apiKey) {
     return {
       status: 'Con error',
-      detail: 'La integración de YouTube no tiene API Key disponible.',
+      detail: 'La integración de YouTube no tiene YOUTUBE_API_KEY disponible en runtime.',
       lastError: 'Missing YouTube API key',
     };
   }
@@ -1176,24 +1200,26 @@ function evaluateIntegrationRuntime(
       };
     }
     case 'openai': {
-      const key = getVal('OPENAI_API_KEY', 'openaiApiKey');
+      const key = cleanSecretCandidate(process.env.OPENAI_API_KEY);
       const ready = Boolean(key);
       return {
         ready,
-        source: config.openaiApiKey ? 'governance' : ready ? 'runtime' : 'none',
+        source: ready ? 'runtime' : 'none',
         summary: ready
-          ? `OpenAI listo (${config.defaultModel || 'modelo por defecto'}).`
+          ? `OpenAI listo desde runtime (${config.defaultModel || 'modelo por defecto'}).`
           : 'Falta OPENAI_API_KEY.',
       };
     }
     case 'gemini': {
-      const key = getVal('GEMINI_API_KEY', 'geminiApiKey') || getVal('GOOGLE_GENERATIVE_AI_API_KEY', 'geminiApiKey');
+      const key =
+        cleanSecretCandidate(process.env.GEMINI_API_KEY) ||
+        cleanSecretCandidate(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
       const ready = Boolean(key);
       return {
         ready,
-        source: config.geminiApiKey ? 'governance' : ready ? 'runtime' : 'none',
+        source: ready ? 'runtime' : 'none',
         summary: ready
-          ? `Gemini listo (${config.defaultModel || 'flash'}).`
+          ? `Gemini listo desde runtime (${config.defaultModel || 'flash'}).`
           : 'Falta API Key de Gemini.',
       };
     }
@@ -1252,18 +1278,14 @@ function evaluateIntegrationRuntime(
       };
     }
     case 'youtube-data-api': {
-      const ready = Boolean(getVal('YOUTUBE_API_KEY', 'youtubeApiKey'));
-      const source: AdminIntegrationSource = config.youtubeApiKey?.trim()
-        ? 'governance'
-        : ready
-          ? 'runtime'
-          : 'none';
+      const ready = Boolean(cleanSecretCandidate(process.env.YOUTUBE_API_KEY));
+      const source: AdminIntegrationSource = ready ? 'runtime' : 'none';
       return {
         ready,
         source,
         summary: ready
-          ? `YouTube Data API lista desde ${source === 'governance' ? 'Gobierno' : 'runtime'}.`
-          : 'Falta YouTube API Key en runtime o en configuración guardada.',
+          ? 'YouTube Data API lista desde runtime.'
+          : 'Falta YOUTUBE_API_KEY en runtime.',
       };
     }
     case 'neon-database': {
@@ -1298,7 +1320,10 @@ function evaluateIntegrationRuntime(
 function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
   const preset = integrationPresetMap[row.id];
   const assistant = integrationAssistantMap[row.id];
-  const config = parseJson<Record<string, string>>(row.config);
+  const config = sanitizeSensitiveIntegrationConfig(
+    row.id,
+    parseJson<Record<string, string>>(row.config),
+  );
   const scopes = parseJson<string[]>(row.scopes);
   const runtime = evaluateIntegrationRuntime(row.id, config);
   const effectiveEnabled = row.enabled;
@@ -1401,7 +1426,7 @@ export async function getIntegrationConfig(id: string) {
     return {} as Record<string, string>;
   }
 
-  return parseJson<Record<string, string>>(row.config);
+  return sanitizeSensitiveIntegrationConfig(id, parseJson<Record<string, string>>(row.config));
 }
 
 async function readLogs() {
@@ -1739,8 +1764,11 @@ export async function updateIntegrationSettings(
     throw new Error('Integración no encontrada.');
   }
 
-  const nextConfig = Object.fromEntries(
+  const nextConfig = sanitizeSensitiveIntegrationConfig(
+    input.id,
+    Object.fromEntries(
     Object.entries(input.config).map(([key, value]) => [key, value.trim()]),
+    ),
   );
   const nextScopes = uniqueValues(input.scopes);
   const nextStatus: AdminIntegrationStatus = input.enabled ? 'Pendiente' : 'Inactiva';

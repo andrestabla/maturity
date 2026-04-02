@@ -101,8 +101,14 @@ export default async function handler(request: Request | any, response?: any) {
 
       notify({ progress: 60, step: 'Semántica IA analizando...' });
 
-      const openaiConfig = await getIntegrationConfig('openai');
-      const openai = new OpenAI({ apiKey: openaiConfig.apiKey });
+      await getIntegrationConfig('openai');
+      const apiKey = process.env.OPENAI_API_KEY?.trim();
+
+      if (!apiKey) {
+        throw new Error('No se encontró OPENAI_API_KEY en runtime para analizar el microcurrículo.');
+      }
+
+      const openai = new OpenAI({ apiKey });
 
       const systemPrompt = `Eres un experto en currículo académico. Extrae literalmente la información del microcurrículo y devuélvela en JSON estructurado. 
       REGLA VITAL: Si un campo no se encuentra en la información, asigna el valor "No especificado" si es texto, 0 si es número, o [] si es un arreglo. 
