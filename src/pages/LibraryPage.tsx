@@ -56,10 +56,6 @@ function makeResourceDrafts(resources: LibraryResource[]) {
   ) as Record<string, LibraryResourceMutationInput>;
 }
 
-function tagsToInput(tags: string[]) {
-  return tags.join(', ');
-}
-
 /** Legacy tag conversion logic removed for SidePanel compatibility */
 
 export function LibraryPage({ role, userRole, appData, refreshAppData }: LibraryPageProps) {
