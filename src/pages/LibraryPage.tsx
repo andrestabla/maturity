@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LibraryBig, NotebookTabs, PackageCheck, PencilLine, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, LibraryBig, NotebookTabs, PackageCheck, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
@@ -60,12 +60,7 @@ function tagsToInput(tags: string[]) {
   return tags.join(', ');
 }
 
-function inputToTags(value: string) {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-}
+/** Legacy tag conversion logic removed for SidePanel compatibility */
 
 export function LibraryPage({ role, userRole, appData, refreshAppData }: LibraryPageProps) {
   const { showAlert, showConfirm } = useSystemDialog();
@@ -108,10 +103,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
   const [resourceDrafts, setResourceDrafts] = useState<Record<string, LibraryResourceMutationInput>>(
     () => makeResourceDrafts(resources),
   );
-  const [tagInputs, setTagInputs] = useState<Record<string, string>>(() =>
-    Object.fromEntries(resources.map((resource) => [resource.id, tagsToInput(resource.tags)])),
-  );
-  const [newTagInput, setNewTagInput] = useState(() => tagsToInput(resourceForm.tags));
 
   useEffect(() => {
     setResourceForm((current) => ({
@@ -119,14 +110,10 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
       kind: current.kind,
       status: current.status,
     }));
-    setNewTagInput('');
   }, [defaultCourseSlug]);
 
   useEffect(() => {
     setResourceDrafts(makeResourceDrafts(resources));
-    setTagInputs(
-      Object.fromEntries(resources.map((resource) => [resource.id, tagsToInput(resource.tags)])),
-    );
   }, [appData, role]);
 
   const editingResource =
@@ -151,7 +138,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
           summary: editingResource.summary,
         },
       }));
-      setTagInputs((current) => ({
         ...current,
         [editingResource.id]: tagsToInput(editingResource.tags),
       }));
@@ -182,7 +168,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
 
       refreshAppData();
       setResourceForm(buildResourceForm(defaultCourseSlug));
-      setNewTagInput('');
       setIsComposerOpen(false);
     } catch (error) {
       await showAlert({

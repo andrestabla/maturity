@@ -583,7 +583,6 @@ export function UserProfilePage({
             <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Editar información personal"
               description="La edición se resuelve en modal para que la vista de perfil permanezca limpia."
-              width="xl"
               onClose={closeProfileEditor}
             >
               <form className="editor-card" onSubmit={isAdminDirectoryView ? handleSaveAdmin : handleSaveProfile}>
@@ -727,7 +726,6 @@ export function UserProfilePage({
             <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Editar acceso, roles y alcance"
               description="Los cambios administrativos se resuelven fuera de la página para evitar saturación."
-              width="xl"
               onClose={closeAdminAccessEditor}
             >
               <form className="editor-card" onSubmit={handleSaveAdmin}>
@@ -942,10 +940,9 @@ export function UserProfilePage({
           ) : null}
 
           {!isAdminDirectoryView && isPasswordEditorOpen ? (
-            <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
+            <SidePanel isOpen={true} width="lg" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Actualizar contraseña"
               description="La seguridad se edita en modal para mantener el perfil como vista de lectura."
-              width="lg"
               onClose={closePasswordEditor}
             >
               <form className="editor-card" onSubmit={handlePasswordChange}>

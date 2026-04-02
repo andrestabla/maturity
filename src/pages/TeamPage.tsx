@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SidePanel } from '../components/SidePanel.js';
-import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationAssistant } from '../components/admin/IntegrationAssistant.js';
@@ -2728,7 +2727,7 @@ export function TeamPage({
             description="Los cambios se guardan desde este panel y se reflejan en todo el directorio."
             sideLabel="Inst"
             sideDescription="GOBIERNO"
-            variant="drawer"
+            
             width="xl"
             onClose={closeInstitutionOverlay}
           >
@@ -2826,7 +2825,7 @@ export function TeamPage({
           <SidePanel isOpen={true}
             title={selectedInstitutionStructure.institution}
             description="Consulta la estructura completa y abre la edición desde aquí cuando lo necesites."
-            variant="drawer"
+            
             width="xl"
             onClose={closeInstitutionOverlay}
           >
@@ -2934,7 +2933,7 @@ export function TeamPage({
           <SidePanel isOpen={true}
             title={editingStructureId ? 'Editar estructura institucional' : 'Crear estructura institucional'}
             description="La edición se resuelve en un side-panel para mantener la vista principal limpia."
-            variant="drawer"
+            
             width="xl"
             onClose={closeInstitutionOverlay}
           >
