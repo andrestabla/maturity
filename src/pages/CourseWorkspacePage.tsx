@@ -3144,7 +3144,8 @@ export function CourseWorkspacePage({
         {canEdit && isEditorOpen ? (
           <ModalFrame
             title={title}
-            description="La bitácora se edita en modal para preservar el foco de la página principal."
+            description="La bitácora se edita en un panel lateral para preservar el foco de la página principal."
+            variant="drawer"
             width="xl"
             onClose={closeWorkspaceOverlay}
           >
@@ -4195,7 +4196,8 @@ export function CourseWorkspacePage({
           <ModalFrame
             title="Lineamientos institucionales"
             description="Marco normativo y pedagógico que rige el diseño de productos para este curso."
-            width="md"
+            variant="drawer"
+            width="xl"
             onClose={() => setIsGuidelinesModalOpen(false)}
           >
             <div className="page-stack">
@@ -4223,7 +4225,8 @@ export function CourseWorkspacePage({
         {isAddProductModalOpen && (
           <ModalFrame
             title={`Nuevo producto - ${activeAddSection}`}
-            width="md"
+            variant="drawer"
+            width="xl"
             onClose={() => setIsAddProductModalOpen(false)}
             footer={
               <div className="flex justify-end gap-3 w-full">
@@ -5895,8 +5898,9 @@ export function CourseWorkspacePage({
       {isVerifyingAnalysis && analysisResult ? (
         <ModalFrame
           title="Verificar Información Extraída"
-          description="Asegura que los datos capturados literalmente del documento sean correctos antes de guardarlos en el expediente."
-          width="full"
+          description="Asegura que los datos capturados del documento sean correctos antes de guardarlos."
+          variant="drawer"
+          width="xl"
           onClose={() => setIsVerifyingAnalysis(false)}
           footer={
             <div className="flex justify-end gap-3 w-full">

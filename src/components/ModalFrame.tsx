@@ -79,7 +79,7 @@ export function ModalFrame({
 
   return createPortal(
     <div 
-      className={`fixed inset-0 z-[1000] flex bg-ink/75 backdrop-blur-2xl backdrop-saturate-[180%] animate-in fade-in transition-all ${
+      className={`fixed inset-0 z-[1000] flex bg-slate-950/40 backdrop-blur-md animate-in fade-in transition-all ${
         variant === 'drawer' ? 'justify-end p-0' : 'items-end md:items-center justify-center p-0 md:p-6'
       }`} 
       onClick={onClose}
@@ -88,14 +88,14 @@ export function ModalFrame({
         ref={modalRef as any}
         className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-600 flex flex-col ${
           variant === 'drawer' 
-            ? 'h-full w-full slide-in-from-right rounded-none border-l border-line-strong' 
+            ? 'h-screen w-full slide-in-from-right rounded-none border-l border-line-strong' 
             : 'h-full md:h-[95vh] w-full slide-in-from-bottom md:zoom-in rounded-none md:rounded-[40px] border-x md:border border-line-strong'
         } ${
           width === 'sm' ? 'max-w-md' : 
           width === 'md' ? 'max-w-2xl' : 
-          width === 'xl' ? 'max-w-[96vw]' : 
+          width === 'xl' ? 'max-w-[40vw]' : 
           width === 'full' ? 'max-w-full' : 
-          variant === 'drawer' ? 'max-w-[40vw]' : 'max-w-6xl'
+          variant === 'drawer' ? 'max-w-2xl' : 'max-w-6xl'
         }`}
         role="dialog"
         aria-modal="true"
