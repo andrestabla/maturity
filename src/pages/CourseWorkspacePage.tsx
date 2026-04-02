@@ -66,6 +66,7 @@ import {
   getInstitutionPrograms,
 } from '../utils/institutions.js';
 import {
+  canManageArchitecture,
   canCreateCourseProducts,
   canCreateTasks,
   canDeleteCourseProducts,
@@ -74,6 +75,7 @@ import {
   canEditPlanningWorkspace,
   canEditStageNote,
   canManageCourses,
+  canManageMicrocurriculo,
 } from '../utils/permissions.js';
 
 interface CourseWorkspacePageProps {
@@ -839,6 +841,12 @@ export function CourseWorkspacePage({
   const [architectureStep, setArchitectureStep] = useState('');
   const [architectureProgress, setArchitectureProgress] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
+  const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
+  const [planningSectionFilter, setPlanningSectionFilter] = useState('Todas');
+  const [planningProductFilter, setPlanningProductFilter] = useState('');
+  const [planningStartFilter, setPlanningStartFilter] = useState('');
+  const [planningEndFilter, setPlanningEndFilter] = useState('');
+  const [planningOwnerFilter, setPlanningOwnerFilter] = useState('');
   const [metadataForm, setMetadataForm] = useState<CourseMetadataMutationInput>(() =>
     course ? makeMetadataForm(course) : makeMetadataForm({
       id: '',
@@ -1252,6 +1260,9 @@ export function CourseWorkspacePage({
 
   const currentCourse = course;
   const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
+  const architecturePreviewProduct = architecturePreviewProductId
+    ? architectureProducts.find((product) => product.id === architecturePreviewProductId) ?? null
+    : null;
   const planningProduct = planningProductId
     ? architectureProducts.find((product) => product.id === planningProductId) ?? null
     : null;
@@ -1266,6 +1277,9 @@ export function CourseWorkspacePage({
   const relatedResources = appData.libraryResources.filter(
     (resource) => resource.courseSlug === currentCourse.slug,
   );
+  const canOperateMicrocurriculo = canManageMicrocurriculo(userRole);
+  const canOperateArchitecture = canManageArchitecture(userRole);
+  const canEditPlanning = canEditPlanningWorkspace(userRole);
   const blockingCheckpoints = currentCourse.stageChecklist.filter(
     (checkpoint, index) => index <= currentStageIndex && checkpoint.status === 'blocked',
   );
@@ -3867,6 +3881,38 @@ export function CourseWorkspacePage({
   function renderMicrocurriculoWizard() {
     if (!course) return null;
 
+    if (!canOperateMicrocurriculo) {
+      return (
+        <div className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Microcurrículo</span>
+              <h3>Consulta del Microcurrículo</h3>
+            </div>
+            <span className="badge badge--outline">Solo lectura</span>
+          </div>
+
+          <div className="empty-state">
+            <strong>El análisis y la edición están restringidos</strong>
+            <p>
+              Solo el coordinador o el administrador pueden ejecutar análisis, revisar archivos y
+              editar la información extraída. Desde este rol puedes consultar el microcurrículo ya
+              consolidado.
+            </p>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setIsVerifyingAnalysis(true)}
+              disabled={!analysisResult}
+            >
+              <Search size={16} />
+              <span>Ver microcurrículo</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="surface section-card">
         <div className="section-heading">
@@ -4828,21 +4874,25 @@ export function CourseWorkspacePage({
                <span>Lineamientos Institucionales</span>
              </button>
 
-             <div className="h-6 w-px bg-border/40 mx-2" />
+             {canOperateArchitecture || canDeleteCourseProducts(userRole) ? (
+               <div className="h-6 w-px bg-border/40 mx-2" />
+             ) : null}
 
-             <button 
-               type="button"
-               className="cta-button shadow-lg shadow-ocean/20" 
-               onClick={() => void handleGenerateArchitecture()}
-               disabled={isGeneratingArchitecture}
-             >
-               {isGeneratingArchitecture ? (
-                 <RefreshCcw size={16} className="animate-spin" />
-               ) : (
-                 <Sparkles size={16} />
-               )}
-               <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
-             </button>
+             {canOperateArchitecture ? (
+               <button 
+                 type="button"
+                 className="cta-button shadow-lg shadow-ocean/20" 
+                 onClick={() => void handleGenerateArchitecture()}
+                 disabled={isGeneratingArchitecture}
+               >
+                 {isGeneratingArchitecture ? (
+                   <RefreshCcw size={16} className="animate-spin" />
+                 ) : (
+                   <Sparkles size={16} />
+                 )}
+                 <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
+               </button>
+             ) : null}
 
              {canDeleteCourseProducts(userRole) ? (
                <button 
@@ -4868,9 +4918,11 @@ export function CourseWorkspacePage({
             <div className="architecture-group">
               <div className="architecture-group__head">
                 <h4 className="flex items-center"><BookOpen size={18} className="mr-2 text-ocean" /> Introducción</h4>
-                <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Introducción')}>
-                  <Plus size={14} />
-                </button>
+                {canOperateArchitecture ? (
+                  <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Introducción')}>
+                    <Plus size={14} />
+                  </button>
+                ) : null}
               </div>
               <div className="architecture-product-list">
                  {introProducts.length > 0 ? (
@@ -4892,9 +4944,11 @@ export function CourseWorkspacePage({
                           <Layers size={18} className="mr-2 text-gold shrink-0" />
                           <span className="truncate">Unidad {idx + 1}</span>
                         </h4>
-                        <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct(`Unidad ${idx + 1}`)}>
-                          <Plus size={14} />
-                        </button>
+                        {canOperateArchitecture ? (
+                          <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct(`Unidad ${idx + 1}`)}>
+                            <Plus size={14} />
+                          </button>
+                        ) : null}
                       </div>
                       <div className="architecture-product-list">
                         {entry.products.length > 0 ? (
@@ -4919,9 +4973,11 @@ export function CourseWorkspacePage({
             <div className="architecture-group">
               <div className="architecture-group__head">
                 <h4 className="flex items-center"><MonitorPlay size={18} className="mr-2 text-sage" /> Cierre</h4>
-                <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Cierre')}>
-                  <Plus size={14} />
-                </button>
+                {canOperateArchitecture ? (
+                  <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Cierre')}>
+                    <Plus size={14} />
+                  </button>
+                ) : null}
               </div>
               <div className="architecture-product-list">
                 {closureProducts.length > 0 ? (
@@ -4960,6 +5016,109 @@ export function CourseWorkspacePage({
                     No hay lineamientos específicos configurados para esta institución.
                   </div>
                 )}
+              </div>
+            </div>
+          </SidePanel>
+        ) : null}
+
+        {architecturePreviewProduct ? (
+          <SidePanel
+            isOpen={Boolean(architecturePreviewProduct)}
+            title={architecturePreviewProduct.title}
+            description="Ficha ampliada del producto dentro de la arquitectura del curso."
+            sideLabel="Prod"
+            sideDescription="DETALLE"
+            width="xl"
+            onClose={() => setArchitecturePreviewProductId(null)}
+            footer={
+              <div className="flex justify-end gap-3 w-full">
+                <button
+                  type="button"
+                  className="filter-chip"
+                  onClick={() => setArchitecturePreviewProductId(null)}
+                >
+                  Cerrar
+                </button>
+                {canEditCourseProduct(userRole, architecturePreviewProduct.owner, architecturePreviewProduct.stage) ? (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setArchitecturePreviewProductId(null);
+                        openArchitectureProductEditor(architecturePreviewProduct, 'move');
+                      }}
+                    >
+                      <MoveRight size={16} />
+                      <span>Mover</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="cta-button"
+                      onClick={() => {
+                        setArchitecturePreviewProductId(null);
+                        openArchitectureProductEditor(architecturePreviewProduct, 'edit');
+                      }}
+                    >
+                      <PencilLine size={16} />
+                      <span>Editar producto</span>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            }
+          >
+            <div className="page-stack">
+              <div className="institution-detail-grid">
+                <div className="list-item">
+                  <div>
+                    <strong>Sección</strong>
+                    <p>{architecturePreviewProduct.section || 'Sin sección'}</p>
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Formato</strong>
+                    <p>{architecturePreviewProduct.format}</p>
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Estado</strong>
+                    <p>{architecturePreviewProduct.status}</p>
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Responsable</strong>
+                    <p>{architecturePreviewProduct.owner}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="list-stack">
+                <div className="list-item">
+                  <div>
+                    <strong>Descripción</strong>
+                    <p>{architecturePreviewProduct.summary || 'Sin descripción ampliada.'}</p>
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Versión</strong>
+                    <p>{architecturePreviewProduct.version}</p>
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Detalle estructurado</strong>
+                    <p>
+                      {architecturePreviewProduct.body?.trim()
+                        ? architecturePreviewProduct.body
+                        : 'Este producto todavía no tiene contenido estructurado adicional.'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </SidePanel>
@@ -5168,6 +5327,15 @@ export function CourseWorkspacePage({
       <div
         key={product.id}
         className={`architecture-card group animate-in fade-in transition-all duration-300 ${isDone ? 'opacity-70' : ''}`}
+        onClick={() => setArchitecturePreviewProductId(product.id)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setArchitecturePreviewProductId(product.id);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div className="architecture-card__inner">
           <div className="architecture-card__icon">
@@ -5203,7 +5371,10 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className="ghost-button ghost-button--compact"
-                  onClick={() => openArchitectureProductEditor(product, 'edit')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openArchitectureProductEditor(product, 'edit');
+                  }}
                 >
                   <PencilLine size={14} />
                   <span>Editar</span>
@@ -5211,7 +5382,10 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className="ghost-button ghost-button--compact"
-                  onClick={() => openArchitectureProductEditor(product, 'move')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openArchitectureProductEditor(product, 'move');
+                  }}
                 >
                   <MoveRight size={14} />
                   <span>Mover</span>
@@ -5222,7 +5396,10 @@ export function CourseWorkspacePage({
               <button
                 type="button"
                 className="danger-button danger-button--ghost danger-button--compact"
-                onClick={() => void handleProductDelete(product.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleProductDelete(product.id);
+                }}
               >
                 <Trash2 size={14} />
                 <span>Eliminar</span>
@@ -5259,8 +5436,39 @@ export function CourseWorkspacePage({
 
         return left.product.title.localeCompare(right.product.title, 'es');
       });
+    const filteredPlanningRows = planningRows.filter(({ product, sectionLabel }) => {
+      const window = getProductPlanningWindow(product.phasePlan);
+      const assigneeNames = getPlanningAssigneeNames(product.phasePlan).join(' ');
+      const normalizedProductFilter = planningProductFilter.trim().toLowerCase();
+      const normalizedOwnerFilter = planningOwnerFilter.trim().toLowerCase();
 
-    const planningWindows = planningRows
+      if (planningSectionFilter !== 'Todas' && sectionLabel !== planningSectionFilter) {
+        return false;
+      }
+
+      if (
+        normalizedProductFilter &&
+        !`${product.title} ${product.summary}`.toLowerCase().includes(normalizedProductFilter)
+      ) {
+        return false;
+      }
+
+      if (planningStartFilter && window.start?.toISOString().slice(0, 10) !== planningStartFilter) {
+        return false;
+      }
+
+      if (planningEndFilter && window.end?.toISOString().slice(0, 10) !== planningEndFilter) {
+        return false;
+      }
+
+      if (normalizedOwnerFilter && !assigneeNames.toLowerCase().includes(normalizedOwnerFilter)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const planningWindows = filteredPlanningRows
       .map(({ product }) => getProductPlanningWindow(product.phasePlan))
       .filter((window) => window.start && window.end);
     const today = new Date();
@@ -5339,6 +5547,68 @@ export function CourseWorkspacePage({
               </div>
             </div>
 
+            <div className="planning-gantt__filters">
+              <label className="field">
+                <span>Sección</span>
+                <div className="field__control">
+                  <select
+                    value={planningSectionFilter}
+                    onChange={(event) => setPlanningSectionFilter(event.target.value)}
+                  >
+                    {['Todas', ...sectionOrder].map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Producto</span>
+                <div className="field__control">
+                  <input
+                    value={planningProductFilter}
+                    onChange={(event) => setPlanningProductFilter(event.target.value)}
+                    placeholder="Buscar por nombre o descripción"
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Inicio</span>
+                <div className="field__control">
+                  <input
+                    type="date"
+                    value={planningStartFilter}
+                    onChange={(event) => setPlanningStartFilter(event.target.value)}
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Final</span>
+                <div className="field__control">
+                  <input
+                    type="date"
+                    value={planningEndFilter}
+                    onChange={(event) => setPlanningEndFilter(event.target.value)}
+                  />
+                </div>
+              </label>
+
+              <label className="field">
+                <span>Responsables</span>
+                <div className="field__control">
+                  <input
+                    value={planningOwnerFilter}
+                    onChange={(event) => setPlanningOwnerFilter(event.target.value)}
+                    placeholder="Buscar responsable"
+                  />
+                </div>
+              </label>
+            </div>
+
             <div className="planning-gantt">
               <div className="planning-gantt__table">
                 <div className="planning-gantt__header">
@@ -5361,12 +5631,11 @@ export function CourseWorkspacePage({
                 </div>
 
                 <div className="planning-gantt__body">
-                  {planningRows.map(({ product, sectionLabel }) => {
+                  {filteredPlanningRows.map(({ product, sectionLabel }) => {
                     const configuredPhases = countConfiguredPlanningPhases(product.phasePlan);
                     const assigneeNames = getPlanningAssigneeNames(product.phasePlan);
                     const window = getProductPlanningWindow(product.phasePlan);
                     const hasWindow = Boolean(window.start && window.end);
-                    const canEditPlanning = canEditPlanningWorkspace(userRole);
                     const productStartLabel = window.start
                       ? formatDate(window.start.toISOString().slice(0, 10))
                       : 'Sin fecha';
@@ -5388,7 +5657,7 @@ export function CourseWorkspacePage({
                         title={
                           canEditPlanning
                             ? 'Abrir planeación del producto'
-                            : 'El rol Experto solo puede editar en la etapa de Escritura'
+                            : 'Solo el coordinador o el administrador pueden editar la planeación'
                         }
                       >
                         <div className="planning-gantt__cell">
@@ -5459,8 +5728,14 @@ export function CourseWorkspacePage({
                           </div>
                         </div>
                       </button>
-                    );
+                    ); 
                   })}
+                  {filteredPlanningRows.length === 0 ? (
+                    <div className="planning-gantt__empty">
+                      <strong>No hay productos que coincidan con los filtros</strong>
+                      <p>Ajusta sección, fechas o responsables para volver a ver la planeación.</p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -7129,7 +7404,122 @@ export function CourseWorkspacePage({
         </SidePanel>
       )}
 
-      {isVerifyingAnalysis && analysisResult ? (
+      {isVerifyingAnalysis && analysisResult && !canOperateMicrocurriculo ? (
+        <SidePanel
+          isOpen={isVerifyingAnalysis}
+          title="Ver microcurrículo"
+          description="Consulta de solo lectura del microcurrículo consolidado para este curso."
+          sideLabel="IA"
+          sideDescription="LECTURA"
+          width="xl"
+          onClose={() => setIsVerifyingAnalysis(false)}
+          footer={
+            <div className="flex justify-end gap-3 w-full">
+              <button
+                type="button"
+                className="filter-chip px-6 py-2.5"
+                onClick={() => setIsVerifyingAnalysis(false)}
+              >
+                <span>Cerrar</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="page-stack">
+            <div className="institution-detail-grid">
+              <div className="list-item">
+                <div>
+                  <strong>Facultad</strong>
+                  <p>{analysisResult.facultad || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Programa</strong>
+                  <p>{analysisResult.programa || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Semestre</strong>
+                  <p>{analysisResult.semestre || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Tipo de curso</strong>
+                  <p>{analysisResult.tipoCurso || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Créditos</strong>
+                  <p>{analysisResult.creditos || 0}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="list-stack">
+              <div className="list-item">
+                <div>
+                  <strong>Descripción del curso</strong>
+                  <p>{analysisResult.descripcionCurso || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Resultados de aprendizaje</strong>
+                  <p>
+                    {Array.isArray(analysisResult.resultadosAprendizaje) && analysisResult.resultadosAprendizaje.length > 0
+                      ? analysisResult.resultadosAprendizaje.join(' · ')
+                      : 'No especificado'}
+                  </p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Unidades</strong>
+                  <p>
+                    {Array.isArray(analysisResult.unidades) && analysisResult.unidades.length > 0
+                      ? analysisResult.unidades
+                          .map((unit: any, index: number) => unit.tituloUnidad || `Unidad ${index + 1}`)
+                          .join(' · ')
+                      : 'No especificado'}
+                  </p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Metodología</strong>
+                  <p>{analysisResult.metodologia || 'No especificado'}</p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Evaluación</strong>
+                  <p>
+                    {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.length > 0
+                      ? analysisResult.evaluacion.join(' · ')
+                      : 'No especificado'}
+                  </p>
+                </div>
+              </div>
+              <div className="list-item">
+                <div>
+                  <strong>Bibliografía</strong>
+                  <p>
+                    {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.length > 0
+                      ? analysisResult.bibliografia.join(' · ')
+                      : 'No especificado'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SidePanel>
+      ) : null}
+
+      {isVerifyingAnalysis && analysisResult && canOperateMicrocurriculo ? (
         <SidePanel
           isOpen={isVerifyingAnalysis}
           title="Verificar Información Extraída"

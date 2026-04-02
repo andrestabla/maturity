@@ -1,5 +1,6 @@
 import { getIntegrationConfig } from '../lib/admin-center.js';
 import { errorResponse } from '../lib/http.js';
+import { canManageArchitecture } from '../lib/permissions.js';
 import { getSessionUser } from '../lib/session.js';
 import { findCourseRecordBySlug, getInstitutionSettingsRecord } from '../lib/store.js';
 import OpenAI from 'openai';
@@ -25,6 +26,11 @@ export default async function handler(request: Request | any, response?: any) {
   if (!user) {
     if (isNodeRes) return response.status(401).json({ error: 'Autenticación requerida' });
     return errorResponse(401, 'Autenticación requerida');
+  }
+
+  if (!canManageArchitecture(user.role)) {
+    if (isNodeRes) return response.status(403).json({ error: 'No tienes permisos para generar la arquitectura con IA.' });
+    return errorResponse(403, 'No tienes permisos para generar la arquitectura con IA.');
   }
 
   let body: GenerateArchitecturePayload = { courseSlug: '' };

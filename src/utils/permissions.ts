@@ -12,6 +12,14 @@ export function canManageCourseTeam(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
 }
 
+export function canManageMicrocurriculo(role: Role) {
+  return canManageCourses(role);
+}
+
+export function canManageArchitecture(role: Role) {
+  return canManageCourses(role);
+}
+
 export function canEditCourseModules(role: Role) {
   return (
     role === 'Administrador' ||
@@ -25,6 +33,10 @@ export function canEditStageNote(role: Role, ownerRole: Role) {
 }
 
 export function canCreateCourseProducts(role: Role, stage?: CourseProductStage) {
+  if (stage === 'microcurriculo' || stage === 'arquitectura' || stage === 'planeacion') {
+    return canManageCourses(role);
+  }
+
   if (role === 'Experto') {
     return stage === 'escritura';
   }
@@ -39,6 +51,10 @@ export function canCreateCourseProducts(role: Role, stage?: CourseProductStage) 
 }
 
 export function canEditCourseProduct(role: Role, ownerRole: Role, stage?: CourseProductStage) {
+  if (stage === 'microcurriculo' || stage === 'arquitectura' || stage === 'planeacion') {
+    return canManageCourses(role);
+  }
+
   if (role === 'Experto') {
     return ownerRole === 'Experto' && stage === 'escritura';
   }
@@ -47,7 +63,7 @@ export function canEditCourseProduct(role: Role, ownerRole: Role, stage?: Course
 }
 
 export function canEditPlanningWorkspace(role: Role) {
-  return role !== 'Experto';
+  return canManageCourses(role);
 }
 
 export function canDeleteCourseProducts(role: Role) {

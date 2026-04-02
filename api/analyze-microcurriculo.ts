@@ -1,6 +1,8 @@
 import { getIntegrationConfig } from '../lib/admin-center.js';
 import { getR2Object } from '../lib/r2.js';
 import { errorResponse } from '../lib/http.js';
+import { getSessionUser } from '../lib/session.js';
+import { canManageMicrocurriculo } from '../lib/permissions.js';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
@@ -18,6 +20,17 @@ export default async function handler(request: Request | any, response?: any) {
   if (request.method !== 'POST') {
     if (isNodeRes) return response.status(405).json({ error: 'Método no permitido' });
     return errorResponse(405, 'Método no permitido');
+  }
+
+  const user = await getSessionUser(request);
+  if (!user) {
+    if (isNodeRes) return response.status(401).json({ error: 'Autenticación requerida' });
+    return errorResponse(401, 'Autenticación requerida');
+  }
+
+  if (!canManageMicrocurriculo(user.role)) {
+    if (isNodeRes) return response.status(403).json({ error: 'No tienes permisos para analizar el microcurrículo.' });
+    return errorResponse(403, 'No tienes permisos para analizar el microcurrículo.');
   }
 
   let body: any = {};

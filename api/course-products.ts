@@ -2,6 +2,7 @@ import {
   canCreateCourseProducts,
   canDeleteCourseProducts,
   canEditCourseProduct,
+  canEditPlanningWorkspace,
 } from '../lib/permissions.js';
 import { errorResponse, jsonResponse, readJson } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
@@ -85,6 +86,10 @@ export default async function handler(request: Request) {
 
     if (!canEditCourseProduct(user.role, current.owner, current.stage)) {
       return errorResponse(403, 'You do not have permission to update this product');
+    }
+
+    if (payload.phasePlan !== undefined && !canEditPlanningWorkspace(user.role)) {
+      return errorResponse(403, 'You do not have permission to edit product planning');
     }
 
     const product = await updateCourseProductRecord(payload.courseSlug, payload.id, payload);

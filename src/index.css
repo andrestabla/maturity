@@ -8628,6 +8628,10 @@ body::after {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .planning-gantt__filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .institution-summary-grid,
   .institution-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8661,6 +8665,10 @@ body::after {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .planning-gantt__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .institution-summary-grid,
   .institution-directory-card__stats,
   .institution-detail-grid {
@@ -8690,7 +8698,8 @@ body::after {
 
   .courses-filter-grid--compact,
   .courses-filter-grid--advanced,
-  .folder-grid {
+  .folder-grid,
+  .planning-gantt__filters {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -9110,11 +9119,13 @@ body::after {
   width: 100%;
   min-width: 0;
   padding: 16px;
+  text-align: left;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--panel-strong);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.03);
   overflow: hidden;
+  cursor: pointer;
 }
 
 .architecture-card__inner {
@@ -9254,6 +9265,13 @@ body::after {
   padding-bottom: 4px;
 }
 
+.planning-gantt__filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
 .planning-gantt__table {
   min-width: 1320px;
 }
@@ -9293,6 +9311,15 @@ body::after {
 .planning-gantt__row:hover,
 .planning-gantt__row:focus-visible {
   background: color-mix(in srgb, var(--ocean) 5%, white 95%);
+}
+
+.planning-gantt__row:disabled {
+  cursor: default;
+}
+
+.planning-gantt__row:disabled:hover,
+.planning-gantt__row:disabled:focus-visible {
+  background: transparent;
 }
 
 .planning-gantt__row:last-child {
@@ -9414,6 +9441,17 @@ body::after {
   transform: translateY(-50%);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
   opacity: 0.95;
+}
+
+.planning-gantt__empty {
+  display: grid;
+  gap: 6px;
+  padding: 22px 14px 8px;
+  color: var(--muted);
+}
+
+.planning-gantt__empty strong {
+  color: var(--secondary);
 }
 
 .planning-product-grid {
