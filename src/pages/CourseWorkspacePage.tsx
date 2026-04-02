@@ -3218,6 +3218,72 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function handleClearArchitecture() {
+    const architectureProducts = currentCourse.products.filter(
+      (product) => product.stage === 'arquitectura',
+    );
+
+    if (architectureProducts.length === 0) {
+      await showAlert({
+        title: 'Arquitectura vacía',
+        message: 'No hay productos de arquitectura para eliminar.',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Limpiar arquitectura',
+      message:
+        'Si continúas, se eliminarán todos los productos creados en Arquitectura para este curso. Esta acción limpia introducción, unidades y cierre.',
+      tone: 'warning',
+      confirmLabel: 'Sí, borrar todo',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProductError(null);
+    setIsProductSaving('architecture:clear');
+
+    try {
+      for (const product of architectureProducts) {
+        const response = await fetch('/api/course-products', {
+          method: 'DELETE',
+          credentials: 'same-origin',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            courseSlug: currentCourse.slug,
+            id: product.id,
+          }),
+        });
+
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? `No fue posible eliminar "${product.title}".`);
+        }
+      }
+
+      refreshAppData();
+      await showAlert({
+        title: 'Arquitectura limpiada',
+        message: `Se eliminaron ${architectureProducts.length} productos de la arquitectura del curso.`,
+        tone: 'success',
+      });
+    } catch (error) {
+      setProductError(
+        error instanceof Error ? error.message : 'No fue posible limpiar la arquitectura.',
+      );
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
   function updateProductDraft<Key extends keyof CourseProductMutationInput>(
     productId: string,
     key: Key,
@@ -4521,14 +4587,21 @@ export function CourseWorkspacePage({
                <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
              </button>
 
-             <button 
-               type="button"
-               className="ghost-button ml-auto" 
-               onClick={() => openModal(`products:arquitectura`)}
-             >
-               <PencilLine size={14} />
-               <span>Inventario de productos</span>
-             </button>
+             {canDeleteCourseProducts(userRole) ? (
+               <button 
+                 type="button"
+                 className="ghost-button ml-auto"
+                 onClick={() => void handleClearArchitecture()}
+                 disabled={isProductSaving === 'architecture:clear'}
+               >
+                 <Trash2 size={14} />
+                 <span>
+                   {isProductSaving === 'architecture:clear'
+                     ? 'Limpiando arquitectura...'
+                     : 'Limpiar arquitectura'}
+                 </span>
+               </button>
+             ) : null}
           </div>
         </header>
 
