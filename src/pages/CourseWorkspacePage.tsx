@@ -31,6 +31,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
+import { useModalStore } from '../store/modalStore.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
@@ -580,13 +581,12 @@ export function CourseWorkspacePage({
   const visibleTasks = canCreateTasks(userRole) ? relatedTasks : myTasks;
 
 
+  const { activeModal, isOpen: isGlobalModalOpen, open: openModal, close: closeModal } = useModalStore();
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-  const [isCourseEditorOpen, setIsCourseEditorOpen] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
-  const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
+  const [isAddingTask, setIsAddingTask] = useState(false);
   const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
   const [productComposerStage, setProductComposerStage] = useState<CourseProductStage | null>(null);
-  const [activeWorkspaceOverlay, setActiveWorkspaceOverlay] = useState<string | null>(null);
   const [courseError, setCourseError] = useState<string | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -842,8 +842,8 @@ export function CourseWorkspacePage({
   }
 
   function closeWorkspaceOverlay() {
-    setActiveWorkspaceOverlay(null);
-    setIsTaskComposerOpen(false);
+    closeModal();
+    closeModal();
     setIsTeamComposerOpen(false);
     setProductComposerStage(null);
   }
@@ -904,7 +904,7 @@ export function CourseWorkspacePage({
       setTeamDrafts({});
       setProductDrafts({});
       setProductComposerStage(null);
-      setActiveWorkspaceOverlay(null);
+      closeModal();
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
       return;
     }
@@ -915,7 +915,7 @@ export function CourseWorkspacePage({
     setTeamDrafts(makeTeamMemberDrafts(course.team));
     setProductDrafts(makeCourseProductDrafts(course.products));
     setProductComposerStage(null);
-    setActiveWorkspaceOverlay(null);
+    closeModal();
     setStageNoteDrafts(makeStageNoteDrafts(course));
   }, [
     appData,
@@ -2494,7 +2494,7 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       setNewTaskForm(makeTaskForm(currentCourse.slug, currentCourse.stageId));
-      setIsTaskComposerOpen(false);
+      closeModal();
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : 'No fue posible crear la tarea.');
     } finally {
@@ -3070,7 +3070,7 @@ export function CourseWorkspacePage({
     const note = currentCourse.stageNotes[noteKey];
     const draft = stageNoteDrafts[noteKey];
     const canEdit = canEditStageNote(userRole, note.owner);
-    const isEditorOpen = activeWorkspaceOverlay === `stage-note:${noteKey}`;
+    const isEditorOpen = activeModal === `stage-note:${noteKey}`;
 
     return (
       <>
@@ -3086,7 +3086,7 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => setActiveWorkspaceOverlay(`stage-note:${noteKey}`)}
+                  onClick={() => openModal(`stage-note:${noteKey}`)}
                 >
                   <PencilLine size={16} />
                   <span>Editar bitácora</span>
@@ -3505,7 +3505,7 @@ export function CourseWorkspacePage({
     const stageProducts = currentCourse.products.filter((product) => product.stage === productStage);
     const stageFormats = productFormatsForStage(productStage);
     const overlayId = `products:${productStage}`;
-    const isOverlayOpen = activeWorkspaceOverlay === overlayId;
+    const isOverlayOpen = activeModal === overlayId;
     const isComposerOpen = isOverlayOpen && productComposerStage === productStage;
     const stageApprovedCount = stageProducts.filter((product) => product.status === 'Aprobado').length;
 
@@ -3525,7 +3525,7 @@ export function CourseWorkspacePage({
                   onClick={() => {
                     setProductError(null);
                     setProductComposerStage(null);
-                    setActiveWorkspaceOverlay(overlayId);
+                    openModal(overlayId);
                   }}
                 >
                   <PencilLine size={16} />
@@ -4111,7 +4111,7 @@ export function CourseWorkspacePage({
              <button 
                type="button"
                className="ghost-button ml-auto" 
-               onClick={() => setActiveWorkspaceOverlay(`products:arquitectura`)}
+               onClick={() => openModal(`products:arquitectura`)}
              >
                <PencilLine size={14} />
                <span>Inventario de productos</span>
@@ -4376,7 +4376,7 @@ export function CourseWorkspacePage({
         key={product.id} 
         className={`architecture-card group animate-in fade-in transition-all duration-300 cursor-pointer ${isDone ? 'opacity-70' : ''}`}
         onClick={() => {
-           setActiveWorkspaceOverlay(`products:arquitectura`);
+           openModal(`products:arquitectura`);
         }}
       >
         <div className="flex items-start gap-4">
@@ -4478,8 +4478,8 @@ export function CourseWorkspacePage({
               {activeSection === 'microcurriculo' && canManageCourses(userRole) ? (
                 <button
                   type="button"
-                  className={isCourseEditorOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  onClick={() => setIsCourseEditorOpen(true)}
+                  className={activeModal === "COURSE_EDITOR" ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  onClick={() => openModal("COURSE_EDITOR")}
                 >
                   <PencilLine size={16} />
                   <span>Editar microcurrículo</span>
@@ -4545,7 +4545,7 @@ export function CourseWorkspacePage({
                 <button
                   type="button"
                   className="cta-button"
-                  onClick={() => setIsCourseEditorOpen(true)}
+                  onClick={() => openModal("COURSE_EDITOR")}
                 >
                   <Settings size={16} />
                   <span>Ver detalles</span>
@@ -4615,7 +4615,7 @@ export function CourseWorkspacePage({
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => setActiveWorkspaceOverlay('tasks')}
+                    onClick={() => openModal('tasks')}
                   >
                     <PencilLine size={16} />
                     <span>Gestionar tareas</span>
@@ -4836,17 +4836,17 @@ export function CourseWorkspacePage({
         </ModalFrame>
       ) : null}
 
-      {activeWorkspaceOverlay === 'metadata' ? (
+      {activeModal === 'METADATA_EDITOR' && isGlobalModalOpen ? (
         <ModalFrame
           title="Metadatos generales"
           description="Edita la información base del curso que alimenta reportes y buscadores."
-          onClose={() => setActiveWorkspaceOverlay(null)}
+          onClose={() => closeModal()}
           footer={
             <div className="form-actions">
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => setActiveWorkspaceOverlay(null)}
+                onClick={() => closeModal()}
               >
                 Cancelar
               </button>
@@ -4855,7 +4855,7 @@ export function CourseWorkspacePage({
                 className="button px-8 py-3 bg-ink text-white rounded-xl font-bold"
                 onClick={() => {
                   void handleMetadataSave(new Event('submit') as any);
-                  setActiveWorkspaceOverlay(null);
+                  closeModal();
                 }}
               >
                 Actualizar información
@@ -4906,12 +4906,12 @@ export function CourseWorkspacePage({
       ) : null}
 
 
-      {activeWorkspaceOverlay === 'team' ? (
+      {activeModal === 'TEAM_MANAGER' && isGlobalModalOpen ? (
         <ModalFrame
           title="Responsables del curso"
           description="Asigna y coordina a los integrantes del equipo de maduración del curso."
           width="xl"
-          onClose={() => setActiveWorkspaceOverlay(null)}
+          onClose={() => closeModal()}
         >
           <div className="page-stack modal-stack-clean">
             <div className="toolbar-header">
@@ -5042,26 +5042,26 @@ export function CourseWorkspacePage({
         </ModalFrame>
       ) : null}
 
-      {activeWorkspaceOverlay === 'tasks' ? (
+      {activeModal === 'TASK_COMPOSER' && isGlobalModalOpen ? (
         <ModalFrame
           title="Gestión de tareas"
           description="Organiza y asigna el trabajo pendiente del curso para asegurar el avance por etapas."
           width="xl"
-          onClose={() => setActiveWorkspaceOverlay(null)}
+          onClose={closeModal}
         >
           <div className="page-stack">
             <div className="toolbar-header">
               <button
                 type="button"
-                className={isTaskComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsTaskComposerOpen((current) => !current)}
+                className={isAddingTask ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsAddingTask((current) => !current)}
               >
                 <Plus size={16} />
-                <span>{isTaskComposerOpen ? 'Ocultar formulario' : 'Nueva tarea'}</span>
+                <span>{isAddingTask ? 'Ocultar formulario' : 'Nueva tarea'}</span>
               </button>
             </div>
 
-            {isTaskComposerOpen ? (
+            {isAddingTask ? (
               <form className="editor-card animate-in fade-in slide-in-from-top-2" onSubmit={handleTaskCreate}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="form-group">
@@ -5187,12 +5187,13 @@ export function CourseWorkspacePage({
         </ModalFrame>
       ) : null}
 
-      {isCourseEditorOpen ? (
+      {activeModal === 'COURSE_EDITOR' && isGlobalModalOpen ? (
         <ModalFrame
           title={`Gestionar curso · ${currentCourse.title}`}
           description="Edición de ficha técnica y metadatos operativos."
           width="xl"
-          onClose={() => setIsCourseEditorOpen(false)}
+          variant="drawer"
+          onClose={closeModal}
         >
           <div className="page-stack modal-stack-clean">
             {!isEditingCourse ? (
@@ -5319,7 +5320,7 @@ export function CourseWorkspacePage({
                       <Trash2 size={16} />
                       <span>Eliminar curso</span>
                     </button>
-                    <button type="button" className="ghost-button" onClick={() => setIsCourseEditorOpen(false)}>
+                    <button type="button" className="ghost-button" onClick={() => closeModal()}>
                       <span>Cerrar</span>
                     </button>
                   </div>

@@ -1,11 +1,12 @@
 import { X } from 'lucide-react';
-import { useEffect, useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ModalFrameProps {
   title: ReactNode;
   description?: ReactNode;
   width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  variant?: 'modal' | 'drawer';
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -16,12 +17,14 @@ export function ModalFrame({
   title,
   description,
   width = 'lg',
+  variant = 'modal',
   onClose,
   children,
   footer,
   closeLabel = 'Cerrar',
 }: ModalFrameProps) {
   const titleId = useId();
+  const modalRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -34,28 +37,61 @@ export function ModalFrame({
       if (event.key === 'Escape') {
         onClose();
       }
+      
+      if (event.key === 'Tab' && modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const firstElement = focusables[0] as HTMLElement;
+        const lastElement = focusables[focusables.length - 1] as HTMLElement;
+
+        if (event.shiftKey) {
+          if (document.activeElement === firstElement) {
+            lastElement.focus();
+            event.preventDefault();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            firstElement.focus();
+            event.preventDefault();
+          }
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-
       const depth = Number(root.dataset.modalDepth ?? '1') - 1;
-
       if (depth <= 0) {
         delete root.dataset.modalDepth;
         root.classList.remove('has-modal-open');
         return;
       }
-
       root.dataset.modalDepth = String(depth);
     };
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6 bg-ink/60 backdrop-blur-md animate-in fade-in transition-all" onClick={onClose}>
+    <div 
+      className={`fixed inset-0 z-50 flex bg-ink/60 backdrop-blur-md animate-in fade-in transition-all ${
+        variant === 'drawer' ? 'justify-end p-0' : 'items-end md:items-center justify-center p-0 md:p-6'
+      }`} 
+      onClick={onClose}
+    >
       <section
-        className={`relative w-full h-full md:h-[95vh] shadow-2xl rounded-none md:rounded-[32px] bg-white border-x md:border border-line-strong overflow-hidden animate-in slide-in-from-bottom md:zoom-in duration-500 flex flex-col ${width === 'sm' ? 'max-w-md' : width === 'md' ? 'max-w-2xl' : width === 'xl' ? 'max-w-[96vw]' : width === 'full' ? 'max-w-full' : 'max-w-5xl'}`}
+        ref={modalRef as any}
+        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-500 flex flex-col ${
+          variant === 'drawer' 
+            ? 'h-full w-full slide-in-from-right rounded-none border-l border-line-strong' 
+            : 'h-full md:h-[95vh] w-full slide-in-from-bottom md:zoom-in rounded-none md:rounded-[32px] border-x md:border border-line-strong'
+        } ${
+          width === 'sm' ? 'max-w-md' : 
+          width === 'md' ? 'max-w-2xl' : 
+          width === 'xl' ? 'max-w-[96vw]' : 
+          width === 'full' ? 'max-w-full' : 
+          variant === 'drawer' ? 'max-w-4xl' : 'max-w-5xl'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
