@@ -11,6 +11,8 @@ import {
 const SESSION_COOKIE = 'maturity_session';
 const SESSION_DURATION_DAYS = 30;
 
+type SessionRequestLike = Request | { headers?: Headers | Record<string, string | string[] | undefined> | undefined };
+
 function parseCookies(headerValue: string | null) {
   const entries = (headerValue ?? '')
     .split(';')
@@ -26,6 +28,38 @@ function parseCookies(headerValue: string | null) {
     });
 
   return Object.fromEntries(entries);
+}
+
+function readHeader(request: SessionRequestLike, name: string) {
+  const headers = request?.headers;
+
+  if (!headers) {
+    return null;
+  }
+
+  if (typeof (headers as Headers).get === 'function') {
+    return (headers as Headers).get(name);
+  }
+
+  const direct = (headers as Record<string, string | string[] | undefined>)[name];
+  if (typeof direct === 'string') {
+    return direct;
+  }
+
+  if (Array.isArray(direct)) {
+    return direct.join('; ');
+  }
+
+  const lowered = (headers as Record<string, string | string[] | undefined>)[name.toLowerCase()];
+  if (typeof lowered === 'string') {
+    return lowered;
+  }
+
+  if (Array.isArray(lowered)) {
+    return lowered.join('; ');
+  }
+
+  return null;
 }
 
 function createCookie(token: string, expiresAt: string) {
@@ -162,8 +196,8 @@ export async function createSession(userId: string) {
   };
 }
 
-export async function getSessionUser(request: Request) {
-  const cookies = parseCookies(request.headers.get('cookie'));
+export async function getSessionUser(request: SessionRequestLike) {
+  const cookies = parseCookies(readHeader(request, 'cookie'));
   const token = cookies[SESSION_COOKIE];
 
   if (!token) {
@@ -187,8 +221,8 @@ export async function getSessionUser(request: Request) {
   } satisfies AuthUser;
 }
 
-export async function destroySession(request: Request) {
-  const cookies = parseCookies(request.headers.get('cookie'));
+export async function destroySession(request: SessionRequestLike) {
+  const cookies = parseCookies(readHeader(request, 'cookie'));
   const token = cookies[SESSION_COOKIE];
 
   if (!token) {

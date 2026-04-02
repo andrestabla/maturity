@@ -2772,6 +2772,7 @@ export function CourseWorkspacePage({
     try {
       const response = await fetch('/api/generate-architecture', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           courseSlug: currentCourse.slug,
@@ -2779,72 +2780,141 @@ export function CourseWorkspacePage({
         }),
       });
 
-      if (!response.ok) throw new Error('Error al conectar con el Arquitecto IA');
+      if (!response.ok) {
+        let message = 'Error al conectar con el Arquitecto IA.';
+
+        try {
+          const payload = (await response.json()) as { error?: string; message?: string };
+          message = payload.error ?? payload.message ?? message;
+        } catch {
+          try {
+            const text = await response.text();
+            if (text.trim()) {
+              message = text.trim();
+            }
+          } catch {
+            // Conserva el mensaje por defecto cuando no haya cuerpo legible.
+          }
+        }
+
+        throw new Error(message);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) throw new Error('No fue posible abrir el canal de la IA.');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      let streamBuffer = '';
+      let generatedCount = 0;
 
-        const chunks = decoder.decode(value, { stream: true }).split('\n\n');
-        for (const chunk of chunks) {
-          if (!chunk.trim() || !chunk.startsWith('data: ')) continue;
-          
-          try {
-            const payload = JSON.parse(chunk.replace('data: ', '').trim());
-            if (payload.progress) setArchitectureProgress(payload.progress);
-            if (payload.step) setArchitectureStep(payload.step);
-            
-            if (payload.complete && payload.data) {
-              const suggested = payload.data as { 
-                introduccion: any[], 
-                unidades: any[], 
-                cierre: any[] 
-              };
+      const processArchitectureEvent = async (rawChunk: string) => {
+        if (!rawChunk.trim()) {
+          return;
+        }
 
-              // Aplanamos todas las sugerencias
-              const allSuggested = [
-                ...suggested.introduccion,
-                ...suggested.unidades,
-                ...suggested.cierre
-              ];
+        const dataLine = rawChunk
+          .split('\n')
+          .find((line) => line.startsWith('data: '));
 
-              // Creamos los productos en lote (secuencial para evitar colisiones de estado en demo)
-              for (const item of allSuggested) {
-                await fetch('/api/course-products', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    courseSlug: currentCourse.slug,
-                    title: item.title,
-                    summary: item.summary,
-                    format: item.format,
-                    stage: 'arquitectura',
-                    owner: userRole,
-                    status: 'Borrador',
-                    version: '1.0',
-                    section: item.section
-                  })
-                });
+        if (!dataLine) {
+          return;
+        }
+
+        let payload: {
+          progress?: number;
+          step?: string;
+          complete?: boolean;
+          data?: {
+            introduccion?: Array<Record<string, unknown>>;
+            unidades?: Array<Record<string, unknown>>;
+            cierre?: Array<Record<string, unknown>>;
+          };
+          error?: string;
+        };
+
+        try {
+          payload = JSON.parse(dataLine.slice(6).trim());
+        } catch (error) {
+          console.error('Architecture event parse error:', error);
+          return;
+        }
+
+        if (typeof payload.progress === 'number') {
+          setArchitectureProgress(payload.progress);
+        }
+
+        if (payload.step) {
+          setArchitectureStep(payload.step);
+        }
+
+        if (payload.error) {
+          throw new Error(payload.error);
+        }
+
+        if (payload.complete && payload.data) {
+          const suggested = payload.data;
+          const allSuggested = [
+            ...(suggested.introduccion ?? []),
+            ...(suggested.unidades ?? []),
+            ...(suggested.cierre ?? []),
+          ];
+
+          generatedCount = allSuggested.length;
+
+          for (const item of allSuggested) {
+            await fetch('/api/course-products', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseSlug: currentCourse.slug,
+                title: String(item.title ?? '').trim(),
+                summary: String(item.summary ?? '').trim(),
+                format: String(item.format ?? '').trim(),
+                stage: 'arquitectura',
+                owner: userRole,
+                status: 'Borrador',
+                version: '1.0',
+                section: String(item.section ?? '').trim(),
+              })
+            }).then(async (createResponse) => {
+              if (!createResponse.ok) {
+                const payload = (await createResponse.json().catch(() => null)) as { error?: string } | null;
+                throw new Error(payload?.error ?? 'No fue posible guardar uno de los productos sugeridos.');
               }
-
-              refreshAppData();
-              await showAlert({
-                tone: 'success',
-                title: 'Arquitectura Actualizada',
-                message: `Se han integrado ${allSuggested.length} productos sugeridos a la arquitectura del curso.`
-              });
-            }
-
-            if (payload.error) throw new Error(payload.error);
-          } catch (e) {
-            console.error('Architecture event parse error:', e);
+            });
           }
         }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        streamBuffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+        const chunks = streamBuffer.split('\n\n');
+        streamBuffer = chunks.pop() ?? '';
+
+        for (const chunk of chunks) {
+          await processArchitectureEvent(chunk);
+        }
+
+        if (done) {
+          if (streamBuffer.trim()) {
+            await processArchitectureEvent(streamBuffer);
+          }
+          break;
+        }
       }
+
+      refreshAppData();
+      await showAlert({
+        tone: 'success',
+        title: 'Arquitectura actualizada',
+        message:
+          generatedCount > 0
+            ? `Se integraron ${generatedCount} productos sugeridos a la arquitectura del curso.`
+            : 'La IA completó la revisión, pero no propuso productos nuevos para integrar.',
+      });
     } catch (error) {
        const message = error instanceof Error ? error.message : 'Falla crítica en el Arquitecto IA.';
        await showAlert({ tone: 'error', title: 'Error de Arquitectura', message });

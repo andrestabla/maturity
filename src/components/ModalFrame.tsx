@@ -29,6 +29,16 @@ export function ModalFrame({
 }: ModalFrameProps) {
   const titleId = useId();
   const modalRef = useRef<HTMLElement>(null);
+  const panelClassName =
+    width === 'sm'
+      ? 'modal-panel modal-panel--sm surface'
+      : width === 'md'
+        ? 'modal-panel modal-panel--md surface'
+        : width === 'xl'
+          ? 'modal-panel modal-panel--xl surface'
+          : width === 'full'
+            ? 'modal-panel modal-panel--full surface'
+            : 'modal-panel modal-panel--lg surface';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -46,8 +56,12 @@ export function ModalFrame({
         const focusables = modalRef.current.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
-        const firstElement = focusables[0] as HTMLElement;
-        const lastElement = focusables[focusables.length - 1] as HTMLElement;
+        const firstElement = focusables[0] as HTMLElement | undefined;
+        const lastElement = focusables[focusables.length - 1] as HTMLElement | undefined;
+
+        if (!firstElement || !lastElement) {
+          return;
+        }
 
         if (event.shiftKey) {
           if (document.activeElement === firstElement) {
@@ -82,91 +96,62 @@ export function ModalFrame({
   }, [onClose]);
 
   return createPortal(
-    <div 
-      className={`fixed inset-0 z-[1000] flex bg-slate-950/40 backdrop-blur-md animate-in fade-in transition-all ${
-        variant === 'drawer' ? 'justify-end p-0' : 'items-end md:items-center justify-center p-0 md:p-6'
-      }`} 
-      onClick={onClose}
-    >
+    <div className="modal-backdrop animate-in fade-in" onClick={onClose}>
       <section
         ref={modalRef as any}
-        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-600 flex ${
-          variant === 'drawer' 
-            ? 'h-screen w-full flex-row slide-in-from-right rounded-none border-l border-line-strong' 
-            : 'h-full md:h-[95vh] w-full flex-col slide-in-from-bottom md:zoom-in rounded-none md:rounded-[40px] border-x md:border border-line-strong'
-        } ${
-          width === 'sm' ? 'max-w-md' : 
-          width === 'md' ? 'max-w-2xl' : 
-          width === 'xl' ? 'max-w-[40vw]' : 
-          width === 'full' ? 'max-w-full' : 
-          variant === 'drawer' ? 'max-w-2xl' : 'max-w-6xl'
-        }`}
+        className={panelClassName}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        {variant === 'drawer' && (
-          <aside className="w-[84px] bg-slate-50 border-r border-line flex flex-col items-center justify-between py-10 select-none">
-            <div className="flex flex-col items-center gap-2">
-               <div className="w-10 h-10 rounded-2xl bg-ink/5 border border-line flex items-center justify-center text-ink font-black text-xl">
-                  M
-               </div>
-            </div>
+        {variant === 'drawer' ? (
+          <div className="side-sheet__main">
+            <header className="modal-panel__head">
+              <div>
+                {sideLabel ? <span className="eyebrow">{sideLabel}</span> : null}
+                <h3 id={titleId}>{title}</h3>
+                {description ? <p>{description}</p> : null}
+                {sideDescription ? <p className="field-help">{sideDescription}</p> : null}
+              </div>
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={onClose}
+                aria-label={closeLabel}
+              >
+                <X size={18} />
+                <span>{closeLabel}</span>
+              </button>
+            </header>
 
-            <div 
-               className="flex-grow flex items-center justify-center -rotate-180"
-               style={{ writingMode: 'vertical-rl' }}
-            >
-               <div className="flex flex-col gap-5">
-                  <span className="text-xl font-black text-ink uppercase tracking-[4px] whitespace-nowrap">
-                    {sideLabel || title}
-                  </span>
-                  {sideDescription && (
-                    <span className="text-[10px] text-muted font-bold tracking-[3px] opacity-60 uppercase whitespace-nowrap">
-                      {sideDescription}
-                    </span>
-                  )}
-               </div>
-            </div>
+            <div className="modal-panel__body custom-scrollbar">{children}</div>
 
-            <div className="p-4 rounded-full bg-ink/5 text-[10px] font-black text-muted uppercase tracking-tighter">
-              v1.0
-            </div>
-          </aside>
-        )}
-
-        <div className="flex-grow flex flex-col h-full overflow-hidden relative">
-          <button 
-            type="button" 
-            className="absolute top-6 right-8 p-3 rounded-2xl bg-black/5 hover:bg-black/10 text-muted hover:text-ink transition-all active:scale-95 z-20" 
-            onClick={onClose} 
-            aria-label={closeLabel}
-          >
-            <X size={22} />
-          </button>
-
-          <header className="px-10 py-8 border-b border-line flex items-center justify-between bg-white sticky top-0 z-10 pr-24">
-            <div>
-              <h3 id={titleId} className="text-2xl font-extrabold text-ink tracking-tight leading-tight">
-                {title}
-              </h3>
-              {description && <p className="text-base text-muted mt-2 font-medium opacity-80">{description}</p>}
-            </div>
-          </header>
-
-          <div className="modal-panel__body flex-grow overflow-y-auto p-10 custom-scrollbar">
-            <div className="max-w-[1600px] mx-auto w-full">
-              {children}
-            </div>
+            {footer ? <footer className="modal-panel__foot">{footer}</footer> : null}
           </div>
+        ) : (
+          <>
+            <header className="modal-panel__head">
+              <div>
+                <h3 id={titleId}>{title}</h3>
+                {description ? <p>{description}</p> : null}
+              </div>
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={onClose}
+                aria-label={closeLabel}
+              >
+                <X size={18} />
+                <span>{closeLabel}</span>
+              </button>
+            </header>
 
-          {footer && (
-            <footer className="px-10 py-8 border-t border-line bg-white flex items-center justify-end gap-6">
-              {footer}
-            </footer>
-          )}
-        </div>
+            <div className="modal-panel__body custom-scrollbar">{children}</div>
+
+            {footer ? <footer className="modal-panel__foot">{footer}</footer> : null}
+          </>
+        )}
       </section>
     </div>,
     document.body,
