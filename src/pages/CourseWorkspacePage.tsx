@@ -3145,6 +3145,8 @@ export function CourseWorkspacePage({
           <ModalFrame
             title={title}
             description="La bitácora se edita en un panel lateral para preservar el foco de la página principal."
+            sideLabel="Ficha"
+            sideDescription="OPERATIVA"
             variant="drawer"
             width="xl"
             onClose={closeWorkspaceOverlay}
@@ -4196,6 +4198,8 @@ export function CourseWorkspacePage({
           <ModalFrame
             title="Lineamientos institucionales"
             description="Marco normativo y pedagógico que rige el diseño de productos para este curso."
+            sideLabel="Norma"
+            sideDescription="PEDAGÓGICA"
             variant="drawer"
             width="xl"
             onClose={() => setIsGuidelinesModalOpen(false)}
@@ -4225,6 +4229,8 @@ export function CourseWorkspacePage({
         {isAddProductModalOpen && (
           <ModalFrame
             title={`Nuevo producto - ${activeAddSection}`}
+            sideLabel="Prod"
+            sideDescription="CREAR"
             variant="drawer"
             width="xl"
             onClose={() => setIsAddProductModalOpen(false)}
@@ -5899,6 +5905,8 @@ export function CourseWorkspacePage({
         <ModalFrame
           title="Verificar Información Extraída"
           description="Asegura que los datos capturados del documento sean correctos antes de guardarlos."
+          sideLabel="IA"
+          sideDescription="EXTRACCIÓN"
           variant="drawer"
           width="xl"
           onClose={() => setIsVerifyingAnalysis(false)}

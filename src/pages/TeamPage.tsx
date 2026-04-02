@@ -1865,6 +1865,8 @@ export function TeamPage({
           <ModalFrame
             title="Crear nuevo usuario"
             description="Registra los datos del usuario, define su acceso y deja lista su vinculación institucional."
+            sideLabel="User"
+            sideDescription="CREAR"
             variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
@@ -2130,6 +2132,8 @@ export function TeamPage({
           <ModalFrame
             title={selectedUser.name}
             description="Edita la cuenta, el rol, el alcance y el estado del usuario desde este panel de gobierno."
+            sideLabel="User"
+            sideDescription="GESTIÓN"
             variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
@@ -2714,6 +2718,8 @@ export function TeamPage({
           <ModalFrame
             title="Editar parámetros institucionales"
             description="Los cambios se guardan desde este panel y se reflejan en todo el directorio."
+            sideLabel="Inst"
+            sideDescription="GOBIERNO"
             variant="drawer"
             width="xl"
             onClose={closeInstitutionOverlay}
@@ -3136,6 +3142,8 @@ export function TeamPage({
           <ModalFrame
             title="Editar branding"
             description="La configuración visual se resuelve en un panel lateral para no saturar la vista de Gobierno."
+            sideLabel="Brand"
+            sideDescription="IMAGEN"
             variant="drawer"
             width="xl"
             onClose={closeBrandingEditor}
@@ -3725,6 +3733,8 @@ export function TeamPage({
           <ModalFrame
             title="Editar experiencia de trabajo"
             description="Estos ajustes se editan en un panel lateral para mantener el foco operativo."
+            sideLabel="UX"
+            sideDescription="EQUIPO"
             variant="drawer"
             width="xl"
             onClose={closeExperienceEditor}
@@ -3934,6 +3944,8 @@ export function TeamPage({
           <ModalFrame
             title="Editar reglas del workflow"
             description="La configuración del flujo queda aislada en modal para no mezclar lectura con edición."
+            sideLabel="Flow"
+            sideDescription="PASOS"
             variant="drawer"
             width="xl"
             onClose={closeWorkflowEditor}
@@ -4270,6 +4282,8 @@ export function TeamPage({
           <ModalFrame
             title={`Configurar ${selectedIntegration.name}`}
             description="La configuración técnica se resuelve en un side-panel para no mezclar directorio con edición."
+            sideLabel="Link"
+            sideDescription="CONECTOR"
             variant="drawer"
             width="xl"
             onClose={closeIntegrationEditor}

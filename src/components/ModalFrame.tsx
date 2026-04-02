@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 interface ModalFrameProps {
   title: ReactNode;
   description?: ReactNode;
+  sideLabel?: ReactNode;
+  sideDescription?: string;
   width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   variant?: 'modal' | 'drawer';
   onClose: () => void;
@@ -16,6 +18,8 @@ interface ModalFrameProps {
 export function ModalFrame({
   title,
   description,
+  sideLabel,
+  sideDescription,
   width = 'lg',
   variant = 'modal',
   onClose,
@@ -86,10 +90,10 @@ export function ModalFrame({
     >
       <section
         ref={modalRef as any}
-        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-600 flex flex-col ${
+        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-600 flex ${
           variant === 'drawer' 
-            ? 'h-screen w-full slide-in-from-right rounded-none border-l border-line-strong' 
-            : 'h-full md:h-[95vh] w-full slide-in-from-bottom md:zoom-in rounded-none md:rounded-[40px] border-x md:border border-line-strong'
+            ? 'h-screen w-full flex-row slide-in-from-right rounded-none border-l border-line-strong' 
+            : 'h-full md:h-[95vh] w-full flex-col slide-in-from-bottom md:zoom-in rounded-none md:rounded-[40px] border-x md:border border-line-strong'
         } ${
           width === 'sm' ? 'max-w-md' : 
           width === 'md' ? 'max-w-2xl' : 
@@ -102,35 +106,67 @@ export function ModalFrame({
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <button 
-          type="button" 
-          className="absolute top-6 right-8 p-3 rounded-2xl bg-black/5 hover:bg-black/10 text-muted hover:text-ink transition-all active:scale-95 z-20" 
-          onClick={onClose} 
-          aria-label={closeLabel}
-        >
-          <X size={22} />
-        </button>
+        {variant === 'drawer' && (
+          <aside className="w-[84px] bg-slate-50 border-r border-line flex flex-col items-center justify-between py-10 select-none">
+            <div className="flex flex-col items-center gap-2">
+               <div className="w-10 h-10 rounded-2xl bg-ink/5 border border-line flex items-center justify-center text-ink font-black text-xl">
+                  M
+               </div>
+            </div>
 
-        <header className="px-10 py-8 border-b border-line flex items-center justify-between bg-white sticky top-0 z-10 pr-24">
-          <div>
-            <h3 id={titleId} className="text-2xl font-extrabold text-ink tracking-tight leading-tight">
-              {title}
-            </h3>
-            {description && <p className="text-base text-muted mt-2 font-medium opacity-80">{description}</p>}
-          </div>
-        </header>
+            <div 
+               className="flex-grow flex items-center justify-center -rotate-180"
+               style={{ writingMode: 'vertical-rl' }}
+            >
+               <div className="flex flex-col gap-5">
+                  <span className="text-xl font-black text-ink uppercase tracking-[4px] whitespace-nowrap">
+                    {sideLabel || title}
+                  </span>
+                  {sideDescription && (
+                    <span className="text-[10px] text-muted font-bold tracking-[3px] opacity-60 uppercase whitespace-nowrap">
+                      {sideDescription}
+                    </span>
+                  )}
+               </div>
+            </div>
 
-        <div className="modal-panel__body flex-grow overflow-y-auto p-10 custom-scrollbar">
-          <div className="max-w-[1600px] mx-auto w-full">
-            {children}
-          </div>
-        </div>
-
-        {footer && (
-          <footer className="px-10 py-8 border-t border-line bg-white flex items-center justify-end gap-6">
-            {footer}
-          </footer>
+            <div className="p-4 rounded-full bg-ink/5 text-[10px] font-black text-muted uppercase tracking-tighter">
+              v1.0
+            </div>
+          </aside>
         )}
+
+        <div className="flex-grow flex flex-col h-full overflow-hidden relative">
+          <button 
+            type="button" 
+            className="absolute top-6 right-8 p-3 rounded-2xl bg-black/5 hover:bg-black/10 text-muted hover:text-ink transition-all active:scale-95 z-20" 
+            onClick={onClose} 
+            aria-label={closeLabel}
+          >
+            <X size={22} />
+          </button>
+
+          <header className="px-10 py-8 border-b border-line flex items-center justify-between bg-white sticky top-0 z-10 pr-24">
+            <div>
+              <h3 id={titleId} className="text-2xl font-extrabold text-ink tracking-tight leading-tight">
+                {title}
+              </h3>
+              {description && <p className="text-base text-muted mt-2 font-medium opacity-80">{description}</p>}
+            </div>
+          </header>
+
+          <div className="modal-panel__body flex-grow overflow-y-auto p-10 custom-scrollbar">
+            <div className="max-w-[1600px] mx-auto w-full">
+              {children}
+            </div>
+          </div>
+
+          {footer && (
+            <footer className="px-10 py-8 border-t border-line bg-white flex items-center justify-end gap-6">
+              {footer}
+            </footer>
+          )}
+        </div>
       </section>
     </div>,
     document.body,
