@@ -9187,6 +9187,221 @@ body::after {
   gap: 20px;
 }
 
+.planning-gantt__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 14px;
+}
+
+.planning-gantt__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.planning-gantt__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.planning-gantt__legend-dot--escritura,
+.planning-gantt__bar--escritura {
+  background: #1f6feb;
+}
+
+.planning-gantt__legend-dot--validacion,
+.planning-gantt__bar--validacion {
+  background: #f59e0b;
+}
+
+.planning-gantt__legend-dot--multimedia,
+.planning-gantt__bar--multimedia {
+  background: #8b5cf6;
+}
+
+.planning-gantt__legend-dot--lms,
+.planning-gantt__bar--lms {
+  background: #14b8a6;
+}
+
+.planning-gantt__legend-dot--qa,
+.planning-gantt__bar--qa {
+  background: #ef4444;
+}
+
+.planning-gantt {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.planning-gantt__table {
+  min-width: 1320px;
+}
+
+.planning-gantt__header,
+.planning-gantt__row {
+  display: grid;
+  grid-template-columns: 150px minmax(320px, 1.35fr) 120px 120px 220px minmax(360px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.planning-gantt__header {
+  padding: 0 14px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.planning-gantt__body {
+  display: grid;
+}
+
+.planning-gantt__row {
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.planning-gantt__row:hover,
+.planning-gantt__row:focus-visible {
+  background: color-mix(in srgb, var(--ocean) 5%, white 95%);
+}
+
+.planning-gantt__row:last-child {
+  border-bottom: 0;
+}
+
+.planning-gantt__cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.planning-gantt__cell--product,
+.planning-gantt__cell--owners {
+  align-items: flex-start;
+}
+
+.planning-gantt__product-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.planning-gantt__product-copy strong {
+  font-size: 1rem;
+  line-height: 1.35;
+  color: var(--secondary);
+}
+
+.planning-gantt__product-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.planning-gantt__product-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.planning-gantt__owner-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.planning-gantt__cell--owners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planning-gantt__muted,
+.planning-gantt__timeline-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.planning-gantt__axis {
+  position: relative;
+  min-height: 32px;
+}
+
+.planning-gantt__axis-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.planning-gantt__timeline {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 249, 252, 0.92));
+  overflow: hidden;
+}
+
+.planning-gantt__timeline-grid {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent,
+    transparent calc(14.285% - 1px),
+    rgba(148, 163, 184, 0.16) calc(14.285% - 1px),
+    rgba(148, 163, 184, 0.16) 14.285%
+  );
+}
+
+.planning-gantt__timeline-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.planning-gantt__bar {
+  position: absolute;
+  top: 50%;
+  height: 12px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  opacity: 0.95;
+}
+
 .planning-product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -9291,6 +9506,12 @@ body::after {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+@media (max-width: 1100px) {
+  .planning-gantt__legend {
+    justify-content: flex-start;
+  }
 }
 
 .architecture-card__actions {

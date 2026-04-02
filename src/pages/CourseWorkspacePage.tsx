@@ -22,13 +22,11 @@ import {
   Target,
   File,
   AlertCircle,
-  CalendarRange,
   Video,
   Mic,
   MonitorPlay,
   ClipboardCheck,
   ChevronDown,
-  UserRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -712,6 +710,50 @@ function countConfiguredPlanningPhases(phasePlan: ProductPhasePlan[]) {
   return phasePlan.filter(
     (item) => item.startDate.trim() && item.endDate.trim() && item.assigneeId?.trim(),
   ).length;
+}
+
+function parsePlanningDate(dateString?: string | null) {
+  if (!dateString?.trim()) {
+    return null;
+  }
+
+  const parsed = new Date(dateString.includes('T') ? dateString : `${dateString}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function diffPlanningDays(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+}
+
+function getProductPlanningWindow(phasePlan: ProductPhasePlan[]) {
+  const startDates = phasePlan
+    .map((item) => parsePlanningDate(item.startDate))
+    .filter((item): item is Date => Boolean(item));
+  const endDates = phasePlan
+    .map((item) => parsePlanningDate(item.endDate))
+    .filter((item): item is Date => Boolean(item));
+
+  if (!startDates.length || !endDates.length) {
+    return {
+      start: null,
+      end: null,
+    };
+  }
+
+  return {
+    start: new Date(Math.min(...startDates.map((item) => item.getTime()))),
+    end: new Date(Math.max(...endDates.map((item) => item.getTime()))),
+  };
+}
+
+function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
+  return Array.from(
+    new Set(
+      phasePlan
+        .map((item) => item.assigneeName?.trim() ?? '')
+        .filter(Boolean),
+    ),
+  );
 }
 
 
@@ -5194,47 +5236,66 @@ export function CourseWorkspacePage({
   function renderPlanningWorkspace() {
     const unitLabels = currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`);
     const unitTitleHints = currentCourse.metadata.units.map((unit) => unit.tituloUnidad ?? '');
-    const groupedSections = [
-      {
-        label: 'Introducción',
-        products: architectureProducts.filter(
-          (product) =>
-            resolveArchitectureSectionLabel(
-              product.section ?? '',
-              product.title,
-              product.summary,
-              unitLabels,
-              unitTitleHints,
-            ) === 'Introducción',
+    const sectionOrder = ['Introducción', ...unitLabels, 'Cierre'];
+    const planningRows = architectureProducts
+      .map((product) => ({
+        product,
+        sectionLabel: resolveArchitectureSectionLabel(
+          product.section ?? '',
+          product.title,
+          product.summary,
+          unitLabels,
+          unitTitleHints,
         ),
-      },
-      ...unitLabels.map((label) => ({
-        label,
-        products: architectureProducts.filter(
-          (product) =>
-            resolveArchitectureSectionLabel(
-              product.section ?? '',
-              product.title,
-              product.summary,
-              unitLabels,
-              unitTitleHints,
-            ) === label,
-        ),
-      })),
-      {
-        label: 'Cierre',
-        products: architectureProducts.filter(
-          (product) =>
-            resolveArchitectureSectionLabel(
-              product.section ?? '',
-              product.title,
-              product.summary,
-              unitLabels,
-              unitTitleHints,
-            ) === 'Cierre',
-        ),
-      },
-    ];
+      }))
+      .sort((left, right) => {
+        const leftIndex = sectionOrder.indexOf(left.sectionLabel);
+        const rightIndex = sectionOrder.indexOf(right.sectionLabel);
+
+        if (leftIndex !== rightIndex) {
+          return leftIndex - rightIndex;
+        }
+
+        return left.product.title.localeCompare(right.product.title, 'es');
+      });
+
+    const planningWindows = planningRows
+      .map(({ product }) => getProductPlanningWindow(product.phasePlan))
+      .filter((window) => window.start && window.end);
+    const today = new Date();
+    const timelineStart = planningWindows.length
+      ? new Date(
+          Math.min(
+            ...planningWindows.map((window) => window.start?.getTime() ?? Number.POSITIVE_INFINITY),
+          ),
+        )
+      : new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const timelineEnd = planningWindows.length
+      ? new Date(
+          Math.max(
+            ...planningWindows.map((window) => window.end?.getTime() ?? Number.NEGATIVE_INFINITY),
+          ),
+        )
+      : new Date(today.getFullYear(), today.getMonth(), today.getDate() + 28);
+
+    if (timelineEnd.getTime() <= timelineStart.getTime()) {
+      timelineEnd.setDate(timelineStart.getDate() + 7);
+    }
+
+    const totalTimelineDays = Math.max(1, diffPlanningDays(timelineStart, timelineEnd) + 1);
+    const timelineTickCount = Math.min(7, totalTimelineDays);
+    const timelineTicks = Array.from({ length: timelineTickCount }, (_, index) => {
+      const ratio = timelineTickCount === 1 ? 0 : index / (timelineTickCount - 1);
+      const offsetDays = Math.round((totalTimelineDays - 1) * ratio);
+      const tickDate = new Date(timelineStart);
+      tickDate.setDate(timelineStart.getDate() + offsetDays);
+
+      return {
+        key: `${tickDate.toISOString()}-${index}`,
+        label: formatDate(tickDate.toISOString().slice(0, 10)),
+        position: ratio * 100,
+      };
+    });
 
     return (
       <section className="page-stack">
@@ -5242,13 +5303,14 @@ export function CourseWorkspacePage({
           <div className="section-heading">
             <div>
               <span className="eyebrow">Planeación operativa</span>
-              <h3>Matriz de producción por producto</h3>
+              <h3>Diagrama operativo por producto</h3>
             </div>
           </div>
           <p className="handoff-copy">
-            Cada producto define una ruta propia de ejecución. Aquí asignas fechas y responsables
-            reales por fase para escritura, validación instruccional, producción multimedia,
-            montaje LMS y QA.
+            Cada fila representa un producto del curso. Aquí visualizas su sección, ventana de
+            trabajo y una banda temporal tipo Gantt; al abrir el producto, parametrizas fechas y
+            responsables reales por fase para escritura, validación instruccional, producción
+            multimedia, montaje LMS y QA.
           </p>
         </article>
 
@@ -5260,93 +5322,137 @@ export function CourseWorkspacePage({
             </div>
           </article>
         ) : (
-          <div className="planning-section-stack">
-            {groupedSections.map((section) =>
-              section.products.length > 0 ? (
-                <article key={section.label} className="surface section-card section-card--compact">
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">Sección</span>
-                      <h3>{section.label}</h3>
-                    </div>
-                    <span className="badge badge--outline">
-                      {section.products.length} producto{section.products.length === 1 ? '' : 's'}
-                    </span>
+          <article className="surface section-card section-card--compact">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Vista Gantt</span>
+                <h3>Planeación por sección y producto</h3>
+              </div>
+              <div className="planning-gantt__legend">
+                {productPlanningPhases.map(({ phase, label }) => (
+                  <span key={phase} className="planning-gantt__legend-item">
+                    <span className={`planning-gantt__legend-dot planning-gantt__legend-dot--${phase}`} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="planning-gantt">
+              <div className="planning-gantt__table">
+                <div className="planning-gantt__header">
+                  <div>Sección</div>
+                  <div>Producto</div>
+                  <div>Inicio</div>
+                  <div>Final</div>
+                  <div>Responsables</div>
+                  <div className="planning-gantt__axis">
+                    {timelineTicks.map((tick) => (
+                      <span
+                        key={tick.key}
+                        className="planning-gantt__axis-label"
+                        style={{ left: `${tick.position}%` }}
+                      >
+                        {tick.label}
+                      </span>
+                    ))}
                   </div>
+                </div>
 
-                  <div className="planning-product-grid">
-                    {section.products.map((product) => {
-                      const configuredPhases = countConfiguredPlanningPhases(product.phasePlan);
+                <div className="planning-gantt__body">
+                  {planningRows.map(({ product, sectionLabel }) => {
+                    const configuredPhases = countConfiguredPlanningPhases(product.phasePlan);
+                    const assigneeNames = getPlanningAssigneeNames(product.phasePlan);
+                    const window = getProductPlanningWindow(product.phasePlan);
+                    const hasWindow = Boolean(window.start && window.end);
+                    const productStartLabel = window.start
+                      ? formatDate(window.start.toISOString().slice(0, 10))
+                      : 'Sin fecha';
+                    const productEndLabel = window.end
+                      ? formatDate(window.end.toISOString().slice(0, 10))
+                      : 'Sin fecha';
 
-                      return (
-                        <article key={product.id} className="planning-product-card">
-                          <div className="planning-product-card__head">
-                            <div>
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        className="planning-gantt__row"
+                        onClick={() => openPlanningProductModal(product)}
+                      >
+                        <div className="planning-gantt__cell">
+                          <span className="badge badge--outline">{sectionLabel}</span>
+                        </div>
+
+                        <div className="planning-gantt__cell planning-gantt__cell--product">
+                          <div className="planning-gantt__product-copy">
+                            <strong>{product.title}</strong>
+                            <div className="planning-gantt__product-meta">
                               <span className="badge badge--outline">{product.format}</span>
-                              <h4>{product.title}</h4>
+                              <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                              <span>{configuredPhases}/{productPlanningPhases.length} fases</span>
                             </div>
-                            <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                            <p>{product.summary}</p>
                           </div>
+                        </div>
 
-                          <p className="planning-product-card__summary">{product.summary}</p>
+                        <div className="planning-gantt__cell">
+                          <span>{productStartLabel}</span>
+                        </div>
 
-                          <div className="planning-product-card__stats">
-                            <span>
-                              <CalendarRange size={14} />
-                              {configuredPhases}/{productPlanningPhases.length} fases programadas
-                            </span>
-                            <span>
-                              <UserRound size={14} />
-                              {
-                                product.phasePlan.filter((item) => item.assigneeId || item.assigneeName).length
-                              }{' '}
-                              responsables asignados
-                            </span>
-                          </div>
+                        <div className="planning-gantt__cell">
+                          <span>{productEndLabel}</span>
+                        </div>
 
-                          <div className="planning-phase-list">
+                        <div className="planning-gantt__cell planning-gantt__cell--owners">
+                          {assigneeNames.length > 0 ? (
+                            assigneeNames.slice(0, 3).map((name) => (
+                              <span key={name} className="planning-gantt__owner-chip">
+                                {name}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="planning-gantt__muted">Sin responsables</span>
+                          )}
+                        </div>
+
+                        <div className="planning-gantt__cell">
+                          <div className="planning-gantt__timeline">
+                            <div className="planning-gantt__timeline-grid" />
+                            {hasWindow ? null : (
+                              <span className="planning-gantt__timeline-empty">Sin programación</span>
+                            )}
                             {productPlanningPhases.map(({ phase, label }) => {
                               const current = product.phasePlan.find((item) => item.phase === phase);
-                              const isConfigured = Boolean(
-                                current?.startDate && current?.endDate && (current?.assigneeId || current?.assigneeName),
-                              );
+                              const start = parsePlanningDate(current?.startDate);
+                              const end = parsePlanningDate(current?.endDate);
+
+                              if (!current || !start || !end) {
+                                return null;
+                              }
+
+                              const offsetDays = diffPlanningDays(timelineStart, start);
+                              const durationDays = Math.max(1, diffPlanningDays(start, end) + 1);
+                              const left = (offsetDays / totalTimelineDays) * 100;
+                              const width = Math.max((durationDays / totalTimelineDays) * 100, 3.5);
 
                               return (
-                                <div key={phase} className="planning-phase-row">
-                                  <div>
-                                    <strong>{label}</strong>
-                                    <p>
-                                      {current?.assigneeName
-                                        ? `${current.assigneeName} · ${current.startDate || 'Sin inicio'} → ${current.endDate || 'Sin cierre'}`
-                                        : 'Sin responsable ni fechas'}
-                                    </p>
-                                  </div>
-                                  <span className={isConfigured ? 'badge badge--sage' : 'badge badge--ink'}>
-                                    {isConfigured ? 'Programada' : 'Pendiente'}
-                                  </span>
-                                </div>
+                                <span
+                                  key={phase}
+                                  className={`planning-gantt__bar planning-gantt__bar--${phase}`}
+                                  style={{ left: `${left}%`, width: `${width}%` }}
+                                  title={`${label}: ${current.assigneeName || 'Sin responsable'} · ${current.startDate || 'Sin inicio'} → ${current.endDate || 'Sin cierre'}`}
+                                />
                               );
                             })}
                           </div>
-
-                          <div className="planning-product-card__actions">
-                            <button
-                              type="button"
-                              className="cta-button cta-button--compact"
-                              onClick={() => openPlanningProductModal(product)}
-                            >
-                              <PencilLine size={16} />
-                              <span>Planificar producto</span>
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </article>
-              ) : null,
-            )}
-          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </article>
         )}
       </section>
     );
