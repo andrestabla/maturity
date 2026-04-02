@@ -1865,6 +1865,7 @@ export function TeamPage({
           <ModalFrame
             title="Crear nuevo usuario"
             description="Registra los datos del usuario, define su acceso y deja lista su vinculación institucional."
+            variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
           >
@@ -2129,6 +2130,7 @@ export function TeamPage({
           <ModalFrame
             title={selectedUser.name}
             description="Edita la cuenta, el rol, el alcance y el estado del usuario desde este panel de gobierno."
+            variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
           >
@@ -2711,8 +2713,9 @@ export function TeamPage({
         {isInstitutionSettingsRoute && institutionSettingsDraft ? (
           <ModalFrame
             title="Editar parámetros institucionales"
-            description="Los cambios se guardan desde este modal y se reflejan en todo el directorio."
-            width="lg"
+            description="Los cambios se guardan desde este panel y se reflejan en todo el directorio."
+            variant="drawer"
+            width="xl"
             onClose={closeInstitutionOverlay}
           >
             <form className="editor-card" onSubmit={handleSaveInstitutionSettings}>
@@ -2809,6 +2812,7 @@ export function TeamPage({
           <ModalFrame
             title={selectedInstitutionStructure.institution}
             description="Consulta la estructura completa y abre la edición desde aquí cuando lo necesites."
+            variant="drawer"
             width="xl"
             onClose={closeInstitutionOverlay}
           >
@@ -2915,7 +2919,8 @@ export function TeamPage({
         {(isInstitutionCreateRoute || isInstitutionStructureEditRoute) && structureDraft ? (
           <ModalFrame
             title={editingStructureId ? 'Editar estructura institucional' : 'Crear estructura institucional'}
-            description="La edición se resuelve fuera del directorio para mantener la vista principal limpia."
+            description="La edición se resuelve en un side-panel para mantener la vista principal limpia."
+            variant="drawer"
             width="xl"
             onClose={closeInstitutionOverlay}
           >
@@ -3130,7 +3135,8 @@ export function TeamPage({
         {isBrandingEditorOpen ? (
           <ModalFrame
             title="Editar branding"
-            description="La configuración visual se resuelve en un modal dedicado para no saturar la vista de Gobierno."
+            description="La configuración visual se resuelve en un panel lateral para no saturar la vista de Gobierno."
+            variant="drawer"
             width="xl"
             onClose={closeBrandingEditor}
           >
@@ -3718,8 +3724,9 @@ export function TeamPage({
         {isExperienceEditorOpen ? (
           <ModalFrame
             title="Editar experiencia de trabajo"
-            description="Estos ajustes se editan fuera de la vista resumen para mantener el foco operativo."
-            width="lg"
+            description="Estos ajustes se editan en un panel lateral para mantener el foco operativo."
+            variant="drawer"
+            width="xl"
             onClose={closeExperienceEditor}
           >
             <form className="editor-card" onSubmit={handleSaveExperience}>
@@ -3927,7 +3934,8 @@ export function TeamPage({
           <ModalFrame
             title="Editar reglas del workflow"
             description="La configuración del flujo queda aislada en modal para no mezclar lectura con edición."
-            width="lg"
+            variant="drawer"
+            width="xl"
             onClose={closeWorkflowEditor}
           >
             <form className="editor-card" onSubmit={handleSaveWorkflow}>
@@ -4261,7 +4269,8 @@ export function TeamPage({
         {isIntegrationEditorOpen && selectedIntegration && integrationDraft ? (
           <ModalFrame
             title={`Configurar ${selectedIntegration.name}`}
-            description="La configuración técnica se resuelve en un modal dedicado para no mezclar directorio con edición."
+            description="La configuración técnica se resuelve en un side-panel para no mezclar directorio con edición."
+            variant="drawer"
             width="xl"
             onClose={closeIntegrationEditor}
           >

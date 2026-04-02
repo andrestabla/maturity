@@ -60,8 +60,11 @@ export function ModalFrame({
     }
 
     window.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
       const depth = Number(root.dataset.modalDepth ?? '1') - 1;
       if (depth <= 0) {
         delete root.dataset.modalDepth;
@@ -74,7 +77,7 @@ export function ModalFrame({
 
   return createPortal(
     <div 
-      className={`fixed inset-0 z-50 flex bg-ink/60 backdrop-blur-md animate-in fade-in transition-all ${
+      className={`fixed inset-0 z-[1000] flex bg-ink/70 backdrop-blur-xl animate-in fade-in transition-all ${
         variant === 'drawer' ? 'justify-end p-0' : 'items-end md:items-center justify-center p-0 md:p-6'
       }`} 
       onClick={onClose}
