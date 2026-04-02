@@ -103,6 +103,20 @@ interface CourseProductRow {
   updatedAt: string;
 }
 
+interface TaskRow {
+  id: string;
+  title: string;
+  courseSlug: string;
+  productId: string | null;
+  productTitle: string | null;
+  role: Role;
+  stageId: string;
+  dueDate: string;
+  priority: Task['priority'];
+  status: Task['status'];
+  summary: string;
+}
+
 interface UserRow {
   id: string;
   name: string;
@@ -973,6 +987,7 @@ function makeTaskRecord(input: TaskMutationInput): Task {
     id: crypto.randomUUID(),
     title: input.title,
     courseSlug: input.courseSlug,
+    productId: input.productId?.trim() || undefined,
     role: input.role,
     stageId: input.stageId,
     dueDate: input.dueDate,
@@ -1054,6 +1069,60 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
 
 function findCourseProduct(course: Course, productId: string) {
   return course.products.find((product) => product.id === productId) ?? null;
+}
+
+function serializeTaskRow(row: TaskRow): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    courseSlug: row.courseSlug,
+    productId: row.productId ?? undefined,
+    productTitle: row.productTitle ?? undefined,
+    role: row.role,
+    stageId: row.stageId,
+    dueDate: row.dueDate,
+    priority: row.priority,
+    status: row.status,
+    summary: row.summary,
+  };
+}
+
+async function resolveTaskProductSnapshot(courseSlug: string, productId?: string | null) {
+  const normalizedProductId = productId?.trim();
+
+  if (!normalizedProductId) {
+    return {
+      productId: undefined,
+      productTitle: undefined,
+    };
+  }
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    throw new Error('El curso de la tarea ya no existe.');
+  }
+
+  const product = findCourseProduct(course, normalizedProductId);
+
+  if (!product) {
+    throw new Error('El producto asociado ya no existe dentro de este curso.');
+  }
+
+  return {
+    productId: product.id,
+    productTitle: product.title,
+  };
+}
+
+async function syncTasksForProduct(product: CourseProduct) {
+  const sql = getSql();
+
+  await sql`
+    UPDATE maturity_tasks
+    SET product_title = ${product.title}
+    WHERE product_id = ${product.id}
+  `;
 }
 
 function mapProductStageToAuditType(stage: CourseProductStage): CourseAuditEntry['type'] {
@@ -2279,7 +2348,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 12; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 13; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2369,6 +2438,8 @@ async function ensureSchema() {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         course_slug TEXT NOT NULL,
+        product_id TEXT,
+        product_title TEXT,
         role TEXT NOT NULL,
         stage_id TEXT NOT NULL,
         due_date TEXT NOT NULL,
@@ -2376,6 +2447,16 @@ async function ensureSchema() {
         status TEXT NOT NULL,
         summary TEXT NOT NULL
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_tasks
+      ADD COLUMN IF NOT EXISTS product_id TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_tasks
+      ADD COLUMN IF NOT EXISTS product_title TEXT
     `;
 
     await sql`
@@ -2858,6 +2939,19 @@ async function ensureSchema() {
       DO $$
       BEGIN
         IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_tasks_product_fk'
+        ) THEN
+          ALTER TABLE maturity_tasks
+          ADD CONSTRAINT maturity_tasks_product_fk
+          FOREIGN KEY (product_id) REFERENCES maturity_course_products(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
           SELECT 1 FROM pg_constraint WHERE conname = 'maturity_alerts_course_fk'
         ) THEN
           ALTER TABLE maturity_alerts
@@ -3094,6 +3188,16 @@ async function ensureSchema() {
       await sql`UPDATE maturity_courses SET status = 'En QA' WHERE status = 'En revisión'`;
       await sql`UPDATE maturity_courses SET status = 'En riesgo' WHERE status = 'Riesgo'`;
       await sql`UPDATE maturity_courses SET status = 'Entregado' WHERE status = 'Listo'`;
+    }
+
+    // Migration 13: Link tasks to course products
+    if (currentVersion < 13) {
+      await sql`
+        UPDATE maturity_tasks task
+        SET product_title = product.title
+        FROM maturity_course_products product
+        WHERE task.product_id = product.id
+      `;
     }
 
     // 4. Update the stored version to avoid running this again
@@ -3390,6 +3494,8 @@ async function persistTask(task: Task) {
       id,
       title,
       course_slug,
+      product_id,
+      product_title,
       role,
       stage_id,
       due_date,
@@ -3401,6 +3507,8 @@ async function persistTask(task: Task) {
       ${task.id},
       ${task.title},
       ${task.courseSlug},
+      ${task.productId ?? null},
+      ${task.productTitle ?? null},
       ${task.role},
       ${task.stageId},
       ${task.dueDate},
@@ -3412,6 +3520,8 @@ async function persistTask(task: Task) {
     SET
       title = EXCLUDED.title,
       course_slug = EXCLUDED.course_slug,
+      product_id = EXCLUDED.product_id,
+      product_title = EXCLUDED.product_title,
       role = EXCLUDED.role,
       stage_id = EXCLUDED.stage_id,
       due_date = EXCLUDED.due_date,
@@ -3705,11 +3815,13 @@ async function readCourses() {
 
 async function readTasks() {
   const sql = getSql();
-  return (await sql`
+  const rows = (await sql`
     SELECT
       id,
       title,
       course_slug AS "courseSlug",
+      product_id AS "productId",
+      product_title AS "productTitle",
       role,
       stage_id AS "stageId",
       due_date AS "dueDate",
@@ -3718,7 +3830,9 @@ async function readTasks() {
       summary
     FROM maturity_tasks
     ORDER BY due_date ASC, title ASC
-  `) as AppData['tasks'];
+  `) as TaskRow[];
+
+  return rows.map(serializeTaskRow);
 }
 
 async function readAlerts() {
@@ -4691,6 +4805,7 @@ export async function updateCourseProductRecord(
   );
 
   await persistCourse(nextCourse);
+  await syncTasksForProduct(finalProduct);
   return finalProduct;
 }
 
@@ -4791,12 +4906,18 @@ export async function deleteCourseRecord(slug: string) {
 export async function createTaskRecord(input: TaskMutationInput) {
   await ensureInitialized();
 
-  const task = makeTaskRecord(input);
+  const productSnapshot = await resolveTaskProductSnapshot(input.courseSlug, input.productId);
+  const task = {
+    ...makeTaskRecord(input),
+    ...productSnapshot,
+  };
   await persistTask(task);
   await appendAuditEntryByCourseSlug(
     input.courseSlug,
     'Tarea creada',
-    `Se asignó "${task.title}" a ${task.role} con vencimiento ${task.dueDate}.`,
+    task.productTitle
+      ? `Se asignó "${task.title}" a ${task.role} sobre el producto "${task.productTitle}" con vencimiento ${task.dueDate}.`
+      : `Se asignó "${task.title}" a ${task.role} con vencimiento ${task.dueDate}.`,
     'planning',
   );
   return task;
@@ -4811,6 +4932,8 @@ export async function updateTaskRecord(id: string, input: Partial<TaskMutationIn
       id,
       title,
       course_slug AS "courseSlug",
+      product_id AS "productId",
+      product_title AS "productTitle",
       role,
       stage_id AS "stageId",
       due_date AS "dueDate",
@@ -4820,24 +4943,37 @@ export async function updateTaskRecord(id: string, input: Partial<TaskMutationIn
     FROM maturity_tasks
     WHERE id = ${id}
     LIMIT 1
-  `) as Task[];
+  `) as TaskRow[];
 
-  const current = rows[0];
+  const current = rows[0] ? serializeTaskRow(rows[0]) : null;
 
   if (!current) {
     return null;
   }
 
+  const nextCourseSlug = input.courseSlug ?? current.courseSlug;
+  const nextProductLink =
+    Object.prototype.hasOwnProperty.call(input, 'productId')
+      ? await resolveTaskProductSnapshot(nextCourseSlug, input.productId)
+      : {
+          productId: current.productId,
+          productTitle: current.productTitle,
+        };
+
   const nextTask: Task = {
     ...current,
     ...input,
+    ...nextProductLink,
+    courseSlug: nextCourseSlug,
   };
 
   await persistTask(nextTask);
   await appendAuditEntryByCourseSlug(
     nextTask.courseSlug,
     'Tarea actualizada',
-    `La tarea "${nextTask.title}" quedó en estado ${nextTask.status}.`,
+    nextTask.productTitle
+      ? `La tarea "${nextTask.title}" quedó en estado ${nextTask.status} y sigue vinculada al producto "${nextTask.productTitle}".`
+      : `La tarea "${nextTask.title}" quedó en estado ${nextTask.status}.`,
     'planning',
   );
   return nextTask;
@@ -4873,6 +5009,8 @@ export async function findTaskById(id: string) {
       id,
       title,
       course_slug AS "courseSlug",
+      product_id AS "productId",
+      product_title AS "productTitle",
       role,
       stage_id AS "stageId",
       due_date AS "dueDate",
@@ -4882,9 +5020,9 @@ export async function findTaskById(id: string) {
     FROM maturity_tasks
     WHERE id = ${id}
     LIMIT 1
-  `) as Task[];
+  `) as TaskRow[];
 
-  return rows[0] ?? null;
+  return rows[0] ? serializeTaskRow(rows[0]) : null;
 }
 
 export async function updateStageCheckpointRecord(

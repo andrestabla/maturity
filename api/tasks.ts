@@ -33,17 +33,24 @@ export default async function handler(request: Request) {
       return errorResponse(403, 'You do not have permission to create tasks');
     }
 
-    const payload = await readJson<TaskMutationInput>(request);
-    const task = await createTaskRecord(payload);
+    try {
+      const payload = await readJson<TaskMutationInput>(request);
+      const task = await createTaskRecord(payload);
 
-    return jsonResponse(
-      {
-        task,
-      },
-      {
-        status: 201,
-      },
-    );
+      return jsonResponse(
+        {
+          task,
+        },
+        {
+          status: 201,
+        },
+      );
+    } catch (error) {
+      return errorResponse(
+        400,
+        error instanceof Error ? error.message : 'No fue posible crear la tarea',
+      );
+    }
   }
 
   if (request.method === 'PATCH') {
@@ -71,11 +78,18 @@ export default async function handler(request: Request) {
             summary: payload.summary,
           };
 
-    const task = await updateTaskRecord(payload.id, nextPayload);
+    try {
+      const task = await updateTaskRecord(payload.id, nextPayload);
 
-    return jsonResponse({
-      task,
-    });
+      return jsonResponse({
+        task,
+      });
+    } catch (error) {
+      return errorResponse(
+        400,
+        error instanceof Error ? error.message : 'No fue posible actualizar la tarea',
+      );
+    }
   }
 
   if (request.method === 'DELETE') {

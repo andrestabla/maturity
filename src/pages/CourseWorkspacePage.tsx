@@ -250,6 +250,7 @@ function makeTaskForm(courseSlug: string, stageId: string): TaskMutationInput {
   return {
     title: '',
     courseSlug,
+    productId: undefined,
     role: 'Experto',
     stageId,
     dueDate: new Date().toISOString().slice(0, 10),
@@ -266,6 +267,7 @@ function makeTaskDrafts(tasks: Task[]) {
       {
         title: task.title,
         courseSlug: task.courseSlug,
+        productId: task.productId,
         role: task.role,
         stageId: task.stageId,
         dueDate: task.dueDate,
@@ -1141,6 +1143,9 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
+  const taskProductOptions = currentCourse.products
+    .slice()
+    .sort((left, right) => left.title.localeCompare(right.title));
   const experienceSettings = appData.experience;
   const workflowSettings = appData.workflow;
   const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
@@ -5137,6 +5142,7 @@ export function CourseWorkspacePage({
                         <span className={badgeClass(draft.status)}>{draft.status}</span>
                         <strong>{task.title}</strong>
                         <p>{draft.summary}</p>
+                        {task.productTitle ? <p>Producto vinculado: {task.productTitle}</p> : null}
                       </div>
                       <div className="list-item__meta">
                         <span>{task.role}</span>
@@ -5583,6 +5589,30 @@ export function CourseWorkspacePage({
                   </div>
 
                   <div className="form-group">
+                    <label className="form-label">Producto asociado</label>
+                    <div className="modern-select-wrapper">
+                      <select
+                        className="modern-select"
+                        value={newTaskForm.productId ?? ''}
+                        onChange={(event) =>
+                          setNewTaskForm((current) => ({
+                            ...current,
+                            productId: event.target.value || undefined,
+                          }))
+                        }
+                      >
+                        <option value="">Sin vincular</option>
+                        {taskProductOptions.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
                     <label className="form-label">Responsable (Rol)</label>
                     <div className="modern-select-wrapper">
                       <select
@@ -5604,6 +5634,52 @@ export function CourseWorkspacePage({
                       <ChevronDown className="modern-select-icon" size={16} />
                     </div>
                   </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Fecha límite</label>
+                    <input
+                      className="modern-input"
+                      type="date"
+                      value={newTaskForm.dueDate}
+                      onChange={(event) =>
+                        setNewTaskForm((current) => ({ ...current, dueDate: event.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Prioridad</label>
+                    <div className="modern-select-wrapper">
+                      <select
+                        className="modern-select"
+                        value={newTaskForm.priority}
+                        onChange={(event) =>
+                          setNewTaskForm((current) => ({
+                            ...current,
+                            priority: event.target.value as TaskMutationInput['priority'],
+                          }))
+                        }
+                      >
+                        <option value="Alta">Alta</option>
+                        <option value="Media">Media</option>
+                        <option value="Baja">Baja</option>
+                      </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group mt-6">
+                  <label className="form-label">Resumen operativo</label>
+                  <textarea
+                    className="modern-textarea"
+                    value={newTaskForm.summary}
+                    onChange={(event) =>
+                      setNewTaskForm((current) => ({ ...current, summary: event.target.value }))
+                    }
+                    rows={4}
+                    placeholder="Describe qué se debe hacer, con qué criterio o qué producto se espera dejar listo."
+                  />
                 </div>
 
                 <div className="flex justify-end mt-6">
@@ -5645,6 +5721,70 @@ export function CourseWorkspacePage({
                         </label>
 
                         <label className="field">
+                          <span>Producto asociado</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.productId ?? ''}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'productId', event.target.value || undefined)
+                              }
+                            >
+                              <option value="">Sin vincular</option>
+                              {taskProductOptions.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Responsable</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.role}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'role', event.target.value as Role)
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Fecha límite</span>
+                          <div className="field__control">
+                            <input
+                              type="date"
+                              value={draft.dueDate}
+                              onChange={(event) => updateTaskDraft(task.id, 'dueDate', event.target.value)}
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Prioridad</span>
+                          <div className="field__control">
+                            <select
+                              value={draft.priority}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, 'priority', event.target.value as TaskMutationInput['priority'])
+                              }
+                            >
+                              <option value="Alta">Alta</option>
+                              <option value="Media">Media</option>
+                              <option value="Baja">Baja</option>
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
                           <span>Estado</span>
                           <div className="field__control">
                             <select
@@ -5654,13 +5794,24 @@ export function CourseWorkspacePage({
                               }
                             >
                               <option value="Pendiente">Pendiente</option>
-                              <option value="En proceso">En proceso</option>
-                              <option value="Completada">Completada</option>
+                              <option value="En revisión">En revisión</option>
+                              <option value="Lista">Lista</option>
                               <option value="Bloqueada">Bloqueada</option>
                             </select>
                           </div>
                         </label>
                       </div>
+
+                      <label className="field">
+                        <span>Resumen operativo</span>
+                        <div className="field__control">
+                          <textarea
+                            rows={3}
+                            value={draft.summary}
+                            onChange={(event) => updateTaskDraft(task.id, 'summary', event.target.value)}
+                          />
+                        </div>
+                      </label>
 
                       <div className="task-editor__actions">
                         <button

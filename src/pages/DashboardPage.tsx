@@ -395,6 +395,7 @@ export function DashboardPage({
                       <span className="badge badge--outline">{task.priority}</span>
                       <strong>{task.title}</strong>
                       <p>{task.summary}</p>
+                      {task.productTitle ? <p>Producto: {task.productTitle}</p> : null}
                     </div>
                     <div className="task-item__meta">
                       <span>{course?.title ?? 'Curso'}</span>

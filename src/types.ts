@@ -268,6 +268,8 @@ export interface Task {
   id: string;
   title: string;
   courseSlug: string;
+  productId?: string;
+  productTitle?: string;
   role: Role;
   stageId: string;
   dueDate: string;
@@ -675,6 +677,7 @@ export interface CourseMutationInput {
 export interface TaskMutationInput {
   title: string;
   courseSlug: string;
+  productId?: string;
   role: Role;
   stageId: string;
   dueDate: string;
