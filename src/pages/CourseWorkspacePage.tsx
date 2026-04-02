@@ -368,17 +368,22 @@ function defaultProductOwner(stage: CourseProductStage): Role {
   }
 }
 
-function makeCourseProductForm(stage: CourseProductStage = 'microcurriculo'): CourseProductMutationInput {
+function makeCourseProductForm(
+  stage: CourseProductStage = 'microcurriculo',
+  owner?: Role,
+  section?: string,
+): CourseProductMutationInput {
   return {
     title: '',
     stage,
     format: defaultProductFormat(stage),
-    owner: defaultProductOwner(stage),
+    owner: owner ?? defaultProductOwner(stage),
     status: 'Borrador',
     summary: '',
     body: '',
     tags: [],
     version: 'v0.1',
+    section,
   };
 }
 
@@ -396,6 +401,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
         body: product.body,
         tags: product.tags,
         version: product.version,
+        section: product.section,
       },
     ]),
   ) as Record<string, CourseProductMutationInput>;
@@ -859,7 +865,7 @@ export function CourseWorkspacePage({
     makeTeamMemberForm(),
   );
   const [newProductForm, setNewProductForm] = useState<CourseProductMutationInput>(() =>
-    makeCourseProductForm(),
+    makeCourseProductForm('microcurriculo', userRole),
   );
   const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskMutationInput>>(() =>
     makeTaskDrafts(relatedTasks),
@@ -930,7 +936,13 @@ export function CourseWorkspacePage({
       return;
     }
 
-    setNewProductForm(makeCourseProductForm(stageId));
+    setNewProductForm(
+      makeCourseProductForm(
+        stageId,
+        userRole,
+        stageId === 'arquitectura' ? architectureSectionOptions[0] ?? 'Introducción' : undefined,
+      ),
+    );
     setProductComposerStage(stageId);
   }
 
@@ -1417,6 +1429,11 @@ export function CourseWorkspacePage({
           : null;
   const showFocusedStageHeader =
     !isWorkflowPage && experienceSettings.showFocusedStageHeader && Boolean(focusedStageMeta);
+  const architectureSectionOptions = [
+    'Introducción',
+    ...(currentCourse?.metadata.units.map((_, index) => `Unidad ${index + 1}`) ?? []),
+    'Cierre',
+  ];
 
   function goToSection(section: CourseSection) {
     navigate(buildCourseSectionPath(currentCourseSlug, section));
@@ -2840,7 +2857,15 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       setProductComposerStage(null);
-      setNewProductForm(makeCourseProductForm());
+      setNewProductForm(
+        makeCourseProductForm(
+          newProductForm.stage,
+          userRole,
+          newProductForm.stage === 'arquitectura'
+            ? architectureSectionOptions[0] ?? 'Introducción'
+            : undefined,
+        ),
+      );
     } catch (error) {
       setProductError(error instanceof Error ? error.message : 'No fue posible crear el producto.');
     } finally {
@@ -3817,169 +3842,271 @@ export function CourseWorkspacePage({
 
               {isComposerOpen ? (
                 <form className="editor-card editor-card--task" onSubmit={handleProductCreate}>
-                  {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
-                  {renderStructuredProductEditor(newProductForm, (patch) =>
-                    setNewProductForm((current) => ({
-                      ...current,
-                      stage: productStage,
-                      ...patch,
-                    }))
+                  {productStage === 'arquitectura' ? (
+                    <>
+                      <div className="surface-muted product-guide">
+                        <div className="section-heading section-heading--compact">
+                          <div>
+                            <span className="eyebrow">Producto base</span>
+                            <h3>Arquitectura lista para trazabilidad</h3>
+                          </div>
+                        </div>
+                        <p className="handoff-copy">
+                          Cada producto de arquitectura define una pieza trazable del curso. Luego podrás
+                          asignarle responsables, fechas y seguimiento independiente en las etapas
+                          siguientes.
+                        </p>
+                      </div>
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Sección</span>
+                          <div className="field__control">
+                            <select
+                              value={newProductForm.section ?? architectureSectionOptions[0] ?? 'Introducción'}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  section: event.target.value,
+                                }))
+                              }
+                            >
+                              {architectureSectionOptions.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Formato</span>
+                          <div className="field__control">
+                            <select
+                              value={newProductForm.format}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  format: event.target.value as CourseProductMutationInput['format'],
+                                }))
+                              }
+                            >
+                              {stageFormats.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Nombre del producto</span>
+                          <div className="field__control">
+                            <input
+                              value={newProductForm.title}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  title: event.target.value,
+                                }))
+                              }
+                              placeholder="Ej: Video de bienvenida, guía de aprendizaje, lectura base..."
+                              required
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Descripción / propósito</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={4}
+                              value={newProductForm.summary}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  summary: event.target.value,
+                                }))
+                              }
+                              placeholder="Describe qué hace este producto y por qué existe dentro del curso."
+                              required
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {renderProductSupportPanel(newProductForm, () => applyTemplateToComposer(productStage))}
+                      {renderStructuredProductEditor(newProductForm, (patch) =>
+                        setNewProductForm((current) => ({
+                          ...current,
+                          stage: productStage,
+                          ...patch,
+                        }))
+                      )}
+
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Título</span>
+                          <div className="field__control">
+                            <input
+                              value={newProductForm.title}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  title: event.target.value,
+                                }))
+                              }
+                              required
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Formato</span>
+                          <div className="field__control">
+                            <select
+                              value={newProductForm.format}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  format: event.target.value as CourseProductMutationInput['format'],
+                                }))
+                              }
+                            >
+                              {stageFormats.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Responsable</span>
+                          <div className="field__control">
+                            <select
+                              value={newProductForm.owner}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  owner: event.target.value as Role,
+                                }))
+                              }
+                            >
+                              {appData.roles.map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Estado</span>
+                          <div className="field__control">
+                            <select
+                              value={newProductForm.status}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  status: event.target.value as CourseProductMutationInput['status'],
+                                }))
+                              }
+                            >
+                              {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                                <option key={item} value={item}>
+                                  {item}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+
+                        <label className="field">
+                          <span>Versión</span>
+                          <div className="field__control">
+                            <input
+                              value={newProductForm.version}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  version: event.target.value,
+                                }))
+                              }
+                              required
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Etiquetas</span>
+                          <div className="field__control">
+                            <input
+                              value={joinTags(newProductForm.tags)}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  tags: splitTags(event.target.value),
+                                }))
+                              }
+                              placeholder="sílabus, currículo, recursos"
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Resumen</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={3}
+                              value={newProductForm.summary}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  summary: event.target.value,
+                                }))
+                              }
+                              required
+                            />
+                          </div>
+                        </label>
+
+                        <label className="field field--full">
+                          <span>Contenido del producto</span>
+                          <div className="field__control field__control--textarea">
+                            <textarea
+                              rows={10}
+                              value={newProductForm.body}
+                              onChange={(event) =>
+                                setNewProductForm((current) => ({
+                                  ...current,
+                                  stage: productStage,
+                                  body: event.target.value,
+                                }))
+                              }
+                              placeholder="Desarrolla aquí el contenido base del producto."
+                              required
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </>
                   )}
-
-                  <div className="form-grid">
-                    <label className="field">
-                      <span>Título</span>
-                      <div className="field__control">
-                        <input
-                          value={newProductForm.title}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              title: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Formato</span>
-                      <div className="field__control">
-                        <select
-                          value={newProductForm.format}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              format: event.target.value as CourseProductMutationInput['format'],
-                            }))
-                          }
-                        >
-                          {stageFormats.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Responsable</span>
-                      <div className="field__control">
-                        <select
-                          value={newProductForm.owner}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              owner: event.target.value as Role,
-                            }))
-                          }
-                        >
-                          {appData.roles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Estado</span>
-                      <div className="field__control">
-                        <select
-                          value={newProductForm.status}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              status: event.target.value as CourseProductMutationInput['status'],
-                            }))
-                          }
-                        >
-                          {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-
-                    <label className="field">
-                      <span>Versión</span>
-                      <div className="field__control">
-                        <input
-                          value={newProductForm.version}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              version: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field field--full">
-                      <span>Etiquetas</span>
-                      <div className="field__control">
-                        <input
-                          value={joinTags(newProductForm.tags)}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              tags: splitTags(event.target.value),
-                            }))
-                          }
-                          placeholder="sílabus, currículo, recursos"
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field field--full">
-                      <span>Resumen</span>
-                      <div className="field__control field__control--textarea">
-                        <textarea
-                          rows={3}
-                          value={newProductForm.summary}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              summary: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </div>
-                    </label>
-
-                    <label className="field field--full">
-                      <span>Contenido del producto</span>
-                      <div className="field__control field__control--textarea">
-                        <textarea
-                          rows={10}
-                          value={newProductForm.body}
-                          onChange={(event) =>
-                            setNewProductForm((current) => ({
-                              ...current,
-                              stage: productStage,
-                              body: event.target.value,
-                            }))
-                          }
-                          placeholder="Desarrolla aquí el contenido base del producto."
-                          required
-                        />
-                      </div>
-                    </label>
-                  </div>
 
                   <div className="action-row">
                     <button type="submit" className="cta-button" disabled={isProductSaving === 'new'}>
@@ -4056,147 +4183,234 @@ export function CourseWorkspacePage({
                             <strong>{product.title}</strong>
                           </div>
 
-                          {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
-                          {renderStructuredProductEditor(draft, (patch) =>
-                            setProductDrafts((current) => ({
-                              ...current,
-                              [product.id]: {
-                                ...current[product.id],
-                                ...patch,
-                              },
-                            }))
-                          )
-                          }
-
-                          <div className="form-grid">
-                            <label className="field">
-                              <span>Título</span>
-                              <div className="field__control">
-                                <input
-                                  value={draft.title}
-                                  onChange={(event) =>
-                                    updateProductDraft(product.id, 'title', event.target.value)
-                                  }
-                                />
+                          {productStage === 'arquitectura' ? (
+                            <>
+                              <div className="surface-muted product-guide">
+                                <div className="section-heading section-heading--compact">
+                                  <div>
+                                    <span className="eyebrow">Producto trazable</span>
+                                    <h3>Base editable del proceso</h3>
+                                  </div>
+                                </div>
+                                <p className="handoff-copy">
+                                  Este producto será base para responsables, fechas y seguimiento independiente
+                                  en las etapas siguientes. Desde aquí puedes corregir ubicación, nombre,
+                                  formato o propósito.
+                                </p>
                               </div>
-                            </label>
 
-                            <label className="field">
-                              <span>Formato</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.format}
-                                  onChange={(event) =>
-                                    updateProductDraft(
-                                      product.id,
-                                      'format',
-                                      event.target.value as CourseProductMutationInput['format'],
-                                    )
-                                  }
-                                >
-                                  {stageFormats.map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
+                              <div className="form-grid">
+                                <label className="field">
+                                  <span>Sección</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.section ?? architectureSectionOptions[0] ?? 'Introducción'}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'section', event.target.value)
+                                      }
+                                    >
+                                      {architectureSectionOptions.map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
 
-                            <label className="field">
-                              <span>Responsable</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.owner}
-                                  onChange={(event) =>
-                                    updateProductDraft(
-                                      product.id,
-                                      'owner',
-                                      event.target.value as Role,
-                                    )
-                                  }
-                                >
-                                  {appData.roles.map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
+                                <label className="field">
+                                  <span>Formato</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.format}
+                                      onChange={(event) =>
+                                        updateProductDraft(
+                                          product.id,
+                                          'format',
+                                          event.target.value as CourseProductMutationInput['format'],
+                                        )
+                                      }
+                                    >
+                                      {stageFormats.map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
 
-                            <label className="field">
-                              <span>Estado</span>
-                              <div className="field__control">
-                                <select
-                                  value={draft.status}
-                                  onChange={(event) =>
-                                    updateProductDraft(
-                                      product.id,
-                                      'status',
-                                      event.target.value as CourseProductMutationInput['status'],
-                                    )
-                                  }
-                                >
-                                  {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
-                                    <option key={item} value={item}>
-                                      {item}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </label>
+                                <label className="field field--full">
+                                  <span>Nombre del producto</span>
+                                  <div className="field__control">
+                                    <input
+                                      value={draft.title}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'title', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
 
-                            <label className="field">
-                              <span>Versión</span>
-                              <div className="field__control">
-                                <input
-                                  value={draft.version}
-                                  onChange={(event) =>
-                                    updateProductDraft(product.id, 'version', event.target.value)
-                                  }
-                                />
+                                <label className="field field--full">
+                                  <span>Descripción / propósito</span>
+                                  <div className="field__control field__control--textarea">
+                                    <textarea
+                                      rows={4}
+                                      value={draft.summary}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'summary', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
                               </div>
-                            </label>
+                            </>
+                          ) : (
+                            <>
+                              {renderProductSupportPanel(draft, () => applyTemplateToDraft(product.id))}
+                              {renderStructuredProductEditor(draft, (patch) =>
+                                setProductDrafts((current) => ({
+                                  ...current,
+                                  [product.id]: {
+                                    ...current[product.id],
+                                    ...patch,
+                                  },
+                                }))
+                              )
+                              }
 
-                            <label className="field field--full">
-                              <span>Etiquetas</span>
-                              <div className="field__control">
-                                <input
-                                  value={joinTags(draft.tags)}
-                                  onChange={(event) =>
-                                    updateProductDraft(product.id, 'tags', splitTags(event.target.value))
-                                  }
-                                />
-                              </div>
-                            </label>
+                              <div className="form-grid">
+                                <label className="field">
+                                  <span>Título</span>
+                                  <div className="field__control">
+                                    <input
+                                      value={draft.title}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'title', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
 
-                            <label className="field field--full">
-                              <span>Resumen</span>
-                              <div className="field__control field__control--textarea">
-                                <textarea
-                                  rows={3}
-                                  value={draft.summary}
-                                  onChange={(event) =>
-                                    updateProductDraft(product.id, 'summary', event.target.value)
-                                  }
-                                />
-                              </div>
-                            </label>
+                                <label className="field">
+                                  <span>Formato</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.format}
+                                      onChange={(event) =>
+                                        updateProductDraft(
+                                          product.id,
+                                          'format',
+                                          event.target.value as CourseProductMutationInput['format'],
+                                        )
+                                      }
+                                    >
+                                      {stageFormats.map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
 
-                            <label className="field field--full">
-                              <span>Contenido del producto</span>
-                              <div className="field__control field__control--textarea">
-                                <textarea
-                                  rows={10}
-                                  value={draft.body}
-                                  onChange={(event) =>
-                                    updateProductDraft(product.id, 'body', event.target.value)
-                                  }
-                                />
+                                <label className="field">
+                                  <span>Responsable</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.owner}
+                                      onChange={(event) =>
+                                        updateProductDraft(
+                                          product.id,
+                                          'owner',
+                                          event.target.value as Role,
+                                        )
+                                      }
+                                    >
+                                      {appData.roles.map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
+
+                                <label className="field">
+                                  <span>Estado</span>
+                                  <div className="field__control">
+                                    <select
+                                      value={draft.status}
+                                      onChange={(event) =>
+                                        updateProductDraft(
+                                          product.id,
+                                          'status',
+                                          event.target.value as CourseProductMutationInput['status'],
+                                        )
+                                      }
+                                    >
+                                      {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                                        <option key={item} value={item}>
+                                          {item}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </label>
+
+                                <label className="field">
+                                  <span>Versión</span>
+                                  <div className="field__control">
+                                    <input
+                                      value={draft.version}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'version', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
+
+                                <label className="field field--full">
+                                  <span>Etiquetas</span>
+                                  <div className="field__control">
+                                    <input
+                                      value={joinTags(draft.tags)}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'tags', splitTags(event.target.value))
+                                      }
+                                    />
+                                  </div>
+                                </label>
+
+                                <label className="field field--full">
+                                  <span>Resumen</span>
+                                  <div className="field__control field__control--textarea">
+                                    <textarea
+                                      rows={3}
+                                      value={draft.summary}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'summary', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
+
+                                <label className="field field--full">
+                                  <span>Contenido del producto</span>
+                                  <div className="field__control field__control--textarea">
+                                    <textarea
+                                      rows={10}
+                                      value={draft.body}
+                                      onChange={(event) =>
+                                        updateProductDraft(product.id, 'body', event.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </label>
                               </div>
-                            </label>
-                          </div>
+                            </>
+                          )}
                         </div>
 
                         <div className="task-editor__sidebar">
@@ -4206,7 +4420,7 @@ export function CourseWorkspacePage({
                           </div>
                           <div className="task-item__meta">
                             <span>{productStageLabel(draft.stage)}</span>
-                            <span>{draft.format}</span>
+                            <span>{draft.section || draft.format}</span>
                           </div>
 
                           <button
