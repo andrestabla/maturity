@@ -4,6 +4,7 @@ import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
+  AuthUser,
   LibraryResource,
   LibraryResourceMutationInput,
   Role,
@@ -19,6 +20,7 @@ import {
 interface LibraryPageProps {
   role: Role;
   userRole: Role;
+  viewer: AuthUser;
   appData: AppData;
   refreshAppData: () => void;
 }
@@ -58,13 +60,19 @@ function makeResourceDrafts(resources: LibraryResource[]) {
 
 /** Legacy tag conversion logic removed for SidePanel compatibility */
 
-export function LibraryPage({ role, userRole, appData, refreshAppData }: LibraryPageProps) {
+export function LibraryPage({
+  role,
+  userRole,
+  viewer,
+  appData,
+  refreshAppData,
+}: LibraryPageProps) {
   const { showAlert, showConfirm } = useSystemDialog();
   const [filter, setFilter] = useState<ResourceFilter>('Todos');
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const resources = getVisibleResources(appData, role);
-  const visibleCourses = getVisibleCourses(appData, role);
+  const resources = getVisibleResources(appData, role, viewer);
+  const visibleCourses = getVisibleCourses(appData, role, viewer);
   const defaultCourseSlug = visibleCourses[0]?.slug ?? appData.courses[0]?.slug ?? '';
   const courseBySlug = new Map(appData.courses.map((course) => [course.slug, course]));
   const courseOptions = visibleCourses.map((course) => ({

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { useSystemDialog } from './SystemDialogProvider.js';
 import type { AppData, AuthUser, BrandingSettings, Role } from '../types.js';
 import { getVisibleCourses } from '../utils/domain.js';
 import { useAmbientMotion } from '../hooks/useAmbientMotion.js';
@@ -97,6 +98,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   useAmbientMotion();
+  const { showConfirm } = useSystemDialog();
   const location = useLocation();
   const navigate = useNavigate();
   const [isCommandOpen, setIsCommandOpen] = useState(false);
@@ -104,7 +106,7 @@ export function AppShell({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const deferredCommandQuery = useDeferredValue(commandQuery);
-  const visibleCourses = useMemo(() => getVisibleCourses(appData, role), [appData, role]);
+  const visibleCourses = useMemo(() => getVisibleCourses(appData, role, user), [appData, role, user]);
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
   const courseSectionMatch = matchPath('/courses/:slug/:section', location.pathname);
@@ -355,6 +357,23 @@ export function AppShell({
     .slice(0, 2)
     .join(' ');
 
+  async function handleLogoutClick() {
+    const confirmed = await showConfirm({
+      title: 'Cerrar sesión',
+      message: 'Se cerrará la sesión actual y volverás a la pantalla de acceso.',
+      tone: 'warning',
+      confirmLabel: 'Cerrar sesión',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    await onLogout();
+    window.location.assign('https://maturity360.co/login');
+  }
+
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
       {
@@ -568,7 +587,7 @@ export function AppShell({
               className="nav-link nav-link--footer nav-link--button sidebar-logout"
               title="Salir"
               aria-label="Salir"
-              onClick={() => void onLogout()}
+              onClick={() => void handleLogoutClick()}
             >
               <LogOut size={18} />
               <span>Salir</span>

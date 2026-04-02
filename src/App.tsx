@@ -234,6 +234,7 @@ export default function App() {
               <DashboardPage
                 role={activeRole}
                 userRole={session.user.role}
+                viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
                 refreshAppData={refreshAppData}
@@ -245,6 +246,7 @@ export default function App() {
             element={
               <CoursesPage
                 role={activeRole}
+                viewer={session.user}
                 appData={appData}
                 userRole={session.user.role}
                 refreshAppData={refreshAppData}
@@ -284,6 +286,7 @@ export default function App() {
               <LibraryPage
                 role={activeRole}
                 userRole={session.user.role}
+                viewer={session.user}
                 appData={appData}
                 refreshAppData={refreshAppData}
               />

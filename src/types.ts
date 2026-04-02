@@ -393,6 +393,7 @@ export interface UserMutationInput {
   institution: string;
   faculty: string;
   program: string;
+  institutionMembershipIds?: string[];
   scope: string;
   statusReason: string;
   password: string;
@@ -412,6 +413,7 @@ export interface UserUpdateInput {
   institution: string;
   faculty: string;
   program: string;
+  institutionMembershipIds?: string[];
   scope: string;
   statusReason: string;
   password?: string;

@@ -15,7 +15,7 @@ import { Link } from 'react-router-dom';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
-import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
+import type { AppData, AuthUser, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
 import { getStageMeta, getVisibleCourses } from '../utils/domain.js';
 import {
   buildCourseDirectoryLabel,
@@ -31,6 +31,7 @@ import { canManageCourses } from '../utils/permissions.js';
 
 interface CoursesPageProps {
   role: Role;
+  viewer: AuthUser;
   appData: AppData;
   userRole: Role;
   refreshAppData: () => void;
@@ -431,6 +432,7 @@ function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: s
           type: 'institution' as const,
         };
       })
+      .filter((entry) => entry.count > 0)
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
@@ -455,6 +457,7 @@ function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: s
           type: 'faculty' as const,
         };
       })
+      .filter((entry) => entry.count > 0)
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
@@ -479,6 +482,7 @@ function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: s
           type: 'program' as const,
         };
       })
+      .filter((entry) => entry.count > 0)
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
@@ -508,6 +512,7 @@ function buildFolderEntries(appData: AppData, courses: Course[], selectedNode: s
           type: 'academicPeriod' as const,
         };
       })
+      .filter((entry) => entry.count > 0)
       .sort((left, right) => left.label.localeCompare(right.label, 'es'));
   }
 
@@ -539,6 +544,7 @@ function getFolderSectionCopy(selectedNode: string) {
 
 export function CoursesPage({
   role,
+  viewer,
   appData,
   userRole,
   refreshAppData,
@@ -565,7 +571,11 @@ export function CoursesPage({
   );
   const [createdCourse, setCreatedCourse] = useState<Course | null>(null);
 
-  const visibleCourses = getVisibleCourses(appData, userRole === 'Administrador' ? 'Administrador' : role);
+  const visibleCourses = getVisibleCourses(
+    appData,
+    userRole === 'Administrador' ? 'Administrador' : role,
+    viewer,
+  );
   const canCreate = canManageCourses(userRole);
 
   const projectOptions = useMemo(

@@ -137,6 +137,7 @@ interface UserRow {
   faculty: string | null;
   programId: string | null;
   program: string | null;
+  institutionMembershipIds?: JsonValue | null;
   scope: string | null;
   statusReason: string | null;
   createdAt: string;
@@ -164,6 +165,7 @@ interface PublicUserRow {
   faculty: string | null;
   programId: string | null;
   program: string | null;
+  institutionMembershipIds?: JsonValue | null;
   scope: string | null;
   statusReason: string | null;
   createdAt: string;
@@ -210,6 +212,7 @@ interface SessionLookupRow {
   faculty: string | null;
   programId: string | null;
   program: string | null;
+  institutionMembershipIds?: JsonValue | null;
   scope: string | null;
   statusReason: string | null;
   createdAt: string;
@@ -252,6 +255,25 @@ function serializeUserRow(row: PublicUserRow | UserRow | SessionLookupRow): Auth
 
 function normalizeRoleList(primaryRole: Role, secondaryRoles: Role[] | undefined) {
   return Array.from(new Set((secondaryRoles ?? []).filter((item) => item && item !== primaryRole)));
+}
+
+function normalizeInstitutionMembershipIds(
+  institutionMembershipIds: string[] | undefined,
+  primaryInstitutionId: string | null | undefined,
+) {
+  const uniqueIds = Array.from(
+    new Set(
+      (institutionMembershipIds ?? [])
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (primaryInstitutionId?.trim() && !uniqueIds.includes(primaryInstitutionId.trim())) {
+    uniqueIds.unshift(primaryInstitutionId.trim());
+  }
+
+  return uniqueIds;
 }
 
 function normalizeUserStatus(status: UserAccountStatus | undefined) {
@@ -2089,6 +2111,7 @@ async function rebuildUserInstitutionMemberships() {
       institution,
       faculty,
       program,
+      institution_membership_ids AS "institutionMembershipIds",
       scope
     FROM maturity_users
   `) as Array<{
@@ -2099,98 +2122,122 @@ async function rebuildUserInstitutionMemberships() {
     institution: string | null;
     faculty: string | null;
     program: string | null;
+    institutionMembershipIds: JsonValue | null;
     scope: string | null;
   }>;
 
   for (const user of users) {
     try {
       const secondaryRoles = parseJson<Role[]>(user.secondaryRoles ?? []);
-      const context = await resolveInstitutionReferenceContext({
+      const primaryContext = await resolveInstitutionReferenceContext({
         institutionId: user.institutionId,
         institution: user.institution?.trim() || defaultInstitutionSettings.displayName,
         faculty: user.faculty?.trim() || '',
         program: user.program?.trim() || '',
       });
+      const requestedInstitutionIds = normalizeInstitutionMembershipIds(
+        parseJson<string[]>(user.institutionMembershipIds ?? []),
+        primaryContext.institutionId,
+      );
+      const contexts = await Promise.all(
+        requestedInstitutionIds.map(async (institutionId, index) => {
+          if (institutionId === primaryContext.institutionId) {
+            return {
+              ...primaryContext,
+              isPrimaryInstitution: true,
+            };
+          }
 
-    const memberships: Array<{
-      id: string;
-      role: Role;
-      primary: boolean;
-    }> = [
-      {
-        id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, user.role),
-        role: user.role,
-        primary: true,
-      },
-      ...secondaryRoles
-        .filter((role) => role && role !== user.role)
-        .map((role) => ({
-          id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, role),
-          role,
-          primary: false,
-        })),
-    ];
+          const context = await resolveInstitutionReferenceContext(
+            {
+              institutionId,
+              institution:
+                (
+                  await readInstitutionStructuresRecord()
+                ).find((item) => item.id === institutionId)?.institution ?? defaultInstitutionSettings.displayName,
+              faculty: '',
+              program: '',
+            },
+            { strict: true },
+          );
 
-    await sql`
-      UPDATE maturity_user_institution_roles
-      SET
-        is_primary = false,
-        updated_at = ${new Date().toISOString()}
-      WHERE user_id = ${user.id}
-    `;
+          return {
+            ...context,
+            isPrimaryInstitution: index === 0,
+          };
+        }),
+      );
 
-    await sql`
-      DELETE FROM maturity_user_institution_roles
-      WHERE user_id = ${user.id}
-        AND institution_id = ${context.institutionId}
-    `;
+      const memberships = contexts.flatMap((context) => [
+        {
+          id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, user.role),
+          role: user.role,
+          primary: context.institutionId === primaryContext.institutionId,
+          institutionId: context.institutionId,
+          facultyId: context.institutionId === primaryContext.institutionId ? context.facultyId : null,
+          programId: context.institutionId === primaryContext.institutionId ? context.programId : null,
+        },
+        ...secondaryRoles
+          .filter((role) => role && role !== user.role)
+          .map((role) => ({
+            id: buildScopedEntityId('mbr', `${user.id}:${context.institutionId}`, role),
+            role,
+            primary: false,
+            institutionId: context.institutionId,
+            facultyId: context.institutionId === primaryContext.institutionId ? context.facultyId : null,
+            programId: context.institutionId === primaryContext.institutionId ? context.programId : null,
+          })),
+      ]);
 
-    for (const membership of memberships) {
       await sql`
-        INSERT INTO maturity_user_institution_roles (
-          id,
-          user_id,
-          institution_id,
-          faculty_id,
-          program_id,
-          role,
-          scope,
-          is_primary,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          ${membership.id},
-          ${user.id},
-          ${context.institutionId},
-          ${context.facultyId},
-          ${context.programId},
-          ${membership.role},
-          ${user.scope?.trim() || null},
-          ${membership.primary},
-          ${new Date().toISOString()},
-          ${new Date().toISOString()}
-        )
-        ON CONFLICT (id) DO UPDATE
-        SET
-          faculty_id = EXCLUDED.faculty_id,
-          program_id = EXCLUDED.program_id,
-          role = EXCLUDED.role,
-          scope = EXCLUDED.scope,
-          is_primary = EXCLUDED.is_primary,
-          updated_at = EXCLUDED.updated_at
+        DELETE FROM maturity_user_institution_roles
+        WHERE user_id = ${user.id}
       `;
-    }
+
+      for (const membership of memberships) {
+        await sql`
+          INSERT INTO maturity_user_institution_roles (
+            id,
+            user_id,
+            institution_id,
+            faculty_id,
+            program_id,
+            role,
+            scope,
+            is_primary,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            ${membership.id},
+            ${user.id},
+            ${membership.institutionId},
+            ${membership.facultyId},
+            ${membership.programId},
+            ${membership.role},
+            ${user.scope?.trim() || null},
+            ${membership.primary},
+            ${new Date().toISOString()},
+            ${new Date().toISOString()}
+          )
+        `;
+      }
 
       await sql`
         UPDATE maturity_users
         SET
-          institution_id = ${context.institutionId},
-          faculty_id = ${context.facultyId},
-          program_id = ${context.programId},
-          institution = ${context.institutionName},
-          faculty = ${context.facultyName || null},
-          program = ${context.programName || null}
+          institution_id = ${primaryContext.institutionId},
+          faculty_id = ${primaryContext.facultyId},
+          program_id = ${primaryContext.programId},
+          institution = ${primaryContext.institutionName},
+          faculty = ${primaryContext.facultyName || null},
+          program = ${primaryContext.programName || null},
+          institution_membership_ids = ${JSON.stringify(
+            normalizeInstitutionMembershipIds(
+              parseJson<string[]>(user.institutionMembershipIds ?? []),
+              primaryContext.institutionId,
+            ),
+          )}::jsonb
         WHERE id = ${user.id}
       `;
     } catch {
@@ -2412,7 +2459,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 14; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 15; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2576,6 +2623,7 @@ async function ensureSchema() {
         faculty TEXT,
         program_id TEXT,
         program TEXT,
+        institution_membership_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
         scope TEXT,
         status_reason TEXT,
         created_by TEXT,
@@ -2643,6 +2691,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_users
       ADD COLUMN IF NOT EXISTS program TEXT
+    `;
+
+    await sql`
+      ALTER TABLE maturity_users
+      ADD COLUMN IF NOT EXISTS institution_membership_ids JSONB NOT NULL DEFAULT '[]'::jsonb
     `;
 
     await sql`
@@ -3277,6 +3330,23 @@ async function ensureSchema() {
         SET phase_plan = '[]'::jsonb
         WHERE phase_plan IS NULL
       `;
+    }
+
+    // Migration 15: Persist multi-institution affiliations as source of truth
+    if (currentVersion < 15) {
+      await sql`
+        UPDATE maturity_users
+        SET institution_membership_ids =
+          CASE
+            WHEN institution_id IS NOT NULL AND institution_id <> ''
+              THEN jsonb_build_array(institution_id)
+            ELSE '[]'::jsonb
+          END
+        WHERE institution_membership_ids IS NULL
+           OR institution_membership_ids = '[]'::jsonb
+      `;
+
+      await rebuildUserInstitutionMemberships();
     }
 
     // 4. Update the stored version to avoid running this again
@@ -5702,6 +5772,18 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
   const id = crypto.randomUUID();
   const timestamp = new Date().toISOString();
   const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
+  const context = await resolveInstitutionReferenceContext(
+    {
+      institution: input.institution,
+      faculty: input.faculty,
+      program: input.program,
+    },
+    { strict: true },
+  );
+  const institutionMembershipIds = normalizeInstitutionMembershipIds(
+    input.institutionMembershipIds,
+    context.institutionId,
+  );
 
   await sql`
     INSERT INTO maturity_users (
@@ -5716,9 +5798,13 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       phone,
       location,
       bio,
+      institution_id,
       institution,
+      faculty_id,
       faculty,
+      program_id,
       program,
+      institution_membership_ids,
       scope,
       status_reason,
       created_by,
@@ -5737,9 +5823,13 @@ export async function createUserRecord(input: UserMutationInput, actorId?: strin
       ${input.phone?.trim() || null},
       ${input.location?.trim() || null},
       ${input.bio?.trim() || null},
-      ${normalizeUserScopeValue(input.institution)},
-      ${normalizeUserScopeValue(input.faculty)},
-      ${normalizeUserScopeValue(input.program)},
+      ${context.institutionId},
+      ${context.institutionName},
+      ${context.facultyId},
+      ${context.facultyName || null},
+      ${context.programId},
+      ${context.programName || null},
+      ${JSON.stringify(institutionMembershipIds)}::jsonb,
       ${normalizeUserScopeValue(input.scope)},
       ${input.statusReason.trim() || null},
       ${actorId ?? null},
@@ -5791,6 +5881,22 @@ export async function updateUserRecord(input: UserUpdateInput) {
     : current.passwordHash;
   const secondaryRoles = normalizeRoleList(input.role, input.secondaryRoles);
   const nextStatus = normalizeUserStatus(input.status);
+  const context = await resolveInstitutionReferenceContext(
+    {
+      institutionId:
+        current.institution?.trim().toLowerCase() === input.institution.trim().toLowerCase()
+          ? current.institutionId ?? null
+          : null,
+      institution: input.institution,
+      faculty: input.faculty,
+      program: input.program,
+    },
+    { strict: true },
+  );
+  const institutionMembershipIds = normalizeInstitutionMembershipIds(
+    input.institutionMembershipIds,
+    context.institutionId,
+  );
 
   await sql`
     UPDATE maturity_users
@@ -5805,9 +5911,13 @@ export async function updateUserRecord(input: UserUpdateInput) {
       phone = ${input.phone?.trim() || null},
       location = ${input.location?.trim() || null},
       bio = ${input.bio?.trim() || null},
-      institution = ${normalizeUserScopeValue(input.institution) || null},
-      faculty = ${normalizeUserScopeValue(input.faculty) || null},
-      program = ${normalizeUserScopeValue(input.program) || null},
+      institution_id = ${context.institutionId},
+      institution = ${context.institutionName},
+      faculty_id = ${context.facultyId},
+      faculty = ${context.facultyName || null},
+      program_id = ${context.programId},
+      program = ${context.programName || null},
+      institution_membership_ids = ${JSON.stringify(institutionMembershipIds)}::jsonb,
       scope = ${normalizeUserScopeValue(input.scope) || null},
       status_reason = ${input.statusReason.trim() || null},
       updated_at = ${new Date().toISOString()}

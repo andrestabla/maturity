@@ -12,7 +12,7 @@ import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { Link } from 'react-router-dom';
-import type { AppData, Role } from '../types.js';
+import type { AppData, AuthUser, Role } from '../types.js';
 import { formatDate } from '../utils/format.js';
 import {
   averageProgress,
@@ -26,6 +26,7 @@ import { canManageAlerts } from '../utils/permissions.js';
 interface DashboardPageProps {
   role: Role;
   userRole: Role;
+  viewer: AuthUser;
   appData: AppData;
   isLoading?: boolean;
   refreshAppData: () => void;
@@ -86,6 +87,7 @@ function DashboardSkeleton() {
 export function DashboardPage({
   role,
   userRole,
+  viewer,
   appData,
   isLoading = false,
   refreshAppData,
@@ -97,11 +99,11 @@ export function DashboardPage({
     return <DashboardSkeleton />;
   }
 
-  const visibleCourses = getVisibleCourses(appData, role);
-  const visibleTasks = getVisibleTasks(appData, role).sort((left, right) =>
+  const visibleCourses = getVisibleCourses(appData, role, viewer);
+  const visibleTasks = getVisibleTasks(appData, role, viewer).sort((left, right) =>
     left.dueDate.localeCompare(right.dueDate),
   );
-  const visibleAlerts = getVisibleAlerts(appData, role);
+  const visibleAlerts = getVisibleAlerts(appData, role, viewer);
   const averageQuality =
     visibleCourses.length === 0
       ? 0

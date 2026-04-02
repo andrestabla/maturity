@@ -2005,8 +2005,8 @@ html.modal-active .app-shell {
   font-family: 'Manrope', sans-serif;
   --font-body: 'Manrope', sans-serif;
   --font-display: 'Fraunces', serif;
-  --bg: #efe6d9;
-  --bg-deep: #e4d9c8;
+  --bg: #f7fbff;
+  --bg-deep: #eef4fb;
   --panel: rgba(252, 246, 239, 0.72);
   --panel-strong: rgba(255, 251, 247, 0.9);
   --panel-muted: rgba(250, 243, 234, 0.78);
@@ -2035,17 +2035,19 @@ html.modal-active .app-shell {
 html {
   background: var(--bg);
   scroll-behavior: smooth;
+  min-height: 100%;
 }
 
 body {
   font-family: var(--font-body);
   color: var(--ink);
   background:
-    radial-gradient(circle at 12% 12%, rgba(199, 124, 86, 0.14), transparent 22%),
-    radial-gradient(circle at 86% 8%, rgba(112, 143, 149, 0.12), transparent 24%),
-    radial-gradient(circle at 52% 100%, rgba(200, 160, 110, 0.08), transparent 28%),
-    linear-gradient(180deg, #f6eee4 0%, #eadfce 100%);
+    radial-gradient(circle at 12% 12%, rgba(90, 167, 255, 0.08), transparent 22%),
+    radial-gradient(circle at 86% 8%, rgba(112, 143, 149, 0.08), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(232, 241, 252, 0.38), transparent 30%),
+    linear-gradient(180deg, #f9fcff 0%, #f3f7fb 100%);
   overflow-x: hidden;
+  min-height: 100%;
 }
 
 body::before,
@@ -2067,13 +2069,15 @@ body::after {
   width: 42vw;
   height: 42vw;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 250, 243, 0.52), rgba(255, 250, 243, 0));
+  background: radial-gradient(circle, rgba(243, 248, 255, 0.6), rgba(243, 248, 255, 0));
   filter: blur(20px);
 }
 
 #root {
   position: relative;
   isolation: isolate;
+  min-height: 100vh;
+  overflow-x: clip;
 }
 
 html.has-ambient-cursor body,
@@ -8033,6 +8037,10 @@ body::after {
   display: flex;
   gap: var(--space-1);
   flex-wrap: wrap;
+}
+
+.role-picker-panel input[type='checkbox'] {
+  margin: 0 8px 0 0;
 }
 
 .tag-token {

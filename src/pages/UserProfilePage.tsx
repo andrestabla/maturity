@@ -28,6 +28,7 @@ import type {
   UserUpdateInput,
 } from '../types.js';
 import { formatDateTime } from '../utils/format.js';
+import { getInstitutionFaculties, getInstitutionPrograms } from '../utils/institutions.js';
 import { canManageUsers } from '../utils/permissions.js';
 
 interface UserProfilePageProps {
@@ -54,6 +55,14 @@ function buildProfileDraft(user: AuthUser): UserProfileUpdateInput {
 }
 
 function buildAdminDraft(user: AuthUser): UserUpdateInput {
+  const membershipIds = Array.from(
+    new Set(
+      (user.memberships ?? [])
+        .map((membership) => membership.institutionId?.trim() ?? '')
+        .filter(Boolean),
+    ),
+  );
+
   return {
     id: user.id,
     name: user.name,
@@ -68,6 +77,12 @@ function buildAdminDraft(user: AuthUser): UserUpdateInput {
     institution: user.institution ?? '',
     faculty: user.faculty ?? '',
     program: user.program ?? '',
+    institutionMembershipIds:
+      membershipIds.length > 0
+        ? membershipIds
+        : user.institutionId?.trim()
+          ? [user.institutionId.trim()]
+          : [],
     scope: user.scope ?? '',
     statusReason: user.statusReason ?? '',
     password: '',
@@ -117,6 +132,37 @@ function toggleSecondaryRole(draft: UserUpdateInput, role: Role) {
   return {
     ...draft,
     secondaryRoles: nextRoles.filter((item) => item !== draft.role),
+  };
+}
+
+function syncAdminInstitutionDraft(
+  draft: UserUpdateInput,
+  appData: AppData,
+  institution: string,
+) {
+  const facultyOptions = getInstitutionFaculties(appData.institution, institution);
+  const programOptions = getInstitutionPrograms(appData.institution, institution);
+  const selectedStructure = appData.institution.structures.find(
+    (structure) => structure.institution === institution,
+  );
+  const membershipIds = new Set(draft.institutionMembershipIds ?? []);
+
+  if (selectedStructure?.id) {
+    membershipIds.add(selectedStructure.id);
+  }
+
+  return {
+    ...draft,
+    institution,
+    faculty:
+      facultyOptions.includes(draft.faculty) || !draft.faculty.trim()
+        ? draft.faculty.trim() || facultyOptions[0] || ''
+        : facultyOptions[0] || '',
+    program:
+      programOptions.includes(draft.program) || !draft.program.trim()
+        ? draft.program.trim() || programOptions[0] || ''
+        : programOptions[0] || '',
+    institutionMembershipIds: Array.from(membershipIds),
   };
 }
 
@@ -195,6 +241,33 @@ export function UserProfilePage({
   }
 
   const profileUser = targetUser;
+  const institutionStructures = appData.institution.structures;
+  const adminInstitutionOptions = institutionStructures.map((structure) => ({
+    id: structure.id,
+    label: structure.institution,
+  }));
+  const adminPrimaryStructure =
+    institutionStructures.find((structure) => structure.institution === adminDraft?.institution) ?? null;
+  const adminFacultyOptions = adminDraft
+    ? Array.from(
+        new Set(
+          [adminDraft.faculty, ...getInstitutionFaculties(appData.institution, adminDraft.institution)].filter(
+            Boolean,
+          ),
+        ),
+      )
+    : [];
+  const adminProgramOptions = adminDraft
+    ? Array.from(
+        new Set(
+          [adminDraft.program, ...getInstitutionPrograms(appData.institution, adminDraft.institution)].filter(
+            Boolean,
+          ),
+        ),
+      )
+    : [];
+  const affiliationLabels =
+    profileUser.memberships?.map((membership) => membership.institution).filter(Boolean) ?? [];
 
   function closeProfileEditor() {
     setProfileDraft(buildProfileDraft(profileUser));
@@ -537,6 +610,13 @@ export function UserProfilePage({
 
                 <div className="list-item">
                   <div>
+                    <strong>Filiación institucional</strong>
+                    <p>{affiliationLabels.length > 0 ? affiliationLabels.join(' · ') : 'Sin afiliaciones definidas'}</p>
+                  </div>
+                </div>
+
+                <div className="list-item">
+                  <div>
                     <strong>Roles complementarios</strong>
                     <p>
                       {profileUser.secondaryRoles?.join(' · ') || 'Sin roles complementarios'}
@@ -781,42 +861,62 @@ export function UserProfilePage({
                   <label className="field">
                     <span>Institución</span>
                     <div className="field__control">
-                      <input
+                      <select
                         value={adminDraft.institution}
                         onChange={(event) =>
                           setAdminDraft((current) =>
-                            current ? { ...current, institution: event.target.value } : current,
+                            current
+                              ? syncAdminInstitutionDraft(current, appData, event.target.value)
+                              : current,
                           )
                         }
-                      />
+                      >
+                        {adminInstitutionOptions.map((item) => (
+                          <option key={item.id} value={item.label}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </label>
 
                   <label className="field">
                     <span>Facultad</span>
                     <div className="field__control">
-                      <input
+                      <select
                         value={adminDraft.faculty}
                         onChange={(event) =>
                           setAdminDraft((current) =>
                             current ? { ...current, faculty: event.target.value } : current,
                           )
                         }
-                      />
+                      >
+                        {adminFacultyOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </label>
 
                   <label className="field">
                     <span>Programa</span>
                     <div className="field__control">
-                      <input
+                      <select
                         value={adminDraft.program}
                         onChange={(event) =>
                           setAdminDraft((current) =>
                             current ? { ...current, program: event.target.value } : current,
                           )
                         }
-                      />
+                      >
+                        {adminProgramOptions.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </label>
 
@@ -834,6 +934,55 @@ export function UserProfilePage({
                     </div>
                   </label>
                 </div>
+
+                <label className="field field--full">
+                  <span>Filiación institucional</span>
+                  <p className="field-help">
+                    Selecciona todas las instituciones en las que el usuario puede operar. La institución principal siempre se conserva.
+                  </p>
+                  <div className="role-picker-panel">
+                    {institutionStructures.map((structure) => {
+                      const checked =
+                        adminDraft.institutionMembershipIds?.includes(structure.id) ||
+                        structure.institution === adminDraft.institution;
+                      const isPrimary = adminPrimaryStructure?.id === structure.id;
+
+                      return (
+                        <label
+                          key={structure.id}
+                          className={checked ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isPrimary}
+                            onChange={(event) =>
+                              setAdminDraft((current) => {
+                                if (!current) {
+                                  return current;
+                                }
+
+                                const currentIds = new Set(current.institutionMembershipIds ?? []);
+
+                                if (event.target.checked) {
+                                  currentIds.add(structure.id);
+                                } else {
+                                  currentIds.delete(structure.id);
+                                }
+
+                                return {
+                                  ...current,
+                                  institutionMembershipIds: Array.from(currentIds),
+                                };
+                              })
+                            }
+                          />
+                          <span>{structure.institution}{isPrimary ? ' · Principal' : ''}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </label>
 
                 <label className="field field--full">
                   <span>Roles complementarios</span>
@@ -1112,6 +1261,10 @@ export function UserProfilePage({
               <div className="checklist__item">
                 <strong>Alcance</strong>
                 <p>{profileUser.scope || 'Global'}</p>
+              </div>
+              <div className="checklist__item">
+                <strong>Afiliaciones</strong>
+                <p>{affiliationLabels.length > 0 ? affiliationLabels.join(' · ') : 'Sin afiliaciones definidas'}</p>
               </div>
             </div>
           </article>
