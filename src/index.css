@@ -9182,6 +9182,117 @@ body::after {
   overflow-wrap: anywhere;
 }
 
+.planning-section-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.planning-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.planning-product-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+
+.planning-product-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.planning-product-card__head h4 {
+  margin: 8px 0 0;
+  font-size: 1rem;
+  line-height: 1.35;
+  color: var(--secondary);
+}
+
+.planning-product-card__summary,
+.planning-modal-summary p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.planning-product-card__stats,
+.planning-modal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.planning-product-card__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.planning-phase-list {
+  display: grid;
+  gap: 10px;
+}
+
+.planning-phase-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.planning-phase-row strong,
+.planning-phase-card__head h4 {
+  color: var(--secondary);
+}
+
+.planning-phase-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.planning-product-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.planning-modal-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.planning-phase-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.planning-phase-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
 .architecture-card__actions {
   display: flex;
   flex-wrap: wrap;

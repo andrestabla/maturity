@@ -93,6 +93,12 @@ export type CourseProductFormat =
   | 'RED'
   | 'Evaluación';
 export type CourseProductStatus = 'Borrador' | 'En revisión' | 'Aprobado';
+export type ProductPlanningPhase =
+  | 'escritura'
+  | 'validacion'
+  | 'multimedia'
+  | 'lms'
+  | 'qa';
 
 export interface StageDefinition {
   id: string;
@@ -220,7 +226,16 @@ export interface CourseProduct {
   tags: string[];
   version: string;
   section?: string;
+  phasePlan: ProductPhasePlan[];
   updatedAt: string;
+}
+
+export interface ProductPhasePlan {
+  phase: ProductPlanningPhase;
+  startDate: string;
+  endDate: string;
+  assigneeId?: string;
+  assigneeName?: string;
 }
 
 export interface AssistantCard {
@@ -629,6 +644,7 @@ export interface CourseProductMutationInput {
   tags: string[];
   version: string;
   section?: string;
+  phasePlan?: ProductPhasePlan[];
 }
 
 export interface DeliverableMutationInput {

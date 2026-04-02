@@ -22,14 +22,17 @@ import {
   Target,
   File,
   AlertCircle,
+  CalendarRange,
   Video,
   Mic,
   MonitorPlay,
   ClipboardCheck,
   ChevronDown,
+  UserRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ModalFrame } from '../components/ModalFrame.js';
 import { SidePanel } from '../components/SidePanel.js';
 import { useModalStore } from '../store/modalStore.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
@@ -45,6 +48,8 @@ import type {
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
   CourseMutationInput,
+  ProductPhasePlan,
+  ProductPlanningPhase,
   Role,
   StageCheckpointStatus,
   Task,
@@ -69,7 +74,6 @@ import {
   canDeleteTasks,
   canEditCourseProduct,
   canEditStageNote,
-  canEditTask,
   canManageCourses,
 } from '../utils/permissions.js';
 
@@ -386,6 +390,7 @@ function makeCourseProductForm(
     tags: [],
     version: 'v0.1',
     section,
+    phasePlan: normalizeProductPhasePlanDraft([]),
   };
 }
 
@@ -404,6 +409,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
         tags: product.tags,
         version: product.version,
         section: product.section,
+        phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
       },
     ]),
   ) as Record<string, CourseProductMutationInput>;
@@ -677,6 +683,37 @@ function resolveArchitectureSectionLabel(
   return rawSection.trim() || 'Introducción';
 }
 
+const productPlanningPhases: Array<{
+  phase: ProductPlanningPhase;
+  label: string;
+  ownerRole: Role;
+}> = [
+  { phase: 'escritura', label: 'Escritura', ownerRole: 'Experto' },
+  { phase: 'validacion', label: 'Validación instruccional', ownerRole: 'Diseñador instruccional' },
+  { phase: 'multimedia', label: 'Producción multimedia', ownerRole: 'Diseñador multimedia' },
+  { phase: 'lms', label: 'Montaje LMS', ownerRole: 'Gestor LMS' },
+  { phase: 'qa', label: 'QA', ownerRole: 'Analista QA' },
+];
+
+function normalizeProductPhasePlanDraft(phasePlan?: ProductPhasePlan[]) {
+  return productPlanningPhases.map(({ phase }) => {
+    const current = phasePlan?.find((item) => item.phase === phase);
+    return (
+      current ?? {
+        phase,
+        startDate: '',
+        endDate: '',
+      }
+    );
+  });
+}
+
+function countConfiguredPlanningPhases(phasePlan: ProductPhasePlan[]) {
+  return phasePlan.filter(
+    (item) => item.startDate.trim() && item.endDate.trim() && item.assigneeId?.trim(),
+  ).length;
+}
+
 
 
 
@@ -709,6 +746,7 @@ export function CourseWorkspacePage({
 
   const { activeModal, isOpen: isGlobalModalOpen, open: openModal, close: closeModal } = useModalStore();
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [planningProductId, setPlanningProductId] = useState<string | null>(null);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [isEditingCourseMetadata, setIsEditingCourseMetadata] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -719,12 +757,14 @@ export function CourseWorkspacePage({
   const [taskError, setTaskError] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
+  const [planningError, setPlanningError] = useState<string | null>(null);
   const [stageNoteError, setStageNoteError] = useState<string | null>(null);
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
   const [isProductSaving, setIsProductSaving] = useState<string | null>(null);
+  const [isPlanningSaving, setIsPlanningSaving] = useState(false);
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [stageNoteDrafts, setStageNoteDrafts] = useState<
     Record<CourseStageNoteKey, CourseStageNoteMutationInput>
@@ -899,6 +939,9 @@ export function CourseWorkspacePage({
   );
   const [productDrafts, setProductDrafts] = useState<Record<string, CourseProductMutationInput>>(() =>
     makeCourseProductDrafts(course?.products ?? []),
+  );
+  const [planningPhaseDraft, setPlanningPhaseDraft] = useState<ProductPhasePlan[]>(() =>
+    normalizeProductPhasePlanDraft([]),
   );
   const currentInstitution =
     courseForm.institution ||
@@ -1165,6 +1208,11 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
+  const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
+  const planningProduct = planningProductId
+    ? architectureProducts.find((product) => product.id === planningProductId) ?? null
+    : null;
+  const activeUsers = appData.users.filter((user) => user.status !== 'Inactivo' && user.status !== 'Suspendido');
   const taskProductOptions = currentCourse.products
     .slice()
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -1367,11 +1415,26 @@ export function CourseWorkspacePage({
                 eyebrow: 'Planeación',
                 title: 'Zona dedicada de planeación',
                 description:
-                  'Asigna responsables, organiza hitos y mueve el trabajo del curso con foco operativo.',
+                  'Programa cada producto del curso por fases, fechas y responsables reales.',
                 stats: [
-                  { label: 'Equipo', value: String(currentCourse.team.length) },
-                  { label: 'Tareas', value: String(pendingTasksCount) },
-                  { label: 'Hitos', value: String(upcomingMilestones.length) },
+                  { label: 'Productos', value: String(architectureProducts.length) },
+                  {
+                    label: 'Fases planificadas',
+                    value: String(
+                      architectureProducts.reduce(
+                        (total, product) => total + countConfiguredPlanningPhases(product.phasePlan),
+                        0,
+                      ),
+                    ),
+                  },
+                  {
+                    label: 'Productos listos',
+                    value: String(
+                      architectureProducts.filter(
+                        (product) => countConfiguredPlanningPhases(product.phasePlan) === productPlanningPhases.length,
+                      ).length,
+                    ),
+                  },
                 ],
               }
           : activeSection === 'escritura'
@@ -3130,6 +3193,7 @@ export function CourseWorkspacePage({
       tags: [],
       version: '1.0',
       section: sectionName,
+      phasePlan: normalizeProductPhasePlanDraft([]),
     });
     setActiveAddSection(sectionName);
     setIsAddProductModalOpen(true);
@@ -3153,6 +3217,7 @@ export function CourseWorkspacePage({
       tags: product.tags,
       version: product.version,
       section: product.section ?? 'Introducción',
+      phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
     });
     setIsAddProductModalOpen(true);
   }
@@ -3351,6 +3416,85 @@ export function CourseWorkspacePage({
       );
     } finally {
       setIsProductSaving(null);
+    }
+  }
+
+  function openPlanningProductModal(product: CourseProduct) {
+    setPlanningError(null);
+    setPlanningProductId(product.id);
+    setPlanningPhaseDraft(normalizeProductPhasePlanDraft(product.phasePlan));
+  }
+
+  function closePlanningProductModal() {
+    setPlanningProductId(null);
+    setPlanningError(null);
+    setPlanningPhaseDraft(normalizeProductPhasePlanDraft([]));
+  }
+
+  function updatePlanningPhaseDraft(
+    phase: ProductPlanningPhase,
+    key: keyof Omit<ProductPhasePlan, 'phase'>,
+    value: string,
+  ) {
+    setPlanningPhaseDraft((current) =>
+      current.map((item) =>
+        item.phase === phase
+          ? {
+              ...item,
+              [key]: value || undefined,
+            }
+          : item,
+      ),
+    );
+  }
+
+  async function handlePlanningSave() {
+    if (!planningProduct) {
+      return;
+    }
+
+    setPlanningError(null);
+    setIsPlanningSaving(true);
+
+    try {
+      const phasePlan = planningPhaseDraft.map((item) => {
+        const assignee = activeUsers.find((user) => user.id === item.assigneeId);
+        return {
+          phase: item.phase,
+          startDate: item.startDate,
+          endDate: item.endDate,
+          assigneeId: item.assigneeId?.trim() || undefined,
+          assigneeName: assignee?.name ?? item.assigneeName ?? undefined,
+        };
+      });
+
+      const response = await fetch('/api/course-products', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: planningProduct.id,
+          phasePlan,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible guardar la planeación del producto.');
+      }
+
+      refreshAppData();
+      closePlanningProductModal();
+    } catch (error) {
+      setPlanningError(
+        error instanceof Error ? error.message : 'No fue posible guardar la planeación del producto.',
+      );
+    } finally {
+      setIsPlanningSaving(false);
     }
   }
 
@@ -5047,6 +5191,167 @@ export function CourseWorkspacePage({
     );
   }
 
+  function renderPlanningWorkspace() {
+    const unitLabels = currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`);
+    const unitTitleHints = currentCourse.metadata.units.map((unit) => unit.tituloUnidad ?? '');
+    const groupedSections = [
+      {
+        label: 'Introducción',
+        products: architectureProducts.filter(
+          (product) =>
+            resolveArchitectureSectionLabel(
+              product.section ?? '',
+              product.title,
+              product.summary,
+              unitLabels,
+              unitTitleHints,
+            ) === 'Introducción',
+        ),
+      },
+      ...unitLabels.map((label) => ({
+        label,
+        products: architectureProducts.filter(
+          (product) =>
+            resolveArchitectureSectionLabel(
+              product.section ?? '',
+              product.title,
+              product.summary,
+              unitLabels,
+              unitTitleHints,
+            ) === label,
+        ),
+      })),
+      {
+        label: 'Cierre',
+        products: architectureProducts.filter(
+          (product) =>
+            resolveArchitectureSectionLabel(
+              product.section ?? '',
+              product.title,
+              product.summary,
+              unitLabels,
+              unitTitleHints,
+            ) === 'Cierre',
+        ),
+      },
+    ];
+
+    return (
+      <section className="page-stack">
+        <article className="surface section-card section-card--compact">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Planeación operativa</span>
+              <h3>Matriz de producción por producto</h3>
+            </div>
+          </div>
+          <p className="handoff-copy">
+            Cada producto define una ruta propia de ejecución. Aquí asignas fechas y responsables
+            reales por fase para escritura, validación instruccional, producción multimedia,
+            montaje LMS y QA.
+          </p>
+        </article>
+
+        {architectureProducts.length === 0 ? (
+          <article className="surface section-card">
+            <div className="empty-state">
+              <strong>No hay productos de arquitectura para planificar</strong>
+              <p>Primero estructura la arquitectura del curso y luego vuelve a esta etapa.</p>
+            </div>
+          </article>
+        ) : (
+          <div className="planning-section-stack">
+            {groupedSections.map((section) =>
+              section.products.length > 0 ? (
+                <article key={section.label} className="surface section-card section-card--compact">
+                  <div className="section-heading">
+                    <div>
+                      <span className="eyebrow">Sección</span>
+                      <h3>{section.label}</h3>
+                    </div>
+                    <span className="badge badge--outline">
+                      {section.products.length} producto{section.products.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  <div className="planning-product-grid">
+                    {section.products.map((product) => {
+                      const configuredPhases = countConfiguredPlanningPhases(product.phasePlan);
+
+                      return (
+                        <article key={product.id} className="planning-product-card">
+                          <div className="planning-product-card__head">
+                            <div>
+                              <span className="badge badge--outline">{product.format}</span>
+                              <h4>{product.title}</h4>
+                            </div>
+                            <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                          </div>
+
+                          <p className="planning-product-card__summary">{product.summary}</p>
+
+                          <div className="planning-product-card__stats">
+                            <span>
+                              <CalendarRange size={14} />
+                              {configuredPhases}/{productPlanningPhases.length} fases programadas
+                            </span>
+                            <span>
+                              <UserRound size={14} />
+                              {
+                                product.phasePlan.filter((item) => item.assigneeId || item.assigneeName).length
+                              }{' '}
+                              responsables asignados
+                            </span>
+                          </div>
+
+                          <div className="planning-phase-list">
+                            {productPlanningPhases.map(({ phase, label }) => {
+                              const current = product.phasePlan.find((item) => item.phase === phase);
+                              const isConfigured = Boolean(
+                                current?.startDate && current?.endDate && (current?.assigneeId || current?.assigneeName),
+                              );
+
+                              return (
+                                <div key={phase} className="planning-phase-row">
+                                  <div>
+                                    <strong>{label}</strong>
+                                    <p>
+                                      {current?.assigneeName
+                                        ? `${current.assigneeName} · ${current.startDate || 'Sin inicio'} → ${current.endDate || 'Sin cierre'}`
+                                        : 'Sin responsable ni fechas'}
+                                    </p>
+                                  </div>
+                                  <span className={isConfigured ? 'badge badge--sage' : 'badge badge--ink'}>
+                                    {isConfigured ? 'Programada' : 'Pendiente'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="planning-product-card__actions">
+                            <button
+                              type="button"
+                              className="cta-button cta-button--compact"
+                              onClick={() => openPlanningProductModal(product)}
+                            >
+                              <PencilLine size={16} />
+                              <span>Planificar producto</span>
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </article>
+              ) : null,
+            )}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
 
@@ -5233,70 +5538,121 @@ export function CourseWorkspacePage({
       ) : null}
 
       {activeSection === 'planeacion' ? (
-        <section className="workspace-grid">
-           {renderStageNoteEditor(
-            'planeacion',
-            'Operación',
-            'Bitácora de planeación',
-            'Seguimiento a hitos operativos y coordinación de recursos del equipo.',
-          )}
+        renderPlanningWorkspace()
+      ) : null}
 
-          <article className="surface section-card section-card--compact">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">Tareas</span>
-                <h3>Tablero operativo del curso</h3>
-              </div>
-              <div className="action-row">
-                {canCreateTasks(userRole) ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => openModal('tasks')}
-                  >
-                    <PencilLine size={16} />
-                    <span>Gestionar tareas</span>
-                  </button>
-                ) : null}
-              </div>
+      {planningProduct ? (
+        <ModalFrame
+          title={`Planeación · ${planningProduct.title}`}
+          description="Define la secuencia operativa del producto por fase, con responsables reales del sistema y ventanas de trabajo."
+          width="xl"
+          onClose={closePlanningProductModal}
+          footer={
+            <div className="flex justify-end gap-3 w-full">
+              <button type="button" className="filter-chip" onClick={closePlanningProductModal}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="cta-button"
+                disabled={isPlanningSaving}
+                onClick={() => void handlePlanningSave()}
+              >
+                <Save size={16} />
+                <span>{isPlanningSaving ? 'Guardando…' : 'Guardar planeación'}</span>
+              </button>
+            </div>
+          }
+        >
+          <div className="page-stack">
+            <div className="planning-modal-summary">
+              <span className="badge badge--outline">{planningProduct.format}</span>
+              <span className="badge badge--outline">{planningProduct.section ?? 'Introducción'}</span>
+              <p>{planningProduct.summary}</p>
             </div>
 
-            <div className="list-stack">
-              {visibleTasks.length === 0 ? (
-                <div className="empty-state">
-                  <strong>Sin tareas visibles en este curso</strong>
-                  <p>Cuando el flujo avance o se registren nuevas asignaciones aparecerán aquí.</p>
-                </div>
-              ) : (
-                visibleTasks.map((task) => {
-                  const draft = taskDrafts[task.id];
-                  const isEditable = canEditTask(userRole, task.role);
+            {planningError ? <p className="form-error">{planningError}</p> : null}
 
-                  if (!draft) {
-                    return null;
-                  }
+            <div className="planning-modal-grid">
+              {productPlanningPhases.map(({ phase, label, ownerRole }) => {
+                const current = planningPhaseDraft.find((item) => item.phase === phase) ?? {
+                  phase,
+                  startDate: '',
+                  endDate: '',
+                };
+                const phaseUsers = activeUsers
+                  .slice()
+                  .sort((left, right) => {
+                    const leftPriority = left.role === ownerRole ? 0 : 1;
+                    const rightPriority = right.role === ownerRole ? 0 : 1;
+                    if (leftPriority !== rightPriority) {
+                      return leftPriority - rightPriority;
+                    }
+                    return left.name.localeCompare(right.name, 'es');
+                  });
 
-                  return (
-                    <div key={task.id} className="list-item">
+                return (
+                  <article key={phase} className="planning-phase-card">
+                    <div className="planning-phase-card__head">
                       <div>
-                        <span className={badgeClass(draft.status)}>{draft.status}</span>
-                        <strong>{task.title}</strong>
-                        <p>{draft.summary}</p>
-                        {task.productTitle ? <p>Producto vinculado: {task.productTitle}</p> : null}
+                        <span className="eyebrow">Fase</span>
+                        <h4>{label}</h4>
                       </div>
-                      <div className="list-item__meta">
-                        <span>{task.role}</span>
-                        <span>{draft.priority}</span>
-                        <span>Vence {formatDate(task.dueDate)}</span>
-                        {!canCreateTasks(userRole) ? <span>{isEditable ? 'Editable' : 'Solo seguimiento'}</span> : null}
-                      </div>
+                      <span className="badge badge--outline">{ownerRole}</span>
                     </div>
-                  );
-                })
-              )}
+
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Fecha de inicio</span>
+                        <div className="field__control">
+                          <input
+                            type="date"
+                            value={current.startDate}
+                            onChange={(event) =>
+                              updatePlanningPhaseDraft(phase, 'startDate', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field">
+                        <span>Fecha final</span>
+                        <div className="field__control">
+                          <input
+                            type="date"
+                            value={current.endDate}
+                            onChange={(event) =>
+                              updatePlanningPhaseDraft(phase, 'endDate', event.target.value)
+                            }
+                          />
+                        </div>
+                      </label>
+
+                      <label className="field field--full">
+                        <span>Responsable</span>
+                        <div className="field__control">
+                          <select
+                            value={current.assigneeId ?? ''}
+                            onChange={(event) =>
+                              updatePlanningPhaseDraft(phase, 'assigneeId', event.target.value)
+                            }
+                          >
+                            <option value="">Seleccionar usuario</option>
+                            {phaseUsers.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.name} · {user.role}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </label>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
-          </article>
-        </section>
+          </div>
+        </ModalFrame>
       ) : null}
 
       {activeSection === 'escritura' ? (

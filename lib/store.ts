@@ -33,6 +33,8 @@ import type {
   Observation,
   ObservationMutationInput,
   PasswordChangeInput,
+  ProductPhasePlan,
+  ProductPlanningPhase,
   Role,
   RoleProfile,
   StageCheckpoint,
@@ -99,6 +101,7 @@ interface CourseProductRow {
   tags: JsonValue;
   version: string;
   section: string | null;
+  phasePlan: JsonValue;
   createdAt: string;
   updatedAt: string;
 }
@@ -452,6 +455,14 @@ const productStageOwners: Record<CourseProductStage, Role> = {
   entrega: 'Coordinador',
 };
 
+const productPlanningPhases: ProductPlanningPhase[] = [
+  'escritura',
+  'validacion',
+  'multimedia',
+  'lms',
+  'qa',
+];
+
 function deriveRiskLevel(status: Course['status']): CourseMetadata['riskLevel'] {
   if (status === 'Bloqueado' || status === 'En riesgo') {
     return 'Alto';
@@ -728,6 +739,7 @@ function buildDefaultCourseProducts(
       ].join('\n'),
       tags: ['sílabus', 'base'],
       version: 'v1.0',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -746,6 +758,7 @@ function buildDefaultCourseProducts(
         .join('\n\n'),
       tags: ['pedagogía', 'módulos'],
       version: 'v1.1',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -764,6 +777,7 @@ function buildDefaultCourseProducts(
         .join('\n\n'),
       tags: ['autoría', 'actividades'],
       version: 'v0.9',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -782,6 +796,7 @@ function buildDefaultCourseProducts(
         .join('\n\n'),
       tags: ['validación', 'instruccional'],
       version: 'v0.8',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -797,6 +812,7 @@ function buildDefaultCourseProducts(
       body: ['HTML interactivo', 'Pódcast', 'Lectura extendida', 'Infografía'].join('\n'),
       tags: ['multimedia', 'html', 'propio'],
       version: 'v0.6',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -810,6 +826,7 @@ function buildDefaultCourseProducts(
       body: ['Navegación verificada', 'Enlaces operativos', 'Actividades configuradas'].join('\n'),
       tags: ['lms', 'montaje', 'técnico'],
       version: 'v1.0',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
     {
@@ -825,6 +842,7 @@ function buildDefaultCourseProducts(
       ),
       tags: ['qa', 'quality-matters'],
       version: 'v1.0',
+      phasePlan: [],
       updatedAt: course.updatedAt,
     },
   ];
@@ -853,8 +871,15 @@ function normalizeCourse(course: Course): Course {
     course.products.length > 0
       ? course.products
           .slice()
+          .map((product) => ({
+            ...product,
+            phasePlan: normalizeProductPhasePlan(product.phasePlan),
+          }))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      : defaultProducts;
+      : defaultProducts.map((product) => ({
+          ...product,
+          phasePlan: normalizeProductPhasePlan(product.phasePlan),
+        }));
 
   const normalizedAuditLog =
     course.auditLog.length > 0
@@ -1050,6 +1075,37 @@ function makeLearningModuleRecord(input: LearningModuleMutationInput): LearningM
   };
 }
 
+function normalizeProductPhasePlan(
+  phasePlan?: ProductPhasePlan[],
+): ProductPhasePlan[] {
+  const planByPhase = new Map<ProductPlanningPhase, ProductPhasePlan>();
+
+  for (const item of phasePlan ?? []) {
+    if (!item?.phase || !productPlanningPhases.includes(item.phase)) {
+      continue;
+    }
+
+    planByPhase.set(item.phase, {
+      phase: item.phase,
+      startDate: item.startDate?.trim?.() ?? '',
+      endDate: item.endDate?.trim?.() ?? '',
+      assigneeId: item.assigneeId?.trim?.() || undefined,
+      assigneeName: item.assigneeName?.trim?.() || undefined,
+    });
+  }
+
+  return productPlanningPhases.map((phase) => {
+    const current = planByPhase.get(phase);
+    return (
+      current ?? {
+        phase,
+        startDate: '',
+        endDate: '',
+      }
+    );
+  });
+}
+
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
   return {
     id: crypto.randomUUID(),
@@ -1063,6 +1119,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     version: input.version?.trim?.() || '1.0',
     section: input.section?.trim() || undefined,
+    phasePlan: normalizeProductPhasePlan(input.phasePlan),
     updatedAt: getTodayLabel(),
   };
 }
@@ -2201,6 +2258,7 @@ async function backfillCourseProductsTable() {
           tags,
           version,
           section,
+          phase_plan,
           created_at,
           updated_at
         )
@@ -2217,6 +2275,7 @@ async function backfillCourseProductsTable() {
           ${JSON.stringify(product.tags ?? [])}::jsonb,
           ${product.version},
           ${product.section ?? null},
+          ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
           ${product.updatedAt},
           ${product.updatedAt}
         )
@@ -2233,6 +2292,7 @@ async function backfillCourseProductsTable() {
           tags = EXCLUDED.tags,
           version = EXCLUDED.version,
           section = EXCLUDED.section,
+          phase_plan = EXCLUDED.phase_plan,
           updated_at = EXCLUDED.updated_at
       `;
     }
@@ -2271,6 +2331,7 @@ async function syncCourseProductsTable(course: Course) {
         tags,
         version,
         section,
+        phase_plan,
         created_at,
         updated_at
       )
@@ -2287,6 +2348,7 @@ async function syncCourseProductsTable(course: Course) {
         ${JSON.stringify(product.tags ?? [])}::jsonb,
         ${product.version},
         ${product.section ?? null},
+        ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
         ${product.updatedAt},
         ${product.updatedAt}
       )
@@ -2303,6 +2365,7 @@ async function syncCourseProductsTable(course: Course) {
         tags = EXCLUDED.tags,
         version = EXCLUDED.version,
         section = EXCLUDED.section,
+        phase_plan = EXCLUDED.phase_plan,
         updated_at = EXCLUDED.updated_at
     `;
   }
@@ -2328,6 +2391,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
       tags,
       version,
       section,
+      phase_plan AS "phasePlan",
       created_at AS "createdAt",
       updated_at AS "updatedAt"
     FROM maturity_course_products
@@ -2348,7 +2412,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 13; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 14; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2705,9 +2769,15 @@ async function ensureSchema() {
         tags JSONB NOT NULL DEFAULT '[]'::jsonb,
         version TEXT NOT NULL DEFAULT '1.0',
         section TEXT,
+        phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_course_products
+      ADD COLUMN IF NOT EXISTS phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb
     `;
 
     await sql`
@@ -3200,6 +3270,15 @@ async function ensureSchema() {
       `;
     }
 
+    // Migration 14: Add per-phase planning to course products
+    if (currentVersion < 14) {
+      await sql`
+        UPDATE maturity_course_products
+        SET phase_plan = '[]'::jsonb
+        WHERE phase_plan IS NULL
+      `;
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -3313,6 +3392,7 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     tags: parseJson<CourseProduct['tags']>(row.tags ?? []),
     version: row.version,
     section: row.section ?? undefined,
+    phasePlan: normalizeProductPhasePlan(parseJson<ProductPhasePlan[]>(row.phasePlan ?? [])),
     updatedAt: row.updatedAt,
   };
 }
@@ -4783,6 +4863,10 @@ export async function updateCourseProductRecord(
       ...input,
       tags: input.tags ? (input.tags as string[]).map((tag) => tag.trim()).filter(Boolean) : product.tags,
       section: input.section ?? product.section,
+      phasePlan:
+        input.phasePlan !== undefined
+          ? normalizeProductPhasePlan(input.phasePlan)
+          : product.phasePlan,
       updatedAt: getTodayLabel(),
     };
 

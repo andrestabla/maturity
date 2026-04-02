@@ -60,6 +60,7 @@ export default async function handler(request: Request) {
       tags: payload.tags ?? [],
       version: payload.version ?? '1.0',
       section: payload.section,
+      phasePlan: payload.phasePlan,
     });
 
     if (!product) {
