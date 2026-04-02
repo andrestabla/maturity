@@ -778,12 +778,16 @@ export function CourseWorkspacePage({
       ? appData.institution.institutions
       : appData.courses.map((item) => item.metadata.institution || ''),
   );
+  const facultyOptions = uniqueOptions(
     getInstitutionFaculties(appData.institution, currentInstitution),
   );
+  const programOptions = uniqueOptions(
     getInstitutionPrograms(appData.institution, currentInstitution),
   );
+  const academicPeriodOptions = uniqueOptions(
     getInstitutionAcademicPeriods(appData.institution, currentInstitution),
   );
+  const courseTypeOptions = uniqueOptions(
     getInstitutionCourseTypes(appData.institution, currentInstitution),
   );
   getInstitutionPedagogicalGuidelines(

@@ -138,9 +138,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
           summary: editingResource.summary,
         },
       }));
-        ...current,
-        [editingResource.id]: tagsToInput(editingResource.tags),
-      }));
     }
 
     setEditingResourceId(null);
