@@ -39,14 +39,14 @@ export default async function handler(request: Request) {
   }
 
   if (request.method === 'POST') {
-    if (!canCreateCourseProducts(user.role)) {
-      return errorResponse(403, 'You do not have permission to create course products');
-    }
-
     const payload = await readJson<ProductCreatePayload>(request);
 
     if (!payload.courseSlug) {
       return errorResponse(400, 'Course slug is required');
+    }
+
+    if (!canCreateCourseProducts(user.role, payload.stage)) {
+      return errorResponse(403, 'You do not have permission to create course products');
     }
 
     const product = await createCourseProductRecord(payload.courseSlug, {
@@ -83,7 +83,7 @@ export default async function handler(request: Request) {
       return errorResponse(404, 'Product not found');
     }
 
-    if (!canEditCourseProduct(user.role, current.owner)) {
+    if (!canEditCourseProduct(user.role, current.owner, current.stage)) {
       return errorResponse(403, 'You do not have permission to update this product');
     }
 

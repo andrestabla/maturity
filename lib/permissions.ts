@@ -1,4 +1,4 @@
-import type { Role } from '../src/types.js';
+import type { CourseProductStage, Role } from '../src/types.js';
 
 export function canManageCourses(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
@@ -20,7 +20,6 @@ export function canEditCourseModules(role: Role) {
   return (
     role === 'Administrador' ||
     role === 'Coordinador' ||
-    role === 'Experto' ||
     role === 'Diseñador instruccional'
   );
 }
@@ -29,19 +28,30 @@ export function canEditStageNote(role: Role, ownerRole: Role) {
   return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
 }
 
-export function canCreateCourseProducts(role: Role) {
+export function canCreateCourseProducts(role: Role, stage?: CourseProductStage) {
+  if (role === 'Experto') {
+    return stage === 'escritura';
+  }
+
   return (
     role === 'Administrador' ||
     role === 'Coordinador' ||
-    role === 'Experto' ||
     role === 'Diseñador instruccional' ||
     role === 'Diseñador multimedia' ||
     role === 'Analista QA'
   );
 }
 
-export function canEditCourseProduct(role: Role, ownerRole: Role) {
+export function canEditCourseProduct(role: Role, ownerRole: Role, stage?: CourseProductStage) {
+  if (role === 'Experto') {
+    return ownerRole === 'Experto' && stage === 'escritura';
+  }
+
   return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
+}
+
+export function canEditPlanningWorkspace(role: Role) {
+  return role !== 'Experto';
 }
 
 export function canDeleteCourseProducts(role: Role) {

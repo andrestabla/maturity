@@ -71,6 +71,7 @@ import {
   canDeleteCourseProducts,
   canDeleteTasks,
   canEditCourseProduct,
+  canEditPlanningWorkspace,
   canEditStageNote,
   canManageCourses,
 } from '../utils/permissions.js';
@@ -4073,7 +4074,7 @@ export function CourseWorkspacePage({
               <h3>{title}</h3>
             </div>
             <div className="action-row">
-              {canCreateCourseProducts(userRole) ? (
+              {canCreateCourseProducts(userRole, productStage) ? (
                 <button
                   type="button"
                   className="ghost-button"
@@ -4149,7 +4150,7 @@ export function CourseWorkspacePage({
             onClose={closeWorkspaceOverlay}
           >
             <div className="page-stack modal-stack-clean">
-              {canCreateCourseProducts(userRole) ? (
+              {canCreateCourseProducts(userRole, productStage) ? (
                 <div className="toolbar-header">
                   <button
                     type="button"
@@ -4449,7 +4450,7 @@ export function CourseWorkspacePage({
                 ) : (
                   stageProducts.map((product) => {
                     const draft = productDrafts[product.id];
-                    const isEditable = canEditCourseProduct(userRole, product.owner);
+                    const isEditable = canEditCourseProduct(userRole, product.owner, product.stage);
 
                     if (!draft || !isEditable) {
                       return (
@@ -5161,7 +5162,7 @@ export function CourseWorkspacePage({
   function renderArchitectureProductCard(product: CourseProduct) {
     const isDone = product.status === 'Aprobado';
     const isActive = product.status === 'Borrador' || product.status === 'En revisión';
-    const canEdit = canEditCourseProduct(userRole, product.owner);
+    const canEdit = canEditCourseProduct(userRole, product.owner, product.stage);
     
     return (
       <div
@@ -5365,6 +5366,7 @@ export function CourseWorkspacePage({
                     const assigneeNames = getPlanningAssigneeNames(product.phasePlan);
                     const window = getProductPlanningWindow(product.phasePlan);
                     const hasWindow = Boolean(window.start && window.end);
+                    const canEditPlanning = canEditPlanningWorkspace(userRole);
                     const productStartLabel = window.start
                       ? formatDate(window.start.toISOString().slice(0, 10))
                       : 'Sin fecha';
@@ -5377,7 +5379,17 @@ export function CourseWorkspacePage({
                         key={product.id}
                         type="button"
                         className="planning-gantt__row"
-                        onClick={() => openPlanningProductModal(product)}
+                        onClick={() => {
+                          if (canEditPlanning) {
+                            openPlanningProductModal(product);
+                          }
+                        }}
+                        disabled={!canEditPlanning}
+                        title={
+                          canEditPlanning
+                            ? 'Abrir planeación del producto'
+                            : 'El rol Experto solo puede editar en la etapa de Escritura'
+                        }
                       >
                         <div className="planning-gantt__cell">
                           <span className="badge badge--outline">{sectionLabel}</span>
