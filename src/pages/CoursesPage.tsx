@@ -1066,7 +1066,6 @@ export function CoursesPage({
 
           {isComposerOpen ? (
             <ModalFrame
-              eyebrow="Alta rápida"
               title="Crear curso"
               width="xl"
               onClose={() => setIsComposerOpen(false)}
@@ -1485,7 +1484,6 @@ export function CoursesPage({
       ) : null}
       {createdCourse && (
         <ModalFrame
-          eyebrow="Creación rápida"
           title="¡Curso creado con éxito!"
           width="sm"
           onClose={() => setCreatedCourse(null)}

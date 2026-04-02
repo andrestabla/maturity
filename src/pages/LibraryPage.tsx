@@ -363,7 +363,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
 
         {isComposerOpen ? (
           <ModalFrame
-            eyebrow="Biblioteca"
             title="Registrar recurso"
             description="La creación se abre en modal para conservar la biblioteca como catálogo limpio y navegable."
             width="xl"
@@ -672,7 +671,6 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
 
       {editingResource && editingResourceDraft ? (
         <ModalFrame
-          eyebrow="Biblioteca"
           title={`Editar recurso · ${editingResource.title}`}
           description="La edición del recurso se abre en modal para no saturar el inventario."
           width="xl"

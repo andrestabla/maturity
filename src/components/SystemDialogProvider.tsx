@@ -118,7 +118,6 @@ export function SystemDialogProvider({ children }: { children: ReactNode }) {
 
       {activeDialog ? (
         <ModalFrame
-          eyebrow={meta.title}
           title={activeDialog.options.title}
           description={activeDialog.options.message}
           width="sm"

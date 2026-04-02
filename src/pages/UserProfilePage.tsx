@@ -581,7 +581,6 @@ export function UserProfilePage({
 
           {isProfileEditorOpen ? (
             <ModalFrame
-              eyebrow="Perfil"
               title="Editar información personal"
               description="La edición se resuelve en modal para que la vista de perfil permanezca limpia."
               width="xl"
@@ -726,7 +725,6 @@ export function UserProfilePage({
 
           {isAdminDirectoryView && adminDraft && isAdminAccessEditorOpen ? (
             <ModalFrame
-              eyebrow="Gobierno"
               title="Editar acceso, roles y alcance"
               description="Los cambios administrativos se resuelven fuera de la página para evitar saturación."
               width="xl"
@@ -945,7 +943,6 @@ export function UserProfilePage({
 
           {!isAdminDirectoryView && isPasswordEditorOpen ? (
             <ModalFrame
-              eyebrow="Seguridad"
               title="Actualizar contraseña"
               description="La seguridad se edita en modal para mantener el perfil como vista de lectura."
               width="lg"

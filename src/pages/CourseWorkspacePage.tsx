@@ -3143,13 +3143,12 @@ export function CourseWorkspacePage({
 
         {canEdit && isEditorOpen ? (
           <ModalFrame
-            eyebrow={eyebrow}
             title={title}
             description="La bitácora se edita en modal para preservar el foco de la página principal."
             width="xl"
             onClose={closeWorkspaceOverlay}
           >
-            <div className="editor-card editor-card--task">
+            <div className="editor-card editor-card--task modal-stack-clean">
               <div className="form-grid">
                 <label className="field">
                   <span>Estado</span>
@@ -3586,13 +3585,12 @@ export function CourseWorkspacePage({
 
         {isOverlayOpen ? (
           <ModalFrame
-            eyebrow={eyebrow}
             title={title}
             description="La edición detallada de productos vive en modal para mantener limpia la vista operativa."
             width="xl"
             onClose={closeWorkspaceOverlay}
           >
-            <div className="page-stack">
+            <div className="page-stack modal-stack-clean">
               {canCreateCourseProducts(userRole) ? (
                 <div className="toolbar-header">
                   <button
@@ -4195,7 +4193,6 @@ export function CourseWorkspacePage({
         
         {isGuidelinesModalOpen ? (
           <ModalFrame
-            eyebrow="Pedagogía"
             title="Lineamientos institucionales"
             description="Marco normativo y pedagógico que rige el diseño de productos para este curso."
             width="md"
@@ -4225,7 +4222,6 @@ export function CourseWorkspacePage({
         {/* Modal: Agregar Producto Manual */}
         {isAddProductModalOpen && (
           <ModalFrame
-            eyebrow="Arquitectura"
             title={`Nuevo producto - ${activeAddSection}`}
             width="md"
             onClose={() => setIsAddProductModalOpen(false)}
@@ -4784,14 +4780,13 @@ export function CourseWorkspacePage({
 
       {isHistoryModalOpen ? (
         <ModalFrame
-          eyebrow="Trazabilidad"
           title={`Expediente de cambios · ${currentCourse.title}`}
           description="Historial detallado de acciones, responsables y cronología del curso."
           width="xl"
           onClose={() => setIsHistoryModalOpen(false)}
         >
-          <div className="surface section-card section-card--compact">
-            <div className="table-container">
+          <div className="modal-stack-clean">
+            <div className="table-container bg-white border border-line rounded-[32px] overflow-hidden">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -4843,7 +4838,6 @@ export function CourseWorkspacePage({
 
       {activeWorkspaceOverlay === 'metadata' ? (
         <ModalFrame
-          eyebrow="Configuración"
           title="Metadatos generales"
           description="Edita la información base del curso que alimenta reportes y buscadores."
           onClose={() => setActiveWorkspaceOverlay(null)}
@@ -4858,7 +4852,7 @@ export function CourseWorkspacePage({
               </button>
               <button
                 type="button"
-                className="button"
+                className="button px-8 py-3 bg-ink text-white rounded-xl font-bold"
                 onClick={() => {
                   void handleMetadataSave(new Event('submit') as any);
                   setActiveWorkspaceOverlay(null);
@@ -4869,7 +4863,7 @@ export function CourseWorkspacePage({
             </div>
           }
         >
-          <div className="form-grid">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 modal-stack-clean">
             <div className="form-field">
               <label htmlFor="inst">Institución</label>
               <input
@@ -4914,13 +4908,12 @@ export function CourseWorkspacePage({
 
       {activeWorkspaceOverlay === 'team' ? (
         <ModalFrame
-          eyebrow="Equipo"
           title="Responsables del curso"
           description="Asigna y coordina a los integrantes del equipo de maduración del curso."
           width="xl"
           onClose={() => setActiveWorkspaceOverlay(null)}
         >
-          <div className="page-stack">
+          <div className="page-stack modal-stack-clean">
             <div className="toolbar-header">
               <button
                 type="button"
@@ -5051,7 +5044,6 @@ export function CourseWorkspacePage({
 
       {activeWorkspaceOverlay === 'tasks' ? (
         <ModalFrame
-          eyebrow="Operación"
           title="Gestión de tareas"
           description="Organiza y asigna el trabajo pendiente del curso para asegurar el avance por etapas."
           width="xl"
@@ -5197,17 +5189,16 @@ export function CourseWorkspacePage({
 
       {isCourseEditorOpen ? (
         <ModalFrame
-          eyebrow="Curso"
           title={`Gestionar curso · ${currentCourse.title}`}
           description="Edición de ficha técnica y metadatos operativos."
           width="xl"
           onClose={() => setIsCourseEditorOpen(false)}
         >
-          <div className="page-stack">
+          <div className="page-stack modal-stack-clean">
             {!isEditingCourse ? (
               <div className="management-layout">
-                <main className="page-stack gap-8">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <main className="page-stack gap-12">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-12">
                     <article className="detail-section">
                       <div className="section-heading mb-6 border-b border-line pb-4">
                         <div className="flex items-center gap-3">
@@ -5334,48 +5325,48 @@ export function CourseWorkspacePage({
                   </div>
                 </main>
 
-                <aside className="side-panel">
-                  <div className="highlight-item">
-                    <span className="eyebrow">Estado del proyecto</span>
-                    <h4>Plan operativo</h4>
+                <aside className="side-panel space-y-12">
+                  <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
+                    <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Estado del proyecto</span>
+                    <h4 className="text-xl font-bold">Plan operativo</h4>
                     <div className="form-grid mt-4">
                       <div className="field">
-                        <span>Etapa</span>
-                        <strong>{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</strong>
+                        <span className="text-sm text-muted">Etapa</span>
+                        <strong className="text-lg">{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</strong>
                       </div>
                       <div className="field">
-                        <span>Status</span>
+                        <span className="text-sm text-muted">Status</span>
                         <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="highlight-item">
-                    <span className="eyebrow">Indicadores clave</span>
-                    <div className="form-grid">
+                  <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
+                    <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Indicadores clave</span>
+                    <div className="form-grid mt-4">
                       <div className="field">
-                        <span>Prioridad</span>
-                        <p className="font-semibold">{currentCourse.metadata.priority}</p>
+                        <span className="text-sm text-muted">Prioridad</span>
+                        <p className="font-semibold text-lg">{currentCourse.metadata.priority}</p>
                       </div>
                       <div className="field">
-                        <span>Riesgo</span>
-                        <p className="font-semibold">{currentCourse.metadata.riskLevel}</p>
+                        <span className="text-sm text-muted">Riesgo</span>
+                        <p className="font-semibold text-lg">{currentCourse.metadata.riskLevel}</p>
                       </div>
                       <div className="field">
-                        <span>Versión</span>
-                        <p>{currentCourse.metadata.currentVersion}</p>
+                        <span className="text-sm text-muted">Versión</span>
+                        <p className="text-lg">{currentCourse.metadata.currentVersion}</p>
                       </div>
                       <div className="field">
-                        <span>Cierre obj.</span>
-                        <p>{formatDate(currentCourse.metadata.targetCloseDate)}</p>
+                        <span className="text-sm text-muted">Cierre obj.</span>
+                        <p className="text-lg">{formatDate(currentCourse.metadata.targetCloseDate)}</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="highlight-item" style={{ background: 'var(--coral-soft)', border: '1px solid rgba(199, 124, 86, 0.2)' }}>
-                    <span className="eyebrow" style={{ color: '#8d3f22' }}>Meta inmediata</span>
-                    <h4 style={{ color: '#8d3f22' }}>Próximo hito</h4>
-                    <p className="mt-2 font-medium" style={{ color: '#8d3f22' }}>{currentCourse.nextMilestone}</p>
+                  <div className="highlight-item p-8 rounded-[32px]" style={{ background: 'var(--coral-soft)', border: '1px solid rgba(199, 124, 86, 0.2)' }}>
+                    <span className="text-xs font-mono font-bold uppercase tracking-widest opacity-60 mb-2 block" style={{ color: '#8d3f22' }}>Meta inmediata</span>
+                    <h4 className="text-xl font-bold" style={{ color: '#8d3f22' }}>Próximo hito</h4>
+                    <p className="mt-4 font-medium text-lg leading-relaxed" style={{ color: '#8d3f22' }}>{currentCourse.nextMilestone}</p>
                   </div>
                 </aside>
               </div>
@@ -5902,7 +5893,6 @@ export function CourseWorkspacePage({
 
       {isVerifyingAnalysis && analysisResult ? (
         <ModalFrame
-          eyebrow="IA de OpenAI"
           title="Verificar Información Extraída"
           description="Asegura que los datos capturados literalmente del documento sean correctos antes de guardarlos en el expediente."
           width="full"

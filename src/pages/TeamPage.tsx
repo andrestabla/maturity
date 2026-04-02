@@ -1863,7 +1863,6 @@ export function TeamPage({
 
         {showCreateUserAssistant ? (
           <ModalFrame
-            eyebrow="Acciones"
             title="Crear nuevo usuario"
             description="Registra los datos del usuario, define su acceso y deja lista su vinculación institucional."
             width="xl"
@@ -2128,7 +2127,6 @@ export function TeamPage({
           </ModalFrame>
         ) : editingDraft && selectedUser ? (
           <ModalFrame
-            eyebrow="Acciones"
             title={selectedUser.name}
             description="Edita la cuenta, el rol, el alcance y el estado del usuario desde este panel de gobierno."
             width="xl"
@@ -2712,7 +2710,6 @@ export function TeamPage({
 
         {isInstitutionSettingsRoute && institutionSettingsDraft ? (
           <ModalFrame
-            eyebrow="Configuración"
             title="Editar parámetros institucionales"
             description="Los cambios se guardan desde este modal y se reflejan en todo el directorio."
             width="lg"
@@ -2810,7 +2807,6 @@ export function TeamPage({
 
         {isInstitutionStructureDetailRoute && selectedInstitutionStructure ? (
           <ModalFrame
-            eyebrow="Detalle"
             title={selectedInstitutionStructure.institution}
             description="Consulta la estructura completa y abre la edición desde aquí cuando lo necesites."
             width="xl"
@@ -2918,7 +2914,6 @@ export function TeamPage({
 
         {(isInstitutionCreateRoute || isInstitutionStructureEditRoute) && structureDraft ? (
           <ModalFrame
-            eyebrow="Edición"
             title={editingStructureId ? 'Editar estructura institucional' : 'Crear estructura institucional'}
             description="La edición se resuelve fuera del directorio para mantener la vista principal limpia."
             width="xl"
@@ -3134,7 +3129,6 @@ export function TeamPage({
 
         {isBrandingEditorOpen ? (
           <ModalFrame
-            eyebrow="Branding"
             title="Editar branding"
             description="La configuración visual se resuelve en un modal dedicado para no saturar la vista de Gobierno."
             width="xl"
@@ -3723,7 +3717,6 @@ export function TeamPage({
 
         {isExperienceEditorOpen ? (
           <ModalFrame
-            eyebrow="Experiencia"
             title="Editar experiencia de trabajo"
             description="Estos ajustes se editan fuera de la vista resumen para mantener el foco operativo."
             width="lg"
@@ -3932,7 +3925,6 @@ export function TeamPage({
 
         {isWorkflowEditorOpen ? (
           <ModalFrame
-            eyebrow="Workflow"
             title="Editar reglas del workflow"
             description="La configuración del flujo queda aislada en modal para no mezclar lectura con edición."
             width="lg"
@@ -4268,7 +4260,6 @@ export function TeamPage({
 
         {isIntegrationEditorOpen && selectedIntegration && integrationDraft ? (
           <ModalFrame
-            eyebrow="Integración"
             title={`Configurar ${selectedIntegration.name}`}
             description="La configuración técnica se resuelve en un modal dedicado para no mezclar directorio con edición."
             width="xl"
