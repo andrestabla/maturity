@@ -602,7 +602,37 @@ function resolveArchitectureSectionLabel(
   const normalizedSection = normalizeSearchText(rawSection);
   const normalizedTitle = normalizeSearchText(title);
   const normalizedSummary = normalizeSearchText(summary);
-  const combined = [normalizedSection, normalizedTitle, normalizedSummary].filter(Boolean).join(' ');
+
+  if (normalizedSection === 'introduccion') {
+    return 'Introducción';
+  }
+
+  if (normalizedSection === 'cierre') {
+    return 'Cierre';
+  }
+
+  const explicitUnitMatch = normalizedSection.match(/unidad\s*(\d+)/);
+  if (explicitUnitMatch) {
+    const unitIndex = Number(explicitUnitMatch[1]) - 1;
+    if (unitIndex >= 0 && unitIndex < unitLabels.length) {
+      return unitLabels[unitIndex];
+    }
+  }
+
+  for (let index = 0; index < unitLabels.length; index += 1) {
+    const label = unitLabels[index];
+    const normalizedLabel = normalizeSearchText(label);
+    const normalizedUnitTitle = normalizeSearchText(unitTitleHints[index] ?? '');
+
+    if (
+      normalizedSection === normalizedLabel ||
+      (normalizedUnitTitle && normalizedSection === normalizedUnitTitle)
+    ) {
+      return label;
+    }
+  }
+
+  const combined = [normalizedTitle, normalizedSummary].filter(Boolean).join(' ');
 
   if (
     combined.includes('introduccion') ||
@@ -624,26 +654,16 @@ function resolveArchitectureSectionLabel(
     return 'Cierre';
   }
 
-  const explicitUnitMatch = normalizedSection.match(/unidad\s*(\d+)/);
-  if (explicitUnitMatch) {
-    const unitIndex = Number(explicitUnitMatch[1]) - 1;
-    if (unitIndex >= 0 && unitIndex < unitLabels.length) {
-      return unitLabels[unitIndex];
-    }
-  }
-
   for (let index = 0; index < unitLabels.length; index += 1) {
     const label = unitLabels[index];
     const normalizedLabel = normalizeSearchText(label);
     const normalizedUnitTitle = normalizeSearchText(unitTitleHints[index] ?? '');
 
     if (
-      normalizedSection === normalizedLabel ||
       normalizedTitle.includes(normalizedLabel) ||
       normalizedSummary.includes(normalizedLabel) ||
       (normalizedUnitTitle &&
-        (normalizedSection.includes(normalizedUnitTitle) ||
-          normalizedTitle.includes(normalizedUnitTitle) ||
+        (normalizedTitle.includes(normalizedUnitTitle) ||
           normalizedSummary.includes(normalizedUnitTitle)))
     ) {
       return label;
