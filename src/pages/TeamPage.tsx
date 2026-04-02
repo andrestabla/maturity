@@ -138,6 +138,30 @@ function uniqueListValues(values: string[]) {
   );
 }
 
+function uniqueGuidelineValues(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of values) {
+    const normalized = item.replace(/\s+/g, ' ').trim();
+    const key = normalized
+      .toLocaleLowerCase('es')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+
+    if (!normalized || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(normalized);
+  }
+
+  return result.sort((left, right) => left.localeCompare(right, 'es'));
+}
+
 function normalizeStructureDraft(structure: InstitutionStructure): InstitutionStructure {
   return {
     id: buildInstitutionStructureId(structure.institution, structure.id),
@@ -146,7 +170,7 @@ function normalizeStructureDraft(structure: InstitutionStructure): InstitutionSt
     programs: uniqueListValues(structure.programs),
     academicPeriods: uniqueListValues(structure.academicPeriods),
     courseTypes: uniqueListValues(structure.courseTypes),
-    pedagogicalGuidelines: uniqueListValues(structure.pedagogicalGuidelines),
+    pedagogicalGuidelines: uniqueGuidelineValues(structure.pedagogicalGuidelines),
     allowAutoProvisioning: Boolean(structure.allowAutoProvisioning),
   };
 }
@@ -1434,30 +1458,32 @@ export function TeamPage({
 
       const reader = responseAI.body?.getReader();
       const decoder = new TextDecoder();
+      let streamBuffer = '';
 
       if (!reader) throw new Error('No fue posible abrir el canal de la IA.');
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        streamBuffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
 
-        const chunks = decoder.decode(value, { stream: true }).split('\n\n');
+        const chunks = streamBuffer.split('\n\n');
+        streamBuffer = chunks.pop() ?? '';
 
         for (const chunk of chunks) {
           if (!chunk.trim() || !chunk.startsWith('data: ')) continue;
-          
+
           try {
             const payload = JSON.parse(chunk.replace('data: ', '').trim());
-            
+
             if (payload.progress) setExtractionProgress(payload.progress);
             if (payload.step) setExtractionStep(payload.step);
-            
+
             if (payload.complete && payload.data) {
               const extracted = payload.data as string[];
               setStructureDraft(current => {
                 if (!current) return current;
                 const existing = current.pedagogicalGuidelines.filter(Boolean);
-                const next = Array.from(new Set([...existing, ...extracted])).filter(Boolean);
+                const next = uniqueGuidelineValues([...existing, ...extracted]);
                 return {
                   ...current,
                   pedagogicalGuidelines: next.length > 0 ? next : ['']
@@ -1475,6 +1501,41 @@ export function TeamPage({
           } catch (e) {
             console.error('Extraction event parse error:', e);
           }
+        }
+
+        if (done) {
+          if (streamBuffer.trim().startsWith('data: ')) {
+            try {
+              const payload = JSON.parse(streamBuffer.replace('data: ', '').trim());
+
+              if (payload.progress) setExtractionProgress(payload.progress);
+              if (payload.step) setExtractionStep(payload.step);
+
+              if (payload.complete && payload.data) {
+                const extracted = payload.data as string[];
+                setStructureDraft(current => {
+                  if (!current) return current;
+                  const existing = current.pedagogicalGuidelines.filter(Boolean);
+                  const next = uniqueGuidelineValues([...existing, ...extracted]);
+                  return {
+                    ...current,
+                    pedagogicalGuidelines: next.length > 0 ? next : ['']
+                  };
+                });
+
+                await showAlert({
+                  tone: 'success',
+                  title: 'Lineamientos extraídos',
+                  message: `Se han identificado ${extracted.length} reglas pedagógicas en el documento y se han integrado a la estructura.`
+                });
+              }
+
+              if (payload.error) throw new Error(payload.error);
+            } catch (e) {
+              console.error('Extraction final event parse error:', e);
+            }
+          }
+          break;
         }
       }
     } catch (error) {

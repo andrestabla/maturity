@@ -11,6 +11,60 @@ export const config = {
   runtime: 'nodejs',
 };
 
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return '{"guidelines":[]}';
+  }
+
+  const withoutCodeFence = trimmed
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const firstBrace = withoutCodeFence.indexOf('{');
+  const lastBrace = withoutCodeFence.lastIndexOf('}');
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return withoutCodeFence.slice(firstBrace, lastBrace + 1);
+  }
+
+  return withoutCodeFence;
+}
+
+function normalizeGuideline(rule: string) {
+  return rule
+    .replace(/^[\-\*\d\.\)\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function uniqueGuidelines(rules: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const rule of rules) {
+    const normalized = normalizeGuideline(rule);
+    const dedupeKey = normalized
+      .toLocaleLowerCase('es')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+
+    if (!normalized || seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
 export default async function handler(request: Request | any, response?: any) {
   const isNodeRes = response && typeof response.write === 'function';
 
@@ -103,31 +157,57 @@ export default async function handler(request: Request | any, response?: any) {
 
       const openai = new OpenAI({ apiKey });
 
-      const systemPrompt = `Eres un experto en currículo y diseño instruccional. 
-      Tu tarea es extraer LINEAMIENTOS PEDAGÓGICOS, REGLAS OPERATIVAS y ESTÁNDARES DE CALIDAD del texto proporcionado.
-      
-      Reglas:
-      1. Devuelve un JSON con un campo "guidelines" que sea un ARREGLO DE STRINGS.
-      2. Cada string debe ser una regla corta, clara y autónoma (ej: "Toda unidad debe tener 1 guía de aprendizaje").
-      3. Ignora información administrativa, nombres de personas o fechas de creación.
-      4. Si no encuentras reglas claras, intenta sintetizar las políticas de diseño que se mencionan.
-      
-      Formato esperado:
-      { "guidelines": ["Regla 1", "Regla 2", ...] }`;
+      const systemPrompt = `Eres un analista curricular experto en diseño instruccional, arquitectura de cursos y estandarización de productos académicos.
+Tu objetivo es extraer una lista EXHAUSTIVA, DETALLADA y NO REPETIDA de lineamientos pedagógicos y operativos para la producción de cursos.
+
+Prioriza especialmente reglas sobre:
+1. Productos obligatorios por curso.
+2. Productos obligatorios por unidad, introducción o cierre.
+3. Cantidades o variaciones según número de créditos académicos.
+4. Características exigidas de cada producto: formato, idioma, cantidad, obligatoriedad, propósito, relación con RAE o evaluación.
+5. Recursos curados, recursos propios, encuentros sincrónicos, cuestionarios, guías, rúbricas, cierres, presentaciones, sílabos, bibliografía y validaciones.
+6. Reglas de conteo, cobertura mínima y correspondencia entre créditos, unidades y productos.
+
+Reglas de salida:
+1. Devuelve SOLO JSON válido con un campo "guidelines" que sea un arreglo de strings.
+2. Cada string debe ser una regla autónoma, clara, accionable y lo más específica posible.
+3. Separa reglas diferentes en strings distintos.
+4. Incluye explícitamente la condición cuando dependa de créditos académicos.
+5. No repitas reglas equivalentes ni reformules la misma idea.
+6. Omite nombres propios, firmas, fechas y texto administrativo irrelevante.
+7. Si el documento describe tablas o matrices, conviértelas en reglas explícitas.
+8. Conserva el detalle de productos y características, no resumas en exceso.
+
+Formato esperado:
+{ "guidelines": ["Regla 1", "Regla 2", "..."] }`;
 
       const chatCompletion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extrae los lineamientos de este documento (solo reglas accionables):\n\n${extractedText.slice(0, 20000)}` },
+          {
+            role: 'user',
+            content:
+              `Extrae del documento una lista exhaustiva de lineamientos para construir cursos. ` +
+              `Debes capturar con el mayor detalle posible todos los productos requeridos y sus características, ` +
+              `especialmente cuando cambian según el número de créditos académicos. ` +
+              `No omitas reglas sobre unidades, introducción, cierre, evaluaciones, recursos, bibliografía, encuentros sincrónicos, RAE, recursos en inglés o cantidades mínimas/máximas.\n\n` +
+              extractedText.slice(0, 40000),
+          },
         ],
         response_format: { type: 'json_object' },
       });
 
       const rawResult = chatCompletion.choices[0].message.content || '{"guidelines":[]}';
-      const result = JSON.parse(rawResult);
+      const parsed = JSON.parse(extractJsonObject(rawResult));
+      const guidelines = uniqueGuidelines(Array.isArray(parsed?.guidelines) ? parsed.guidelines : []);
 
-      notify({ progress: 100, step: '¡Lineamientos extraídos!', data: result.guidelines || [], complete: true });
+      notify({
+        progress: 100,
+        step: '¡Lineamientos extraídos!',
+        data: guidelines,
+        complete: true,
+      });
 
       if (controller) controller.close();
       if (isNodeRes) response.end();
