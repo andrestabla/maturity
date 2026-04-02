@@ -1,6 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
-import { AmbientCursor } from './components/AmbientCursor.js';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
 import { defaultBranding } from './data/platformDefaults.js';
@@ -227,7 +226,6 @@ export default function App() {
           branding={branding}
           appData={appData}
         >
-          <AmbientCursor />
           <Suspense fallback={<RouteSkeleton />}>
             <Routes>
           <Route
