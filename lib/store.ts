@@ -1021,16 +1021,16 @@ function makeLearningModuleRecord(input: LearningModuleMutationInput): LearningM
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
   return {
     id: crypto.randomUUID(),
-    title: input.title,
+    title: input.title.trim(),
     stage: input.stage,
     format: input.format,
     owner: input.owner,
     status: input.status,
-    summary: input.summary,
-    body: input.body,
-    tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
-    version: input.version,
-    section: input.section,
+    summary: input.summary?.trim?.() ?? '',
+    body: input.body?.trim?.() ?? '',
+    tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
+    version: input.version?.trim?.() || '1.0',
+    section: input.section?.trim() || undefined,
     updatedAt: getTodayLabel(),
   };
 }

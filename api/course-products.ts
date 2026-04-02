@@ -55,10 +55,11 @@ export default async function handler(request: Request) {
       format: payload.format,
       owner: payload.owner,
       status: payload.status,
-      summary: payload.summary,
-      body: payload.body,
-      tags: payload.tags,
-      version: payload.version,
+      summary: payload.summary ?? '',
+      body: payload.body ?? '',
+      tags: payload.tags ?? [],
+      version: payload.version ?? '1.0',
+      section: payload.section,
     });
 
     if (!product) {

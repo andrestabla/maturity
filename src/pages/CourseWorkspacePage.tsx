@@ -553,6 +553,28 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeArchitectureProductFormat(rawFormat: string): CourseProductMutationInput['format'] {
+  const value = rawFormat.trim().toLocaleLowerCase();
+
+  if (value.includes('video')) return 'Video';
+  if (value.includes('podcast') || value.includes('pódcast')) return 'Pódcast';
+  if (value.includes('infografia') || value.includes('infografía')) return 'Infografía';
+  if (value.includes('rubrica') || value.includes('rúbrica')) return 'Rúbrica';
+  if (value.includes('lectura')) return 'Lectura';
+  if (value.includes('evaluacion') || value.includes('evaluación') || value.includes('examen')) {
+    return 'Evaluación';
+  }
+  if (value.includes('taller')) return 'Taller';
+  if (value.includes('actividad')) return 'Actividad';
+  if (value.includes('html')) return 'HTML';
+  if (value.includes('pdf')) return 'PDF';
+  if (value.includes('lineamiento')) return 'Lineamiento';
+  if (value.includes('silabus') || value.includes('sílabus')) return 'Sílabus';
+  if (value.includes('recurso')) return 'Recurso';
+  if (value.includes('red')) return 'RED';
+  return 'Documento';
+}
+
 
 
 
@@ -2862,18 +2884,25 @@ export function CourseWorkspacePage({
           generatedCount = allSuggested.length;
 
           for (const item of allSuggested) {
+            const title = String(item.title ?? '').trim();
+            if (!title) {
+              continue;
+            }
+
             await fetch('/api/course-products', {
               method: 'POST',
               credentials: 'same-origin',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 courseSlug: currentCourse.slug,
-                title: String(item.title ?? '').trim(),
+                title,
                 summary: String(item.summary ?? '').trim(),
-                format: String(item.format ?? '').trim(),
+                format: normalizeArchitectureProductFormat(String(item.format ?? '')),
                 stage: 'arquitectura',
                 owner: userRole,
                 status: 'Borrador',
+                body: '',
+                tags: [],
                 version: '1.0',
                 section: String(item.section ?? '').trim(),
               })

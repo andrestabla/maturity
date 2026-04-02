@@ -82,13 +82,16 @@ export type CourseProductFormat =
   | 'Actividad'
   | 'Recurso'
   | 'Documento'
+  | 'PDF'
   | 'HTML'
   | 'Pódcast'
   | 'Lectura'
   | 'Infografía'
   | 'Rúbrica'
+  | 'Taller'
   | 'Video'
-  | 'RED';
+  | 'RED'
+  | 'Evaluación';
 export type CourseProductStatus = 'Borrador' | 'En revisión' | 'Aprobado';
 
 export interface StageDefinition {
