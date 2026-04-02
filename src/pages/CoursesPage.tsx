@@ -34,6 +34,7 @@ interface CoursesPageProps {
   appData: AppData;
   userRole: Role;
   refreshAppData: () => void;
+  mutateAppData: (nextData: AppData | ((current: AppData) => AppData)) => void;
 }
 
 type ExplorerView = 'cards' | 'list';
@@ -541,6 +542,7 @@ export function CoursesPage({
   appData,
   userRole,
   refreshAppData,
+  mutateAppData,
 }: CoursesPageProps) {
   const { showAlert } = useSystemDialog();
   const [view, setView] = useState<ExplorerView>('cards');
@@ -659,6 +661,25 @@ export function CoursesPage({
 
       if (!response.ok) {
         throw new Error(payload.error ?? 'No fue posible crear el curso.');
+      }
+
+      if (payload.course) {
+        const createdCourseRecord = payload.course;
+
+        mutateAppData((current) => {
+          const alreadyExists = current.courses.some(
+            (course) => course.slug === createdCourseRecord.slug,
+          );
+
+          if (alreadyExists) {
+            return current;
+          }
+
+          return {
+            ...current,
+            courses: [createdCourseRecord, ...current.courses],
+          };
+        });
       }
 
       refreshAppData();

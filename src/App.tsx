@@ -248,6 +248,7 @@ export default function App() {
                 appData={appData}
                 userRole={session.user.role}
                 refreshAppData={refreshAppData}
+                mutateAppData={mutateAppData}
               />
             }
           />
