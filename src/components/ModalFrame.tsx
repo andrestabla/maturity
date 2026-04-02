@@ -61,10 +61,12 @@ export function ModalFrame({
 
     window.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
+    root.classList.add('modal-active');
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'unset';
+      root.classList.remove('modal-active');
       const depth = Number(root.dataset.modalDepth ?? '1') - 1;
       if (depth <= 0) {
         delete root.dataset.modalDepth;
@@ -77,23 +79,23 @@ export function ModalFrame({
 
   return createPortal(
     <div 
-      className={`fixed inset-0 z-[1000] flex bg-ink/70 backdrop-blur-xl animate-in fade-in transition-all ${
+      className={`fixed inset-0 z-[1000] flex bg-ink/75 backdrop-blur-2xl backdrop-saturate-[180%] animate-in fade-in transition-all ${
         variant === 'drawer' ? 'justify-end p-0' : 'items-end md:items-center justify-center p-0 md:p-6'
       }`} 
       onClick={onClose}
     >
       <section
         ref={modalRef as any}
-        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-500 flex flex-col ${
+        className={`relative shadow-2xl bg-white overflow-hidden animate-in duration-600 flex flex-col ${
           variant === 'drawer' 
             ? 'h-full w-full slide-in-from-right rounded-none border-l border-line-strong' 
-            : 'h-full md:h-[95vh] w-full slide-in-from-bottom md:zoom-in rounded-none md:rounded-[32px] border-x md:border border-line-strong'
+            : 'h-full md:h-[95vh] w-full slide-in-from-bottom md:zoom-in rounded-none md:rounded-[40px] border-x md:border border-line-strong'
         } ${
           width === 'sm' ? 'max-w-md' : 
           width === 'md' ? 'max-w-2xl' : 
           width === 'xl' ? 'max-w-[96vw]' : 
           width === 'full' ? 'max-w-full' : 
-          variant === 'drawer' ? 'max-w-4xl' : 'max-w-5xl'
+          variant === 'drawer' ? 'max-w-[40vw]' : 'max-w-6xl'
         }`}
         role="dialog"
         aria-modal="true"

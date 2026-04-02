@@ -170,79 +170,103 @@ export function MailAssistant({ config, onConfigChange }: MailAssistantProps) {
     }
   };
 
+  const [activeTab, setActiveTab] = React.useState<'config' | 'auth'>('config');
+
   return (
-    <div className="assistant-modular">
-      <div className="assistant-modular__header">
-        <div className="assistant-modular__icon-wrapper">
-          <Mail size={24} />
+    <>
+      <div className="assistant-modular">
+        <div className="assistant-modular__header">
+          <div className="assistant-modular__icon-wrapper">
+            <Mail size={24} />
+          </div>
+          <div className="flex-grow">
+            <h4>Configuración de Correo Saliente</h4>
+            <p>Gestiona proveedores y credenciales directamente desde la plataforma.</p>
+          </div>
+          <div className="tabs-pill">
+            <button 
+              type="button" 
+              className={activeTab === 'config' ? 'active' : ''} 
+              onClick={() => setActiveTab('config')}
+            >
+              Configuración
+            </button>
+            <button 
+              type="button" 
+              className={activeTab === 'auth' ? 'active' : ''} 
+              onClick={() => setActiveTab('auth')}
+            >
+              Credenciales
+            </button>
+          </div>
         </div>
-        <div>
-          <h4>Configuración de Correo Saliente</h4>
-          <p>Gestiona proveedores y credenciales directamente desde la plataforma.</p>
-        </div>
-      </div>
 
-      <div className="provider-selector">
-        {PROVIDERS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={selectedProvider === p.id ? 'provider-card provider-card--active' : 'provider-card'}
-            onClick={() => onConfigChange('providerType', p.id)}
-          >
-            <div className="provider-card__icon" style={{ color: p.color }}>
-              {p.icon}
+        {activeTab === 'config' ? (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="provider-selector">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={selectedProvider === p.id ? 'provider-card provider-card--active' : 'provider-card'}
+                  onClick={() => onConfigChange('providerType', p.id)}
+                >
+                  <div className="provider-card__icon" style={{ color: p.color }}>
+                    {p.icon}
+                  </div>
+                  <span>{p.name}</span>
+                  {selectedProvider === p.id && <Check size={14} className="provider-card__check" />}
+                </button>
+              ))}
             </div>
-            <span>{p.name}</span>
-            {selectedProvider === p.id && <Check size={14} className="provider-card__check" />}
-          </button>
-        ))}
-      </div>
 
-      <div className="assistant-layout">
-        <div className="assistant-steps-box">
-          <h5>Guía de Configuración</h5>
-          <div className="integration-assistant__steps">
-            {renderSteps().map((step, index) => (
-              <div key={index} className="integration-assistant__step">
-                <span>{index + 1}</span>
-                <p>{step}</p>
+            <div className="assistant-steps-box mt-6">
+              <h5>Guía de Configuración: {selectedProvider}</h5>
+              <div className="integration-assistant__steps">
+                {renderSteps().map((step, index) => (
+                  <div key={index} className="integration-assistant__step">
+                    <span>{index + 1}</span>
+                    <p>{step}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="assistant-form-box">
-          <h5>Credenciales y Operación</h5>
-          <div className="form-grid">
-            <div className="form-row">
-              <label className="field">
-                <span>Nombre Remitente</span>
-                <div className="field__control">
-                  <input
-                    value={config.senderName || ''}
-                    onChange={(e) => onConfigChange('senderName', e.target.value)}
-                    placeholder="Maturity OS"
-                  />
-                </div>
-              </label>
-              <label className="field">
-                <span>Email de envío</span>
-                <div className="field__control">
-                  <input
-                    value={config.senderEmail || ''}
-                    onChange={(e) => onConfigChange('senderEmail', e.target.value)}
-                    placeholder="no-reply@dominio.com"
-                  />
-                </div>
-              </label>
             </div>
-            
-            <div className="separator" />
-            
-            {renderProviderFields()}
           </div>
-        </div>
+        ) : (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="assistant-form-box">
+              <h5>Credenciales y Operación</h5>
+              <div className="form-grid">
+                <div className="form-row">
+                  <label className="field">
+                    <span>Nombre Remitente</span>
+                    <div className="field__control">
+                      <input
+                        value={config.senderName || ''}
+                        onChange={(e) => onConfigChange('senderName', e.target.value)}
+                        placeholder="Maturity OS"
+                      />
+                    </div>
+                  </label>
+                  <label className="field">
+                    <span>Email de envío</span>
+                    <div className="field__control">
+                      <input
+                        value={config.senderEmail || ''}
+                        onChange={(e) => onConfigChange('senderEmail', e.target.value)}
+                        placeholder="no-reply@dominio.com"
+                      />
+                    </div>
+                  </label>
+                </div>
+                
+                <div className="separator" />
+                
+                {renderProviderFields()}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -251,9 +275,9 @@ export function MailAssistant({ config, onConfigChange }: MailAssistantProps) {
           flex-direction: column;
           gap: 1.5rem;
           padding: 1.5rem;
-          border-radius: var(--radius-xl);
-          background: var(--surface-subtle);
-          border: 1px solid var(--border);
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: 28px;
         }
         .assistant-modular__header {
           display: flex;
@@ -266,111 +290,66 @@ export function MailAssistant({ config, onConfigChange }: MailAssistantProps) {
           justify-content: center;
           width: 48px;
           height: 48px;
-          border-radius: var(--radius-lg);
-          background: var(--primary-subtle);
-          color: var(--primary);
+          border-radius: 16px;
+          background: var(--ink-soft);
+          color: var(--ink);
         }
-        .assistant-modular__header h4 {
-          margin: 0;
-          font-size: 1.125rem;
+        .tabs-pill {
+          display: flex;
+          background: var(--ink-soft);
+          padding: 4px;
+          border-radius: 12px;
+          gap: 2px;
+        }
+        .tabs-pill button {
+          padding: 8px 16px;
+          border-radius: 10px;
+          border: none;
+          background: transparent;
+          font-size: 0.85rem;
           font-weight: 700;
-          color: var(--text);
+          color: var(--muted);
+          transition: all 0.2s ease;
         }
-        .assistant-modular__header p {
-          margin: 0.25rem 0 0;
-          font-size: 0.875rem;
-          color: var(--text-muted);
+        .tabs-pill button.active {
+          background: white;
+          color: var(--ink);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
         .provider-selector {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-          gap: 0.75rem;
+          grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+          gap: 12px;
         }
         .provider-card {
-          position: relative;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 0.75rem;
-          padding: 1.25rem;
-          background: var(--panel);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .provider-card:hover {
-          background: var(--surface-hover);
-          transform: translateY(-2px);
-          border-color: var(--border-hover);
+          gap: 12px;
+          padding: 16px;
+          background: white;
+          border: 1px solid var(--line);
+          border-radius: 20px;
+          transition: all 0.2s ease;
         }
         .provider-card--active {
-          border-color: var(--primary);
-          background: var(--primary-subtle);
-          box-shadow: 0 0 0 1px var(--primary);
-        }
-        .provider-card__icon {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: var(--surface);
-          border: 1px solid var(--border);
-        }
-        .provider-card span {
-          font-size: 0.8125rem;
-          font-weight: 600;
-        }
-        .assistant-layout {
-          display: grid;
-          grid-template-columns: 320px 1fr;
-          gap: 1.5rem;
-        }
-        @media (max-width: 900px) {
-          .assistant-layout {
-            grid-template-columns: 1fr;
-          }
-        }
-        .assistant-steps-box, .assistant-form-box {
-          background: var(--panel);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-lg);
-          padding: 1.5rem;
-        }
-        .assistant-steps-box h5, .assistant-form-box h5 {
-          margin: 0 0 1.25rem;
-          font-size: 0.75rem;
-          font-weight: 700;
-          color: var(--text-muted);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .form-row {
-          display: flex;
-          gap: 1rem;
-        }
-        .separator {
-          height: 1px;
-          background: var(--border);
-          margin: 0.5rem 0;
+          border-color: var(--ocean);
+          background: var(--ocean-soft);
+          transform: translateY(-2px);
         }
         .field__icon {
           position: absolute;
-          left: 0.75rem;
+          left: 14px;
           top: 50%;
           transform: translateY(-50%);
-          color: var(--text-muted);
-          pointer-events: none;
-        }
-        .field__control {
-          position: relative;
+          color: var(--muted);
+          opacity: 0.5;
         }
         .field__control input {
-          padding-left: 2.5rem;
+          padding-left: 44px !important;
         }
+        .mt-6 { margin-top: 1.5rem; }
       `}</style>
-    </div>
+    </>
   );
 }
