@@ -9182,6 +9182,23 @@ body::after {
   overflow-wrap: anywhere;
 }
 
+.architecture-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ghost-button--compact,
+.danger-button--compact {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
 .product-block {
   padding: 16px;
   background: var(--panel-strong);

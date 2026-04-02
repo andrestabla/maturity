@@ -717,6 +717,8 @@ export function CourseWorkspacePage({
 
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [activeAddSection, setActiveAddSection] = useState<string>('');
+  const [editingArchitectureProductId, setEditingArchitectureProductId] = useState<string | null>(null);
+  const [architectureEditorMode, setArchitectureEditorMode] = useState<'create' | 'edit' | 'move'>('create');
   const [newTaskForm, setNewTaskForm] = useState<TaskMutationInput>(() =>
     makeTaskForm(currentCourseSlug, currentStageId),
   );
@@ -3095,6 +3097,8 @@ export function CourseWorkspacePage({
   function handleQuickAddProduct(sectionName: string) {
     if (!currentCourse) return;
 
+    setEditingArchitectureProductId(null);
+    setArchitectureEditorMode('create');
     setNewProductForm({
       title: '',
       summary: '',
@@ -3111,26 +3115,67 @@ export function CourseWorkspacePage({
     setIsAddProductModalOpen(true);
   }
 
-  async function handleCreateProduct() {
+  function openArchitectureProductEditor(
+    product: CourseProduct,
+    mode: 'edit' | 'move' = 'edit',
+  ) {
+    setEditingArchitectureProductId(product.id);
+    setArchitectureEditorMode(mode);
+    setActiveAddSection(product.section ?? 'Introducción');
+    setNewProductForm({
+      title: product.title,
+      summary: product.summary,
+      format: product.format,
+      stage: 'arquitectura',
+      owner: product.owner,
+      status: product.status,
+      body: product.body,
+      tags: product.tags,
+      version: product.version,
+      section: product.section ?? 'Introducción',
+    });
+    setIsAddProductModalOpen(true);
+  }
+
+  async function handleSubmitArchitectureProduct() {
      if (!currentCourse || !newProductForm.title) return;
 
-     setIsProductSaving('new');
+     const saveKey = editingArchitectureProductId ?? 'new';
+     setIsProductSaving(saveKey);
      try {
        const response = await fetch('/api/course-products', {
-         method: 'POST',
+         method: editingArchitectureProductId ? 'PATCH' : 'POST',
+         credentials: 'same-origin',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({
            courseSlug: currentCourse.slug,
+           ...(editingArchitectureProductId ? { id: editingArchitectureProductId } : {}),
            ...newProductForm,
          })
        });
 
-       if (!response.ok) throw new Error('Error al crear el producto');
+       const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+       if (!response.ok) {
+         throw new Error(
+           payload?.error ??
+             (editingArchitectureProductId
+               ? 'Error al actualizar el producto'
+               : 'Error al crear el producto'),
+         );
+       }
        
        setIsAddProductModalOpen(false);
+       setEditingArchitectureProductId(null);
+       setArchitectureEditorMode('create');
        refreshAppData();
      } catch (error) {
-       const message = error instanceof Error ? error.message : 'Error al crear producto';
+       const message =
+         error instanceof Error
+           ? error.message
+           : editingArchitectureProductId
+             ? 'Error al actualizar producto'
+             : 'Error al crear producto';
        setProductError(message);
      } finally {
        setIsProductSaving(null);
@@ -4531,7 +4576,7 @@ export function CourseWorkspacePage({
   function renderArchitectureVisualizer() {
     if (!currentCourse) return null;
 
-    const products = currentCourse.products || [];
+    const products = (currentCourse.products || []).filter((product) => product.stage === 'arquitectura');
     const units = currentCourse.metadata.units || [];
     const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
     const unitTitleHints = units.map((unit) => unit.tituloUnidad ?? '');
@@ -4717,31 +4762,51 @@ export function CourseWorkspacePage({
         {isAddProductModalOpen && (
           <SidePanel
             isOpen={isAddProductModalOpen}
-            title={`Nuevo producto - ${activeAddSection}`}
+            title={
+              editingArchitectureProductId
+                ? architectureEditorMode === 'move'
+                  ? 'Mover producto de arquitectura'
+                  : 'Editar producto de arquitectura'
+                : `Nuevo producto - ${activeAddSection}`
+            }
             sideLabel="Prod"
-            sideDescription="CREAR"
+            sideDescription={editingArchitectureProductId ? 'EDITAR' : 'CREAR'}
             width="xl"
-            onClose={() => setIsAddProductModalOpen(false)}
+            onClose={() => {
+              setIsAddProductModalOpen(false);
+              setEditingArchitectureProductId(null);
+              setArchitectureEditorMode('create');
+            }}
             footer={
               <div className="flex justify-end gap-3 w-full">
                 <button 
                   className="filter-chip" 
-                  onClick={() => setIsAddProductModalOpen(false)}
-                  disabled={isProductSaving === 'new'}
+                  onClick={() => {
+                    setIsAddProductModalOpen(false);
+                    setEditingArchitectureProductId(null);
+                    setArchitectureEditorMode('create');
+                  }}
+                  disabled={isProductSaving === (editingArchitectureProductId ?? 'new')}
                 >
                   Cancelar
                 </button>
                 <button 
                   className="cta-button" 
-                  onClick={() => void handleCreateProduct()}
-                  disabled={isProductSaving === 'new' || !newProductForm.title}
+                  onClick={() => void handleSubmitArchitectureProduct()}
+                  disabled={isProductSaving === (editingArchitectureProductId ?? 'new') || !newProductForm.title}
                 >
-                  {isProductSaving === 'new' ? (
+                  {isProductSaving === (editingArchitectureProductId ?? 'new') ? (
                     <RefreshCcw size={16} className="animate-spin mr-2" />
                   ) : (
-                    <Plus size={16} className="mr-2" />
+                    editingArchitectureProductId ? <PencilLine size={16} className="mr-2" /> : <Plus size={16} className="mr-2" />
                   )}
-                  <span>Crear Producto</span>
+                  <span>
+                    {editingArchitectureProductId
+                      ? architectureEditorMode === 'move'
+                        ? 'Guardar nueva ubicación'
+                        : 'Guardar cambios'
+                      : 'Crear producto'}
+                  </span>
                 </button>
               </div>
             }
@@ -4759,7 +4824,30 @@ export function CourseWorkspacePage({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-6">
+                <div className="form-group">
+                  <label className="form-label">Sección</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={newProductForm.section ?? activeAddSection}
+                      onChange={(e) =>
+                        setNewProductForm({
+                          ...newProductForm,
+                          section: e.target.value,
+                        })
+                      }
+                    >
+                      {architectureSectionOptions.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={18} />
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Formato</label>
                   <div className="modern-select-wrapper">
@@ -4867,14 +4955,12 @@ export function CourseWorkspacePage({
   function renderArchitectureProductCard(product: CourseProduct) {
     const isDone = product.status === 'Aprobado';
     const isActive = product.status === 'Borrador' || product.status === 'En revisión';
+    const canEdit = canEditCourseProduct(userRole, product.owner);
     
     return (
-      <div 
-        key={product.id} 
-        className={`architecture-card group animate-in fade-in transition-all duration-300 cursor-pointer ${isDone ? 'opacity-70' : ''}`}
-        onClick={() => {
-           openModal(`products:arquitectura`);
-        }}
+      <div
+        key={product.id}
+        className={`architecture-card group animate-in fade-in transition-all duration-300 ${isDone ? 'opacity-70' : ''}`}
       >
         <div className="architecture-card__inner">
           <div className="architecture-card__icon">
@@ -4903,6 +4989,40 @@ export function CourseWorkspacePage({
             )}
           </div>
         </div>
+        {(canEdit || canDeleteCourseProducts(userRole)) ? (
+          <div className="architecture-card__actions">
+            {canEdit ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--compact"
+                  onClick={() => openArchitectureProductEditor(product, 'edit')}
+                >
+                  <PencilLine size={14} />
+                  <span>Editar</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--compact"
+                  onClick={() => openArchitectureProductEditor(product, 'move')}
+                >
+                  <MoveRight size={14} />
+                  <span>Mover</span>
+                </button>
+              </>
+            ) : null}
+            {canDeleteCourseProducts(userRole) ? (
+              <button
+                type="button"
+                className="danger-button danger-button--ghost danger-button--compact"
+                onClick={() => void handleProductDelete(product.id)}
+              >
+                <Trash2 size={14} />
+                <span>Eliminar</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
