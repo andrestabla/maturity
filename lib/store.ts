@@ -86,6 +86,23 @@ interface CourseRow {
   products: JsonValue;
 }
 
+interface CourseProductRow {
+  id: string;
+  courseSlug: string;
+  title: string;
+  stage: CourseProductStage;
+  format: CourseProduct['format'];
+  owner: Role;
+  status: CourseProduct['status'];
+  summary: string;
+  body: string;
+  tags: JsonValue;
+  version: string;
+  section: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface UserRow {
   id: string;
   name: string;
@@ -2075,14 +2092,194 @@ async function cleanupOrphanOperationalRows() {
   `;
 
   await sql`
+    DELETE FROM maturity_course_products
+    WHERE course_slug NOT IN (SELECT slug FROM maturity_courses)
+  `;
+
+  await sql`
     DELETE FROM maturity_sessions
     WHERE user_id NOT IN (SELECT id FROM maturity_users)
   `;
 }
 
+async function backfillCourseProductsTable() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      slug,
+      products
+    FROM maturity_courses
+  `) as Array<{
+    slug: string;
+    products: JsonValue;
+  }>;
+
+  for (const row of rows) {
+    const products = parseJson<Course['products']>(row.products ?? []);
+
+    for (const product of products) {
+      await sql`
+        INSERT INTO maturity_course_products (
+          id,
+          course_slug,
+          title,
+          stage,
+          format,
+          owner,
+          status,
+          summary,
+          body,
+          tags,
+          version,
+          section,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${product.id},
+          ${row.slug},
+          ${product.title},
+          ${product.stage},
+          ${product.format},
+          ${product.owner},
+          ${product.status},
+          ${product.summary},
+          ${product.body},
+          ${JSON.stringify(product.tags ?? [])}::jsonb,
+          ${product.version},
+          ${product.section ?? null},
+          ${product.updatedAt},
+          ${product.updatedAt}
+        )
+        ON CONFLICT (id) DO UPDATE
+        SET
+          course_slug = EXCLUDED.course_slug,
+          title = EXCLUDED.title,
+          stage = EXCLUDED.stage,
+          format = EXCLUDED.format,
+          owner = EXCLUDED.owner,
+          status = EXCLUDED.status,
+          summary = EXCLUDED.summary,
+          body = EXCLUDED.body,
+          tags = EXCLUDED.tags,
+          version = EXCLUDED.version,
+          section = EXCLUDED.section,
+          updated_at = EXCLUDED.updated_at
+      `;
+    }
+  }
+}
+
+async function syncCourseProductsTable(course: Course) {
+  const sql = getSql();
+  const nextIds = course.products.map((product) => product.id);
+
+  if (nextIds.length > 0) {
+    await sql`
+      DELETE FROM maturity_course_products
+      WHERE course_slug = ${course.slug}
+        AND id NOT IN (${nextIds})
+    `;
+  } else {
+    await sql`
+      DELETE FROM maturity_course_products
+      WHERE course_slug = ${course.slug}
+    `;
+  }
+
+  for (const product of course.products) {
+    await sql`
+      INSERT INTO maturity_course_products (
+        id,
+        course_slug,
+        title,
+        stage,
+        format,
+        owner,
+        status,
+        summary,
+        body,
+        tags,
+        version,
+        section,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${product.id},
+        ${course.slug},
+        ${product.title},
+        ${product.stage},
+        ${product.format},
+        ${product.owner},
+        ${product.status},
+        ${product.summary},
+        ${product.body},
+        ${JSON.stringify(product.tags ?? [])}::jsonb,
+        ${product.version},
+        ${product.section ?? null},
+        ${product.updatedAt},
+        ${product.updatedAt}
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET
+        course_slug = EXCLUDED.course_slug,
+        title = EXCLUDED.title,
+        stage = EXCLUDED.stage,
+        format = EXCLUDED.format,
+        owner = EXCLUDED.owner,
+        status = EXCLUDED.status,
+        summary = EXCLUDED.summary,
+        body = EXCLUDED.body,
+        tags = EXCLUDED.tags,
+        version = EXCLUDED.version,
+        section = EXCLUDED.section,
+        updated_at = EXCLUDED.updated_at
+    `;
+  }
+}
+
+async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
+  if (courseSlugs.length === 0) {
+    return new Map<string, Course['products']>();
+  }
+
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      course_slug AS "courseSlug",
+      title,
+      stage,
+      format,
+      owner,
+      status,
+      summary,
+      body,
+      tags,
+      version,
+      section,
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+    FROM maturity_course_products
+    WHERE course_slug IN (${courseSlugs})
+    ORDER BY updated_at DESC, title ASC
+  `) as CourseProductRow[];
+
+  const map = new Map<string, Course['products']>();
+
+  for (const row of rows) {
+    const nextProducts = map.get(row.courseSlug) ?? [];
+    nextProducts.push(serializeCourseProductRow(row));
+    map.set(row.courseSlug, nextProducts);
+  }
+
+  return map;
+}
+
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 11; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 12; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2413,6 +2610,30 @@ async function ensureSchema() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_course_products (
+        id TEXT PRIMARY KEY,
+        course_slug TEXT NOT NULL,
+        title TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        format TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        status TEXT NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+        version TEXT NOT NULL DEFAULT '1.0',
+        section TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS maturity_course_products_course_idx
+      ON maturity_course_products (course_slug, stage, updated_at DESC)
+    `;
+
     for (const [position, role] of platformRoles.entries()) {
       await sql`
         INSERT INTO maturity_roles (role, position)
@@ -2454,6 +2675,7 @@ async function ensureSchema() {
 
     await ensureInstitutionDirectoryFromLegacySources();
     await backfillCourseInstitutionRelations();
+    await backfillCourseProductsTable();
     await rebuildUserInstitutionMemberships();
     await cleanupOrphanOperationalRows();
 
@@ -2471,6 +2693,32 @@ async function ensureSchema() {
         ) THEN
           ALTER TABLE maturity_stages
           ADD CONSTRAINT maturity_stages_owner_role_fk
+          FOREIGN KEY (owner) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_course_products_course_fk'
+        ) THEN
+          ALTER TABLE maturity_course_products
+          ADD CONSTRAINT maturity_course_products_course_fk
+          FOREIGN KEY (course_slug) REFERENCES maturity_courses(slug) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'maturity_course_products_owner_fk'
+        ) THEN
+          ALTER TABLE maturity_course_products
+          ADD CONSTRAINT maturity_course_products_owner_fk
           FOREIGN KEY (owner) REFERENCES maturity_roles(role) ON DELETE RESTRICT;
         END IF;
       END $$;
@@ -2948,7 +3196,24 @@ async function ensureAdminUserSeed() {
   await rebuildUserInstitutionMemberships();
 }
 
-function serializeCourseRow(row: CourseRow): Course {
+function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
+  return {
+    id: row.id,
+    title: row.title,
+    stage: row.stage,
+    format: row.format,
+    owner: row.owner,
+    status: row.status,
+    summary: row.summary,
+    body: row.body,
+    tags: parseJson<CourseProduct['tags']>(row.tags ?? []),
+    version: row.version,
+    section: row.section ?? undefined,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function serializeCourseRow(row: CourseRow, productsOverride?: Course['products']): Course {
   return normalizeCourse({
     ...row,
     institutionStructureId: row.institutionStructureId ?? undefined,
@@ -2963,7 +3228,7 @@ function serializeCourseRow(row: CourseRow): Course {
     metadata: parseJson<Course['metadata']>(row.metadata),
     auditLog: parseJson<Course['auditLog']>(row.auditLog),
     stageNotes: parseJson<Course['stageNotes']>(row.stageNotes),
-    products: parseJson<Course['products']>(row.products),
+    products: productsOverride ?? parseJson<Course['products']>(row.products),
   });
 }
 
@@ -3113,6 +3378,8 @@ async function persistCourse(course: Course) {
       products = EXCLUDED.products
   `;
 
+  await syncCourseProductsTable(nextCourse);
+
   return nextCourse;
 }
 
@@ -3259,7 +3526,12 @@ async function readCourseBySlug(slug: string) {
     LIMIT 1
   `) as CourseRow[];
 
-  return rows[0] ? serializeCourseRow(rows[0]) : null;
+  if (!rows[0]) {
+    return null;
+  }
+
+  const productsByCourseSlug = await readCourseProductsByCourseSlugs([slug]);
+  return serializeCourseRow(rows[0], productsByCourseSlug.get(slug));
 }
 
 function mergeCourseMetadata(
@@ -3427,7 +3699,8 @@ async function readCourses() {
     ORDER BY title ASC
   `) as CourseRow[];
 
-  return rows.map(serializeCourseRow);
+  const productsByCourseSlug = await readCourseProductsByCourseSlugs(rows.map((row) => row.slug));
+  return rows.map((row) => serializeCourseRow(row, productsByCourseSlug.get(row.slug)));
 }
 
 async function readTasks() {
@@ -3907,42 +4180,7 @@ export async function updateCourseRecord(slug: string, input: CourseMutationInpu
   await ensureInitialized();
   assertCourseContextInput(input);
 
-  const sql = getSql();
-  const rows = (await sql`
-    SELECT
-      id,
-      slug,
-      title,
-      code,
-      institution_structure_id AS "institutionStructureId",
-      faculty,
-      program,
-      modality,
-      credits,
-      stage_id AS "stageId",
-      status,
-      progress,
-      summary,
-      next_milestone AS "nextMilestone",
-      updated_at AS "updatedAt",
-      pulse,
-      team,
-      deliverables,
-      modules,
-      observations,
-      schedule,
-      stage_checklist AS "stageChecklist",
-      assistants,
-      metadata,
-      audit_log AS "auditLog",
-      stage_notes AS "stageNotes",
-      products
-    FROM maturity_courses
-    WHERE slug = ${slug}
-    LIMIT 1
-  `) as CourseRow[];
-
-  const current = rows[0] ? serializeCourseRow(rows[0]) : null;
+  const current = await readCourseBySlug(slug);
 
   if (!current) {
     return null;
