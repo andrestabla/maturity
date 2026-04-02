@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ModalFrame } from '../components/ModalFrame.js';
+import { SidePanel } from '../components/SidePanel.js';
 import { useModalStore } from '../store/modalStore.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
@@ -584,6 +584,7 @@ export function CourseWorkspacePage({
   const { activeModal, isOpen: isGlobalModalOpen, open: openModal, close: closeModal } = useModalStore();
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isEditingCourse, setIsEditingCourse] = useState(false);
+  const [isEditingCourseMetadata, setIsEditingCourseMetadata] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [isTeamComposerOpen, setIsTeamComposerOpen] = useState(false);
   const [productComposerStage, setProductComposerStage] = useState<CourseProductStage | null>(null);
@@ -3142,14 +3143,30 @@ export function CourseWorkspacePage({
         </article>
 
         {canEdit && isEditorOpen ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={canEdit && isEditorOpen}
             title={title}
             description="La bitácora se edita en un panel lateral para preservar el foco de la página principal."
             sideLabel="Ficha"
             sideDescription="OPERATIVA"
-            variant="drawer"
             width="xl"
             onClose={closeWorkspaceOverlay}
+            footer={
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={isStageNoteSaving === noteKey}
+                  onClick={() => void handleStageNoteSave(noteKey)}
+                >
+                  <Save size={16} />
+                  <span>{isStageNoteSaving === noteKey ? 'Guardando…' : 'Guardar bitácora'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeWorkspaceOverlay}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
             <div className="editor-card editor-card--task modal-stack-clean">
               <div className="form-grid">
@@ -3218,23 +3235,8 @@ export function CourseWorkspacePage({
               {stageNoteError && isStageNoteSaving === null ? (
                 <p className="form-error">{stageNoteError}</p>
               ) : null}
-
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={isStageNoteSaving === noteKey}
-                  onClick={() => void handleStageNoteSave(noteKey)}
-                >
-                  <Save size={16} />
-                  <span>{isStageNoteSaving === noteKey ? 'Guardando…' : 'Guardar bitácora'}</span>
-                </button>
-                <button type="button" className="filter-chip" onClick={closeWorkspaceOverlay}>
-                  <span>Cancelar</span>
-                </button>
-              </div>
             </div>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </>
     );
@@ -3587,9 +3589,12 @@ export function CourseWorkspacePage({
         </article>
 
         {isOverlayOpen ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={isOverlayOpen}
             title={title}
-            description="La edición detallada de productos vive en modal para mantener limpia la vista operativa."
+            description="La edición detallada de productos vive en un panel lateral para mantener limpia la vista operativa."
+            sideLabel="Prod"
+            sideDescription="ESTUDIO"
             width="xl"
             onClose={closeWorkspaceOverlay}
           >
@@ -4029,7 +4034,7 @@ export function CourseWorkspacePage({
                 )}
               </div>
             </div>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </>
     );
@@ -4195,12 +4200,12 @@ export function CourseWorkspacePage({
         </div>
         
         {isGuidelinesModalOpen ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={isGuidelinesModalOpen}
             title="Lineamientos institucionales"
             description="Marco normativo y pedagógico que rige el diseño de productos para este curso."
             sideLabel="Norma"
             sideDescription="PEDAGÓGICA"
-            variant="drawer"
             width="xl"
             onClose={() => setIsGuidelinesModalOpen(false)}
           >
@@ -4222,16 +4227,16 @@ export function CourseWorkspacePage({
                 )}
               </div>
             </div>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
 
-        {/* Modal: Agregar Producto Manual */}
+        {/* Panel: Agregar Producto Manual */}
         {isAddProductModalOpen && (
-          <ModalFrame
+          <SidePanel
+            isOpen={isAddProductModalOpen}
             title={`Nuevo producto - ${activeAddSection}`}
             sideLabel="Prod"
             sideDescription="CREAR"
-            variant="drawer"
             width="xl"
             onClose={() => setIsAddProductModalOpen(false)}
             footer={
@@ -4321,7 +4326,7 @@ export function CourseWorkspacePage({
                 </div>
               )}
             </div>
-          </ModalFrame>
+          </SidePanel>
         )}
 
         {isGeneratingArchitecture && (
@@ -4788,9 +4793,12 @@ export function CourseWorkspacePage({
       ) : null}
 
       {isHistoryModalOpen ? (
-        <ModalFrame
+        <SidePanel
+          isOpen={isHistoryModalOpen}
           title={`Expediente de cambios · ${currentCourse.title}`}
           description="Historial detallado de acciones, responsables y cronología del curso."
+          sideLabel="Historial"
+          sideDescription="BITÁCORA"
           width="xl"
           onClose={() => setIsHistoryModalOpen(false)}
         >
@@ -4842,26 +4850,30 @@ export function CourseWorkspacePage({
               </table>
             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
 
       {activeModal === 'METADATA_EDITOR' && isGlobalModalOpen ? (
-        <ModalFrame
+        <SidePanel
+          isOpen={isGlobalModalOpen}
           title="Metadatos generales"
           description="Edita la información base del curso que alimenta reportes y buscadores."
+          sideLabel="Metadatos"
+          sideDescription="FICHA"
+          width="xl"
           onClose={() => closeModal()}
           footer={
-            <div className="form-actions">
+            <div className="flex justify-end gap-3 w-full">
               <button
                 type="button"
-                className="ghost-button"
+                className="filter-chip px-6 py-2.5"
                 onClick={() => closeModal()}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                className="button px-8 py-3 bg-ink text-white rounded-xl font-bold"
+                className="cta-button"
                 onClick={() => {
                   void handleMetadataSave(new Event('submit') as any);
                   closeModal();
@@ -4911,14 +4923,17 @@ export function CourseWorkspacePage({
               </select>
             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
 
 
       {activeModal === 'TEAM_MANAGER' && isGlobalModalOpen ? (
-        <ModalFrame
+        <SidePanel
+          isOpen={isGlobalModalOpen}
           title="Responsables del curso"
           description="Asigna y coordina a los integrantes del equipo de maduración del curso."
+          sideLabel="Equipo"
+          sideDescription="GESTIÓN"
           width="xl"
           onClose={() => closeModal()}
         >
@@ -5048,13 +5063,16 @@ export function CourseWorkspacePage({
               })}
             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
 
       {activeModal === 'TASK_COMPOSER' && isGlobalModalOpen ? (
-        <ModalFrame
+        <SidePanel
+          isOpen={isGlobalModalOpen}
           title="Gestión de tareas"
           description="Organiza y asigna el trabajo pendiente del curso para asegurar el avance por etapas."
+          sideLabel="Tareas"
+          sideDescription="OPERACIÓN"
           width="xl"
           onClose={closeModal}
         >
@@ -5193,295 +5211,260 @@ export function CourseWorkspacePage({
               )}
             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
 
-      {activeModal === 'COURSE_EDITOR' && isGlobalModalOpen ? (
-        <ModalFrame
-          title={`Gestionar curso · ${currentCourse.title}`}
-          description="Edición de ficha técnica y metadatos operativos."
+      {activeModal === "COURSE_EDITOR" && isGlobalModalOpen ? (
+        <SidePanel
+          isOpen={isGlobalModalOpen}
+          title={`Expediente: ${currentCourse.title}`}
+          description="Consulta técnica de ficha operativa, criterios académicos e indicadores de avance."
+          sideLabel="Expediente"
+          sideDescription="CONSULTA"
           width="xl"
-          variant="drawer"
           onClose={closeModal}
         >
-          <div className="page-stack modal-stack-clean">
-            {!isEditingCourse ? (
-              <div className="management-layout">
-                <main className="page-stack gap-12">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-12">
-                    <article className="detail-section">
-                      <div className="section-heading mb-6 border-b border-line pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
-                            <FileText size={20} />
-                          </div>
-                          <h3 className="text-xl font-semibold tracking-tight">Información principal</h3>
-                        </div>
-                      </div>
-                      <div className="space-y-6">
-                        <div className="form-group">
-                          <label className="form-label">Título del curso</label>
-                          <p className="text-2xl font-bold text-ink tracking-tight">{currentCourse.title}</p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                          <div className="form-group">
-                            <label className="form-label">Código</label>
-                            <p className="font-mono text-ocean font-semibold bg-ocean/5 px-3 py-1 rounded-lg w-fit">{currentCourse.code}</p>
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">Institución</label>
-                            <p className="font-medium">{currentCourse.metadata.institution}</p>
-                          </div>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Resumen ejecutivo</label>
-                          <p className="text-muted leading-relaxed italic border-l-4 border-line pl-4 py-2">{currentCourse.summary || 'Sin resumen definido.'}</p>
-                        </div>
-                      </div>
-                    </article>
-
-                    <article className="detail-section">
-                      <div className="section-heading mb-6 border-b border-line pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-sage/10 text-sage rounded-lg">
-                            <BarChart3 size={20} />
-                          </div>
-                          <h3 className="text-xl font-semibold tracking-tight">Perfil académico</h3>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-                        <div className="form-group">
-                          <label className="form-label">Facultad</label>
-                          <p className="font-medium">{currentCourse.faculty}</p>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Programa</label>
-                          <p className="font-medium">{currentCourse.program}</p>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Créditos</label>
-                          <p className="font-bold text-lg text-sage">{currentCourse.credits}</p>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Semestre</label>
-                          <p className="font-medium">{currentCourse.metadata.semester}</p>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Modalidad</label>
-                          <p className="font-medium">{currentCourse.modality}</p>
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Periodo</label>
-                          <p className="font-medium">{currentCourse.metadata.academicPeriod}</p>
-                        </div>
-                      </div>
-                    </article>
-                  </div>
-
+          <div className="page-stack">
+            <div className="management-layout">
+              <main className="page-stack gap-12">
+                <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-12">
                   <article className="detail-section">
-                    <div className="section-heading">
-                      <h3>Contenido y Metodología</h3>
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                          <FileText size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Información principal</h3>
+                      </div>
                     </div>
-                    <div className="form-grid">
-                      <div className="field field--full">
-                        <span>Resultados de aprendizaje</span>
-                        <div className="list-stack list-stack--compact mt-2">
-                          {currentCourse.metadata.learningOutcomes.map((item, idx) => (
-                            <p key={idx} className="text-sm">• {item}</p>
-                          ))}
+                    <div className="space-y-6">
+                      <div className="form-group">
+                        <label className="form-label">Título del curso</label>
+                        <p className="text-2xl font-bold text-ink tracking-tight">{currentCourse.title}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="form-group">
+                          <label className="form-label">Código</label>
+                          <p className="font-mono text-ocean font-semibold bg-ocean/5 px-3 py-1 rounded-lg w-fit">{currentCourse.code}</p>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Institución</label>
+                          <p className="font-medium">{currentCourse.metadata.institution}</p>
                         </div>
                       </div>
-
-                      <div className="field field--full">
-                        <span>Temas clave</span>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {currentCourse.metadata.topics.map((item, idx) => (
-                            <span key={idx} className="badge badge--outline">{item}</span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="field">
-                        <span>Metodología</span>
-                        <p>{currentCourse.metadata.methodology}</p>
-                      </div>
-                      <div className="field">
-                        <span>Evaluación</span>
-                        <p>{currentCourse.metadata.evaluation}</p>
+                      <div className="form-group">
+                        <label className="form-label">Resumen ejecutivo</label>
+                        <p className="text-muted leading-relaxed italic border-l-4 border-line pl-4 py-2">{currentCourse.summary || "Sin resumen definido."}</p>
                       </div>
                     </div>
                   </article>
 
-                  <div className="action-row mt-4">
-                    <button
-                      type="button"
-                      className="cta-button"
-                      onClick={() => setIsEditingCourse(true)}
-                    >
-                      <PencilLine size={16} />
-                      <span>Editar información</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="danger-button danger-button--ghost"
-                      onClick={() => void handleCourseDelete()}
-                    >
-                      <Trash2 size={16} />
-                      <span>Eliminar curso</span>
-                    </button>
-                    <button type="button" className="ghost-button" onClick={() => closeModal()}>
-                      <span>Cerrar</span>
-                    </button>
-                  </div>
-                </main>
-
-                <aside className="side-panel space-y-12">
-                  <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
-                    <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Estado del proyecto</span>
-                    <h4 className="text-xl font-bold">Plan operativo</h4>
-                    <div className="form-grid mt-4">
-                      <div className="field">
-                        <span className="text-sm text-muted">Etapa</span>
-                        <strong className="text-lg">{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</strong>
-                      </div>
-                      <div className="field">
-                        <span className="text-sm text-muted">Status</span>
-                        <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-sage/10 text-sage rounded-lg">
+                          <BarChart3 size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Perfil académico</h3>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
-                    <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Indicadores clave</span>
-                    <div className="form-grid mt-4">
-                      <div className="field">
-                        <span className="text-sm text-muted">Prioridad</span>
-                        <p className="font-semibold text-lg">{currentCourse.metadata.priority}</p>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                      <div className="form-group">
+                        <label className="form-label">Facultad</label>
+                        <p className="font-medium">{currentCourse.faculty}</p>
                       </div>
-                      <div className="field">
-                        <span className="text-sm text-muted">Riesgo</span>
-                        <p className="font-semibold text-lg">{currentCourse.metadata.riskLevel}</p>
+                      <div className="form-group">
+                        <label className="form-label">Programa</label>
+                        <p className="font-medium">{currentCourse.program}</p>
                       </div>
-                      <div className="field">
-                        <span className="text-sm text-muted">Versión</span>
-                        <p className="text-lg">{currentCourse.metadata.currentVersion}</p>
+                      <div className="form-group">
+                        <label className="form-label">Créditos</label>
+                        <p className="font-bold text-lg text-sage">{currentCourse.credits}</p>
                       </div>
-                      <div className="field">
-                        <span className="text-sm text-muted">Cierre obj.</span>
-                        <p className="text-lg">{formatDate(currentCourse.metadata.targetCloseDate)}</p>
+                      <div className="form-group">
+                        <label className="form-label">Semestre</label>
+                        <p className="font-medium">{currentCourse.metadata.semester}</p>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Modalidad</label>
+                        <p className="font-medium">{currentCourse.modality}</p>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Periodo</label>
+                        <p className="font-medium">{currentCourse.metadata.academicPeriod}</p>
                       </div>
                     </div>
-                  </div>
+                  </article>
+                </div>
 
-                  <div className="highlight-item p-8 rounded-[32px]" style={{ background: 'var(--coral-soft)', border: '1px solid rgba(199, 124, 86, 0.2)' }}>
-                    <span className="text-xs font-mono font-bold uppercase tracking-widest opacity-60 mb-2 block" style={{ color: '#8d3f22' }}>Meta inmediata</span>
-                    <h4 className="text-xl font-bold" style={{ color: '#8d3f22' }}>Próximo hito</h4>
-                    <p className="mt-4 font-medium text-lg leading-relaxed" style={{ color: '#8d3f22' }}>{currentCourse.nextMilestone}</p>
+                <article className="detail-section">
+                  <div className="section-heading">
+                    <h3>Contenido y Metodología</h3>
                   </div>
-                </aside>
-              </div>
-            ) : (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="form-grid">
+                    <div className="field field--full">
+                      <span>Resultados de aprendizaje</span>
+                      <div className="list-stack list-stack--compact mt-2">
+                        {currentCourse.metadata.learningOutcomes.map((item, idx) => (
+                          <p key={idx} className="text-sm">• {item}</p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="field field--full">
+                      <span>Temas clave</span>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {currentCourse.metadata.topics.map((item, idx) => (
+                          <span key={idx} className="badge badge--outline">{item}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <span>Metodología</span>
+                      <p>{currentCourse.metadata.methodology}</p>
+                    </div>
+                    <div className="field">
+                      <span>Evaluación</span>
+                      <p>{currentCourse.metadata.evaluation}</p>
+                    </div>
+                  </div>
+                </article>
+
+                <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                  <button
+                    type="button"
+                    className="cta-button"
+                    onClick={() => {
+                      closeModal();
+                      setIsEditingCourse(true);
+                    }}
+                  >
+                    <PencilLine size={16} />
+                    <span>Editar información profunda</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button danger-button--ghost"
+                    onClick={() => void handleCourseDelete()}
+                  >
+                    <Trash2 size={16} />
+                    <span>Eliminar curso</span>
+                  </button>
+                  <button type="button" className="filter-chip px-6" onClick={() => closeModal()}>
+                    <span>Cerrar expediente</span>
+                  </button>
+                </div>
+              </main>
+
+              <aside className="side-panel space-y-12">
+                <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
+                  <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Estado del proyecto</span>
+                  <h4 className="text-xl font-bold">Plan operativo</h4>
+                  <div className="form-grid mt-4">
+                    <div className="field">
+                      <span className="text-sm text-muted">Etapa</span>
+                      <strong className="text-lg">{appData.stages.find(s => s.id === currentCourse.stageId)?.name || currentCourse.stageId}</strong>
+                    </div>
+                    <div className="field">
+                      <span className="text-sm text-muted">Status</span>
+                      <span className={badgeClass(currentCourse.status)}>{currentCourse.status}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="highlight-item bg-ink/5 border border-line p-8 rounded-[32px]">
+                  <span className="text-xs font-mono font-bold uppercase tracking-widest text-muted opacity-60 mb-2 block">Indicadores clave</span>
+                  <div className="form-grid mt-4">
+                    <div className="field">
+                      <span className="text-sm text-muted">Prioridad</span>
+                      <p className="font-semibold text-lg">{currentCourse.metadata.priority}</p>
+                    </div>
+                    <div className="field">
+                      <span className="text-sm text-muted">Riesgo</span>
+                      <p className="font-semibold text-lg">{currentCourse.metadata.riskLevel}</p>
+                    </div>
+                    <div className="field">
+                      <span className="text-sm text-muted">Versión</span>
+                      <p className="text-lg">{currentCourse.metadata.currentVersion}</p>
+                    </div>
+                    <div className="field">
+                      <span className="text-sm text-muted">Cierre obj.</span>
+                      <p className="text-lg">{formatDate(currentCourse.metadata.targetCloseDate)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="highlight-item p-8 rounded-[32px]" style={{ background: "var(--coral-soft)", border: "1px solid rgba(199, 124, 86, 0.2)" }}>
+                  <span className="text-xs font-mono font-bold uppercase tracking-widest opacity-60 mb-2 block" style={{ color: "#8d3f22" }}>Meta inmediata</span>
+                  <h4 className="text-xl font-bold" style={{ color: "#8d3f22" }}>Próximo hito</h4>
+                  <p className="mt-4 font-medium text-lg leading-relaxed" style={{ color: "#8d3f22" }}>{currentCourse.nextMilestone}</p>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </SidePanel>
+      ) : null}
+      {isEditingCourse && (
+        <SidePanel
+          isOpen={isEditingCourse}
+          title={`Editar: ${courseForm.title}`}
+          description="Gestión de metadatos profundos, criterios pedagógicos y parámetros operativos del curso."
+          sideLabel="Ficha"
+          sideDescription="MAESTRA"
+          width="xl"
+          onClose={() => setIsEditingCourse(false)}
+        >
+          <div className="page-stack">
+            <div className="flex items-center gap-4 mb-8">
+              <button
+                type="button"
+                className={!isEditingCourseMetadata ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsEditingCourseMetadata(false)}
+              >
+                Información básica
+              </button>
+              <button
+                type="button"
+                className={isEditingCourseMetadata ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                onClick={() => setIsEditingCourseMetadata(true)}
+              >
+                Ficha operativa (Profunda)
+              </button>
+            </div>
+
+            {!isEditingCourseMetadata ? (
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <form className="page-stack gap-10" onSubmit={handleCourseSave}>
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-coral/10 text-coral rounded-lg">
-                          <PencilLine size={20} />
+                        <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                          <Settings size={20} />
                         </div>
-                        <h3 className="text-xl font-semibold tracking-tight">Editar ficha técnica</h3>
+                        <h3 className="text-xl font-semibold tracking-tight">Ajustes principales</h3>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                       <div className="form-group lg:col-span-2">
-                        <label className="form-label">Título del curso</label>
+                        <label className="form-label">Nombre del curso</label>
                         <input
-                          className="modern-input"
+                          className="modern-input !text-lg font-bold"
                           value={courseForm.title}
                           onChange={(event) => updateCourseDraftField('title', event.target.value)}
+                          placeholder="Ej: Introducción a la Inteligencia Artificial"
                           required
                         />
                       </div>
+
                       <div className="form-group">
-                        <label className="form-label">Código</label>
+                        <label className="form-label">Código institucional</label>
                         <input
-                          className="modern-input font-mono"
+                          className="modern-input"
                           value={courseForm.code}
                           onChange={(event) => updateCourseDraftField('code', event.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Institución</label>
-                        <div className="modern-select-wrapper">
-                          <select
-                            className="modern-select"
-                            value={courseForm.institution}
-                            onChange={(event) => updateCourseDraftField('institution', event.target.value)}
-                            required
-                          >
-                            <option value="">Seleccionar institución</option>
-                            {institutionOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="modern-select-icon" size={16} />
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Facultad</label>
-                        <div className="modern-select-wrapper">
-                          <select
-                            className="modern-select"
-                            value={courseForm.faculty}
-                            onChange={(event) => updateCourseDraftField('faculty', event.target.value)}
-                            required
-                          >
-                            <option value="">Seleccionar facultad</option>
-                            {facultyOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="modern-select-icon" size={16} />
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Programa</label>
-                        <div className="modern-select-wrapper">
-                          <select
-                            className="modern-select"
-                            value={courseForm.program}
-                            onChange={(event) => updateCourseDraftField('program', event.target.value)}
-                            required
-                          >
-                            <option value="">Seleccionar programa</option>
-                            {programOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="modern-select-icon" size={16} />
-                        </div>
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Créditos</label>
-                        <input
-                          type="number"
-                          className="modern-input"
-                          value={courseForm.credits}
-                          onChange={(event) =>
-                            updateCourseDraftField('credits', parseInt(event.target.value, 10))
-                          }
+                          placeholder="Ej: IA-101"
                           required
                         />
                       </div>
@@ -5580,8 +5563,10 @@ export function CourseWorkspacePage({
                     </div>
                   </article>
                 </form>
-
-                <form className="page-stack gap-10 mt-12 bg-white/30 p-8 rounded-3xl border border-line" onSubmit={handleMetadataSave}>
+              </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <form className="page-stack gap-10" onSubmit={handleMetadataSave}>
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
@@ -5876,15 +5861,15 @@ export function CourseWorkspacePage({
                               bibliography: splitLines(event.target.value),
                             }))
                           }
-                          placeholder="Normas APA, enlaces, recursos físicos... (uno por línea)"
-                          required
-                        />
-                      </div>
+                        placeholder="Normas APA, enlaces, recursos físicos... (uno por línea)"
+                        required
+                      />
                     </div>
+                  </div>
 
-                    {metadataError ? <p className="form-error mt-4">{metadataError}</p> : null}
+                  {metadataError ? <p className="form-error mt-4">{metadataError}</p> : null}
 
-                    <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                  <div className="flex gap-4 mt-8 pt-6 border-t border-line">
                       <button type="submit" className="cta-button" disabled={isMetadataSaving}>
                         <Save size={18} />
                         <span>{isMetadataSaving ? 'Guardando…' : 'Guardar ficha operativa'}</span>
@@ -5898,16 +5883,16 @@ export function CourseWorkspacePage({
               </div>
             )}
           </div>
-        </ModalFrame>
-      ) : null}
+        </SidePanel>
+      )}
 
       {isVerifyingAnalysis && analysisResult ? (
-        <ModalFrame
+        <SidePanel
+          isOpen={isVerifyingAnalysis}
           title="Verificar Información Extraída"
           description="Asegura que los datos capturados del documento sean correctos antes de guardarlos."
           sideLabel="IA"
           sideDescription="EXTRACCIÓN"
-          variant="drawer"
           width="xl"
           onClose={() => setIsVerifyingAnalysis(false)}
           footer={
@@ -6009,7 +5994,6 @@ export function CourseWorkspacePage({
           <div className="page-stack max-w-5xl mx-auto py-4">
              <div className="management-layout">
                 <main className="page-stack gap-10">
-                  {/* METADATOS PRINCIPALES */}
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
@@ -6068,7 +6052,6 @@ export function CourseWorkspacePage({
                     </div>
                   </article>
 
-                  {/* DESCRIPCIÓN Y RESULTADOS */}
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
@@ -6093,10 +6076,10 @@ export function CourseWorkspacePage({
                          <label className="form-label">Resultados de aprendizaje esperados (RAE)</label>
                          <div className="grid gap-3">
                             {Array.isArray(analysisResult.resultadosAprendizaje) && analysisResult.resultadosAprendizaje.map((res: string, idx: number) => (
-                              <div key={idx} className="flex gap-3 items-start group animate-in slide-in-from-left-2" style={{ animationDelay: `${idx * 50}ms` }}>
+                              <div key={idx} className="flex gap-3 items-start group">
                                 <textarea 
                                   rows={2} 
-                                  className="modern-textarea flex-1 min-h-[70px] bg-white/50 focus:bg-white" 
+                                  className="modern-textarea flex-1 min-h-[70px] bg-white/50" 
                                   value={res} 
                                   onChange={(e) => {
                                     const arr = [...analysisResult.resultadosAprendizaje];
@@ -6105,128 +6088,29 @@ export function CourseWorkspacePage({
                                   }} 
                                 />
                                 <button 
-                                  className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100" 
+                                  className="p-3 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" 
                                   onClick={() => {
                                     const arr = [...analysisResult.resultadosAprendizaje];
                                     arr.splice(idx, 1);
                                     setAnalysisResult({ ...analysisResult, resultadosAprendizaje: arr });
                                   }}
-                                  title="Eliminar resultado"
                                 >
                                   <Trash2 size={18} />
                                 </button>
                               </div>
                             ))}
                             <button 
-                              className="filter-chip w-fit mt-2 hover:bg-ocean/5 hover:text-ocean border-dashed border-2 px-6 py-3" 
+                              className="filter-chip w-fit mt-2 border-dashed" 
                               onClick={() => setAnalysisResult({...analysisResult, resultadosAprendizaje: [...(analysisResult.resultadosAprendizaje||[]), '']})}
                             >
                               <Plus size={16} className="mr-2" /> 
-                              <span>Agregar nuevo resultado</span>
+                              <span>Agregar resultado</span>
                             </button>
                          </div>
                       </div>
                     </div>
                   </article>
 
-                  {/* UNIDADES CURRICULARES */}
-                  <article className="detail-section">
-                    <div className="section-heading mb-6 border-b border-line pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-coral/10 text-coral rounded-lg">
-                          <Layers size={20} />
-                        </div>
-                        <h3 className="text-xl font-semibold tracking-tight">Estructura Curricular (Unidades y Temáticas)</h3>
-                      </div>
-                    </div>
-                    <div className="grid gap-6">
-                      {Array.isArray(analysisResult.unidades) && analysisResult.unidades.map((unidad: any, idx: number) => (
-                        <div key={idx} className="surface border border-line-strong rounded-3xl p-8 group transition-all hover:border-ocean/30 hover:shadow-xl hover:shadow-ocean/5 bg-white/40">
-                          <div className="flex items-start gap-6 mb-8">
-                             <div className="form-group flex-1">
-                               <label className="form-label text-ocean font-bold">Título de la Unidad {idx + 1}</label>
-                               <input 
-                                 className="modern-input text-lg font-semibold bg-white"
-                                 value={unidad.tituloUnidad || ''} 
-                                 onChange={(e) => {
-                                   const arr = [...analysisResult.unidades];
-                                   arr[idx] = { ...arr[idx], tituloUnidad: e.target.value };
-                                   setAnalysisResult({ ...analysisResult, unidades: arr });
-                                 }} 
-                               />
-                             </div>
-                             <button 
-                               className="p-3.5 rounded-2xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 mt-8" 
-                               onClick={() => {
-                                  const arr = [...analysisResult.unidades];
-                                  arr.splice(idx, 1);
-                                  setAnalysisResult({ ...analysisResult, unidades: arr });
-                                }}
-                                title="Eliminar unidad"
-                              >
-                                <Trash2 size={20} />
-                             </button>
-                          </div>
-                          
-                          <div className="form-group">
-                            <label className="form-label uppercase tracking-widest text-[10px] opacity-60">Temáticas y Subtemas</label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                              {Array.isArray(unidad.tematicas) && unidad.tematicas.map((tema: string, tIdx: number) => (
-                                <div key={tIdx} className="flex gap-2 items-center group/tema animate-in fade-in">
-                                   <div className="w-1.5 h-1.5 rounded-full bg-line-strong group-focus-within/tema:bg-ocean transition-colors" />
-                                   <input 
-                                     className="modern-input flex-1 py-2.5 text-sm bg-white/70" 
-                                     value={tema} 
-                                     onChange={(e) => {
-                                       const arr = [...analysisResult.unidades];
-                                       const newTemas = [...(arr[idx].tematicas || [])];
-                                       newTemas[tIdx] = e.target.value;
-                                       arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                       setAnalysisResult({ ...analysisResult, unidades: arr });
-                                     }}
-                                   />
-                                   <button 
-                                      className="p-2 rounded-xl text-muted hover:text-red-500 transition-all opacity-0 group-hover/tema:opacity-100" 
-                                      onClick={() => {
-                                         const arr = [...analysisResult.unidades];
-                                         const newTemas = [...(arr[idx].tematicas || [])];
-                                         newTemas.splice(tIdx, 1);
-                                         arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                         setAnalysisResult({ ...analysisResult, unidades: arr });
-                                      }}
-                                    >
-                                      <Trash2 size={14} />
-                                   </button>
-                                </div>
-                              ))}
-                              <button 
-                                className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean py-2.5 px-4 border-dashed" 
-                                onClick={() => {
-                                   const arr = [...analysisResult.unidades];
-                                   const newTemas = Array.isArray(arr[idx].tematicas) ? [...arr[idx].tematicas] : [];
-                                   newTemas.push('');
-                                   arr[idx] = { ...arr[idx], tematicas: newTemas };
-                                   setAnalysisResult({ ...analysisResult, unidades: arr });
-                                }}
-                              >
-                                <Plus size={14} className="mr-2" /> 
-                                <span className="text-xs font-bold">Añadir tema</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      <button 
-                        className="cta-button bg-none border-2 border-dashed border-ocean/30 !text-ocean bg-ocean/5 hover:bg-ocean/10 shadow-none px-8 py-5 mt-4 group" 
-                        onClick={() => setAnalysisResult({...analysisResult, unidades: [...(analysisResult.unidades||[]), { tituloUnidad: 'Nueva Unidad', tematicas: [''] }]})}
-                      >
-                        <Plus size={22} className="mr-3 group-hover:rotate-90 transition-transform" /> 
-                        <span className="text-lg">Agregar Unidad Curricular</span>
-                      </button>
-                    </div>
-                  </article>
-
-                  {/* METODOLOGÍA Y EVALUACIÓN */}
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
@@ -6237,23 +6121,22 @@ export function CourseWorkspacePage({
                       </div>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                      <div className="form-group border-r border-line pr-8">
+                      <div className="form-group">
                         <label className="form-label">Estrategia Metodológica</label>
                         <textarea 
-                          rows={10} 
+                          rows={6} 
                           className="modern-textarea"
                           value={analysisResult.metodologia || ''} 
                           onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} 
-                          placeholder="Describe cómo se impartirá el curso..."
                         />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Esquema de Evaluación</label>
-                        <div className="grid gap-3">
+                        <div className="grid gap-2">
                             {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
-                              <div key={idx} className="flex gap-3 items-start group">
+                              <div key={idx} className="flex gap-2 items-center group">
                                 <input 
-                                  className="modern-input flex-1 py-3 bg-white/50" 
+                                  className="modern-input flex-1 py-2" 
                                   value={ev} 
                                   onChange={(e) => {
                                     const arr = [...analysisResult.evaluacion];
@@ -6261,71 +6144,21 @@ export function CourseWorkspacePage({
                                     setAnalysisResult({ ...analysisResult, evaluacion: arr });
                                   }} 
                                 />
-                                <button className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100" onClick={() => {
+                                <button className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
                                   const arr = [...analysisResult.evaluacion];
                                   arr.splice(idx, 1);
                                   setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                }}><Trash2 size={18} /></button>
+                                }}><Trash2 size={16} /></button>
                               </div>
                             ))}
-                            <button 
-                              className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean border-dashed py-3 px-6" 
-                              onClick={() => setAnalysisResult({...analysisResult, evaluacion: [...(analysisResult.evaluacion||[]), '']})}
-                            >
-                              <Plus size={16} className="mr-2" /> 
-                              <span>Agregar ítem de evaluación</span>
-                            </button>
                          </div>
                       </div>
                     </div>
                   </article>
-
-                  {/* BIBLIOGRAFÍA */}
-                  <article className="detail-section">
-                    <div className="section-heading mb-6 border-b border-line pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-ink/10 text-ink rounded-lg">
-                          <BookOpen size={20} />
-                        </div>
-                        <h3 className="text-xl font-semibold tracking-tight">Referencias Bibliográficas</h3>
-                      </div>
-                    </div>
-                    <div className="form-group">
-                       <label className="form-label">Fuentes y Bibliografía base</label>
-                       <div className="grid gap-4">
-                          {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.map((bib: string, idx: number) => (
-                            <div key={idx} className="flex gap-4 items-start group animate-in slide-in-from-bottom-2" style={{ animationDelay: `${idx * 40}ms` }}>
-                              <textarea 
-                                rows={2} 
-                                className="modern-textarea flex-1 min-h-[60px] bg-white/60 focus:bg-white italic text-sm" 
-                                value={bib} 
-                                onChange={(e) => {
-                                  const arr = [...analysisResult.bibliografia];
-                                  arr[idx] = e.target.value;
-                                  setAnalysisResult({ ...analysisResult, bibliografia: arr });
-                                }} 
-                              />
-                              <button className="p-3 rounded-xl bg-red-500/5 text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100 mt-2" onClick={() => {
-                                const arr = [...analysisResult.bibliografia];
-                                arr.splice(idx, 1);
-                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
-                              }}><Trash2 size={18} /></button>
-                            </div>
-                          ))}
-                          <button 
-                            className="filter-chip w-fit hover:bg-ocean/5 hover:text-ocean border-dashed py-4 px-8 mt-2" 
-                            onClick={() => setAnalysisResult({...analysisResult, bibliografia: [...(analysisResult.bibliografia||[]), '']})}
-                          >
-                            <Plus size={18} className="mr-3" /> 
-                            <span className="text-base">Agregar referencia bibliográfica</span>
-                          </button>
-                       </div>
-                    </div>
-                  </article>
                 </main>
-              </div>
+             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
     </div>
   );

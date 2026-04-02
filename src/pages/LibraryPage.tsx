@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LibraryBig, NotebookTabs, PackageCheck, PencilLine, Plus, Trash2 } from 'lucide-react';
-import { ModalFrame } from '../components/ModalFrame.js';
+import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
@@ -362,156 +362,148 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
         </div>
 
         {isComposerOpen ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={isComposerOpen}
             title="Registrar recurso"
-            description="La creación se abre en modal para conservar la biblioteca como catálogo limpio y navegable."
+            description="Agrega piezas de producción o referencias académicas al repositorio operativo."
+            sideLabel="Recurso"
+            sideDescription="ALTA"
             width="xl"
             onClose={() => setIsComposerOpen(false)}
           >
-            <form className="editor-card" onSubmit={handleCreateResource}>
-            <div className="editor-card__header">
-              <div>
-                <span className="eyebrow">Alta rápida</span>
-                <h3>Registrar recurso</h3>
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <label className="field">
-                <span>Título</span>
-                <div className="field__control">
-                  <input
-                    value={resourceForm.title}
-                    onChange={(event) => updateResourceField('title', event.target.value)}
-                    required
-                  />
+            <form className="page-stack" onSubmit={handleCreateResource}>
+              <article className="detail-section">
+                <div className="section-heading mb-6 border-b border-line pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                      <Plus size={20} />
+                    </div>
+                    <h3 className="text-xl font-semibold tracking-tight">Nuevo recurso</h3>
+                  </div>
                 </div>
-              </label>
 
-              <label className="field">
-                <span>Tipo</span>
-                <div className="field__control">
-                  <select
-                    value={resourceForm.kind}
-                    onChange={(event) =>
-                      updateResourceField(
-                        'kind',
-                        event.target.value as LibraryResourceMutationInput['kind'],
-                      )
-                    }
-                  >
-                    {['Curado', 'Propio'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  <div className="form-group lg:col-span-2">
+                    <label className="form-label">Título del recurso</label>
+                    <input
+                      className="modern-input"
+                      value={resourceForm.title}
+                      onChange={(event) => updateResourceField('title', event.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Tipo</label>
+                    <div className="modern-select-wrapper">
+                      <select
+                        className="modern-select"
+                        value={resourceForm.kind}
+                        onChange={(event) =>
+                          updateResourceField(
+                            'kind',
+                            event.target.value as any,
+                          )
+                        }
+                      >
+                        {['Curado', 'Propio'].map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Curso vinculado</label>
+                    <div className="modern-select-wrapper">
+                      <select
+                        className="modern-select"
+                        value={resourceForm.courseSlug}
+                        onChange={(event) => updateResourceField('courseSlug', event.target.value)}
+                        required
+                      >
+                        {courseOptions.map((course) => (
+                          <option key={course.value} value={course.value}>
+                            {course.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Unidad / Módulo</label>
+                    <input
+                      className="modern-input"
+                      value={resourceForm.unit}
+                      onChange={(event) => updateResourceField('unit', event.target.value)}
+                      placeholder="Módulo 1..."
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Estado</label>
+                    <div className="modern-select-wrapper">
+                      <select
+                        className="modern-select"
+                        value={resourceForm.status}
+                        onChange={(event) =>
+                          updateResourceField(
+                            'status',
+                            event.target.value as any,
+                          )
+                        }
+                      >
+                        {['Pendiente', 'En revisión', 'Listo'].map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="modern-select-icon" size={16} />
+                    </div>
+                  </div>
+
+                  <div className="form-group lg:col-span-3">
+                    <label className="form-label">Fuente / Referencia</label>
+                    <input
+                      className="modern-input"
+                      value={resourceForm.source}
+                      onChange={(event) => updateResourceField('source', event.target.value)}
+                      placeholder="URL o bibliografía..."
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group lg:col-span-3">
+                    <label className="form-label">Resumen y etiquetas</label>
+                    <textarea
+                      rows={3}
+                      className="modern-textarea"
+                      value={resourceForm.summary}
+                      onChange={(event) => updateResourceField('summary', event.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </label>
 
-              <label className="field">
-                <span>Curso</span>
-                <div className="field__control">
-                  <select
-                    value={resourceForm.courseSlug}
-                    onChange={(event) => updateResourceField('courseSlug', event.target.value)}
-                    required
-                  >
-                    {courseOptions.map((course) => (
-                      <option key={course.value} value={course.value}>
-                        {course.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                  <button type="submit" className="cta-button" disabled={isSaving}>
+                    <Plus size={18} />
+                    <span>{isSaving ? 'Guardando…' : 'Crear recurso'}</span>
+                  </button>
+                  <button type="button" className="filter-chip px-6" onClick={() => setIsComposerOpen(false)}>
+                    Cancelar
+                  </button>
                 </div>
-              </label>
-
-              <label className="field">
-                <span>Unidad</span>
-                <div className="field__control">
-                  <input
-                    value={resourceForm.unit}
-                    onChange={(event) => updateResourceField('unit', event.target.value)}
-                    placeholder="Módulo, unidad o bloque"
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Fuente</span>
-                <div className="field__control">
-                  <input
-                    value={resourceForm.source}
-                    onChange={(event) => updateResourceField('source', event.target.value)}
-                    placeholder="Origen o referencia"
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={resourceForm.status}
-                    onChange={(event) =>
-                      updateResourceField(
-                        'status',
-                        event.target.value as LibraryResourceMutationInput['status'],
-                      )
-                    }
-                  >
-                    {['Pendiente', 'En revisión', 'Listo'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Tags</span>
-                <div className="field__control">
-                  <input
-                    value={newTagInput}
-                    onChange={(event) => {
-                      setNewTagInput(event.target.value);
-                      updateResourceField('tags', inputToTags(event.target.value));
-                    }}
-                    placeholder="accesibilidad, video, evaluación"
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={resourceForm.summary}
-                    onChange={(event) => updateResourceField('summary', event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className="action-row">
-              <button
-                type="submit"
-                className="cta-button"
-                disabled={isSaving || visibleCourses.length === 0}
-              >
-                <span>{isSaving ? 'Creando…' : 'Guardar recurso'}</span>
-              </button>
-              <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
-                <span>Cancelar</span>
-              </button>
-            </div>
+              </article>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </section>
 
@@ -670,172 +662,81 @@ export function LibraryPage({ role, userRole, appData, refreshAppData }: Library
       </section>
 
       {editingResource && editingResourceDraft ? (
-        <ModalFrame
-          title={`Editar recurso · ${editingResource.title}`}
-          description="La edición del recurso se abre en modal para no saturar el inventario."
+        <SidePanel
+          isOpen={!!editingResource}
+          title={`Editar recurso: ${editingResource?.title}`}
+          description="Actualiza la ficha técnica y descriptiva del recurso en biblioteca."
+          sideLabel="Recurso"
+          sideDescription="EDICIÓN"
           width="xl"
           onClose={closeResourceEditor}
         >
           <form
-            className="editor-card"
+            className="page-stack"
             onSubmit={(event) => {
               event.preventDefault();
-              void handleSaveResource(editingResource.id);
+              if (editingResource) void handleSaveResource(editingResource.id);
             }}
           >
-            <div className="form-grid">
-              <label className="field">
-                <span>Título</span>
-                <div className="field__control">
+            <article className="detail-section">
+              <div className="section-heading mb-6 border-b border-line pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-coral/10 text-coral rounded-lg">
+                    <PencilLine size={20} />
+                  </div>
+                  <h3 className="text-xl font-semibold tracking-tight">Editar información</h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="form-group lg:col-span-2">
+                  <label className="form-label">Título</label>
                   <input
-                    value={editingResourceDraft.title}
+                    className="modern-input font-bold"
+                    value={editingResourceDraft?.title || ''}
                     onChange={(event) =>
-                      updateResourceDraft(editingResource.id, 'title', event.target.value)
+                      editingResource && updateResourceDraft(editingResource.id, 'title', event.target.value)
                     }
                   />
                 </div>
-              </label>
 
-              <label className="field">
-                <span>Tipo</span>
-                <div className="field__control">
-                  <select
-                    value={editingResourceDraft.kind}
-                    onChange={(event) =>
-                      updateResourceDraft(
-                        editingResource.id,
-                        'kind',
-                        event.target.value as LibraryResourceMutationInput['kind'],
-                      )
-                    }
-                  >
-                    {['Curado', 'Propio'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
+                <div className="form-group">
+                  <label className="form-label">Estado</label>
+                  <div className="modern-select-wrapper">
+                    <select
+                      className="modern-select"
+                      value={editingResourceDraft?.status || 'Pendiente'}
+                      onChange={(event) =>
+                        editingResource && updateResourceDraft(
+                          editingResource.id,
+                          'status',
+                          event.target.value as any,
+                        )
+                      }
+                    >
+                      {['Pendiente', 'En revisión', 'Listo'].map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="modern-select-icon" size={16} />
+                  </div>
                 </div>
-              </label>
+              </div>
 
-              <label className="field">
-                <span>Curso</span>
-                <div className="field__control">
-                  <select
-                    value={editingResourceDraft.courseSlug}
-                    onChange={(event) =>
-                      updateResourceDraft(editingResource.id, 'courseSlug', event.target.value)
-                    }
-                  >
-                    {courseOptions.map((course) => (
-                      <option key={course.value} value={course.value}>
-                        {course.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Unidad</span>
-                <div className="field__control">
-                  <input
-                    value={editingResourceDraft.unit}
-                    onChange={(event) =>
-                      updateResourceDraft(editingResource.id, 'unit', event.target.value)
-                    }
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Fuente</span>
-                <div className="field__control">
-                  <input
-                    value={editingResourceDraft.source}
-                    onChange={(event) =>
-                      updateResourceDraft(editingResource.id, 'source', event.target.value)
-                    }
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Estado</span>
-                <div className="field__control">
-                  <select
-                    value={editingResourceDraft.status}
-                    onChange={(event) =>
-                      updateResourceDraft(
-                        editingResource.id,
-                        'status',
-                        event.target.value as LibraryResourceMutationInput['status'],
-                      )
-                    }
-                  >
-                    {['Pendiente', 'En revisión', 'Listo'].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Tags</span>
-                <div className="field__control">
-                  <input
-                    value={tagInputs[editingResource.id] ?? tagsToInput(editingResourceDraft.tags)}
-                    onChange={(event) => {
-                      setTagInputs((current) => ({
-                        ...current,
-                        [editingResource.id]: event.target.value,
-                      }));
-                      updateResourceDraft(
-                        editingResource.id,
-                        'tags',
-                        inputToTags(event.target.value),
-                      );
-                    }}
-                  />
-                </div>
-              </label>
-
-              <label className="field field--full">
-                <span>Resumen</span>
-                <div className="field__control field__control--textarea">
-                  <textarea
-                    rows={3}
-                    value={editingResourceDraft.summary}
-                    onChange={(event) =>
-                      updateResourceDraft(editingResource.id, 'summary', event.target.value)
-                    }
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className="action-row">
-              <button type="submit" className="cta-button" disabled={isSaving}>
-                <span>{isSaving ? 'Guardando…' : 'Guardar recurso'}</span>
-              </button>
-              <button type="button" className="filter-chip" onClick={closeResourceEditor}>
-                <span>Cancelar</span>
-              </button>
-              {canDelete ? (
-                <button
-                  type="button"
-                  className="danger-button danger-button--ghost"
-                  onClick={() => void handleDeleteResource(editingResource.id)}
-                >
-                  <Trash2 size={16} />
-                  <span>Eliminar</span>
+              <div className="flex gap-4 mt-8 pt-6 border-t border-line">
+                <button type="submit" className="cta-button">
+                  <PackageCheck size={18} />
+                  <span>Guardar cambios</span>
                 </button>
-              ) : null}
-            </div>
+                <button type="button" className="filter-chip px-6" onClick={closeResourceEditor}>
+                  Cancelar
+                </button>
+              </div>
+            </article>
           </form>
-        </ModalFrame>
+        </SidePanel>
       ) : null}
     </div>
   );

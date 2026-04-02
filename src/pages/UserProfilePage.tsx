@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ModalFrame } from '../components/ModalFrame.js';
+import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type {
@@ -580,7 +580,7 @@ export function UserProfilePage({
           )}
 
           {isProfileEditorOpen ? (
-            <ModalFrame
+            <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Editar información personal"
               description="La edición se resuelve en modal para que la vista de perfil permanezca limpia."
               width="xl"
@@ -720,11 +720,11 @@ export function UserProfilePage({
                   </button>
                 </div>
               </form>
-            </ModalFrame>
+            </SidePanel>
           ) : null}
 
           {isAdminDirectoryView && adminDraft && isAdminAccessEditorOpen ? (
-            <ModalFrame
+            <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Editar acceso, roles y alcance"
               description="Los cambios administrativos se resuelven fuera de la página para evitar saturación."
               width="xl"
@@ -938,11 +938,11 @@ export function UserProfilePage({
                   ) : null}
                 </div>
               </form>
-            </ModalFrame>
+            </SidePanel>
           ) : null}
 
           {!isAdminDirectoryView && isPasswordEditorOpen ? (
-            <ModalFrame
+            <SidePanel isOpen={true} width="xl" sideLabel="Perfil" sideDescription="AJUSTES"
               title="Actualizar contraseña"
               description="La seguridad se edita en modal para mantener el perfil como vista de lectura."
               width="lg"
@@ -995,7 +995,7 @@ export function UserProfilePage({
                   </button>
                 </div>
               </form>
-            </ModalFrame>
+            </SidePanel>
           ) : null}
         </section>
 

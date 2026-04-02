@@ -22,7 +22,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ModalFrame } from '../components/ModalFrame.js';
+import { SidePanel } from '../components/SidePanel.js';
+import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationAssistant } from '../components/admin/IntegrationAssistant.js';
@@ -1862,16 +1863,31 @@ export function TeamPage({
         </article>
 
         {showCreateUserAssistant ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={showCreateUserAssistant}
             title="Crear nuevo usuario"
             description="Registra los datos del usuario, define su acceso y deja lista su vinculación institucional."
             sideLabel="User"
             sideDescription="CREAR"
-            variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
+            footer={
+              <div className="flex items-center gap-4">
+                <button
+                  type="submit"
+                  form="create-user-form"
+                  className="cta-button"
+                  disabled={isCreatingUser}
+                >
+                  <span>{isCreatingUser ? 'Creando…' : 'Crear usuario ahora'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
-            <form className="editor-card" onSubmit={handleCreateUser}>
+            <form id="create-user-form" className="editor-card" onSubmit={handleCreateUser}>
               <fieldset className="form-section">
                 <legend>Datos personales</legend>
                 <div className="form-grid">
@@ -2117,28 +2133,52 @@ export function TeamPage({
                   <option key={item} value={item} />
                 ))}
               </datalist>
-
-              <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isCreatingUser}>
-                  <span>{isCreatingUser ? 'Creando…' : 'Crear usuario'}</span>
-                </button>
-                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
-                  <span>Cerrar</span>
-                </button>
-              </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : editingDraft && selectedUser ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={!!(editingDraft && selectedUser)}
             title={selectedUser.name}
             description="Edita la cuenta, el rol, el alcance y el estado del usuario desde este panel de gobierno."
             sideLabel="User"
             sideDescription="GESTIÓN"
-            variant="drawer"
             width="xl"
             onClose={closeUserAssistant}
+            footer={
+              <div className="flex items-center gap-4">
+                <button
+                  type="submit"
+                  form="edit-user-form"
+                  className="cta-button"
+                  disabled={isSavingUser}
+                >
+                  <span>{isSavingUser ? 'Guardando…' : 'Guardar cambios'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setFocusRoleAssignment((current) => !current)}
+                >
+                  <Waypoints size={16} />
+                  <span>{focusRoleAssignment ? 'Volver a edición general' : 'Enfocar roles'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
+                  <span>Cerrar</span>
+                </button>
+                {selectedUser.id !== user.id ? (
+                  <button
+                    type="button"
+                    className="danger-button danger-button--ghost"
+                    onClick={() => void handleDeleteUser(selectedUser.id, selectedUser.name)}
+                  >
+                    <Trash2 size={16} />
+                    <span>Eliminar</span>
+                  </button>
+                ) : null}
+              </div>
+            }
           >
-            <div className="editor-card">
+            <form id="edit-user-form" className="editor-card" onSubmit={handleUpdateUser}>
               <div className="admin-assistant-intro">
                 <span className={getBadgeClass(formatUserStateLabel(selectedUser.status))}>
                   {formatUserStateLabel(selectedUser.status)}
@@ -2389,40 +2429,8 @@ export function TeamPage({
                 <span>Institución {selectedUser.institution || 'sin definir'}</span>
                 <span>Programa {selectedUser.program || 'sin definir'}</span>
               </div>
-
-              <div className="action-row">
-                <button
-                  type="button"
-                  className="cta-button"
-                  onClick={() => void handleUpdateUser()}
-                  disabled={isSavingUser}
-                >
-                  <span>{isSavingUser ? 'Guardando…' : 'Guardar cambios'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => setFocusRoleAssignment((current) => !current)}
-                >
-                  <Waypoints size={16} />
-                  <span>{focusRoleAssignment ? 'Volver a edición general' : 'Enfocar roles'}</span>
-                </button>
-                <button type="button" className="filter-chip" onClick={closeUserAssistant}>
-                  <span>Cerrar</span>
-                </button>
-                {selectedUser.id !== user.id ? (
-                  <button
-                    type="button"
-                    className="danger-button danger-button--ghost"
-                    onClick={() => void handleDeleteUser(selectedUser.id, selectedUser.name)}
-                  >
-                    <Trash2 size={16} />
-                    <span>Eliminar</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </ModalFrame>
+            </form>
+          </SidePanel>
         ) : null}
 
         {renderAccountSecurity()}
@@ -2715,7 +2723,7 @@ export function TeamPage({
         </section>
 
         {isInstitutionSettingsRoute && institutionSettingsDraft ? (
-          <ModalFrame
+          <SidePanel isOpen={true}
             title="Editar parámetros institucionales"
             description="Los cambios se guardan desde este panel y se reflejan en todo el directorio."
             sideLabel="Inst"
@@ -2811,11 +2819,11 @@ export function TeamPage({
                 </button>
               </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
 
         {isInstitutionStructureDetailRoute && selectedInstitutionStructure ? (
-          <ModalFrame
+          <SidePanel isOpen={true}
             title={selectedInstitutionStructure.institution}
             description="Consulta la estructura completa y abre la edición desde aquí cuando lo necesites."
             variant="drawer"
@@ -2919,11 +2927,11 @@ export function TeamPage({
                 </div>
               </section>
             </div>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
 
         {(isInstitutionCreateRoute || isInstitutionStructureEditRoute) && structureDraft ? (
-          <ModalFrame
+          <SidePanel isOpen={true}
             title={editingStructureId ? 'Editar estructura institucional' : 'Crear estructura institucional'}
             description="La edición se resuelve en un side-panel para mantener la vista principal limpia."
             variant="drawer"
@@ -3026,7 +3034,7 @@ export function TeamPage({
                 </button>
               </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </div>
     );
@@ -3138,17 +3146,27 @@ export function TeamPage({
           </article>
         </section>
 
-        {isBrandingEditorOpen ? (
-          <ModalFrame
+        {isBrandingEditorOpen && brandingDraft ? (
+          <SidePanel
+            isOpen={isBrandingEditorOpen}
             title="Editar branding"
             description="La configuración visual se resuelve en un panel lateral para no saturar la vista de Gobierno."
             sideLabel="Brand"
             sideDescription="IMAGEN"
-            variant="drawer"
             width="xl"
             onClose={closeBrandingEditor}
+            footer={
+              <div className="flex items-center gap-4">
+                <button type="submit" form="branding-form" className="cta-button" disabled={isSavingBranding}>
+                  <span>{isSavingBranding ? 'Guardando…' : 'Guardar branding'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeBrandingEditor}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
-            <form className="editor-card" onSubmit={handleSaveBranding}>
+            <form id="branding-form" className="editor-card" onSubmit={handleSaveBranding}>
           <input
             ref={logoFileInputRef}
             type="file"
@@ -3658,7 +3676,7 @@ export function TeamPage({
             </button>
           </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </div>
     );
@@ -3729,17 +3747,27 @@ export function TeamPage({
           </article>
         </section>
 
-        {isExperienceEditorOpen ? (
-          <ModalFrame
+        {isExperienceEditorOpen && experienceDraft ? (
+          <SidePanel
+            isOpen={isExperienceEditorOpen}
             title="Editar experiencia de trabajo"
             description="Estos ajustes se editan en un panel lateral para mantener el foco operativo."
             sideLabel="UX"
             sideDescription="EQUIPO"
-            variant="drawer"
             width="xl"
             onClose={closeExperienceEditor}
+            footer={
+              <div className="flex items-center gap-4">
+                <button type="submit" form="experience-form" className="cta-button" disabled={isSavingExperience}>
+                  <span>{isSavingExperience ? 'Guardando…' : 'Guardar experiencia'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeExperienceEditor}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
-            <form className="editor-card" onSubmit={handleSaveExperience}>
+            <form id="experience-form" className="editor-card" onSubmit={handleSaveExperience}>
           <div className="section-heading">
             <div>
               <span className="eyebrow">Ajustes</span>
@@ -3873,7 +3901,7 @@ export function TeamPage({
             </button>
           </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </div>
     );
@@ -3940,17 +3968,27 @@ export function TeamPage({
           </article>
         </section>
 
-        {isWorkflowEditorOpen ? (
-          <ModalFrame
+        {isWorkflowEditorOpen && workflowDraft ? (
+          <SidePanel
+            isOpen={isWorkflowEditorOpen}
             title="Editar reglas del workflow"
             description="La configuración del flujo queda aislada en modal para no mezclar lectura con edición."
             sideLabel="Flow"
             sideDescription="PASOS"
-            variant="drawer"
             width="xl"
             onClose={closeWorkflowEditor}
+            footer={
+              <div className="flex items-center gap-4">
+                <button type="submit" form="workflow-form" className="cta-button" disabled={isSavingWorkflow}>
+                  <span>{isSavingWorkflow ? 'Guardando…' : 'Guardar workflow'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeWorkflowEditor}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
-            <form className="editor-card" onSubmit={handleSaveWorkflow}>
+            <form id="workflow-form" className="editor-card" onSubmit={handleSaveWorkflow}>
           <div className="section-heading">
             <div>
               <span className="eyebrow">Reglas</span>
@@ -4068,7 +4106,7 @@ export function TeamPage({
             </button>
           </div>
             </form>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </div>
     );
@@ -4279,14 +4317,29 @@ export function TeamPage({
         </section>
 
         {isIntegrationEditorOpen && selectedIntegration && integrationDraft ? (
-          <ModalFrame
+          <SidePanel
+            isOpen={isIntegrationEditorOpen}
             title={`Configurar ${selectedIntegration.name}`}
-            description="La configuración técnica se resuelve en un side-panel para no mezclar directorio con edición."
+            description="La configuración técnica se resuelve en un panel lateral para no mezclar directorio con edición."
             sideLabel="Link"
             sideDescription="CONECTOR"
-            variant="drawer"
             width="xl"
             onClose={closeIntegrationEditor}
+            footer={
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  className="cta-button"
+                  onClick={() => void handleSaveIntegration()}
+                  disabled={isSavingIntegration}
+                >
+                  <span>{isSavingIntegration ? 'Guardando…' : 'Guardar integración'}</span>
+                </button>
+                <button type="button" className="filter-chip" onClick={closeIntegrationEditor}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            }
           >
             <div className="page-stack">
               <section className="surface section-card section-card--compact">
@@ -4473,7 +4526,7 @@ export function TeamPage({
                 </div>
               </section>
             </div>
-          </ModalFrame>
+          </SidePanel>
         ) : null}
       </div>
     );

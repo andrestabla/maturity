@@ -12,7 +12,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ModalFrame } from '../components/ModalFrame.js';
+import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { CourseCard } from '../components/CourseCard.js';
 import type { AppData, Course, CourseMutationInput, CourseStatus, Role } from '../types.js';
@@ -1065,7 +1065,7 @@ export function CoursesPage({
           </div>
 
           {isComposerOpen ? (
-            <ModalFrame
+            <SidePanel isOpen={true}
               title="Crear curso"
               width="xl"
               onClose={() => setIsComposerOpen(false)}
@@ -1312,7 +1312,7 @@ export function CoursesPage({
                   </button>
                 </div>
               </form>
-            </ModalFrame>
+            </SidePanel>
 
           ) : null}
         </div>
@@ -1483,8 +1483,12 @@ export function CoursesPage({
         </section>
       ) : null}
       {createdCourse && (
-        <ModalFrame
+        <SidePanel
+          isOpen={!!createdCourse}
           title="¡Curso creado con éxito!"
+          description="El proyecto ha sido registrado y el repositorio actualizado."
+          sideLabel="Éxito"
+          sideDescription="RESERVA"
           width="sm"
           onClose={() => setCreatedCourse(null)}
         >
@@ -1492,29 +1496,29 @@ export function CoursesPage({
             <div className="success-state__icon">
               <CheckCircle size={48} color="var(--success-main)" />
             </div>
-            <h4>{createdCourse.title}</h4>
+            <h4>{createdCourse?.title}</h4>
             <p>
               El curso se ha registrado correctamente en el repositorio y la estructura de carpetas
               se ha actualizado.
             </p>
             <div className="success-state__actions">
               <Link
-                to={`/courses/${createdCourse.slug}`}
-                className="button button--primary button--full"
+                to={`/courses/${createdCourse?.slug}`}
+                className="cta-button w-full justify-center"
                 onClick={() => setCreatedCourse(null)}
               >
                 <span>Ver curso</span>
               </Link>
               <button
                 type="button"
-                className="ghost-button button--full"
+                className="filter-chip w-full justify-center"
                 onClick={() => setCreatedCourse(null)}
               >
                 <span>Cerrar</span>
               </button>
             </div>
           </div>
-        </ModalFrame>
+        </SidePanel>
       )}
     </div>
   );
