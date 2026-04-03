@@ -1899,6 +1899,85 @@ html.modal-active .app-shell {
   overflow-wrap: anywhere;
 }
 
+.rich-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.rich-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rich-editor__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--secondary);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rich-editor__tool:hover {
+  border-color: color-mix(in srgb, var(--ocean) 38%, var(--line) 62%);
+  background: color-mix(in srgb, var(--surface-soft) 72%, white 28%);
+}
+
+.rich-editor__surface {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel);
+  padding: 16px 18px;
+}
+
+.rich-editor__content {
+  outline: none;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.8;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.rich-editor__content:empty::before {
+  content: attr(data-placeholder);
+  color: color-mix(in srgb, var(--muted) 78%, white 22%);
+}
+
+.rich-editor__content p,
+.rich-editor__content ul,
+.rich-editor__content ol,
+.rich-editor__content blockquote,
+.rich-editor__content h3,
+.rich-editor__content h4 {
+  margin: 0 0 0.9rem;
+}
+
+.rich-editor__content ul,
+.rich-editor__content ol {
+  padding-left: 1.4rem;
+}
+
+.rich-editor__content blockquote {
+  padding-left: 1rem;
+  border-left: 3px solid color-mix(in srgb, var(--ocean) 32%, transparent 68%);
+  color: var(--muted);
+}
+
+.rich-editor__content h3,
+.rich-editor__content h4 {
+  color: var(--secondary);
+  line-height: 1.35;
+}
+
 .form-error {
   margin: 0;
   color: #8d3f22;
@@ -9276,6 +9355,55 @@ body::after {
   line-height: 1.7;
 }
 
+.rich-html {
+  color: var(--text-body);
+  line-height: 1.8;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.rich-html p,
+.rich-html ul,
+.rich-html ol,
+.rich-html blockquote,
+.rich-html h3,
+.rich-html h4 {
+  margin: 0 0 0.9rem;
+}
+
+.rich-html ul,
+.rich-html ol {
+  padding-left: 1.35rem;
+}
+
+.rich-html blockquote {
+  padding: 0.2rem 0 0.2rem 1rem;
+  border-left: 3px solid color-mix(in srgb, var(--ocean) 30%, transparent 70%);
+  color: var(--muted);
+}
+
+.rich-html h3,
+.rich-html h4 {
+  color: var(--secondary);
+  line-height: 1.35;
+}
+
+.rich-html--compact {
+  font-size: 0.97rem;
+}
+
+.rich-html--structured {
+  display: grid;
+  gap: 12px;
+}
+
+.rich-html--structured > * {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, white 28%);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white 18%);
+}
+
 .planning-section-stack {
   display: grid;
   gap: 20px;
@@ -9664,6 +9792,10 @@ body::after {
   line-height: 1.6;
 }
 
+.writing-editor__summary-copy {
+  color: var(--muted);
+}
+
 .writing-editor__meta {
   flex-wrap: wrap;
 }
@@ -9705,11 +9837,8 @@ body::after {
 
 .writing-editor__structured-body {
   margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  font-size: 0.92rem;
-  line-height: 1.65;
+  font-size: 0.96rem;
+  line-height: 1.75;
   color: var(--text-body);
 }
 

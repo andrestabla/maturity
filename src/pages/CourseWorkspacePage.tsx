@@ -27,8 +27,14 @@ import {
   MonitorPlay,
   ClipboardCheck,
   ChevronDown,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Underline,
+  Heading3,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { SidePanel } from '../components/SidePanel.js';
@@ -120,7 +126,7 @@ const validCourseSections: CourseSection[] = [
 ];
 
 function splitRichTextLines(text: string) {
-  return text
+  return stripHtmlToText(text)
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split(/\n+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/u)
@@ -128,32 +134,253 @@ function splitRichTextLines(text: string) {
     .filter(Boolean);
 }
 
-function renderRichTextList(text: string, emptyText: string, className = '') {
-  const lines = splitRichTextLines(text);
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
 
-  if (lines.length === 0) {
+function hasHtmlMarkup(value: string) {
+  return /<\/?[a-z][\s\S]*>/iu.test(value);
+}
+
+function normalizePlainTextToHtml(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function stripHtmlToText(value: string) {
+  const raw = value.trim();
+
+  if (!raw) {
+    return '';
+  }
+
+  if (!hasHtmlMarkup(raw)) {
+    return raw;
+  }
+
+  if (typeof window === 'undefined') {
+    return raw
+      .replace(/<br\s*\/?>/giu, '\n')
+      .replace(/<\/(p|div|li|ul|ol|blockquote|h[1-6])>/giu, '\n')
+      .replace(/<li>/giu, '• ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+
+  return root?.textContent?.replace(/\u00a0/g, ' ').replace(/\s+\n/g, '\n').trim() ?? '';
+}
+
+function sanitizeRichHtml(value: string) {
+  const raw = value.trim();
+
+  if (!raw) {
+    return '';
+  }
+
+  if (!hasHtmlMarkup(raw)) {
+    return normalizePlainTextToHtml(raw);
+  }
+
+  if (typeof window === 'undefined') {
+    return normalizePlainTextToHtml(stripHtmlToText(raw));
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+
+  const sanitizeNode = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return escapeHtml(node.textContent ?? '');
+    }
+
+    if (!(node instanceof HTMLElement)) {
+      return '';
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes)
+      .map((child) => sanitizeNode(child))
+      .join('');
+
+    switch (tag) {
+      case 'br':
+        return '<br>';
+      case 'p':
+      case 'ul':
+      case 'ol':
+      case 'li':
+      case 'strong':
+      case 'b':
+      case 'em':
+      case 'i':
+      case 'u':
+      case 'blockquote':
+      case 'h3':
+      case 'h4':
+        return `<${tag}>${children}</${tag}>`;
+      case 'a': {
+        const href = (node.getAttribute('href') || '').trim();
+        const safeHref =
+          href.startsWith('http://') ||
+          href.startsWith('https://') ||
+          href.startsWith('mailto:') ||
+          href.startsWith('#') ||
+          href.startsWith('/')
+            ? href
+            : '';
+        const attrs = safeHref
+          ? ` href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer"`
+          : '';
+        return `<a${attrs}>${children}</a>`;
+      }
+      case 'div':
+      case 'span':
+        return children;
+      default:
+        return children;
+    }
+  };
+
+  const sanitized = Array.from(root?.childNodes ?? [])
+    .map((child) => sanitizeNode(child))
+    .join('')
+    .trim();
+
+  return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
+}
+
+function renderRichTextContent(text: string, emptyText: string, className = '') {
+  const sanitized = sanitizeRichHtml(text);
+
+  if (!sanitized) {
     return <p className={`rich-copy rich-copy--empty ${className}`.trim()}>{emptyText}</p>;
   }
 
   return (
-    <ul className={`rich-copy ${className}`.trim()}>
-      {lines.map((line, index) => {
-        const structuredMatch = line.match(/^([^:]{2,64}):\s*(.+)$/u);
+    <div
+      className={`rich-html ${className}`.trim()}
+      dangerouslySetInnerHTML={{ __html: sanitized }}
+    />
+  );
+}
 
-        return (
-          <li key={`${line}-${index}`} className="rich-copy__item">
-            {structuredMatch ? (
-              <>
-                <strong className="rich-copy__label">{structuredMatch[1]}:</strong>
-                <span>{structuredMatch[2]}</span>
-              </>
-            ) : (
-              <span>{line}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+interface RichTextEditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  minHeight?: number;
+}
+
+function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  minHeight = 220,
+}: RichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+
+    if (!editor || isFocused) {
+      return;
+    }
+
+    const normalized = sanitizeRichHtml(value);
+
+    if (editor.innerHTML !== normalized) {
+      editor.innerHTML = normalized;
+    }
+  }, [isFocused, value]);
+
+  const syncValue = () => {
+    onChange(sanitizeRichHtml(editorRef.current?.innerHTML ?? ''));
+  };
+
+  const applyCommand = (command: string, commandValue?: string) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    editorRef.current?.focus();
+    document.execCommand(command, false, commandValue);
+    syncValue();
+  };
+
+  return (
+    <div className="rich-editor">
+      <div className="rich-editor__toolbar" role="toolbar" aria-label="Formato del texto">
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', 'p')}>
+          <span>Párrafo</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', 'h3')}>
+          <Heading3 size={15} />
+          <span>Título</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('bold')}>
+          <Bold size={15} />
+          <span>Negrita</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('italic')}>
+          <Italic size={15} />
+          <span>Cursiva</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('underline')}>
+          <Underline size={15} />
+          <span>Subrayado</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertUnorderedList')}>
+          <List size={15} />
+          <span>Lista</span>
+        </button>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertOrderedList')}>
+          <ListOrdered size={15} />
+          <span>Numerada</span>
+        </button>
+      </div>
+      <div className="rich-editor__surface">
+        <div
+          ref={editorRef}
+          className="rich-editor__content"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          data-placeholder={placeholder}
+          style={{ minHeight }}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => {
+            setIsFocused(false);
+            syncValue();
+          }}
+          onInput={syncValue}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -805,8 +1032,9 @@ function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
 function buildWritingSectionsFromProduct(product: CourseProduct): ProductWritingSection[] {
   const sections: ProductWritingSection[] = [];
   let current: ProductWritingSection | null = null;
+  const normalizedBody = stripHtmlToText(product.body);
 
-  product.body.split('\n').forEach((rawLine) => {
+  normalizedBody.split('\n').forEach((rawLine) => {
     const line = rawLine.trimEnd();
 
     if (/^#\s+/.test(line)) {
@@ -850,7 +1078,7 @@ function buildWritingSectionsFromProduct(product: CourseProduct): ProductWriting
     {
       id: 'section-general',
       title: 'Desarrollo del producto',
-      instructions: product.body.trim(),
+      instructions: normalizedBody.trim(),
       content: '',
     },
   ];
@@ -1792,7 +2020,7 @@ export function CourseWorkspacePage({
   }
 
   function extractPreviewItems(body: string): string[] {
-    const lines: string[] = splitLines(body);
+    const lines: string[] = splitLines(stripHtmlToText(body));
     const bulletLines: string[] = lines.filter((line: string) => /^[-*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line));
     const source: string[] = bulletLines.length > 0 ? bulletLines : lines;
 
@@ -4091,11 +4319,7 @@ export function CourseWorkspacePage({
             <div className="writing-queue">
               {writingWorkQueue.map((product) => {
                 const writingPhase = getWritingPhase(product);
-                const structuredLines = product.body
-                  .split('\n')
-                  .map((line) => line.trim())
-                  .filter(Boolean)
-                  .slice(0, 5);
+                const structuredLines = splitRichTextLines(product.body).slice(0, 5);
                 const dueLabel = writingPhase?.endDate ? formatDate(writingPhase.endDate) : 'Sin fecha final';
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
@@ -4133,7 +4357,7 @@ export function CourseWorkspacePage({
                       </div>
                     </div>
 
-                    <p className="writing-queue__summary">{product.summary}</p>
+                    <p className="writing-queue__summary">{stripHtmlToText(product.summary)}</p>
 
                     <div className="writing-queue__specs">
                       <span className="eyebrow">Instrucciones</span>
@@ -4779,7 +5003,7 @@ export function CourseWorkspacePage({
                   <div>
                     <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
                     <strong>{product.title}</strong>
-                    <p>{product.summary}</p>
+                    <p>{stripHtmlToText(product.summary)}</p>
                   </div>
                   <div className="list-item__meta">
                     <span>{product.owner}</span>
@@ -4898,21 +5122,18 @@ export function CourseWorkspacePage({
 
                         <label className="field field--full">
                           <span>Descripción</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              rows={4}
-                              value={newProductForm.summary}
-                              onChange={(event) =>
-                                setNewProductForm((current) => ({
-                                  ...current,
-                                  stage: productStage,
-                                  summary: event.target.value,
-                                }))
-                              }
-                              placeholder="Describe qué es este producto y cuál es su propósito dentro del curso."
-                              required
-                            />
-                          </div>
+                          <RichTextEditor
+                            value={newProductForm.summary}
+                            onChange={(value) =>
+                              setNewProductForm((current) => ({
+                                ...current,
+                                stage: productStage,
+                                summary: value,
+                              }))
+                            }
+                            placeholder="Describe qué es este producto y cuál es su propósito dentro del curso."
+                            minHeight={180}
+                          />
                         </label>
                       </div>
                     </>
@@ -5046,41 +5267,34 @@ export function CourseWorkspacePage({
 
                         <label className="field field--full">
                           <span>Descripción</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              className="rich-textarea"
-                              rows={3}
-                              value={newProductForm.summary}
-                              onChange={(event) =>
-                                setNewProductForm((current) => ({
-                                  ...current,
-                                  stage: productStage,
-                                  summary: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
+                          <RichTextEditor
+                            value={newProductForm.summary}
+                            onChange={(value) =>
+                              setNewProductForm((current) => ({
+                                ...current,
+                                stage: productStage,
+                                summary: value,
+                              }))
+                            }
+                            placeholder="Describe el producto y su propósito dentro del curso."
+                            minHeight={180}
+                          />
                         </label>
 
                         <label className="field field--full">
                           <span>Instrucciones</span>
-                          <div className="field__control field__control--textarea">
-                            <textarea
-                              className="rich-textarea"
-                              rows={10}
-                              value={newProductForm.body}
-                              onChange={(event) =>
-                                setNewProductForm((current) => ({
-                                  ...current,
-                                  stage: productStage,
-                                  body: event.target.value,
-                                }))
-                              }
-                              placeholder="Define aquí las instrucciones, estructura esperada y criterios de producción del producto."
-                              required
-                            />
-                          </div>
+                          <RichTextEditor
+                            value={newProductForm.body}
+                            onChange={(value) =>
+                              setNewProductForm((current) => ({
+                                ...current,
+                                stage: productStage,
+                                body: value,
+                              }))
+                            }
+                            placeholder="Define aquí las instrucciones, estructura esperada y criterios de producción del producto."
+                            minHeight={260}
+                          />
                         </label>
                       </div>
                     </>
@@ -5122,7 +5336,11 @@ export function CourseWorkspacePage({
                               <div className="list-item">
                                 <div>
                                   <strong>Descripción</strong>
-                                  <p>{product.summary}</p>
+                                  {renderRichTextContent(
+                                    product.summary,
+                                    'Sin descripción registrada.',
+                                    'rich-html--compact',
+                                  )}
                                 </div>
                                 <div className="list-item__meta">
                                   <span>{product.format}</span>
@@ -5133,7 +5351,11 @@ export function CourseWorkspacePage({
                               <div className="list-item">
                                 <div>
                                   <strong>Instrucciones</strong>
-                                  <p style={{ whiteSpace: 'pre-wrap' }}>{product.body}</p>
+                                  {renderRichTextContent(
+                                    product.body,
+                                    'Sin instrucciones registradas.',
+                                    'rich-html--structured',
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -5232,16 +5454,14 @@ export function CourseWorkspacePage({
 
                                 <label className="field field--full">
                                   <span>Descripción</span>
-                                  <div className="field__control field__control--textarea">
-                                    <textarea
-                                      className="rich-textarea"
-                                      rows={4}
-                                      value={draft.summary}
-                                      onChange={(event) =>
-                                        updateProductDraft(product.id, 'summary', event.target.value)
-                                      }
-                                    />
-                                  </div>
+                                  <RichTextEditor
+                                    value={draft.summary}
+                                    onChange={(value) =>
+                                      updateProductDraft(product.id, 'summary', value)
+                                    }
+                                    placeholder="Describe el producto y su propósito dentro del curso."
+                                    minHeight={180}
+                                  />
                                 </label>
                               </div>
                             </>
@@ -5364,30 +5584,26 @@ export function CourseWorkspacePage({
 
                                 <label className="field field--full">
                                   <span>Descripción</span>
-                                  <div className="field__control field__control--textarea">
-                                    <textarea
-                                      className="rich-textarea"
-                                      rows={3}
-                                      value={draft.summary}
-                                      onChange={(event) =>
-                                        updateProductDraft(product.id, 'summary', event.target.value)
-                                      }
-                                    />
-                                  </div>
+                                  <RichTextEditor
+                                    value={draft.summary}
+                                    onChange={(value) =>
+                                      updateProductDraft(product.id, 'summary', value)
+                                    }
+                                    placeholder="Describe el producto y su propósito dentro del curso."
+                                    minHeight={180}
+                                  />
                                 </label>
 
                                 <label className="field field--full">
                                   <span>Instrucciones</span>
-                                  <div className="field__control field__control--textarea">
-                                    <textarea
-                                      className="rich-textarea"
-                                      rows={10}
-                                      value={draft.body}
-                                      onChange={(event) =>
-                                        updateProductDraft(product.id, 'body', event.target.value)
-                                      }
-                                    />
-                                  </div>
+                                  <RichTextEditor
+                                    value={draft.body}
+                                    onChange={(value) =>
+                                      updateProductDraft(product.id, 'body', value)
+                                    }
+                                    placeholder="Detalla cómo debe producirse este artefacto, su estructura, alcance, criterios técnicos y nivel de profundidad."
+                                    minHeight={260}
+                                  />
                                 </label>
                               </div>
                             </>
@@ -5712,10 +5928,10 @@ export function CourseWorkspacePage({
                 <div className="list-item">
                   <div>
                     <strong>Descripción</strong>
-                    {renderRichTextList(
+                    {renderRichTextContent(
                       architecturePreviewProduct.summary || '',
                       'Sin descripción ampliada.',
-                      'rich-copy--compact',
+                      'rich-html--compact',
                     )}
                   </div>
                 </div>
@@ -5728,10 +5944,10 @@ export function CourseWorkspacePage({
                 <div className="list-item">
                   <div>
                     <strong>Instrucciones</strong>
-                    {renderRichTextList(
+                    {renderRichTextContent(
                       architecturePreviewProduct.body?.trim() || '',
                       'Este producto todavía no tiene instrucciones registradas.',
-                      'rich-copy--structured',
+                      'rich-html--structured',
                     )}
                   </div>
                 </div>
@@ -5863,12 +6079,21 @@ export function CourseWorkspacePage({
 
               <div className="form-group">
                 <label className="form-label">Descripción / Propósito</label>
-                <textarea
-                  rows={4}
-                  className="modern-textarea rich-textarea"
+                <RichTextEditor
                   value={newProductForm.summary}
-                  onChange={(e) => setNewProductForm({ ...newProductForm, summary: e.target.value })}
+                  onChange={(value) => setNewProductForm({ ...newProductForm, summary: value })}
                   placeholder="Describe brevemente qué se espera de este producto..."
+                  minHeight={180}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Instrucciones</label>
+                <RichTextEditor
+                  value={newProductForm.body}
+                  onChange={(value) => setNewProductForm({ ...newProductForm, body: value })}
+                  placeholder="Detalla cómo debe desarrollarse este producto, su estructura, alcance, criterios técnicos, tono y entregables esperados."
+                  minHeight={280}
                 />
               </div>
 
@@ -5975,7 +6200,7 @@ export function CourseWorkspacePage({
             </div>
             {product.summary && (
               <p className="architecture-card__summary">
-                {product.summary}
+                {stripHtmlToText(product.summary)}
               </p>
             )}
           </div>
@@ -6281,16 +6506,16 @@ export function CourseWorkspacePage({
                         </div>
 
                         <div className="planning-gantt__cell planning-gantt__cell--product">
-                          <div className="planning-gantt__product-copy">
-                            <strong>{product.title}</strong>
-                            <div className="planning-gantt__product-meta">
-                              <span className="badge badge--outline">{product.format}</span>
-                              <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
-                              <span>{configuredPhases}/{productPlanningPhases.length} fases</span>
+                            <div className="planning-gantt__product-copy">
+                              <strong>{product.title}</strong>
+                              <div className="planning-gantt__product-meta">
+                                <span className="badge badge--outline">{product.format}</span>
+                                <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                                <span>{configuredPhases}/{productPlanningPhases.length} fases</span>
+                              </div>
+                            <p>{stripHtmlToText(product.summary)}</p>
                             </div>
-                            <p>{product.summary}</p>
                           </div>
-                        </div>
 
                         <div className="planning-gantt__cell">
                           <span>{productStartLabel}</span>
@@ -6699,7 +6924,11 @@ export function CourseWorkspacePage({
               <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
                 {selectedWritingProduct.status}
               </span>
-              <p>{selectedWritingProduct.summary}</p>
+              {renderRichTextContent(
+                selectedWritingProduct.summary,
+                'Sin descripción del producto.',
+                'writing-editor__summary-copy',
+              )}
             </div>
 
             <div className="writing-editor__meta">
@@ -6984,9 +7213,11 @@ export function CourseWorkspacePage({
                       <h4>Instrucciones del producto</h4>
                     </div>
                   </div>
-                  <pre className="writing-editor__structured-body">
-                    {selectedWritingProduct.body?.trim() || 'Sin instrucciones del producto.'}
-                  </pre>
+                  {renderRichTextContent(
+                    selectedWritingProduct.body?.trim() || '',
+                    'Sin instrucciones del producto.',
+                    'writing-editor__structured-body',
+                  )}
                 </article>
 
                 <article className="surface section-card section-card--compact">
