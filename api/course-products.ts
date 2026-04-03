@@ -62,6 +62,7 @@ export default async function handler(request: Request) {
       version: payload.version ?? '1.0',
       section: payload.section,
       phasePlan: payload.phasePlan,
+      writingData: payload.writingData,
     });
 
     if (!product) {

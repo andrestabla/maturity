@@ -227,6 +227,7 @@ export interface CourseProduct {
   version: string;
   section?: string;
   phasePlan: ProductPhasePlan[];
+  writingData: ProductWritingData;
   updatedAt: string;
 }
 
@@ -236,6 +237,37 @@ export interface ProductPhasePlan {
   endDate: string;
   assigneeId?: string;
   assigneeName?: string;
+}
+
+export type ProductWritingMode = 'upload' | 'ai' | 'manual';
+
+export interface ProductWritingAsset {
+  key: string;
+  url: string;
+  name: string;
+  contentType?: string;
+  size?: number;
+  uploadedAt: string;
+}
+
+export interface ProductWritingSection {
+  id: string;
+  title: string;
+  instructions: string;
+  content: string;
+  updatedAt?: string;
+}
+
+export interface ProductWritingData {
+  mode: ProductWritingMode;
+  submittedAsset?: ProductWritingAsset;
+  supportAssets: ProductWritingAsset[];
+  libraryResourceIds: string[];
+  extractedText: string;
+  draftText: string;
+  sections: ProductWritingSection[];
+  lastSavedAt?: string;
+  lastGeneratedAt?: string;
 }
 
 export interface AssistantCard {
@@ -647,6 +679,7 @@ export interface CourseProductMutationInput {
   version: string;
   section?: string;
   phasePlan?: ProductPhasePlan[];
+  writingData?: ProductWritingData;
 }
 
 export interface DeliverableMutationInput {

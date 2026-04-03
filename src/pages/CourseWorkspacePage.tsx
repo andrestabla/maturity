@@ -29,7 +29,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { SidePanel } from '../components/SidePanel.js';
 import { useModalStore } from '../store/modalStore.js';
@@ -38,6 +38,7 @@ import { ProgressRing } from '../components/ProgressRing.js';
 import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
 import type {
   AppData,
+  AuthUser,
   Course,
   CourseMetadataMutationInput,
   CourseProduct,
@@ -46,6 +47,9 @@ import type {
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
   CourseMutationInput,
+  ProductWritingAsset,
+  ProductWritingData,
+  ProductWritingSection,
   ProductPhasePlan,
   ProductPlanningPhase,
   Role,
@@ -81,6 +85,7 @@ import {
 interface CourseWorkspacePageProps {
   role: Role;
   userRole: Role;
+  viewer: AuthUser;
   appData: AppData;
   isLoading?: boolean;
   refreshAppData: () => void;
@@ -759,18 +764,96 @@ function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
   );
 }
 
+function buildWritingSectionsFromProduct(product: CourseProduct): ProductWritingSection[] {
+  const sections: ProductWritingSection[] = [];
+  let current: ProductWritingSection | null = null;
+
+  product.body.split('\n').forEach((rawLine) => {
+    const line = rawLine.trimEnd();
+
+    if (/^#\s+/.test(line)) {
+      if (current) {
+        const finalized = current as ProductWritingSection;
+        sections.push({
+          ...finalized,
+          instructions: finalized.instructions.trim(),
+        });
+      }
+
+      current = {
+        id: `section-${sections.length + 1}`,
+        title: line.replace(/^#\s+/, '').trim(),
+        instructions: '',
+        content: '',
+      };
+      return;
+    }
+
+    if (!current) {
+      return;
+    }
+
+    current.instructions = `${current.instructions}${current.instructions ? '\n' : ''}${line}`.trimEnd();
+  });
+
+  if (current) {
+    const finalized = current as ProductWritingSection;
+    sections.push({
+      ...finalized,
+      instructions: finalized.instructions.trim(),
+    });
+  }
+
+  if (sections.length > 0) {
+    return sections;
+  }
+
+  return [
+    {
+      id: 'section-general',
+      title: 'Desarrollo del producto',
+      instructions: product.body.trim(),
+      content: '',
+    },
+  ];
+}
+
+function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
+  const current = product.writingData;
+  return {
+    mode: current.mode ?? 'manual',
+    submittedAsset: current.submittedAsset,
+    supportAssets: current.supportAssets ?? [],
+    libraryResourceIds: current.libraryResourceIds ?? [],
+    extractedText: current.extractedText ?? '',
+    draftText: current.draftText ?? '',
+    sections:
+      current.sections && current.sections.length > 0
+        ? current.sections
+        : buildWritingSectionsFromProduct(product),
+    lastSavedAt: current.lastSavedAt,
+    lastGeneratedAt: current.lastGeneratedAt,
+  };
+}
+
+function getWritingPhase(product: CourseProduct) {
+  return product.phasePlan.find((phase) => phase.phase === 'escritura');
+}
+
 
 
 
 export function CourseWorkspacePage({
   role,
   userRole,
+  viewer,
   appData,
   isLoading,
   refreshAppData,
   mutateAppData,
 }: CourseWorkspacePageProps) {
   const { slug = '', section: sectionParam } = useParams<{ slug?: string; section?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showAlert, showConfirm } = useSystemDialog();
   const navigate = useNavigate();
   const course = getCourseBySlug(appData, slug);
@@ -842,6 +925,11 @@ export function CourseWorkspacePage({
   const [architectureProgress, setArchitectureProgress] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
+  const [writingError, setWritingError] = useState<string | null>(null);
+  const [isWritingSaving, setIsWritingSaving] = useState(false);
+  const [isWritingExtracting, setIsWritingExtracting] = useState(false);
+  const [isWritingUploadingSupport, setIsWritingUploadingSupport] = useState(false);
+  const [writingGeneratingSectionId, setWritingGeneratingSectionId] = useState<string | null>(null);
   const [planningSectionFilter, setPlanningSectionFilter] = useState('Todas');
   const [planningProductFilter, setPlanningProductFilter] = useState('');
   const [planningStartFilter, setPlanningStartFilter] = useState('');
@@ -976,6 +1064,7 @@ export function CourseWorkspacePage({
       products: [],
     }),
   );
+  const [writingDraft, setWritingDraft] = useState<ProductWritingData | null>(null);
   const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
     makeTeamMemberForm(),
   );
@@ -1260,6 +1349,50 @@ export function CourseWorkspacePage({
 
   const currentCourse = course;
   const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
+  const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
+  const canManageWritingWorkspace = userRole === 'Administrador' || userRole === 'Coordinador';
+  const courseLibraryResources = appData.libraryResources.filter(
+    (resource) => resource.courseSlug === currentCourse.slug,
+  );
+  const writingWorkQueue = architectureProducts
+    .filter((product) => {
+      if (canManageWritingWorkspace) {
+        return true;
+      }
+
+      if (role !== 'Experto') {
+        return false;
+      }
+
+      return getWritingPhase(product)?.assigneeId === viewer.id;
+    })
+    .slice()
+    .sort((left, right) => {
+      const leftEnd = parsePlanningDate(getWritingPhase(left)?.endDate);
+      const rightEnd = parsePlanningDate(getWritingPhase(right)?.endDate);
+
+      if (leftEnd && rightEnd) {
+        return leftEnd.getTime() - rightEnd.getTime();
+      }
+
+      if (leftEnd) {
+        return -1;
+      }
+
+      if (rightEnd) {
+        return 1;
+      }
+
+      return left.title.localeCompare(right.title, 'es');
+    });
+  const selectedWritingProduct =
+    activeSection === 'escritura' && writingProductQueryId
+      ? writingWorkQueue.find((product) => product.id === writingProductQueryId) ?? null
+      : null;
+  const canEditSelectedWritingProduct = Boolean(
+    selectedWritingProduct &&
+      (canManageWritingWorkspace || (role === 'Experto' && getWritingPhase(selectedWritingProduct)?.assigneeId === viewer.id)),
+  );
   const architecturePreviewProduct = architecturePreviewProductId
     ? architectureProducts.find((product) => product.id === architecturePreviewProductId) ?? null
     : null;
@@ -1267,6 +1400,22 @@ export function CourseWorkspacePage({
     ? architectureProducts.find((product) => product.id === planningProductId) ?? null
     : null;
   const activeUsers = appData.users.filter((user) => user.status !== 'Inactivo' && user.status !== 'Suspendido');
+
+  useEffect(() => {
+    if (selectedWritingProduct) {
+      setWritingDraft(normalizeWritingDraft(selectedWritingProduct));
+      setWritingError(null);
+      return;
+    }
+
+    setWritingDraft(null);
+
+    if (activeSection === 'escritura' && writingProductQueryId) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('product');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [activeSection, searchParams, selectedWritingProduct, setSearchParams, writingProductQueryId]);
   const taskProductOptions = currentCourse.products
     .slice()
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -1306,7 +1455,6 @@ export function CourseWorkspacePage({
     (deliverable) => deliverable.status !== 'Listo',
   ).length;
   const totalActivities = currentCourse.modules.reduce((sum, module) => sum + module.activities, 0);
-  const pendingTasksCount = relatedTasks.filter((task) => task.status !== 'Lista').length;
   const pendingObservationsCount = currentCourse.observations.filter(
     (observation) => observation.status !== 'Resuelta',
   ).length;
@@ -1499,11 +1647,21 @@ export function CourseWorkspacePage({
                 eyebrow: 'Escritura',
                 title: 'Zona dedicada de escritura',
                 description:
-                  'Fase de redacción y desarrollo de contenidos instruccionales detallados.',
+                  'Fase de autoría sobre productos planificados, con instrucciones claras y ventanas de trabajo por experto.',
                 stats: [
-                  { label: 'Entregables', value: String(deliverablesOpenCount) },
-                  { label: 'Hitos', value: String(upcomingMilestones.length) },
-                  { label: 'Tareas', value: String(pendingTasksCount) },
+                  { label: 'Productos', value: String(writingWorkQueue.length) },
+                  {
+                    label: 'Con fecha final',
+                    value: String(
+                      writingWorkQueue.filter((product) => Boolean(getWritingPhase(product)?.endDate)).length,
+                    ),
+                  },
+                  {
+                    label: 'Listos para escribir',
+                    value: String(
+                      writingWorkQueue.filter((product) => Boolean(product.body.trim())).length,
+                    ),
+                  },
                 ],
               }
           : activeSection === 'validacion'
@@ -3553,6 +3711,413 @@ export function CourseWorkspacePage({
     } finally {
       setIsPlanningSaving(false);
     }
+  }
+
+  function openWritingEditor(product: CourseProduct) {
+    const target = `/courses/${currentCourse.slug}/escritura?product=${encodeURIComponent(product.id)}`;
+    window.open(target, '_blank', 'noopener,noreferrer');
+  }
+
+  function closeWritingEditor() {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('product');
+    setSearchParams(nextParams, { replace: true });
+    setWritingError(null);
+  }
+
+  function updateWritingDraft(updater: (current: ProductWritingData) => ProductWritingData) {
+    setWritingDraft((current) => (current ? updater(current) : current));
+  }
+
+  function updateWritingSection(sectionId: string, key: keyof ProductWritingSection, value: string) {
+    updateWritingDraft((current) => {
+      const sections = current.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              [key]: value,
+              updatedAt: new Date().toISOString(),
+            }
+          : section,
+      );
+
+      return {
+        ...current,
+        sections,
+        draftText:
+          current.mode === 'ai'
+            ? sections
+                .map((section) => `# ${section.title}\n${section.content.trim()}`.trim())
+                .join('\n\n')
+                .trim()
+            : current.draftText,
+      };
+    });
+  }
+
+  async function handleWritingSave() {
+    if (!selectedWritingProduct || !writingDraft) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingSaving(true);
+
+    try {
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'save',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          writingData: {
+            ...writingDraft,
+            lastSavedAt: new Date().toISOString(),
+          },
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible guardar el producto en escritura.');
+      }
+
+      if (payload?.product) {
+        setWritingDraft(normalizeWritingDraft(payload.product));
+      }
+
+      refreshAppData();
+      await showAlert({
+        title: 'Producto guardado',
+        message: 'La escritura del producto quedó actualizada en el expediente del curso.',
+        tone: 'success',
+      });
+    } catch (error) {
+      setWritingError(
+        error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.',
+      );
+    } finally {
+      setIsWritingSaving(false);
+    }
+  }
+
+  async function handleWritingSubmissionUpload(file: File) {
+    if (!selectedWritingProduct || !writingDraft) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingExtracting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('scope', 'course');
+      formData.append('folder', `${currentCourse.slug}-writing`);
+
+      const uploadResponse = await fetch('/api/uploads', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData,
+      });
+      const uploadPayload = (await uploadResponse.json().catch(() => null)) as
+        | { error?: string; key?: string; url?: string }
+        | null;
+
+      if (!uploadResponse.ok || !uploadPayload?.key || !uploadPayload.url) {
+        throw new Error(uploadPayload?.error ?? 'No fue posible cargar el producto a R2.');
+      }
+
+      const asset: ProductWritingAsset = {
+        key: uploadPayload.key,
+        url: uploadPayload.url,
+        name: file.name,
+        contentType: file.type,
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'extract-upload',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          asset,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible digitalizar el producto cargado.');
+      }
+
+      if (payload?.product) {
+        setWritingDraft(normalizeWritingDraft(payload.product));
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setWritingError(
+        error instanceof Error ? error.message : 'No fue posible digitalizar el producto cargado.',
+      );
+    } finally {
+      setIsWritingExtracting(false);
+    }
+  }
+
+  async function handleWritingSupportUpload(files: FileList | null) {
+    if (!selectedWritingProduct || !writingDraft || !files?.length) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingUploadingSupport(true);
+
+    try {
+      const uploadedAssets: ProductWritingAsset[] = [];
+
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('scope', 'course');
+        formData.append('folder', `${currentCourse.slug}-knowledge`);
+
+        const uploadResponse = await fetch('/api/uploads', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: formData,
+        });
+        const uploadPayload = (await uploadResponse.json().catch(() => null)) as
+          | { error?: string; key?: string; url?: string }
+          | null;
+
+        if (!uploadResponse.ok || !uploadPayload?.key || !uploadPayload.url) {
+          throw new Error(uploadPayload?.error ?? `No fue posible cargar "${file.name}".`);
+        }
+
+        uploadedAssets.push({
+          key: uploadPayload.key,
+          url: uploadPayload.url,
+          name: file.name,
+          contentType: file.type,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+
+      const nextSupportAssets = [...writingDraft.supportAssets, ...uploadedAssets];
+
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'save',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          writingData: {
+            ...writingDraft,
+            mode: 'ai',
+            supportAssets: nextSupportAssets,
+          },
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible guardar los documentos de apoyo.');
+      }
+
+      if (payload?.product) {
+        setWritingDraft(normalizeWritingDraft(payload.product));
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setWritingError(
+        error instanceof Error ? error.message : 'No fue posible cargar los documentos de apoyo.',
+      );
+    } finally {
+      setIsWritingUploadingSupport(false);
+    }
+  }
+
+  async function handleGenerateWritingSection(section: ProductWritingSection) {
+    if (!selectedWritingProduct || !writingDraft) {
+      return;
+    }
+
+    setWritingError(null);
+    setWritingGeneratingSectionId(section.id);
+
+    try {
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate-section',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          sectionId: section.id,
+          sectionTitle: section.title,
+          sectionInstructions: section.instructions,
+          supportAssets: writingDraft.supportAssets,
+          libraryResourceIds: writingDraft.libraryResourceIds,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? `No fue posible generar "${section.title}".`);
+      }
+
+      if (payload?.product) {
+        setWritingDraft(normalizeWritingDraft(payload.product));
+      }
+
+      refreshAppData();
+    } catch (error) {
+      setWritingError(
+        error instanceof Error ? error.message : `No fue posible generar "${section.title}".`,
+      );
+    } finally {
+      setWritingGeneratingSectionId(null);
+    }
+  }
+
+  function renderWritingWorkspace() {
+    return (
+      <section className="page-stack">
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Escritura por producto</span>
+              <h3>Cola editorial del experto</h3>
+            </div>
+          </div>
+          <p className="section-lead">
+            Aquí aparecen los productos creados en arquitectura y ya planificados para la fase de
+            escritura. Se ordenan por fecha final y cada fila resume lo que se espera del experto
+            según el detalle estructurado del producto.
+          </p>
+        </article>
+
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Bandeja</span>
+              <h3>{role === 'Experto' ? 'Productos asignados para redactar' : 'Seguimiento de escritura'}</h3>
+            </div>
+          </div>
+
+          {writingWorkQueue.length === 0 ? (
+            <div className="empty-state">
+              <strong>No hay productos disponibles en escritura</strong>
+              <p>
+                {role === 'Experto'
+                  ? 'Cuando el coordinador te asigne productos en planeación, aparecerán aquí ordenados por fecha final.'
+                  : 'La etapa de escritura mostrará aquí los productos planificados para autoría.'}
+              </p>
+            </div>
+          ) : (
+            <div className="writing-queue">
+              {writingWorkQueue.map((product) => {
+                const writingPhase = getWritingPhase(product);
+                const structuredLines = product.body
+                  .split('\n')
+                  .map((line) => line.trim())
+                  .filter(Boolean)
+                  .slice(0, 5);
+                const dueLabel = writingPhase?.endDate ? formatDate(writingPhase.endDate) : 'Sin fecha final';
+                const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
+                const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
+
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className="writing-queue__item"
+                    onClick={() => openWritingEditor(product)}
+                  >
+                    <div className="writing-queue__head">
+                      <div>
+                        <span className="badge badge--outline">{product.section ?? 'Introducción'}</span>
+                        <h4>{product.title}</h4>
+                      </div>
+                      <div className="writing-queue__meta">
+                        <span className="badge badge--outline">{product.format}</span>
+                        <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                      </div>
+                    </div>
+
+                    <div className="writing-queue__schedule">
+                      <div>
+                        <span className="eyebrow">Inicio</span>
+                        <strong>{startLabel}</strong>
+                      </div>
+                      <div>
+                        <span className="eyebrow">Fecha final</span>
+                        <strong>{dueLabel}</strong>
+                      </div>
+                      <div>
+                        <span className="eyebrow">Responsable</span>
+                        <strong>{assigneeLabel}</strong>
+                      </div>
+                    </div>
+
+                    <p className="writing-queue__summary">{product.summary}</p>
+
+                    <div className="writing-queue__specs">
+                      <span className="eyebrow">Detalle estructurado</span>
+                      {structuredLines.length > 0 ? (
+                        <ul className="writing-queue__spec-list">
+                          {structuredLines.map((line, index) => (
+                            <li key={`${product.id}-spec-${index}`}>{line}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="writing-queue__muted">Sin detalle estructurado definido.</p>
+                      )}
+                    </div>
+
+                    <div className="writing-queue__cta">
+                      <span>Abrir en nueva pestaña</span>
+                      <MoveRight size={16} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </article>
+      </section>
+    );
   }
 
   function updateProductDraft<Key extends keyof CourseProductMutationInput>(
@@ -6048,21 +6613,367 @@ export function CourseWorkspacePage({
         </ModalFrame>
       ) : null}
 
+      {selectedWritingProduct && writingDraft ? (
+        <SidePanel
+          isOpen={Boolean(selectedWritingProduct)}
+          onClose={closeWritingEditor}
+          title={`Escritura · ${selectedWritingProduct.title}`}
+          description="Trabaja el producto en una pestaña dedicada. Puedes cargar un archivo, apoyarte en IA o redactar desde cero siguiendo el detalle estructurado."
+          sideLabel="Escritura"
+          sideDescription="PRODUCTO"
+          width="2xl"
+          footer={
+            <div className="flex justify-end gap-3 w-full">
+              <button type="button" className="ghost-button" onClick={closeWritingEditor}>
+                Cerrar
+              </button>
+              {canEditSelectedWritingProduct ? (
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={isWritingSaving}
+                  onClick={() => void handleWritingSave()}
+                >
+                  <Save size={16} />
+                  <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
+                </button>
+              ) : null}
+            </div>
+          }
+        >
+          <div className="page-stack">
+            <div className="writing-editor__summary">
+              <span className="badge badge--outline">{selectedWritingProduct.section ?? 'Introducción'}</span>
+              <span className="badge badge--outline">{selectedWritingProduct.format}</span>
+              <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
+                {selectedWritingProduct.status}
+              </span>
+              <p>{selectedWritingProduct.summary}</p>
+            </div>
+
+            <div className="writing-editor__meta">
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Fecha de inicio</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.startDate ? formatDate(getWritingPhase(selectedWritingProduct)?.startDate ?? '') : 'Sin fecha'}</strong>
+              </article>
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Fecha final</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.endDate ? formatDate(getWritingPhase(selectedWritingProduct)?.endDate ?? '') : 'Sin fecha'}</strong>
+              </article>
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Responsable</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.assigneeName || 'Sin asignación'}</strong>
+              </article>
+            </div>
+
+            {writingError ? <p className="form-error">{writingError}</p> : null}
+
+            <div className="writing-mode-switch">
+              {[
+                ['upload', 'Subir producto'],
+                ['ai', 'Generarlo con IA'],
+                ['manual', 'Redactar desde cero'],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={writingDraft.mode === mode ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  disabled={!canEditSelectedWritingProduct}
+                  onClick={() =>
+                    updateWritingDraft((current) => ({
+                      ...current,
+                      mode: mode as ProductWritingData['mode'],
+                    }))
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="writing-editor__layout">
+              <section className="writing-editor__workspace">
+                {writingDraft.mode === 'upload' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 1</span>
+                        <h4>Subir producto y digitalizar</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Carga un archivo `.docx` o `.pdf`. El sistema lo almacenará en R2 y lo
+                      convertirá a texto editable para revisión posterior.
+                    </p>
+
+                    {canEditSelectedWritingProduct ? (
+                      <label className="field">
+                        <span>Archivo del producto</span>
+                        <div className="field__control">
+                          <input
+                            type="file"
+                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            disabled={isWritingExtracting}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) {
+                                void handleWritingSubmissionUpload(file);
+                              }
+                            }}
+                          />
+                        </div>
+                      </label>
+                    ) : null}
+
+                    {writingDraft.submittedAsset ? (
+                      <div className="writing-editor__asset">
+                        <strong>{writingDraft.submittedAsset.name}</strong>
+                        <a href={writingDraft.submittedAsset.url} target="_blank" rel="noreferrer">
+                          Ver archivo cargado
+                        </a>
+                      </div>
+                    ) : null}
+
+                    <label className="field">
+                      <span>Texto digitalizado</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={16}
+                          value={writingDraft.draftText || writingDraft.extractedText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="Aquí aparecerá el texto digitalizado del archivo cargado."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+
+                {writingDraft.mode === 'ai' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 2</span>
+                        <h4>Generar producto con asistente IA</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Adjunta documentos base o selecciona recursos de la biblioteca. La IA redacta
+                      cada parte usando el detalle estructurado del producto.
+                    </p>
+
+                    {canEditSelectedWritingProduct ? (
+                      <label className="field">
+                        <span>Documentos base</span>
+                        <div className="field__control">
+                          <input
+                            type="file"
+                            multiple
+                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            disabled={isWritingUploadingSupport}
+                            onChange={(event) => {
+                              void handleWritingSupportUpload(event.target.files);
+                            }}
+                          />
+                        </div>
+                      </label>
+                    ) : null}
+
+                    {writingDraft.supportAssets.length > 0 ? (
+                      <div className="tag-token-list">
+                        {writingDraft.supportAssets.map((asset) => (
+                          <span key={asset.key} className="tag-token">
+                            {asset.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="field-help">Todavía no hay documentos base cargados.</p>
+                    )}
+
+                    <div className="form-section">
+                      <strong>Recursos de biblioteca para la IA</strong>
+                      {courseLibraryResources.length > 0 ? (
+                        <div className="role-picker-panel">
+                          {courseLibraryResources.map((resource) => (
+                            <label key={resource.id} className="checkbox-card">
+                              <input
+                                type="checkbox"
+                                checked={writingDraft.libraryResourceIds.includes(resource.id)}
+                                disabled={!canEditSelectedWritingProduct}
+                                onChange={(event) =>
+                                  updateWritingDraft((current) => ({
+                                    ...current,
+                                    libraryResourceIds: event.target.checked
+                                      ? [...current.libraryResourceIds, resource.id]
+                                      : current.libraryResourceIds.filter((id) => id !== resource.id),
+                                  }))
+                                }
+                              />
+                              <span>
+                                {resource.title} · {resource.unit}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="field-help">No hay recursos de biblioteca vinculados a este curso.</p>
+                      )}
+                    </div>
+
+                    <div className="writing-sections">
+                      {writingDraft.sections.map((section) => (
+                        <article key={section.id} className="writing-section-card">
+                          <div className="writing-section-card__head">
+                            <div>
+                              <span className="eyebrow">Parte del producto</span>
+                              <h4>{section.title}</h4>
+                            </div>
+                            {canEditSelectedWritingProduct ? (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                disabled={writingGeneratingSectionId === section.id}
+                                onClick={() => void handleGenerateWritingSection(section)}
+                              >
+                                <Sparkles size={16} />
+                                <span>
+                                  {writingGeneratingSectionId === section.id ? 'Generando…' : 'Generar esta parte'}
+                                </span>
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <div className="writing-section-card__body">
+                            <div className="writing-section-card__instructions">
+                              <strong>Instrucciones</strong>
+                              <p>{section.instructions || 'Sin instrucciones específicas.'}</p>
+                            </div>
+                            <label className="field">
+                              <span>Borrador</span>
+                              <div className="field__control">
+                                <textarea
+                                  rows={10}
+                                  value={section.content}
+                                  readOnly={!canEditSelectedWritingProduct}
+                                  onChange={(event) =>
+                                    updateWritingSection(section.id, 'content', event.target.value)
+                                  }
+                                  placeholder="Aquí se redactará esta parte del producto."
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    <label className="field">
+                      <span>Documento consolidado</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={16}
+                          value={writingDraft.draftText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="La consolidación del producto aparecerá aquí a medida que la IA redacte sus partes."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+
+                {writingDraft.mode === 'manual' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 3</span>
+                        <h4>Redactar desde cero</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Usa el detalle estructurado como guía y redacta directamente el producto.
+                    </p>
+                    <label className="field">
+                      <span>Texto del producto</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={22}
+                          value={writingDraft.draftText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="Empieza aquí la redacción del producto."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+              </section>
+
+              <aside className="writing-editor__reference">
+                <article className="surface section-card section-card--compact">
+                  <div className="section-heading">
+                    <div>
+                      <span className="eyebrow">Guía</span>
+                      <h4>Detalle estructurado</h4>
+                    </div>
+                  </div>
+                  <pre className="writing-editor__structured-body">
+                    {selectedWritingProduct.body?.trim() || 'Sin detalle estructurado.'}
+                  </pre>
+                </article>
+
+                <article className="surface section-card section-card--compact">
+                  <div className="section-heading">
+                    <div>
+                      <span className="eyebrow">Estado</span>
+                      <h4>Expediente de escritura</h4>
+                    </div>
+                  </div>
+                  <div className="list-stack">
+                    <div className="list-item">
+                      <div>
+                        <strong>Modo actual</strong>
+                        <p>{writingDraft.mode === 'upload' ? 'Carga digitalizada' : writingDraft.mode === 'ai' ? 'Asistente IA' : 'Redacción manual'}</p>
+                      </div>
+                    </div>
+                    <div className="list-item">
+                      <div>
+                        <strong>Texto guardado</strong>
+                        <p>{writingDraft.draftText.trim() ? 'Sí' : 'Aún no'}</p>
+                      </div>
+                    </div>
+                    <div className="list-item">
+                      <div>
+                        <strong>Último guardado</strong>
+                        <p>{writingDraft.lastSavedAt ? formatDate(writingDraft.lastSavedAt.slice(0, 10)) : 'Sin guardar'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </aside>
+            </div>
+          </div>
+        </SidePanel>
+      ) : null}
+
       {activeSection === 'escritura' ? (
-        <section className="workspace-grid">
-          {renderProductStudio(
-            'escritura',
-            'Escritura y autoría',
-            'Desarrollo de contenidos y guías',
-            'En esta etapa se redactan las actividades, guiones, instrucciones y materiales base para el curso.',
-          )}
-          {renderStageNoteEditor(
-            'escritura',
-            'Autoría',
-            'Avances y borradores',
-            'Registra aquí el progreso de la redacción académica y técnica.',
-          )}
-        </section>
+        renderWritingWorkspace()
       ) : null}
 
       {activeSection === 'validacion' ? (

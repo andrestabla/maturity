@@ -35,6 +35,9 @@ import type {
   PasswordChangeInput,
   ProductPhasePlan,
   ProductPlanningPhase,
+  ProductWritingAsset,
+  ProductWritingData,
+  ProductWritingSection,
   Role,
   RoleProfile,
   StageCheckpoint,
@@ -102,6 +105,7 @@ interface CourseProductRow {
   version: string;
   section: string | null;
   phasePlan: JsonValue;
+  writingData: JsonValue;
   createdAt: string;
   updatedAt: string;
 }
@@ -762,6 +766,7 @@ function buildDefaultCourseProducts(
       tags: ['sílabus', 'base'],
       version: 'v1.0',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -781,6 +786,7 @@ function buildDefaultCourseProducts(
       tags: ['pedagogía', 'módulos'],
       version: 'v1.1',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -800,6 +806,7 @@ function buildDefaultCourseProducts(
       tags: ['autoría', 'actividades'],
       version: 'v0.9',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -819,6 +826,7 @@ function buildDefaultCourseProducts(
       tags: ['validación', 'instruccional'],
       version: 'v0.8',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -835,6 +843,7 @@ function buildDefaultCourseProducts(
       tags: ['multimedia', 'html', 'propio'],
       version: 'v0.6',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -849,6 +858,7 @@ function buildDefaultCourseProducts(
       tags: ['lms', 'montaje', 'técnico'],
       version: 'v1.0',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
     {
@@ -865,6 +875,7 @@ function buildDefaultCourseProducts(
       tags: ['qa', 'quality-matters'],
       version: 'v1.0',
       phasePlan: [],
+      writingData: normalizeProductWritingData(),
       updatedAt: course.updatedAt,
     },
   ];
@@ -896,11 +907,13 @@ function normalizeCourse(course: Course): Course {
           .map((product) => ({
             ...product,
             phasePlan: normalizeProductPhasePlan(product.phasePlan),
+            writingData: normalizeProductWritingData(product.writingData),
           }))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       : defaultProducts.map((product) => ({
           ...product,
           phasePlan: normalizeProductPhasePlan(product.phasePlan),
+          writingData: normalizeProductWritingData(product.writingData),
         }));
 
   const normalizedAuditLog =
@@ -1128,6 +1141,53 @@ function normalizeProductPhasePlan(
   });
 }
 
+function normalizeProductWritingAssets(assets?: ProductWritingAsset[]): ProductWritingAsset[] {
+  return (assets ?? [])
+    .filter((asset): asset is ProductWritingAsset => Boolean(asset?.key && asset?.url && asset?.name))
+    .map((asset) => ({
+      key: asset.key.trim(),
+      url: asset.url.trim(),
+      name: asset.name.trim(),
+      contentType: asset.contentType?.trim() || undefined,
+      size: typeof asset.size === 'number' && Number.isFinite(asset.size) ? asset.size : undefined,
+      uploadedAt: asset.uploadedAt?.trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeProductWritingSections(sections?: ProductWritingSection[]): ProductWritingSection[] {
+  return (sections ?? [])
+    .filter((section): section is ProductWritingSection => Boolean(section?.title))
+    .map((section, index) => ({
+      id: section.id?.trim() || `section-${index + 1}`,
+      title: section.title.trim(),
+      instructions: section.instructions?.trim?.() ?? '',
+      content: section.content?.trim?.() ?? '',
+      updatedAt: section.updatedAt?.trim() || undefined,
+    }));
+}
+
+function normalizeProductWritingData(writingData?: ProductWritingData): ProductWritingData {
+  return {
+    mode:
+      writingData?.mode === 'upload' || writingData?.mode === 'ai' || writingData?.mode === 'manual'
+        ? writingData.mode
+        : 'manual',
+    submittedAsset:
+      writingData?.submittedAsset?.key && writingData.submittedAsset.url && writingData.submittedAsset.name
+        ? normalizeProductWritingAssets([writingData.submittedAsset])[0]
+        : undefined,
+    supportAssets: normalizeProductWritingAssets(writingData?.supportAssets),
+    libraryResourceIds: (writingData?.libraryResourceIds ?? [])
+      .map((item) => item?.trim?.() ?? '')
+      .filter(Boolean),
+    extractedText: writingData?.extractedText?.trim?.() ?? '',
+    draftText: writingData?.draftText?.trim?.() ?? '',
+    sections: normalizeProductWritingSections(writingData?.sections),
+    lastSavedAt: writingData?.lastSavedAt?.trim() || undefined,
+    lastGeneratedAt: writingData?.lastGeneratedAt?.trim() || undefined,
+  };
+}
+
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
   return {
     id: crypto.randomUUID(),
@@ -1142,6 +1202,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     version: input.version?.trim?.() || '1.0',
     section: input.section?.trim() || undefined,
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
+    writingData: normalizeProductWritingData(input.writingData),
     updatedAt: getTodayLabel(),
   };
 }
@@ -2306,6 +2367,7 @@ async function backfillCourseProductsTable() {
           version,
           section,
           phase_plan,
+          writing_data,
           created_at,
           updated_at
         )
@@ -2323,6 +2385,7 @@ async function backfillCourseProductsTable() {
           ${product.version},
           ${product.section ?? null},
           ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
+          ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
           ${product.updatedAt},
           ${product.updatedAt}
         )
@@ -2340,6 +2403,7 @@ async function backfillCourseProductsTable() {
           version = EXCLUDED.version,
           section = EXCLUDED.section,
           phase_plan = EXCLUDED.phase_plan,
+          writing_data = EXCLUDED.writing_data,
           updated_at = EXCLUDED.updated_at
       `;
     }
@@ -2379,6 +2443,7 @@ async function syncCourseProductsTable(course: Course) {
         version,
         section,
         phase_plan,
+        writing_data,
         created_at,
         updated_at
       )
@@ -2396,6 +2461,7 @@ async function syncCourseProductsTable(course: Course) {
         ${product.version},
         ${product.section ?? null},
         ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
+        ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
         ${product.updatedAt},
         ${product.updatedAt}
       )
@@ -2413,6 +2479,7 @@ async function syncCourseProductsTable(course: Course) {
         version = EXCLUDED.version,
         section = EXCLUDED.section,
         phase_plan = EXCLUDED.phase_plan,
+        writing_data = EXCLUDED.writing_data,
         updated_at = EXCLUDED.updated_at
     `;
   }
@@ -2439,6 +2506,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
       version,
       section,
       phase_plan AS "phasePlan",
+      writing_data AS "writingData",
       created_at AS "createdAt",
       updated_at AS "updatedAt"
     FROM maturity_course_products
@@ -2459,7 +2527,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 15; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 16; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -2823,6 +2891,7 @@ async function ensureSchema() {
         version TEXT NOT NULL DEFAULT '1.0',
         section TEXT,
         phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb,
+        writing_data JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -2831,6 +2900,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_course_products
       ADD COLUMN IF NOT EXISTS phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_course_products
+      ADD COLUMN IF NOT EXISTS writing_data JSONB NOT NULL DEFAULT '{}'::jsonb
     `;
 
     await sql`
@@ -3349,6 +3423,15 @@ async function ensureSchema() {
       await rebuildUserInstitutionMemberships();
     }
 
+    // Migration 16: Persist product writing workspace state
+    if (currentVersion < 16) {
+      await sql`
+        UPDATE maturity_course_products
+        SET writing_data = '{}'::jsonb
+        WHERE writing_data IS NULL
+      `;
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -3463,6 +3546,7 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     version: row.version,
     section: row.section ?? undefined,
     phasePlan: normalizeProductPhasePlan(parseJson<ProductPhasePlan[]>(row.phasePlan ?? [])),
+    writingData: normalizeProductWritingData(parseJson<ProductWritingData>(row.writingData ?? {})),
     updatedAt: row.updatedAt,
   };
 }
@@ -4937,6 +5021,10 @@ export async function updateCourseProductRecord(
         input.phasePlan !== undefined
           ? normalizeProductPhasePlan(input.phasePlan)
           : product.phasePlan,
+      writingData:
+        input.writingData !== undefined
+          ? normalizeProductWritingData(input.writingData)
+          : product.writingData,
       updatedAt: getTodayLabel(),
     };
 

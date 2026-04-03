@@ -260,6 +260,7 @@ export default function App() {
               <CourseWorkspacePage
                 role={activeRole}
                 userRole={session.user.role}
+                viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
                 refreshAppData={refreshAppData}
@@ -273,6 +274,7 @@ export default function App() {
               <CourseWorkspacePage
                 role={activeRole}
                 userRole={session.user.role}
+                viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
                 refreshAppData={refreshAppData}
