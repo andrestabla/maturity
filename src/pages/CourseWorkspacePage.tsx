@@ -56,6 +56,7 @@ import type {
   LibraryResource,
   ProductWritingAsset,
   ProductWritingData,
+  ProductWritingMode,
   ProductWritingSection,
   ProductPhasePlan,
   ProductPlanningPhase,
@@ -1766,6 +1767,7 @@ export function CourseWorkspacePage({
     }),
   );
   const [writingDraft, setWritingDraft] = useState<ProductWritingData | null>(null);
+  const [selectedWritingMode, setSelectedWritingMode] = useState<ProductWritingMode | null>(null);
   const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
     makeTeamMemberForm(),
   );
@@ -2133,12 +2135,14 @@ export function CourseWorkspacePage({
   useEffect(() => {
     if (selectedWritingProduct) {
       setWritingDraft(normalizeWritingDraft(selectedWritingProduct));
+      setSelectedWritingMode(null);
       setWritingError(null);
       setIsWritingInstructionsPanelOpen(false);
       return;
     }
 
     setWritingDraft(null);
+    setSelectedWritingMode(null);
     setIsWritingInstructionsPanelOpen(false);
 
     if (activeSection === 'escritura' && writingProductQueryId && !isLoading) {
@@ -4877,6 +4881,7 @@ export function CourseWorkspacePage({
       writingDraft.sections,
     );
     const aiPromptValue = writingDraft.aiPrompt?.trim() || suggestedWritingPrompt;
+    const activeWritingMode = selectedWritingMode;
 
     const renderStepBadge = (status: 'done' | 'active' | 'pending') => {
       if (status === 'done') {
@@ -4918,7 +4923,6 @@ export function CourseWorkspacePage({
 
     const renderSectionEditors = (options?: {
       modeLabel?: string;
-      showInstructions?: boolean;
       allowGenerate?: boolean;
     }) => (
       <div className="writing-structured-workspace">
@@ -4958,12 +4962,6 @@ export function CourseWorkspacePage({
                   </button>
                 ) : null}
               </div>
-              {options?.showInstructions ? (
-                <div className="writing-structured-card__guide">
-                  <strong>Qué debe resolver esta parte</strong>
-                  <p>{section.instructions || 'Sin instrucciones específicas para esta sección.'}</p>
-                </div>
-              ) : null}
               <RichTextEditor
                 value={section.content}
                 onChange={(value) => updateWritingSection(section.id, 'content', value)}
@@ -5119,6 +5117,8 @@ export function CourseWorkspacePage({
         steps: ['Estructura', 'Redacción', 'Revisión'],
       },
     ];
+    const activeModeDefinition =
+      writingModes.find((mode) => mode.id === activeWritingMode) ?? null;
 
     return (
       <>
@@ -5174,39 +5174,62 @@ export function CourseWorkspacePage({
 
           {writingError ? <p className="form-error">{writingError}</p> : null}
 
-          <div className="writing-mode-cards">
-            {writingModes.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                className={
-                  writingDraft.mode === mode.id
-                    ? 'writing-mode-card writing-mode-card--active'
-                    : 'writing-mode-card'
-                }
-                disabled={!canEditSelectedWritingProduct}
-                onClick={() =>
-                  updateWritingDraft((current) => ({
-                    ...current,
-                    mode: mode.id,
-                  }))
-                }
-              >
-                <span className="eyebrow">{mode.eyebrow}</span>
-                <strong>{mode.title}</strong>
-                <p>{mode.description}</p>
-                <div className="writing-mode-card__steps">
-                  {mode.steps.map((step) => (
-                    <span key={step}>{step}</span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
+          {!activeWritingMode ? (
+            <div className="writing-mode-selector">
+              <div className="writing-mode-selector__intro">
+                <span className="eyebrow">Elige una ruta de trabajo</span>
+                <h4>Selecciona cómo quieres construir este producto</h4>
+                <p>
+                  Primero elige una de las tres opciones. La experiencia se personalizará por pasos
+                  según esa elección y no mostrará información de las demás rutas.
+                </p>
+              </div>
+              <div className="writing-mode-cards">
+                {writingModes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={`writing-mode-card writing-mode-card--${mode.id}`}
+                    disabled={!canEditSelectedWritingProduct}
+                    onClick={() => {
+                      setSelectedWritingMode(mode.id);
+                      updateWritingDraft((current) => ({
+                        ...current,
+                        mode: mode.id,
+                      }));
+                    }}
+                  >
+                    <span className="eyebrow">{mode.eyebrow}</span>
+                    <strong>{mode.title}</strong>
+                    <p>{mode.description}</p>
+                    <div className="writing-mode-card__steps">
+                      {mode.steps.map((step) => (
+                        <span key={step}>{step}</span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="writing-editor__layout writing-editor__layout--solo writing-editor__layout--flow">
+              <section className="writing-editor__workspace">
+                <article className="surface-soft writing-mode-active">
+                  <div>
+                    <span className="eyebrow">{activeModeDefinition?.eyebrow ?? 'Ruta activa'}</span>
+                    <h4>{activeModeDefinition?.title ?? 'Ruta de trabajo'}</h4>
+                    <p>{activeModeDefinition?.description ?? ''}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setSelectedWritingMode(null)}
+                  >
+                    <span>Cambiar opción</span>
+                  </button>
+                </article>
 
-          <div className="writing-editor__layout writing-editor__layout--solo writing-editor__layout--flow">
-            <section className="writing-editor__workspace">
-              {writingDraft.mode === 'upload' ? (
+                {activeWritingMode === 'upload' ? (
                 <article className="surface section-card section-card--compact writing-flow-card">
                   <div className="section-heading">
                     <div>
@@ -5260,12 +5283,11 @@ export function CourseWorkspacePage({
 
                   {renderSectionEditors({
                     modeLabel: 'Subir producto',
-                    showInstructions: true,
                   })}
                 </article>
               ) : null}
 
-              {writingDraft.mode === 'ai' ? (
+              {activeWritingMode === 'ai' ? (
                 <article className="surface section-card section-card--compact writing-flow-card">
                   <div className="section-heading">
                     <div>
@@ -5428,14 +5450,13 @@ export function CourseWorkspacePage({
                     </div>
                     {renderSectionEditors({
                       modeLabel: 'Generarlo con IA',
-                      showInstructions: true,
                       allowGenerate: true,
                     })}
                   </div>
                 </article>
               ) : null}
 
-              {writingDraft.mode === 'manual' ? (
+              {activeWritingMode === 'manual' ? (
                 <article className="surface section-card section-card--compact writing-flow-card">
                   <div className="section-heading">
                     <div>
@@ -5449,12 +5470,12 @@ export function CourseWorkspacePage({
                   {renderStepList(manualSteps)}
                   {renderSectionEditors({
                     modeLabel: 'Redactar desde cero',
-                    showInstructions: true,
                   })}
                 </article>
               ) : null}
-            </section>
-          </div>
+              </section>
+            </div>
+          )}
 
           <div className="writing-editor__footer">
             <button type="button" className="ghost-button" onClick={closeWritingEditor}>
