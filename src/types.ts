@@ -263,6 +263,7 @@ export interface ProductWritingData {
   submittedAsset?: ProductWritingAsset;
   supportAssets: ProductWritingAsset[];
   libraryResourceIds: string[];
+  aiPrompt?: string;
   extractedText: string;
   draftText: string;
   sections: ProductWritingSection[];

@@ -1180,6 +1180,7 @@ function normalizeProductWritingData(writingData?: ProductWritingData): ProductW
     libraryResourceIds: (writingData?.libraryResourceIds ?? [])
       .map((item) => item?.trim?.() ?? '')
       .filter(Boolean),
+    aiPrompt: writingData?.aiPrompt?.trim?.() || undefined,
     extractedText: writingData?.extractedText?.trim?.() ?? '',
     draftText: writingData?.draftText?.trim?.() ?? '',
     sections: normalizeProductWritingSections(writingData?.sections),

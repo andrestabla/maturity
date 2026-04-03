@@ -35,6 +35,7 @@ interface WritingPayload {
   sectionTitle?: string;
   sectionInstructions?: string;
   supportAssets?: ProductWritingAsset[];
+  aiPrompt?: string;
 }
 
 function canEditWritingProduct(user: Awaited<ReturnType<typeof getSessionUser>>, product: CourseProduct) {
@@ -54,65 +55,247 @@ function canEditWritingProduct(user: Awaited<ReturnType<typeof getSessionUser>>,
   return writingPhase?.assigneeId === user.id;
 }
 
-function normalizeHeading(line: string) {
-  return line
-    .replace(/^#+\s*/, '')
-    .replace(/^[-*]\s*/, '')
+const writingSectionTemplatesByFormat: Record<string, string[]> = {
+  video: ['Título', 'Inicio o introducción', 'Desarrollo', 'Cierre'],
+  documento: ['Título', 'Introducción', 'Desarrollo', 'Conclusiones', 'Bibliografía'],
+  evaluacion: ['Título', 'Instrucciones', 'Preguntas', 'Retroalimentación'],
+  actividad: ['Título', 'Contexto', 'Instrucciones', 'Entregable esperado', 'Criterios de evaluación'],
+  lectura: ['Título', 'Introducción', 'Desarrollo', 'Conclusiones', 'Bibliografía'],
+  infografia: ['Título', 'Mensaje central', 'Desarrollo visual', 'Cierre', 'Fuentes'],
+  podcast: ['Título', 'Apertura', 'Desarrollo', 'Cierre'],
+  guia: ['Título', 'Introducción', 'Desarrollo', 'Cierre', 'Bibliografía'],
+};
+
+function normalizeWritingTemplateKey(format: string) {
+  return format
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
+function slugifyWritingSectionTitle(title: string) {
+  return title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
     .trim();
 }
 
-function buildStructuredSections(product: CourseProduct): ProductWritingSection[] {
-  const sections: ProductWritingSection[] = [];
-  let current: ProductWritingSection | null = null;
+function stripHtml(value: string) {
+  return value
+    .replace(/<br\s*\/?>/giu, '\n')
+    .replace(/<\/(p|div|li|ul|ol|blockquote|h[1-6]|section)>/giu, '\n')
+    .replace(/<li>/giu, '• ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
 
-  product.body.split('\n').forEach((rawLine) => {
-    const line = rawLine.trimEnd();
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
 
-    if (/^#\s+/.test(line)) {
-      if (current) {
-        const finalized = current as ProductWritingSection;
-        const finalizedSection = {
-          ...finalized,
-          instructions: finalized.instructions.trim(),
-        };
-        sections.push(finalizedSection);
-      }
-      current = {
-        id: `section-${sections.length + 1}`,
-        title: normalizeHeading(line),
-        instructions: '',
-        content: '',
-      };
+function normalizePlainTextToHtml(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function inferWritingSectionTitlesFromText(text: string, format: string) {
+  const plain = stripHtml(text)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+  const foundTitles: string[] = [];
+  const seen = new Set<string>();
+  const knownHeadings = [
+    'titulo',
+    'introduccion',
+    'inicio',
+    'apertura',
+    'desarrollo',
+    'cierre',
+    'conclusiones',
+    'bibliografia',
+    'fuentes',
+    'preguntas',
+    'retroalimentacion',
+    'contexto',
+    'instrucciones',
+    'entregable esperado',
+    'criterios de evaluacion',
+    'mensaje central',
+    'desarrollo visual',
+  ];
+
+  plain.split('\n').forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
       return;
     }
 
-    if (!current) {
+    const headingMatch = line.match(/^(?:\d+[\).\s-]+)?([A-ZÁÉÍÓÚÑ][^:]{2,80})(?::|\s*$)/u);
+    if (!headingMatch) {
       return;
     }
 
-    current.instructions = `${current.instructions}${current.instructions ? '\n' : ''}${line}`.trimEnd();
+    const normalized = headingMatch[1]
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+    if (!knownHeadings.some((keyword) => normalized.includes(keyword))) {
+      return;
+    }
+
+    const title = headingMatch[1].trim();
+    const key = slugifyWritingSectionTitle(title);
+    if (!key || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    foundTitles.push(title);
   });
 
-  if (current) {
-    const finalized = current as ProductWritingSection;
-    sections.push({
-      ...finalized,
-      instructions: finalized.instructions.trim(),
-    });
+  if (foundTitles.length > 1) {
+    return foundTitles;
   }
 
-  if (sections.length > 0) {
-    return sections;
-  }
+  return (
+    writingSectionTemplatesByFormat[normalizeWritingTemplateKey(format)] ?? [
+      'Título',
+      'Introducción',
+      'Desarrollo',
+      'Cierre',
+    ]
+  );
+}
 
-  return [
-    {
-      id: 'section-general',
-      title: 'Desarrollo del producto',
-      instructions: product.body.trim(),
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: string) {
+  const plainInstructionText = stripHtml(instructionHtml)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+
+  return titles.map((title, index) => {
+    const headingPattern = new RegExp(
+      `(?:^|\\n)(?:\\d+[.)\\s-]+)?${escapeRegex(title)}:?\\s*([\\s\\S]*?)(?=(?:\\n(?:\\d+[.)\\s-]+)?(?:${titles
+        .filter((candidate) => candidate !== title)
+        .map((candidate) => escapeRegex(candidate))
+        .join('|')}):?\\s*)|$)`,
+      'i',
+    );
+    const match = plainInstructionText.match(headingPattern);
+    const sectionInstruction = match?.[1]?.trim() || plainInstructionText;
+
+    return {
+      id: slugifyWritingSectionTitle(title) || `section-${index + 1}`,
+      title,
+      instructions: sectionInstruction,
       content: '',
-    },
-  ];
+    } satisfies ProductWritingSection;
+  });
+}
+
+function createWritingDraftTextFromSections(sections: ProductWritingSection[]) {
+  return sections
+    .map((section) => {
+      const cleanContent = section.content.trim();
+      if (!cleanContent) {
+        return '';
+      }
+      return `<section data-section="${escapeHtml(section.title)}"><h3>${escapeHtml(section.title)}</h3>${cleanContent}</section>`;
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function hydrateWritingSectionsFromText(
+  baseSections: ProductWritingSection[],
+  sourceText: string,
+): ProductWritingSection[] {
+  const cleanText = sourceText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!cleanText) {
+    return baseSections;
+  }
+
+  const nextSections = baseSections.map((section) => ({ ...section, content: '' }));
+
+  if (nextSections.length === 1) {
+    nextSections[0].content = normalizePlainTextToHtml(cleanText);
+    nextSections[0].updatedAt = new Date().toISOString();
+    return nextSections;
+  }
+
+  const normalizedLines = cleanText.split('\n');
+  let currentSectionIndex = 0;
+  const sectionMatchers = nextSections.map((section) => {
+    const variants = [
+      section.title,
+      section.title.replace(/\s+o\s+/gi, ' '),
+      section.title.replace(/\s*\/\s*/g, ' '),
+    ];
+    return new RegExp(
+      `^(?:\\d+[.)\\s-]+)?(?:${variants.map((variant) => escapeRegex(variant)).join('|')})(?::)?$`,
+      'i',
+    );
+  });
+
+  const buffers = nextSections.map(() => [] as string[]);
+  normalizedLines.forEach((line) => {
+    const trimmed = line.trim();
+    const matchedIndex = sectionMatchers.findIndex((pattern) => pattern.test(trimmed));
+    if (matchedIndex >= 0) {
+      currentSectionIndex = matchedIndex;
+      return;
+    }
+
+    buffers[currentSectionIndex].push(line);
+  });
+
+  const hasSpecificBuckets = buffers.some((buffer, index) => index > 0 && buffer.join('').trim());
+  if (!hasSpecificBuckets) {
+    nextSections[0].content = normalizePlainTextToHtml(cleanText);
+    nextSections[0].updatedAt = new Date().toISOString();
+    return nextSections;
+  }
+
+  return nextSections.map((section, index) => ({
+    ...section,
+    content: normalizePlainTextToHtml(buffers[index].join('\n').trim()),
+    updatedAt: buffers[index].join('').trim() ? new Date().toISOString() : section.updatedAt,
+  }));
+}
+
+function buildStructuredSections(product: CourseProduct): ProductWritingSection[] {
+  const instructionHtml = product.body?.trim() || product.summary?.trim() || '';
+  const inferredTitles = inferWritingSectionTitlesFromText(instructionHtml, product.format);
+  return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
 }
 
 function mergeWritingData(
@@ -125,6 +308,7 @@ function mergeWritingData(
     submittedAsset: next?.submittedAsset ?? current.submittedAsset,
     supportAssets: next?.supportAssets ?? current.supportAssets,
     libraryResourceIds: next?.libraryResourceIds ?? current.libraryResourceIds,
+    aiPrompt: next?.aiPrompt ?? current.aiPrompt,
     extractedText: next?.extractedText ?? current.extractedText,
     draftText: next?.draftText ?? current.draftText,
     sections: next?.sections ?? current.sections,
@@ -221,11 +405,18 @@ export default async function handler(request: Request) {
     }
 
     const extractedText = await readR2AssetText(payload.asset);
+    const baseSections =
+      currentWritingData.sections.length > 0
+        ? currentWritingData.sections
+        : buildStructuredSections(product);
+    const sections = hydrateWritingSectionsFromText(baseSections, extractedText);
+    const draftText = createWritingDraftTextFromSections(sections);
     const writingData = mergeWritingData(currentWritingData, {
       mode: 'upload',
       submittedAsset: payload.asset,
       extractedText,
-      draftText: currentWritingData.draftText || extractedText,
+      draftText,
+      sections,
       lastSavedAt: new Date().toISOString(),
     });
 
@@ -253,6 +444,7 @@ export default async function handler(request: Request) {
     const sectionInstructions = payload.sectionInstructions?.trim() || product.body.trim();
     const supportAssets = payload.supportAssets ?? currentWritingData.supportAssets;
     const libraryResourceIds = payload.libraryResourceIds ?? currentWritingData.libraryResourceIds;
+    const aiPrompt = payload.aiPrompt?.trim() || currentWritingData.aiPrompt || '';
 
     const supportTexts = await Promise.all(
       supportAssets.map(async (asset) => {
@@ -294,6 +486,7 @@ export default async function handler(request: Request) {
             'DETALLE ESTRUCTURADO DEL PRODUCTO:',
             product.body.trim(),
             '',
+            aiPrompt ? `PROMPT ADICIONAL DEL EXPERTO:\n${aiPrompt}\n` : '',
             `SECCIÓN A REDACTAR: ${sectionTitle}`,
             'INSTRUCCIONES DE ESTA PARTE:',
             sectionInstructions,
@@ -346,15 +539,13 @@ export default async function handler(request: Request) {
             },
           ];
 
-    const draftText = nextSections
-      .map((section) => `# ${section.title}\n${section.content.trim()}`)
-      .join('\n\n')
-      .trim();
+    const draftText = createWritingDraftTextFromSections(nextSections);
 
     const writingData = mergeWritingData(currentWritingData, {
       mode: 'ai',
       supportAssets,
       libraryResourceIds,
+      aiPrompt,
       sections: nextSections,
       draftText,
       lastGeneratedAt: new Date().toISOString(),
