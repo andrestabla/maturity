@@ -1197,18 +1197,106 @@ function normalizeLongTextBlock(value?: string | null) {
     .trim();
 }
 
-function splitLegacyArchitectureText(summary?: string | null, body?: string | null) {
+const genericArchitectureInstructionTemplate =
+  'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.';
+
+function isGenericArchitectureInstruction(value?: string | null) {
+  return normalizeLongTextBlock(value) === genericArchitectureInstructionTemplate;
+}
+
+function buildArchitectureInstructionFallback({
+  title,
+  format,
+  section,
+  summary,
+}: {
+  title?: string | null;
+  format?: string | null;
+  section?: string | null;
+  summary?: string | null;
+}) {
+  const normalizedTitle = normalizeLongTextBlock(title) || 'este producto';
+  const normalizedFormat = normalizeLongTextBlock(format);
+  const normalizedSection = normalizeLongTextBlock(section) || 'la sección asignada';
+  const normalizedSummary = normalizeLongTextBlock(summary);
+
+  const sectionInstruction = (() => {
+    if (/^introducci[oó]n$/i.test(normalizedSection)) {
+      return 'Ubícalo como pieza de arranque del curso: debe orientar, activar o encuadrar al estudiante desde el inicio.';
+    }
+
+    if (/^cierre$/i.test(normalizedSection)) {
+      return 'Ubícalo como pieza de cierre del curso: debe sintetizar aprendizajes, consolidar evidencias o cerrar la experiencia formativa.';
+    }
+
+    if (/^unidad/i.test(normalizedSection)) {
+      return `Ubícalo dentro de ${normalizedSection}: debe conectar con los contenidos, actividades y resultados esperados de esa unidad.`;
+    }
+
+    return `Ubícalo en ${normalizedSection} y asegúrate de que aporte coherencia pedagógica a esa parte del curso.`;
+  })();
+
+  const formatInstruction = (() => {
+    switch (normalizedFormat) {
+      case 'Video':
+        return 'Entrega un guion claro con apertura, desarrollo y cierre; define mensaje central, duración estimada, apoyos visuales y llamado a la acción para el estudiante.';
+      case 'Evaluación':
+        return 'Define propósito evaluativo, instrucciones para el estudiante, criterios o lógica de respuesta, estructura de preguntas o actividades y condiciones de aplicación y retroalimentación.';
+      case 'Documento':
+      case 'Sílabus':
+      case 'PDF':
+        return 'Estructura el contenido con encabezados claros, propósito explícito, desarrollo ordenado, recursos o referencias necesarias y cierre operativo para el estudiante o el equipo.';
+      case 'Actividad':
+      case 'Taller':
+        return 'Describe objetivo, secuencia paso a paso, recursos requeridos, evidencia esperada, tiempo estimado y criterios de logro o revisión.';
+      case 'Lectura':
+      case 'RED':
+        return 'Desarrolla una pieza pedagógica autocontenida, con concepto central, desarrollo temático ordenado, ejemplos de aplicación y cierre que conecte con la unidad.';
+      case 'Infografía':
+        return 'Resume la información en bloques visuales jerárquicos; define mensaje principal, secciones mínimas, datos clave y guía de lectura para el estudiante.';
+      case 'Pódcast':
+        return 'Escribe una escaleta o libreto con introducción, desarrollo temático, tono conversacional, referencias clave y cierre con síntesis o invitación a profundizar.';
+      case 'Rúbrica':
+        return 'Define criterios, niveles de desempeño, evidencias observables y uso previsto de la rúbrica dentro del flujo de revisión o evaluación.';
+      default:
+        return 'Desarrolla el producto con una estructura clara, componentes obligatorios, criterios pedagógicos y una salida utilizable por el equipo de producción del curso.';
+    }
+  })();
+
+  return normalizeLongTextBlock(
+    [
+      `Desarrolla "${normalizedTitle}" tomando como base esta descripción: ${normalizedSummary || 'Alinea el contenido con el propósito pedagógico del curso.'}`,
+      sectionInstruction,
+      formatInstruction,
+      'Asegura coherencia con los lineamientos institucionales, el microcurrículo y la secuencia pedagógica del curso.',
+    ].join('\n\n'),
+  );
+}
+
+function splitLegacyArchitectureText({
+  title,
+  format,
+  section,
+  summary,
+  body,
+}: {
+  title?: string | null;
+  format?: string | null;
+  section?: string | null;
+  summary?: string | null;
+  body?: string | null;
+}) {
   const normalizedSummary = normalizeLongTextBlock(summary);
   const normalizedBody = normalizeLongTextBlock(body);
 
   if (!normalizedSummary && !normalizedBody) {
     return {
       summary: '',
-      body: '',
+      body: buildArchitectureInstructionFallback({ title, format, section, summary }),
     };
   }
 
-  if (normalizedBody) {
+  if (normalizedBody && !isGenericArchitectureInstruction(normalizedBody)) {
     return {
       summary: normalizedSummary,
       body: normalizedBody,
@@ -1251,10 +1339,12 @@ function splitLegacyArchitectureText(summary?: string | null, body?: string | nu
   if (!summaryLooksOverloaded) {
     return {
       summary: normalizedSummary,
-      body:
-        normalizedSummary
-          ? 'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.'
-          : '',
+      body: buildArchitectureInstructionFallback({
+        title,
+        format,
+        section,
+        summary: normalizedSummary,
+      }),
     };
   }
 
@@ -1271,27 +1361,44 @@ function splitLegacyArchitectureText(summary?: string | null, body?: string | nu
     summary: nextSummary,
     body:
       nextBody ||
-      'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.',
+      buildArchitectureInstructionFallback({
+        title,
+        format,
+        section,
+        summary: nextSummary,
+      }),
   };
 }
 
 function normalizeCourseProductTextFields(
-  stage: CourseProductStage,
-  summary?: string | null,
-  body?: string | null,
+  input: {
+    stage: CourseProductStage;
+    title?: string | null;
+    format?: string | null;
+    section?: string | null;
+    summary?: string | null;
+    body?: string | null;
+  },
 ) {
-  if (stage === 'arquitectura') {
-    return splitLegacyArchitectureText(summary, body);
+  if (input.stage === 'arquitectura') {
+    return splitLegacyArchitectureText(input);
   }
 
   return {
-    summary: normalizeLongTextBlock(summary),
-    body: normalizeLongTextBlock(body),
+    summary: normalizeLongTextBlock(input.summary),
+    body: normalizeLongTextBlock(input.body),
   };
 }
 
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
-  const normalizedText = normalizeCourseProductTextFields(input.stage, input.summary, input.body);
+  const normalizedText = normalizeCourseProductTextFields({
+    stage: input.stage,
+    title: input.title,
+    format: input.format,
+    section: input.section,
+    summary: input.summary,
+    body: input.body,
+  });
 
   return {
     id: crypto.randomUUID(),
@@ -2550,7 +2657,10 @@ async function backfillArchitectureProductTextFields() {
     SELECT
       id,
       course_slug AS "courseSlug",
+      title,
       stage,
+      format,
+      section,
       summary,
       body
     FROM maturity_course_products
@@ -2558,7 +2668,10 @@ async function backfillArchitectureProductTextFields() {
   `) as Array<{
     id: string;
     courseSlug: string;
+    title: string;
     stage: CourseProductStage;
+    format: CourseProduct['format'];
+    section: string | null;
     summary: string;
     body: string;
   }>;
@@ -2566,7 +2679,14 @@ async function backfillArchitectureProductTextFields() {
   const affectedCourseSlugs = new Set<string>();
 
   for (const row of rows) {
-    const normalizedText = normalizeCourseProductTextFields(row.stage, row.summary, row.body);
+    const normalizedText = normalizeCourseProductTextFields({
+      stage: row.stage,
+      title: row.title,
+      format: row.format,
+      section: row.section,
+      summary: row.summary,
+      body: row.body,
+    });
 
     if (normalizedText.summary === row.summary && normalizedText.body === row.body) {
       continue;
@@ -2706,7 +2826,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 18; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 19; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3621,6 +3741,11 @@ async function ensureSchema() {
       await backfillArchitectureProductTextFields();
     }
 
+    // Migration 19: Tailor architecture instructions by product format and section
+    if (currentVersion < 19) {
+      await backfillArchitectureProductTextFields();
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -3722,7 +3847,14 @@ async function ensureAdminUserSeed() {
 }
 
 function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
-  const normalizedText = normalizeCourseProductTextFields(row.stage, row.summary, row.body);
+  const normalizedText = normalizeCourseProductTextFields({
+    stage: row.stage,
+    title: row.title,
+    format: row.format,
+    section: row.section,
+    summary: row.summary,
+    body: row.body,
+  });
 
   return {
     id: row.id,
@@ -5204,16 +5336,24 @@ export async function updateCourseProductRecord(
     }
 
     const nextStage = input.stage ?? product.stage;
-    const normalizedText = normalizeCourseProductTextFields(
-      nextStage,
-      input.summary ?? product.summary,
-      input.body ?? product.body,
-    );
+    const nextTitle = input.title ?? product.title;
+    const nextFormat = input.format ?? product.format;
+    const nextSection = input.section ?? product.section;
+    const normalizedText = normalizeCourseProductTextFields({
+      stage: nextStage,
+      title: nextTitle,
+      format: nextFormat,
+      section: nextSection,
+      summary: input.summary ?? product.summary,
+      body: input.body ?? product.body,
+    });
 
     updatedProduct = {
       ...product,
       ...input,
+      title: nextTitle,
       stage: nextStage,
+      format: nextFormat,
       summary: normalizedText.summary,
       body: normalizedText.body,
       tags: input.tags ? (input.tags as string[]).map((tag) => tag.trim()).filter(Boolean) : product.tags,
