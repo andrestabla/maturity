@@ -265,10 +265,56 @@ function sanitizeRichHtml(value: string) {
     }
   };
 
-  const sanitized = Array.from(root?.childNodes ?? [])
-    .map((child) => sanitizeNode(child))
-    .join('')
-    .trim();
+  const isBlockNode = (node: Node) => {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+
+    const tag = node.tagName.toLowerCase();
+    return ['p', 'ul', 'ol', 'li', 'blockquote', 'h3', 'h4', 'div'].includes(tag);
+  };
+
+  const isRootStrong = (node: Node) =>
+    node instanceof HTMLElement &&
+    ['strong', 'b'].includes(node.tagName.toLowerCase());
+
+  const rootChildren = Array.from(root?.childNodes ?? []);
+  const blocks: string[] = [];
+  let inlineBuffer = '';
+
+  const flushInlineBuffer = () => {
+    const trimmed = inlineBuffer.trim();
+
+    if (!trimmed) {
+      inlineBuffer = '';
+      return;
+    }
+
+    blocks.push(`<p>${trimmed}</p>`);
+    inlineBuffer = '';
+  };
+
+  rootChildren.forEach((child) => {
+    if (isBlockNode(child)) {
+      flushInlineBuffer();
+      const normalized = sanitizeNode(child).trim();
+
+      if (normalized) {
+        blocks.push(normalized);
+      }
+      return;
+    }
+
+    if (isRootStrong(child) && inlineBuffer.trim()) {
+      flushInlineBuffer();
+    }
+
+    inlineBuffer += sanitizeNode(child);
+  });
+
+  flushInlineBuffer();
+
+  const sanitized = blocks.join('').trim();
 
   return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
 }
@@ -1105,6 +1151,28 @@ function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
 
 function getWritingPhase(product: CourseProduct) {
   return product.phasePlan.find((phase) => phase.phase === 'escritura');
+}
+
+function hasWritingProgress(product: CourseProduct) {
+  const writingData = product.writingData;
+
+  return Boolean(
+    writingData.draftText.trim() ||
+      writingData.extractedText.trim() ||
+      writingData.submittedAsset ||
+      writingData.lastSavedAt ||
+      writingData.lastGeneratedAt ||
+      (writingData.supportAssets ?? []).length > 0 ||
+      (writingData.sections ?? []).some((section) => section.content.trim()),
+  );
+}
+
+function getWritingActionLabel(product: CourseProduct) {
+  if (product.status === 'Aprobado' || product.status === 'En revisión') {
+    return 'Revisar';
+  }
+
+  return hasWritingProgress(product) ? 'Continuar' : 'Iniciar';
 }
 
 
@@ -3990,11 +4058,6 @@ export function CourseWorkspacePage({
     }
   }
 
-  function openWritingEditor(product: CourseProduct) {
-    const target = `/courses/${currentCourse.slug}/escritura?product=${encodeURIComponent(product.id)}`;
-    window.open(target, '_blank', 'noopener,noreferrer');
-  }
-
   function closeWritingEditor() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('product');
@@ -4289,6 +4352,436 @@ export function CourseWorkspacePage({
   }
 
   function renderWritingWorkspace() {
+    if (activeSection === 'escritura' && writingProductQueryId && isLoading && !selectedWritingProduct) {
+      return (
+        <section className="page-stack">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Escritura del producto</span>
+                <h3>Preparando editor</h3>
+              </div>
+            </div>
+            <p className="section-lead">
+              Estamos cargando el expediente del curso y resolviendo el producto solicitado.
+            </p>
+          </article>
+        </section>
+      );
+    }
+
+    if (activeSection === 'escritura' && writingProductQueryId && !isLoading && !selectedWritingProduct) {
+      return (
+        <section className="page-stack">
+          <article className="surface empty-state">
+            <strong>No fue posible abrir este producto</strong>
+            <p>
+              El producto solicitado ya no existe, no pertenece a este curso o no tienes acceso a
+              su expediente de escritura.
+            </p>
+            <button type="button" className="cta-button" onClick={closeWritingEditor}>
+              <span>Volver a la bandeja</span>
+              <MoveRight size={16} />
+            </button>
+          </article>
+        </section>
+      );
+    }
+
+    if (selectedWritingProduct && !writingDraft) {
+      return (
+        <section className="page-stack">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Escritura del producto</span>
+                <h3>Abriendo {selectedWritingProduct.title}</h3>
+              </div>
+            </div>
+            <p className="section-lead">
+              Estamos preparando el editor, las instrucciones y el estado actual del expediente.
+            </p>
+          </article>
+        </section>
+      );
+    }
+
+    if (selectedWritingProduct && writingDraft) {
+      return (
+        <section className="page-stack">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Escritura del producto</span>
+                <h3>{selectedWritingProduct.title}</h3>
+              </div>
+              <button type="button" className="ghost-button" onClick={closeWritingEditor}>
+                <span>Volver a la bandeja</span>
+              </button>
+            </div>
+            <p className="section-lead">
+              Trabaja este producto en una vista dedicada. Puedes cargar un archivo, apoyarte
+              en IA o redactarlo desde cero siguiendo las instrucciones del producto.
+            </p>
+          </article>
+
+          <article className="surface section-card">
+            <div className="writing-editor__summary">
+              <div className="writing-editor__summary-head">
+                <span className="badge badge--outline">{selectedWritingProduct.section ?? 'Introducción'}</span>
+                <span className="badge badge--outline">{selectedWritingProduct.format}</span>
+                <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
+                  {selectedWritingProduct.status}
+                </span>
+              </div>
+              {renderRichTextContent(
+                selectedWritingProduct.summary,
+                'Sin descripción del producto.',
+                'writing-editor__summary-copy',
+              )}
+            </div>
+
+            <div className="writing-editor__meta">
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Fecha de inicio</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.startDate ? formatDate(getWritingPhase(selectedWritingProduct)?.startDate ?? '') : 'Sin fecha'}</strong>
+              </article>
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Fecha final</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.endDate ? formatDate(getWritingPhase(selectedWritingProduct)?.endDate ?? '') : 'Sin fecha'}</strong>
+              </article>
+              <article className="surface-soft writing-editor__meta-card">
+                <span className="eyebrow">Responsable</span>
+                <strong>{getWritingPhase(selectedWritingProduct)?.assigneeName || 'Sin asignación'}</strong>
+              </article>
+            </div>
+
+            {writingError ? <p className="form-error">{writingError}</p> : null}
+
+            <div className="writing-mode-switch">
+              {[
+                ['upload', 'Subir producto'],
+                ['ai', 'Generarlo con IA'],
+                ['manual', 'Redactar desde cero'],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={writingDraft.mode === mode ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                  disabled={!canEditSelectedWritingProduct}
+                  onClick={() =>
+                    updateWritingDraft((current) => ({
+                      ...current,
+                      mode: mode as ProductWritingData['mode'],
+                    }))
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="writing-editor__layout">
+              <section className="writing-editor__workspace">
+                {writingDraft.mode === 'upload' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 1</span>
+                        <h4>Subir producto y digitalizar</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Carga un archivo `.docx` o `.pdf`. El sistema lo almacenará en R2 y lo
+                      convertirá a texto editable para revisión posterior.
+                    </p>
+
+                    {canEditSelectedWritingProduct ? (
+                      <label className="field">
+                        <span>Archivo del producto</span>
+                        <div className="field__control">
+                          <input
+                            type="file"
+                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            disabled={isWritingExtracting}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) {
+                                void handleWritingSubmissionUpload(file);
+                              }
+                            }}
+                          />
+                        </div>
+                      </label>
+                    ) : null}
+
+                    {writingDraft.submittedAsset ? (
+                      <div className="writing-editor__asset">
+                        <strong>{writingDraft.submittedAsset.name}</strong>
+                        <a href={writingDraft.submittedAsset.url} target="_blank" rel="noreferrer">
+                          Ver archivo cargado
+                        </a>
+                      </div>
+                    ) : null}
+
+                    <label className="field">
+                      <span>Texto digitalizado</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={16}
+                          value={writingDraft.draftText || writingDraft.extractedText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="Aquí aparecerá el texto digitalizado del archivo cargado."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+
+                {writingDraft.mode === 'ai' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 2</span>
+                        <h4>Generar producto con asistente IA</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Adjunta documentos base o selecciona recursos de la biblioteca. La IA redacta
+                      cada parte usando las instrucciones del producto.
+                    </p>
+
+                    {canEditSelectedWritingProduct ? (
+                      <label className="field">
+                        <span>Documentos base</span>
+                        <div className="field__control">
+                          <input
+                            type="file"
+                            multiple
+                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            disabled={isWritingUploadingSupport}
+                            onChange={(event) => {
+                              void handleWritingSupportUpload(event.target.files);
+                            }}
+                          />
+                        </div>
+                      </label>
+                    ) : null}
+
+                    {writingDraft.supportAssets.length > 0 ? (
+                      <div className="tag-token-list">
+                        {writingDraft.supportAssets.map((asset) => (
+                          <span key={asset.key} className="tag-token">
+                            {asset.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="field-help">Todavía no hay documentos base cargados.</p>
+                    )}
+
+                    <div className="form-section">
+                      <strong>Recursos de biblioteca para la IA</strong>
+                      {courseLibraryResources.length > 0 ? (
+                        <div className="role-picker-panel">
+                          {courseLibraryResources.map((resource) => (
+                            <label key={resource.id} className="checkbox-card">
+                              <input
+                                type="checkbox"
+                                checked={writingDraft.libraryResourceIds.includes(resource.id)}
+                                disabled={!canEditSelectedWritingProduct}
+                                onChange={(event) =>
+                                  updateWritingDraft((current) => ({
+                                    ...current,
+                                    libraryResourceIds: event.target.checked
+                                      ? [...current.libraryResourceIds, resource.id]
+                                      : current.libraryResourceIds.filter((id) => id !== resource.id),
+                                  }))
+                                }
+                              />
+                              <span>
+                                {resource.title} · {resource.unit}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="field-help">No hay recursos de biblioteca vinculados a este curso.</p>
+                      )}
+                    </div>
+
+                    <div className="writing-sections">
+                      {writingDraft.sections.map((section) => (
+                        <article key={section.id} className="writing-section-card">
+                          <div className="writing-section-card__head">
+                            <div>
+                              <span className="eyebrow">Parte del producto</span>
+                              <h4>{section.title}</h4>
+                            </div>
+                            {canEditSelectedWritingProduct ? (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                disabled={writingGeneratingSectionId === section.id}
+                                onClick={() => void handleGenerateWritingSection(section)}
+                              >
+                                <Sparkles size={16} />
+                                <span>
+                                  {writingGeneratingSectionId === section.id ? 'Generando…' : 'Generar esta parte'}
+                                </span>
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <div className="writing-section-card__body">
+                            <div className="writing-section-card__instructions">
+                              <strong>Instrucciones</strong>
+                              <p>{section.instructions || 'Sin instrucciones específicas.'}</p>
+                            </div>
+                            <label className="field">
+                              <span>Borrador</span>
+                              <div className="field__control">
+                                <textarea
+                                  rows={10}
+                                  value={section.content}
+                                  readOnly={!canEditSelectedWritingProduct}
+                                  onChange={(event) =>
+                                    updateWritingSection(section.id, 'content', event.target.value)
+                                  }
+                                  placeholder="Aquí se redactará esta parte del producto."
+                                />
+                              </div>
+                            </label>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    <label className="field">
+                      <span>Documento consolidado</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={16}
+                          value={writingDraft.draftText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="La consolidación del producto aparecerá aquí a medida que la IA redacte sus partes."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+
+                {writingDraft.mode === 'manual' ? (
+                  <article className="surface section-card section-card--compact">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">Opción 3</span>
+                        <h4>Redactar desde cero</h4>
+                      </div>
+                    </div>
+                    <p className="field-help">
+                      Usa las instrucciones del producto como guía y redacta directamente el producto.
+                    </p>
+                    <label className="field">
+                      <span>Texto del producto</span>
+                      <div className="field__control">
+                        <textarea
+                          rows={22}
+                          value={writingDraft.draftText}
+                          readOnly={!canEditSelectedWritingProduct}
+                          onChange={(event) =>
+                            updateWritingDraft((current) => ({
+                              ...current,
+                              draftText: event.target.value,
+                            }))
+                          }
+                          placeholder="Empieza aquí la redacción del producto."
+                        />
+                      </div>
+                    </label>
+                  </article>
+                ) : null}
+              </section>
+
+              <aside className="writing-editor__reference">
+                <article className="surface section-card section-card--compact">
+                  <div className="section-heading">
+                    <div>
+                      <span className="eyebrow">Guía</span>
+                      <h4>Instrucciones del producto</h4>
+                    </div>
+                  </div>
+                  {renderRichTextContent(
+                    selectedWritingProduct.body?.trim() || '',
+                    'Sin instrucciones del producto.',
+                    'writing-editor__structured-body',
+                  )}
+                </article>
+
+                <article className="surface section-card section-card--compact">
+                  <div className="section-heading">
+                    <div>
+                      <span className="eyebrow">Estado</span>
+                      <h4>Expediente de escritura</h4>
+                    </div>
+                  </div>
+                  <div className="list-stack">
+                    <div className="list-item">
+                      <div>
+                        <strong>Modo actual</strong>
+                        <p>{writingDraft.mode === 'upload' ? 'Carga digitalizada' : writingDraft.mode === 'ai' ? 'Asistente IA' : 'Redacción manual'}</p>
+                      </div>
+                    </div>
+                    <div className="list-item">
+                      <div>
+                        <strong>Texto guardado</strong>
+                        <p>{writingDraft.draftText.trim() ? 'Sí' : 'Aún no'}</p>
+                      </div>
+                    </div>
+                    <div className="list-item">
+                      <div>
+                        <strong>Último guardado</strong>
+                        <p>{writingDraft.lastSavedAt ? formatDate(writingDraft.lastSavedAt.slice(0, 10)) : 'Sin guardar'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </aside>
+            </div>
+
+            <div className="writing-editor__footer">
+              <button type="button" className="ghost-button" onClick={closeWritingEditor}>
+                Volver a la bandeja
+              </button>
+              {canEditSelectedWritingProduct ? (
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={isWritingSaving}
+                  onClick={() => void handleWritingSave()}
+                >
+                  <Save size={16} />
+                  <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
+                </button>
+              ) : null}
+            </div>
+          </article>
+        </section>
+      );
+    }
+
     return (
       <section className="page-stack">
         <article className="surface section-card">
@@ -4300,8 +4793,8 @@ export function CourseWorkspacePage({
           </div>
           <p className="section-lead">
             Aquí aparecen los productos creados en arquitectura y ya planificados para la fase de
-            escritura. Se ordenan por fecha final y cada fila resume lo que se espera del experto
-            según las instrucciones del producto.
+            escritura. Se ordenan por fecha final y se presentan como una cola compacta para abrir
+            la escritura del producto en una pestaña dedicada.
           </p>
         </article>
 
@@ -4329,13 +4822,16 @@ export function CourseWorkspacePage({
                 const dueLabel = writingPhase?.endDate ? formatDate(writingPhase.endDate) : 'Sin fecha final';
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
+                const actionLabel = getWritingActionLabel(product);
+                const editorHref = `/courses/${currentCourse.slug}/escritura?product=${encodeURIComponent(product.id)}`;
 
                 return (
-                  <button
+                  <a
                     key={product.id}
-                    type="button"
+                    href={editorHref}
+                    target="_blank"
+                    rel="noreferrer"
                     className="writing-queue__item"
-                    onClick={() => openWritingEditor(product)}
                   >
                     <div className="writing-queue__head">
                       <div>
@@ -4365,20 +4861,18 @@ export function CourseWorkspacePage({
 
                     <p className="writing-queue__summary">{stripHtmlToText(product.summary)}</p>
 
-                    <div className="writing-queue__specs">
-                      <span className="eyebrow">Instrucciones</span>
-                      {renderRichTextContent(
-                        product.body,
-                        'Sin instrucciones definidas.',
-                        'rich-html--panel writing-queue__instructions',
-                      )}
+                    <div className="writing-queue__details">
+                      <span className="eyebrow">Guía disponible</span>
+                      <p className="writing-queue__muted">
+                        Las instrucciones completas y las tres rutas de trabajo se abren al iniciar la escritura.
+                      </p>
                     </div>
 
                     <div className="writing-queue__cta">
-                      <span>Abrir en nueva pestaña</span>
+                      <span>{actionLabel}</span>
                       <MoveRight size={16} />
                     </div>
-                  </button>
+                  </a>
                 );
               })}
             </div>
@@ -6889,371 +7383,6 @@ export function CourseWorkspacePage({
             </div>
           </div>
         </ModalFrame>
-      ) : null}
-
-      {selectedWritingProduct && writingDraft ? (
-        <SidePanel
-          isOpen={Boolean(selectedWritingProduct)}
-          onClose={closeWritingEditor}
-          title={`Escritura · ${selectedWritingProduct.title}`}
-          description="Trabaja el producto en una pestaña dedicada. Puedes cargar un archivo, apoyarte en IA o redactar desde cero siguiendo las instrucciones del producto."
-          sideLabel="Escritura"
-          sideDescription="PRODUCTO"
-          width="2xl"
-          footer={
-            <div className="flex justify-end gap-3 w-full">
-              <button type="button" className="ghost-button" onClick={closeWritingEditor}>
-                Cerrar
-              </button>
-              {canEditSelectedWritingProduct ? (
-                <button
-                  type="button"
-                  className="cta-button"
-                  disabled={isWritingSaving}
-                  onClick={() => void handleWritingSave()}
-                >
-                  <Save size={16} />
-                  <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
-                </button>
-              ) : null}
-            </div>
-          }
-        >
-          <div className="page-stack">
-            <div className="writing-editor__summary">
-              <span className="badge badge--outline">{selectedWritingProduct.section ?? 'Introducción'}</span>
-              <span className="badge badge--outline">{selectedWritingProduct.format}</span>
-              <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
-                {selectedWritingProduct.status}
-              </span>
-              {renderRichTextContent(
-                selectedWritingProduct.summary,
-                'Sin descripción del producto.',
-                'writing-editor__summary-copy',
-              )}
-            </div>
-
-            <div className="writing-editor__meta">
-              <article className="surface-soft writing-editor__meta-card">
-                <span className="eyebrow">Fecha de inicio</span>
-                <strong>{getWritingPhase(selectedWritingProduct)?.startDate ? formatDate(getWritingPhase(selectedWritingProduct)?.startDate ?? '') : 'Sin fecha'}</strong>
-              </article>
-              <article className="surface-soft writing-editor__meta-card">
-                <span className="eyebrow">Fecha final</span>
-                <strong>{getWritingPhase(selectedWritingProduct)?.endDate ? formatDate(getWritingPhase(selectedWritingProduct)?.endDate ?? '') : 'Sin fecha'}</strong>
-              </article>
-              <article className="surface-soft writing-editor__meta-card">
-                <span className="eyebrow">Responsable</span>
-                <strong>{getWritingPhase(selectedWritingProduct)?.assigneeName || 'Sin asignación'}</strong>
-              </article>
-            </div>
-
-            {writingError ? <p className="form-error">{writingError}</p> : null}
-
-            <div className="writing-mode-switch">
-              {[
-                ['upload', 'Subir producto'],
-                ['ai', 'Generarlo con IA'],
-                ['manual', 'Redactar desde cero'],
-              ].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={writingDraft.mode === mode ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                  disabled={!canEditSelectedWritingProduct}
-                  onClick={() =>
-                    updateWritingDraft((current) => ({
-                      ...current,
-                      mode: mode as ProductWritingData['mode'],
-                    }))
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="writing-editor__layout">
-              <section className="writing-editor__workspace">
-                {writingDraft.mode === 'upload' ? (
-                  <article className="surface section-card section-card--compact">
-                    <div className="section-heading">
-                      <div>
-                        <span className="eyebrow">Opción 1</span>
-                        <h4>Subir producto y digitalizar</h4>
-                      </div>
-                    </div>
-                    <p className="field-help">
-                      Carga un archivo `.docx` o `.pdf`. El sistema lo almacenará en R2 y lo
-                      convertirá a texto editable para revisión posterior.
-                    </p>
-
-                    {canEditSelectedWritingProduct ? (
-                      <label className="field">
-                        <span>Archivo del producto</span>
-                        <div className="field__control">
-                          <input
-                            type="file"
-                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            disabled={isWritingExtracting}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (file) {
-                                void handleWritingSubmissionUpload(file);
-                              }
-                            }}
-                          />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {writingDraft.submittedAsset ? (
-                      <div className="writing-editor__asset">
-                        <strong>{writingDraft.submittedAsset.name}</strong>
-                        <a href={writingDraft.submittedAsset.url} target="_blank" rel="noreferrer">
-                          Ver archivo cargado
-                        </a>
-                      </div>
-                    ) : null}
-
-                    <label className="field">
-                      <span>Texto digitalizado</span>
-                      <div className="field__control">
-                        <textarea
-                          rows={16}
-                          value={writingDraft.draftText || writingDraft.extractedText}
-                          readOnly={!canEditSelectedWritingProduct}
-                          onChange={(event) =>
-                            updateWritingDraft((current) => ({
-                              ...current,
-                              draftText: event.target.value,
-                            }))
-                          }
-                          placeholder="Aquí aparecerá el texto digitalizado del archivo cargado."
-                        />
-                      </div>
-                    </label>
-                  </article>
-                ) : null}
-
-                {writingDraft.mode === 'ai' ? (
-                  <article className="surface section-card section-card--compact">
-                    <div className="section-heading">
-                      <div>
-                        <span className="eyebrow">Opción 2</span>
-                        <h4>Generar producto con asistente IA</h4>
-                      </div>
-                    </div>
-                    <p className="field-help">
-                      Adjunta documentos base o selecciona recursos de la biblioteca. La IA redacta
-                      cada parte usando las instrucciones del producto.
-                    </p>
-
-                    {canEditSelectedWritingProduct ? (
-                      <label className="field">
-                        <span>Documentos base</span>
-                        <div className="field__control">
-                          <input
-                            type="file"
-                            multiple
-                            accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            disabled={isWritingUploadingSupport}
-                            onChange={(event) => {
-                              void handleWritingSupportUpload(event.target.files);
-                            }}
-                          />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {writingDraft.supportAssets.length > 0 ? (
-                      <div className="tag-token-list">
-                        {writingDraft.supportAssets.map((asset) => (
-                          <span key={asset.key} className="tag-token">
-                            {asset.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="field-help">Todavía no hay documentos base cargados.</p>
-                    )}
-
-                    <div className="form-section">
-                      <strong>Recursos de biblioteca para la IA</strong>
-                      {courseLibraryResources.length > 0 ? (
-                        <div className="role-picker-panel">
-                          {courseLibraryResources.map((resource) => (
-                            <label key={resource.id} className="checkbox-card">
-                              <input
-                                type="checkbox"
-                                checked={writingDraft.libraryResourceIds.includes(resource.id)}
-                                disabled={!canEditSelectedWritingProduct}
-                                onChange={(event) =>
-                                  updateWritingDraft((current) => ({
-                                    ...current,
-                                    libraryResourceIds: event.target.checked
-                                      ? [...current.libraryResourceIds, resource.id]
-                                      : current.libraryResourceIds.filter((id) => id !== resource.id),
-                                  }))
-                                }
-                              />
-                              <span>
-                                {resource.title} · {resource.unit}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="field-help">No hay recursos de biblioteca vinculados a este curso.</p>
-                      )}
-                    </div>
-
-                    <div className="writing-sections">
-                      {writingDraft.sections.map((section) => (
-                        <article key={section.id} className="writing-section-card">
-                          <div className="writing-section-card__head">
-                            <div>
-                              <span className="eyebrow">Parte del producto</span>
-                              <h4>{section.title}</h4>
-                            </div>
-                            {canEditSelectedWritingProduct ? (
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                disabled={writingGeneratingSectionId === section.id}
-                                onClick={() => void handleGenerateWritingSection(section)}
-                              >
-                                <Sparkles size={16} />
-                                <span>
-                                  {writingGeneratingSectionId === section.id ? 'Generando…' : 'Generar esta parte'}
-                                </span>
-                              </button>
-                            ) : null}
-                          </div>
-
-                          <div className="writing-section-card__body">
-                            <div className="writing-section-card__instructions">
-                              <strong>Instrucciones</strong>
-                              <p>{section.instructions || 'Sin instrucciones específicas.'}</p>
-                            </div>
-                            <label className="field">
-                              <span>Borrador</span>
-                              <div className="field__control">
-                                <textarea
-                                  rows={10}
-                                  value={section.content}
-                                  readOnly={!canEditSelectedWritingProduct}
-                                  onChange={(event) =>
-                                    updateWritingSection(section.id, 'content', event.target.value)
-                                  }
-                                  placeholder="Aquí se redactará esta parte del producto."
-                                />
-                              </div>
-                            </label>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-
-                    <label className="field">
-                      <span>Documento consolidado</span>
-                      <div className="field__control">
-                        <textarea
-                          rows={16}
-                          value={writingDraft.draftText}
-                          readOnly={!canEditSelectedWritingProduct}
-                          onChange={(event) =>
-                            updateWritingDraft((current) => ({
-                              ...current,
-                              draftText: event.target.value,
-                            }))
-                          }
-                          placeholder="La consolidación del producto aparecerá aquí a medida que la IA redacte sus partes."
-                        />
-                      </div>
-                    </label>
-                  </article>
-                ) : null}
-
-                {writingDraft.mode === 'manual' ? (
-                  <article className="surface section-card section-card--compact">
-                    <div className="section-heading">
-                      <div>
-                        <span className="eyebrow">Opción 3</span>
-                        <h4>Redactar desde cero</h4>
-                      </div>
-                    </div>
-                    <p className="field-help">
-                      Usa las instrucciones del producto como guía y redacta directamente el producto.
-                    </p>
-                    <label className="field">
-                      <span>Texto del producto</span>
-                      <div className="field__control">
-                        <textarea
-                          rows={22}
-                          value={writingDraft.draftText}
-                          readOnly={!canEditSelectedWritingProduct}
-                          onChange={(event) =>
-                            updateWritingDraft((current) => ({
-                              ...current,
-                              draftText: event.target.value,
-                            }))
-                          }
-                          placeholder="Empieza aquí la redacción del producto."
-                        />
-                      </div>
-                    </label>
-                  </article>
-                ) : null}
-              </section>
-
-              <aside className="writing-editor__reference">
-                <article className="surface section-card section-card--compact">
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">Guía</span>
-                      <h4>Instrucciones del producto</h4>
-                    </div>
-                  </div>
-                  {renderRichTextContent(
-                    selectedWritingProduct.body?.trim() || '',
-                    'Sin instrucciones del producto.',
-                    'writing-editor__structured-body',
-                  )}
-                </article>
-
-                <article className="surface section-card section-card--compact">
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">Estado</span>
-                      <h4>Expediente de escritura</h4>
-                    </div>
-                  </div>
-                  <div className="list-stack">
-                    <div className="list-item">
-                      <div>
-                        <strong>Modo actual</strong>
-                        <p>{writingDraft.mode === 'upload' ? 'Carga digitalizada' : writingDraft.mode === 'ai' ? 'Asistente IA' : 'Redacción manual'}</p>
-                      </div>
-                    </div>
-                    <div className="list-item">
-                      <div>
-                        <strong>Texto guardado</strong>
-                        <p>{writingDraft.draftText.trim() ? 'Sí' : 'Aún no'}</p>
-                      </div>
-                    </div>
-                    <div className="list-item">
-                      <div>
-                        <strong>Último guardado</strong>
-                        <p>{writingDraft.lastSavedAt ? formatDate(writingDraft.lastSavedAt.slice(0, 10)) : 'Sin guardar'}</p>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              </aside>
-            </div>
-          </div>
-        </SidePanel>
       ) : null}
 
       {activeSection === 'escritura' ? (

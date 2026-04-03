@@ -9681,18 +9681,21 @@ body::after {
 
 .writing-queue {
   display: grid;
-  gap: 16px;
+  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .writing-queue__item {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   width: 100%;
-  padding: 20px;
+  padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: 22px;
   background: var(--panel-strong);
+  color: inherit;
   text-align: left;
+  text-decoration: none;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
@@ -9722,7 +9725,7 @@ body::after {
 .writing-queue__head h4 {
   margin: 10px 0 0;
   color: var(--secondary);
-  font-size: 1.15rem;
+  font-size: 1.08rem;
   line-height: 1.3;
 }
 
@@ -9734,6 +9737,8 @@ body::after {
 }
 
 .writing-queue__schedule {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   flex-wrap: wrap;
   align-items: stretch;
 }
@@ -9742,8 +9747,8 @@ body::after {
 .writing-editor__meta-card {
   display: grid;
   gap: 6px;
-  min-width: 160px;
-  padding: 14px 16px;
+  min-width: 0;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--surface-soft);
@@ -9753,31 +9758,41 @@ body::after {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
+  min-height: calc(1.6em * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.writing-queue__specs {
+.writing-queue__details {
   display: grid;
-  gap: 8px;
-}
-
-.writing-queue__instructions {
-  font-size: 0.96rem;
+  gap: 6px;
 }
 
 .writing-queue__muted {
   margin: 0;
   color: var(--muted);
+  line-height: 1.55;
 }
 
 .writing-queue__cta {
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   color: var(--secondary);
   font-weight: 700;
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .writing-editor__summary {
   display: grid;
+  gap: 10px;
+}
+
+.writing-editor__summary-head {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -9837,6 +9852,16 @@ body::after {
   color: var(--text-body);
 }
 
+.writing-editor__structured-body > :last-child {
+  margin-bottom: 0;
+}
+
+.writing-editor__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .writing-sections {
   display: grid;
   gap: 16px;
@@ -9885,6 +9910,10 @@ body::after {
 }
 
 @media (max-width: 1180px) {
+  .writing-queue {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .writing-editor__layout {
     flex-direction: column;
   }
@@ -9892,6 +9921,21 @@ body::after {
   .writing-editor__reference {
     flex: 1 1 auto;
     min-width: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .writing-queue {
+    grid-template-columns: 1fr;
+  }
+
+  .writing-queue__schedule {
+    grid-template-columns: 1fr;
+  }
+
+  .writing-editor__footer {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
