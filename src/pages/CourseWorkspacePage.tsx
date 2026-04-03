@@ -391,82 +391,6 @@ function sanitizeRichHtml(value: string) {
 
   const plainText = stripHtmlToText(raw);
 
-  if (hasStructuredRichHtmlBlocks(raw)) {
-    if (typeof window === 'undefined') {
-      return raw;
-    }
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
-    const root = doc.body.firstElementChild;
-
-    const sanitizeNode = (node: Node): string => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        return escapeHtml(node.textContent ?? '');
-      }
-
-      if (!(node instanceof HTMLElement)) {
-        return '';
-      }
-
-      const tag = node.tagName.toLowerCase();
-      const children = Array.from(node.childNodes)
-        .map((child) => sanitizeNode(child))
-        .join('');
-
-      switch (tag) {
-        case 'br':
-          return '<br>';
-        case 'p':
-        case 'ul':
-        case 'ol':
-        case 'li':
-        case 'strong':
-        case 'b':
-        case 'em':
-        case 'i':
-        case 'u':
-        case 'blockquote':
-        case 'h3':
-        case 'h4':
-          return `<${tag}>${children}</${tag}>`;
-        case 'a': {
-          const href = (node.getAttribute('href') || '').trim();
-          const safeHref =
-            href.startsWith('http://') ||
-            href.startsWith('https://') ||
-            href.startsWith('mailto:') ||
-            href.startsWith('#') ||
-            href.startsWith('/')
-              ? href
-              : '';
-          const attrs = safeHref
-            ? ` href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer"`
-            : '';
-          return `<a${attrs}>${children}</a>`;
-        }
-        case 'div': {
-          const trimmedChildren = children.trim();
-          if (!trimmedChildren) {
-            return '';
-          }
-          return trimmedChildren;
-        }
-        case 'span':
-          return children;
-        default:
-          return children;
-      }
-    };
-
-    const sanitized = Array.from(root?.childNodes ?? [])
-      .map((child) => sanitizeNode(child).trim())
-      .filter(Boolean)
-      .join('');
-
-    return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
-  }
-
   if (
     hasBrokenInstructionMarkup(raw) ||
     hasBrokenInstructionMarkup(plainText) ||
@@ -474,14 +398,6 @@ function sanitizeRichHtml(value: string) {
   ) {
     return normalizeLegacyStructuredText(plainText || raw);
   }
-
-  if (typeof window === 'undefined') {
-    return normalizePlainTextToHtml(plainText);
-  }
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
-  const root = doc.body.firstElementChild;
 
   const sanitizeNode = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -530,14 +446,10 @@ function sanitizeRichHtml(value: string) {
       }
       case 'div': {
         const trimmedChildren = children.trim();
-
         if (!trimmedChildren) {
           return '';
         }
-
-        const hasStructuredBlock = /<(p|ul|ol|blockquote|h3|h4)\b/i.test(trimmedChildren);
-
-        return hasStructuredBlock ? trimmedChildren : `<p>${trimmedChildren}</p>`;
+        return trimmedChildren;
       }
       case 'span':
         return children;
@@ -546,56 +458,65 @@ function sanitizeRichHtml(value: string) {
     }
   };
 
-  const isBlockNode = (node: Node) => {
-    if (!(node instanceof HTMLElement)) {
-      return false;
+  const sanitizeDomRichHtml = (markup: string) => {
+    if (typeof window === 'undefined') {
+      return markup;
     }
 
-    const tag = node.tagName.toLowerCase();
-    return ['p', 'ul', 'ol', 'li', 'blockquote', 'h3', 'h4', 'div'].includes(tag);
-  };
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${markup}</div>`, 'text/html');
+    const root = doc.body.firstElementChild;
 
-  const isRootStrong = (node: Node) =>
-    node instanceof HTMLElement &&
-    ['strong', 'b'].includes(node.tagName.toLowerCase());
+    const isBlockMarkup = (chunk: string) =>
+      /^<(p|ul|ol|blockquote|h3|h4)\b/i.test(chunk.trim());
 
-  const rootChildren = Array.from(root?.childNodes ?? []);
-  const blocks: string[] = [];
-  let inlineBuffer = '';
+    const rootChildren = Array.from(root?.childNodes ?? []);
+    const blocks: string[] = [];
+    let inlineBuffer = '';
 
-  const flushInlineBuffer = () => {
-    const trimmed = inlineBuffer.trim();
+    const flushInlineBuffer = () => {
+      const trimmed = inlineBuffer.trim();
 
-    if (!trimmed) {
-      inlineBuffer = '';
-      return;
-    }
-
-    blocks.push(`<p>${trimmed}</p>`);
-    inlineBuffer = '';
-  };
-
-  rootChildren.forEach((child) => {
-    if (isBlockNode(child)) {
-      flushInlineBuffer();
-      const normalized = sanitizeNode(child).trim();
-
-      if (normalized) {
-        blocks.push(normalized);
+      if (!trimmed) {
+        inlineBuffer = '';
+        return;
       }
-      return;
-    }
 
-    if (isRootStrong(child) && inlineBuffer.trim()) {
-      flushInlineBuffer();
-    }
+      blocks.push(`<p>${trimmed}</p>`);
+      inlineBuffer = '';
+    };
 
-    inlineBuffer += sanitizeNode(child);
-  });
+    rootChildren.forEach((child) => {
+      const normalizedChild = sanitizeNode(child).trim();
 
-  flushInlineBuffer();
+      if (!normalizedChild) {
+        return;
+      }
 
-  const sanitized = blocks.join('').trim();
+      if (isBlockMarkup(normalizedChild)) {
+        flushInlineBuffer();
+        blocks.push(normalizedChild);
+        return;
+      }
+
+      inlineBuffer += normalizedChild;
+    });
+
+    flushInlineBuffer();
+
+    return blocks.join('').trim();
+  };
+
+  if (hasStructuredRichHtmlBlocks(raw)) {
+    const sanitized = sanitizeDomRichHtml(raw);
+    return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
+  }
+
+  if (typeof window === 'undefined') {
+    return normalizePlainTextToHtml(plainText);
+  }
+
+  const sanitized = sanitizeDomRichHtml(raw);
 
   return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
 }
@@ -606,7 +527,8 @@ function hasBrokenInstructionMarkup(value: string) {
     /(?:Funci[oó]n|Prop[oó]sito comunicativo|Duraci[oó]n m[aá]xima|Inicio|Desarrollo|Cierre|Tono)(?=[A-ZÁÉÍÓÚÑ0-9])/u.test(
       value,
     ) ||
-    /<\/(?:strong|b|h3|h4)>(?=[A-ZÁÉÍÓÚÑ0-9])/iu.test(value)
+    /<\/(?:strong|b|h3|h4)>(?=[A-ZÁÉÍÓÚÑ0-9])/iu.test(value) ||
+    /<\/h[34]>\s*(?!<(?:p|ul|ol|blockquote|h3|h4)\b)[^<\s]/iu.test(value)
   );
 }
 
@@ -698,10 +620,10 @@ function RichTextEditor({
   return (
     <div className="rich-editor">
       <div className="rich-editor__toolbar" role="toolbar" aria-label="Formato del texto">
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', 'p')}>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<p>')}>
           <span>Párrafo</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', 'h3')}>
+        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<h3>')}>
           <Heading3 size={15} />
           <span>Título</span>
         </button>
@@ -4203,6 +4125,8 @@ export function CourseWorkspacePage({
           courseSlug: currentCourse.slug,
           id: productId,
           ...draft,
+          summary: sanitizeRichHtml(draft.summary),
+          body: sanitizeRichHtml(draft.body),
           tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
         }),
       });

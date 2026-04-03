@@ -1272,7 +1272,8 @@ function hasBrokenArchitectureInstructionMarkup(value: string) {
     ) ||
     /<\/(?:strong|b|h3|h4|p|div)>\s*(?:Funci[oó]n|Prop[oó]sito comunicativo|Duraci[oó]n m[aá]xima|Inicio|Desarrollo|Cierre|Tono|Aspecto)/iu.test(
       value,
-    )
+    ) ||
+    /<\/h[34]>\s*(?!<(?:p|ul|ol|blockquote|h3|h4)\b)[^<\s]/iu.test(value)
   );
 }
 
@@ -1418,10 +1419,6 @@ function normalizeArchitectureInstructionHtml(value?: string | null) {
     return normalizeLegacyArchitectureInstructionText(normalized);
   }
 
-  if (hasStructuredHtmlBlocks(normalized)) {
-    return normalized;
-  }
-
   const plainText = stripHtmlToTextBlock(normalized);
 
   if (
@@ -1430,6 +1427,10 @@ function normalizeArchitectureInstructionHtml(value?: string | null) {
     hasFragmentedArchitectureInstructionHtml(normalized)
   ) {
     return normalizeLegacyArchitectureInstructionText(plainText || normalized);
+  }
+
+  if (hasStructuredHtmlBlocks(normalized)) {
+    return normalized;
   }
 
   return normalized;
@@ -3069,7 +3070,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 21; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 22; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3996,6 +3997,11 @@ async function ensureSchema() {
 
     // Migration 21: Regroup fragmented architecture instruction paragraphs
     if (currentVersion < 21) {
+      await backfillArchitectureProductTextFields();
+    }
+
+    // Migration 22: Persist stable HTML blocks for architecture instructions
+    if (currentVersion < 22) {
       await backfillArchitectureProductTextFields();
     }
 
