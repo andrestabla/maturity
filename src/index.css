@@ -9403,6 +9403,30 @@ body::after {
   margin-bottom: 0;
 }
 
+.rich-html--instruction {
+  display: grid;
+  gap: 0;
+}
+
+.rich-html--instruction p,
+.rich-html--instruction ul,
+.rich-html--instruction ol,
+.rich-html--instruction blockquote,
+.rich-html--instruction h3,
+.rich-html--instruction h4 {
+  margin: 0 0 1rem;
+}
+
+.rich-html--instruction h3 {
+  margin-top: 1rem;
+  font-size: 1.08rem;
+}
+
+.rich-html--instruction h4 {
+  margin-top: 1rem;
+  font-size: 0.96rem;
+}
+
 .planning-section-stack {
   display: grid;
   gap: 20px;
@@ -9820,6 +9844,10 @@ body::after {
   align-items: flex-start;
 }
 
+.writing-editor__layout--solo {
+  display: block;
+}
+
 .writing-editor__workspace {
   display: grid;
   flex: 1 1 0;
@@ -9832,6 +9860,25 @@ body::after {
   flex: 0 0 360px;
   gap: 16px;
   min-width: 300px;
+}
+
+.writing-product-shell {
+  padding-top: 8px;
+}
+
+.writing-product-shell__hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.writing-product-shell__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .writing-editor__asset {
@@ -9921,6 +9968,15 @@ body::after {
   .writing-editor__reference {
     flex: 1 1 auto;
     min-width: 0;
+  }
+
+  .writing-product-shell__hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .writing-product-shell__actions {
+    justify-content: flex-start;
   }
 }
 
