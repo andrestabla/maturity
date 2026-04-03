@@ -53,6 +53,7 @@ import type {
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
   CourseMutationInput,
+  LibraryResource,
   ProductWritingAsset,
   ProductWritingData,
   ProductWritingSection,
@@ -124,6 +125,60 @@ const validCourseSections: CourseSection[] = [
   'entrega',
   'history',
 ];
+
+const WRITING_LAUNCH_STORAGE_KEY = 'maturity-writing-launch-v1';
+const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
+
+interface WritingLaunchSnapshot {
+  courseSlug: string;
+  productId: string;
+  createdAt: number;
+  course: Course;
+  users: AuthUser[];
+  libraryResources: LibraryResource[];
+}
+
+function readWritingLaunchSnapshot(courseSlug: string, productId: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(WRITING_LAUNCH_STORAGE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<WritingLaunchSnapshot> | null;
+
+    if (
+      !parsed ||
+      parsed.courseSlug !== courseSlug ||
+      parsed.productId !== productId ||
+      typeof parsed.createdAt !== 'number' ||
+      !parsed.course
+    ) {
+      return null;
+    }
+
+    if (Date.now() - parsed.createdAt > WRITING_LAUNCH_MAX_AGE) {
+      window.localStorage.removeItem(WRITING_LAUNCH_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      courseSlug: parsed.courseSlug,
+      productId: parsed.productId,
+      createdAt: parsed.createdAt,
+      course: parsed.course,
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      libraryResources: Array.isArray(parsed.libraryResources) ? parsed.libraryResources : [],
+    } satisfies WritingLaunchSnapshot;
+  } catch {
+    return null;
+  }
+}
 
 function escapeHtml(value: string) {
   return value
@@ -1191,11 +1246,20 @@ export function CourseWorkspacePage({
   const [searchParams, setSearchParams] = useSearchParams();
   const { showAlert, showConfirm } = useSystemDialog();
   const navigate = useNavigate();
-  const course = getCourseBySlug(appData, slug);
+  const activeSection: CourseSection = isCourseSection(sectionParam) ? sectionParam : 'summary';
+  const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
+  const persistedCourse = getCourseBySlug(appData, slug);
+  const [writingLaunchSnapshot, setWritingLaunchSnapshot] = useState<WritingLaunchSnapshot | null>(() =>
+    activeSection === 'escritura' && writingProductQueryId
+      ? readWritingLaunchSnapshot(slug, writingProductQueryId)
+      : null,
+  );
+  const course =
+    persistedCourse ??
+    (activeSection === 'escritura' && isLoading ? writingLaunchSnapshot?.course ?? null : null);
   const fallbackStageId = appData.stages[0]?.id ?? 'configuracion';
   const currentStageId = course?.stageId ?? fallbackStageId;
   const currentCourseSlug = course?.slug ?? slug;
-  const activeSection: CourseSection = isCourseSection(sectionParam) ? sectionParam : 'summary';
   const stage = course ? getStageMeta(appData, course.stageId) : undefined;
   const relatedTasks = course
     ? appData.tasks.filter((task) => task.courseSlug === course.slug)
@@ -1231,7 +1295,7 @@ export function CourseWorkspacePage({
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [stageNoteDrafts, setStageNoteDrafts] = useState<
     Record<CourseStageNoteKey, CourseStageNoteMutationInput>
-  >(() => makeStageNoteDrafts(course));
+  >(() => makeStageNoteDrafts(course ?? undefined));
   const [courseForm, setCourseForm] = useState<CourseMutationInput>(() =>
     course
       ? syncCourseStructureFields(appData, makeCourseForm(course))
@@ -1684,11 +1748,15 @@ export function CourseWorkspacePage({
 
   const currentCourse = course;
   const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
-  const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
   const canManageWritingWorkspace = userRole === 'Administrador' || userRole === 'Coordinador';
-  const courseLibraryResources = appData.libraryResources.filter(
-    (resource) => resource.courseSlug === currentCourse.slug,
-  );
+  const courseLibraryResources =
+    appData.libraryResources.length > 0
+      ? appData.libraryResources.filter((resource) => resource.courseSlug === currentCourse.slug)
+      : activeSection === 'escritura' && isLoading
+        ? (writingLaunchSnapshot?.libraryResources ?? []).filter(
+            (resource) => resource.courseSlug === currentCourse.slug,
+          )
+        : [];
   const writingWorkQueue = architectureProducts
     .filter((product) => {
       if (canManageWritingWorkspace) {
@@ -1740,7 +1808,23 @@ export function CourseWorkspacePage({
   const planningProduct = planningProductId
     ? architectureProducts.find((product) => product.id === planningProductId) ?? null
     : null;
-  const activeUsers = appData.users.filter((user) => user.status !== 'Inactivo' && user.status !== 'Suspendido');
+  const fallbackUsers =
+    !persistedCourse && activeSection === 'escritura' && isLoading
+      ? writingLaunchSnapshot?.users ?? []
+      : [];
+  const availableUsers = appData.users.length > 0 ? appData.users : fallbackUsers;
+  const activeUsers = availableUsers.filter(
+    (user) => user.status !== 'Inactivo' && user.status !== 'Suspendido',
+  );
+
+  useEffect(() => {
+    if (activeSection !== 'escritura' || !writingProductQueryId) {
+      setWritingLaunchSnapshot(null);
+      return;
+    }
+
+    setWritingLaunchSnapshot(readWritingLaunchSnapshot(slug, writingProductQueryId));
+  }, [activeSection, slug, writingProductQueryId]);
 
   useEffect(() => {
     if (selectedWritingProduct) {
@@ -1764,9 +1848,13 @@ export function CourseWorkspacePage({
   const workflowSettings = appData.workflow;
   const currentStageIndex = appData.stages.findIndex((item) => item.id === currentCourse.stageId);
   const currentCheckpoint = currentCourse.stageChecklist[currentStageIndex];
-  const relatedResources = appData.libraryResources.filter(
-    (resource) => resource.courseSlug === currentCourse.slug,
-  );
+  const relatedResources = (
+    appData.libraryResources.length > 0
+      ? appData.libraryResources
+      : activeSection === 'escritura' && isLoading
+        ? writingLaunchSnapshot?.libraryResources ?? []
+        : []
+  ).filter((resource) => resource.courseSlug === currentCourse.slug);
   const canOperateMicrocurriculo = canManageMicrocurriculo(userRole);
   const canOperateArchitecture = canManageArchitecture(userRole);
   const canEditPlanning = canEditPlanningWorkspace(userRole);
@@ -4065,6 +4153,29 @@ export function CourseWorkspacePage({
     setWritingError(null);
   }
 
+  function stashWritingLaunchSnapshot(product: CourseProduct) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const snapshot: WritingLaunchSnapshot = {
+      courseSlug: currentCourse.slug,
+      productId: product.id,
+      createdAt: Date.now(),
+      course: currentCourse,
+      users: appData.users,
+      libraryResources: appData.libraryResources.filter(
+        (resource) => resource.courseSlug === currentCourse.slug,
+      ),
+    };
+
+    try {
+      window.localStorage.setItem(WRITING_LAUNCH_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+      /* noop */
+    }
+  }
+
   function updateWritingDraft(updater: (current: ProductWritingData) => ProductWritingData) {
     setWritingDraft((current) => (current ? updater(current) : current));
   }
@@ -4832,6 +4943,7 @@ export function CourseWorkspacePage({
                     target="_blank"
                     rel="noreferrer"
                     className="writing-queue__item"
+                    onClick={() => stashWritingLaunchSnapshot(product)}
                   >
                     <div className="writing-queue__head">
                       <div>
@@ -4857,15 +4969,6 @@ export function CourseWorkspacePage({
                         <span className="eyebrow">Responsable</span>
                         <strong>{assigneeLabel}</strong>
                       </div>
-                    </div>
-
-                    <p className="writing-queue__summary">{stripHtmlToText(product.summary)}</p>
-
-                    <div className="writing-queue__details">
-                      <span className="eyebrow">Guía disponible</span>
-                      <p className="writing-queue__muted">
-                        Las instrucciones completas y las tres rutas de trabajo se abren al iniciar la escritura.
-                      </p>
                     </div>
 
                     <div className="writing-queue__cta">
