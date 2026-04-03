@@ -1188,7 +1188,111 @@ function normalizeProductWritingData(writingData?: ProductWritingData): ProductW
   };
 }
 
+function normalizeLongTextBlock(value?: string | null) {
+  return (value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function splitLegacyArchitectureText(summary?: string | null, body?: string | null) {
+  const normalizedSummary = normalizeLongTextBlock(summary);
+  const normalizedBody = normalizeLongTextBlock(body);
+
+  if (!normalizedSummary && !normalizedBody) {
+    return {
+      summary: '',
+      body: '',
+    };
+  }
+
+  if (normalizedBody) {
+    return {
+      summary: normalizedSummary,
+      body: normalizedBody,
+    };
+  }
+
+  const markerMatches = [
+    /caracteristicas/i,
+    /características/i,
+    /aspecto\s+lineamiento/i,
+    /instrucciones para escribirlo/i,
+    /formula practica/i,
+    /fórmula práctica/i,
+    /puedes pensarlo asi/i,
+    /puedes pensarlo así/i,
+    /en sintesis/i,
+    /en síntesis/i,
+  ]
+    .map((pattern) => normalizedSummary.search(pattern))
+    .filter((index) => index >= 0);
+
+  const firstMarkerIndex = markerMatches.length > 0 ? Math.min(...markerMatches) : -1;
+
+  if (firstMarkerIndex > 0) {
+    const nextSummary = normalizeLongTextBlock(normalizedSummary.slice(0, firstMarkerIndex));
+    const nextBody = normalizeLongTextBlock(normalizedSummary.slice(firstMarkerIndex));
+    return {
+      summary: nextSummary,
+      body: nextBody,
+    };
+  }
+
+  const summaryLooksOverloaded =
+    normalizedSummary.length > 420 ||
+    normalizedSummary.split('\n').length > 8 ||
+    /caracteristicas|características|momento de aplicacion|momento de aplicación|tipo de cuestionario|numero de preguntas|número de preguntas|cobertura tematica|cobertura temática/i.test(
+      normalizedSummary,
+    );
+
+  if (!summaryLooksOverloaded) {
+    return {
+      summary: normalizedSummary,
+      body:
+        normalizedSummary
+          ? 'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.'
+          : '',
+    };
+  }
+
+  const sentenceMatches = normalizedSummary.match(/[^.!?\n]+[.!?]+(?:\s+|$)/g) ?? [];
+  const descriptionSource =
+    sentenceMatches.slice(0, 2).join(' ').trim() ||
+    normalizedSummary.slice(0, 220).trim();
+  const nextSummary = normalizeLongTextBlock(descriptionSource);
+  const nextBody = normalizeLongTextBlock(
+    normalizedSummary.slice(descriptionSource.length).trim() || normalizedSummary,
+  );
+
+  return {
+    summary: nextSummary,
+    body:
+      nextBody ||
+      'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.',
+  };
+}
+
+function normalizeCourseProductTextFields(
+  stage: CourseProductStage,
+  summary?: string | null,
+  body?: string | null,
+) {
+  if (stage === 'arquitectura') {
+    return splitLegacyArchitectureText(summary, body);
+  }
+
+  return {
+    summary: normalizeLongTextBlock(summary),
+    body: normalizeLongTextBlock(body),
+  };
+}
+
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
+  const normalizedText = normalizeCourseProductTextFields(input.stage, input.summary, input.body);
+
   return {
     id: crypto.randomUUID(),
     title: input.title.trim(),
@@ -1196,8 +1300,8 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     format: input.format,
     owner: input.owner,
     status: input.status,
-    summary: input.summary?.trim?.() ?? '',
-    body: input.body?.trim?.() ?? '',
+    summary: normalizedText.summary,
+    body: normalizedText.body,
     tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     version: input.version?.trim?.() || '1.0',
     section: input.section?.trim() || undefined,
@@ -2410,6 +2514,81 @@ async function backfillCourseProductsTable() {
   }
 }
 
+async function syncCourseProductsJsonSnapshot(courseSlug: string) {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      stage,
+      format,
+      owner,
+      status,
+      summary,
+      body,
+      tags,
+      version,
+      section,
+      phase_plan AS "phasePlan",
+      writing_data AS "writingData",
+      updated_at AS "updatedAt"
+    FROM maturity_course_products
+    WHERE course_slug = ${courseSlug}
+    ORDER BY updated_at DESC, title ASC
+  `) as CourseProductRow[];
+
+  await sql`
+    UPDATE maturity_courses
+    SET products = ${JSON.stringify(rows.map(serializeCourseProductRow))}::jsonb
+    WHERE slug = ${courseSlug}
+  `;
+}
+
+async function backfillArchitectureProductTextFields() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      course_slug AS "courseSlug",
+      stage,
+      summary,
+      body
+    FROM maturity_course_products
+    WHERE stage = 'arquitectura'
+  `) as Array<{
+    id: string;
+    courseSlug: string;
+    stage: CourseProductStage;
+    summary: string;
+    body: string;
+  }>;
+
+  const affectedCourseSlugs = new Set<string>();
+
+  for (const row of rows) {
+    const normalizedText = normalizeCourseProductTextFields(row.stage, row.summary, row.body);
+
+    if (normalizedText.summary === row.summary && normalizedText.body === row.body) {
+      continue;
+    }
+
+    await sql`
+      UPDATE maturity_course_products
+      SET
+        summary = ${normalizedText.summary},
+        body = ${normalizedText.body},
+        updated_at = COALESCE(updated_at, ${getTodayLabel()})
+      WHERE id = ${row.id}
+    `;
+
+    affectedCourseSlugs.add(row.courseSlug);
+  }
+
+  for (const courseSlug of affectedCourseSlugs) {
+    await syncCourseProductsJsonSnapshot(courseSlug);
+  }
+}
+
 async function syncCourseProductsTable(course: Course) {
   const sql = getSql();
   const nextIds = course.products.map((product) => product.id);
@@ -2527,7 +2706,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 16; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 18; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3432,6 +3611,16 @@ async function ensureSchema() {
       `;
     }
 
+    // Migration 17: Split architecture products into description and instructions
+    if (currentVersion < 17) {
+      await backfillArchitectureProductTextFields();
+    }
+
+    // Migration 18: Ensure architecture products always carry explicit instructions
+    if (currentVersion < 18) {
+      await backfillArchitectureProductTextFields();
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -3533,6 +3722,8 @@ async function ensureAdminUserSeed() {
 }
 
 function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
+  const normalizedText = normalizeCourseProductTextFields(row.stage, row.summary, row.body);
+
   return {
     id: row.id,
     title: row.title,
@@ -3540,8 +3731,8 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     format: row.format,
     owner: row.owner,
     status: row.status,
-    summary: row.summary,
-    body: row.body,
+    summary: normalizedText.summary,
+    body: normalizedText.body,
     tags: parseJson<CourseProduct['tags']>(row.tags ?? []),
     version: row.version,
     section: row.section ?? undefined,
@@ -5012,9 +5203,19 @@ export async function updateCourseProductRecord(
       return product;
     }
 
+    const nextStage = input.stage ?? product.stage;
+    const normalizedText = normalizeCourseProductTextFields(
+      nextStage,
+      input.summary ?? product.summary,
+      input.body ?? product.body,
+    );
+
     updatedProduct = {
       ...product,
       ...input,
+      stage: nextStage,
+      summary: normalizedText.summary,
+      body: normalizedText.body,
       tags: input.tags ? (input.tags as string[]).map((tag) => tag.trim()).filter(Boolean) : product.tags,
       section: input.section ?? product.section,
       phasePlan:
