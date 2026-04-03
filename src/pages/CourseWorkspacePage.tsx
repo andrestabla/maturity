@@ -193,6 +193,10 @@ function hasHtmlMarkup(value: string) {
   return /<\/?[a-z][\s\S]*>/iu.test(value);
 }
 
+function hasStructuredRichHtmlBlocks(value: string) {
+  return /<(p|ul|ol|li|blockquote|h3|h4)\b/i.test(value);
+}
+
 function normalizePlainTextToHtml(value: string) {
   return value
     .replace(/\r\n/g, '\n')
@@ -386,6 +390,82 @@ function sanitizeRichHtml(value: string) {
   }
 
   const plainText = stripHtmlToText(raw);
+
+  if (hasStructuredRichHtmlBlocks(raw)) {
+    if (typeof window === 'undefined') {
+      return raw;
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
+    const root = doc.body.firstElementChild;
+
+    const sanitizeNode = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return escapeHtml(node.textContent ?? '');
+      }
+
+      if (!(node instanceof HTMLElement)) {
+        return '';
+      }
+
+      const tag = node.tagName.toLowerCase();
+      const children = Array.from(node.childNodes)
+        .map((child) => sanitizeNode(child))
+        .join('');
+
+      switch (tag) {
+        case 'br':
+          return '<br>';
+        case 'p':
+        case 'ul':
+        case 'ol':
+        case 'li':
+        case 'strong':
+        case 'b':
+        case 'em':
+        case 'i':
+        case 'u':
+        case 'blockquote':
+        case 'h3':
+        case 'h4':
+          return `<${tag}>${children}</${tag}>`;
+        case 'a': {
+          const href = (node.getAttribute('href') || '').trim();
+          const safeHref =
+            href.startsWith('http://') ||
+            href.startsWith('https://') ||
+            href.startsWith('mailto:') ||
+            href.startsWith('#') ||
+            href.startsWith('/')
+              ? href
+              : '';
+          const attrs = safeHref
+            ? ` href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer"`
+            : '';
+          return `<a${attrs}>${children}</a>`;
+        }
+        case 'div': {
+          const trimmedChildren = children.trim();
+          if (!trimmedChildren) {
+            return '';
+          }
+          return trimmedChildren;
+        }
+        case 'span':
+          return children;
+        default:
+          return children;
+      }
+    };
+
+    const sanitized = Array.from(root?.childNodes ?? [])
+      .map((child) => sanitizeNode(child).trim())
+      .filter(Boolean)
+      .join('');
+
+    return sanitized || normalizePlainTextToHtml(stripHtmlToText(raw));
+  }
 
   if (
     hasBrokenInstructionMarkup(raw) ||

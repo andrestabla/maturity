@@ -1210,6 +1210,10 @@ function hasHtmlLikeMarkup(value: string) {
   return /<\/?[a-z][\s\S]*>/iu.test(value);
 }
 
+function hasStructuredHtmlBlocks(value: string) {
+  return /<(p|ul|ol|li|blockquote|h3|h4)\b/i.test(value);
+}
+
 function normalizePlainTextToHtmlBlock(value: string) {
   return value
     .replace(/\r\n/g, '\n')
@@ -1412,6 +1416,10 @@ function normalizeArchitectureInstructionHtml(value?: string | null) {
 
   if (!hasHtmlLikeMarkup(normalized)) {
     return normalizeLegacyArchitectureInstructionText(normalized);
+  }
+
+  if (hasStructuredHtmlBlocks(normalized)) {
+    return normalized;
   }
 
   const plainText = stripHtmlToTextBlock(normalized);
