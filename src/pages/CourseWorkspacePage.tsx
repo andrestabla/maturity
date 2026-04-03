@@ -125,15 +125,6 @@ const validCourseSections: CourseSection[] = [
   'history',
 ];
 
-function splitRichTextLines(text: string) {
-  return stripHtmlToText(text)
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split(/\n+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/u)
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
-}
-
 function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
@@ -256,7 +247,17 @@ function sanitizeRichHtml(value: string) {
           : '';
         return `<a${attrs}>${children}</a>`;
       }
-      case 'div':
+      case 'div': {
+        const trimmedChildren = children.trim();
+
+        if (!trimmedChildren) {
+          return '';
+        }
+
+        const hasStructuredBlock = /<(p|ul|ol|blockquote|h3|h4)\b/i.test(trimmedChildren);
+
+        return hasStructuredBlock ? trimmedChildren : `<p>${trimmedChildren}</p>`;
+      }
       case 'span':
         return children;
       default:
@@ -1651,10 +1652,16 @@ export function CourseWorkspacePage({
 
       return left.title.localeCompare(right.title, 'es');
     });
-  const selectedWritingProduct =
+  const queriedWritingProduct =
     activeSection === 'escritura' && writingProductQueryId
-      ? writingWorkQueue.find((product) => product.id === writingProductQueryId) ?? null
+      ? architectureProducts.find((product) => product.id === writingProductQueryId) ?? null
       : null;
+  const canAccessQueriedWritingProduct = Boolean(
+    queriedWritingProduct &&
+      (canManageWritingWorkspace ||
+        (role === 'Experto' && getWritingPhase(queriedWritingProduct)?.assigneeId === viewer.id)),
+  );
+  const selectedWritingProduct = canAccessQueriedWritingProduct ? queriedWritingProduct : null;
   const canEditSelectedWritingProduct = Boolean(
     selectedWritingProduct &&
       (canManageWritingWorkspace || (role === 'Experto' && getWritingPhase(selectedWritingProduct)?.assigneeId === viewer.id)),
@@ -1676,12 +1683,12 @@ export function CourseWorkspacePage({
 
     setWritingDraft(null);
 
-    if (activeSection === 'escritura' && writingProductQueryId) {
+    if (activeSection === 'escritura' && writingProductQueryId && !isLoading) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('product');
       setSearchParams(nextParams, { replace: true });
     }
-  }, [activeSection, searchParams, selectedWritingProduct, setSearchParams, writingProductQueryId]);
+  }, [activeSection, isLoading, searchParams, selectedWritingProduct, setSearchParams, writingProductQueryId]);
   const taskProductOptions = currentCourse.products
     .slice()
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -4319,7 +4326,6 @@ export function CourseWorkspacePage({
             <div className="writing-queue">
               {writingWorkQueue.map((product) => {
                 const writingPhase = getWritingPhase(product);
-                const structuredLines = splitRichTextLines(product.body).slice(0, 5);
                 const dueLabel = writingPhase?.endDate ? formatDate(writingPhase.endDate) : 'Sin fecha final';
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
@@ -4361,14 +4367,10 @@ export function CourseWorkspacePage({
 
                     <div className="writing-queue__specs">
                       <span className="eyebrow">Instrucciones</span>
-                      {structuredLines.length > 0 ? (
-                        <ul className="writing-queue__spec-list">
-                          {structuredLines.map((line, index) => (
-                            <li key={`${product.id}-spec-${index}`}>{line}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="writing-queue__muted">Sin instrucciones definidas.</p>
+                      {renderRichTextContent(
+                        product.body,
+                        'Sin instrucciones definidas.',
+                        'rich-html--panel writing-queue__instructions',
                       )}
                     </div>
 
@@ -5354,7 +5356,7 @@ export function CourseWorkspacePage({
                                   {renderRichTextContent(
                                     product.body,
                                     'Sin instrucciones registradas.',
-                                    'rich-html--structured',
+                                    'rich-html--panel',
                                   )}
                                 </div>
                               </div>
@@ -5947,7 +5949,7 @@ export function CourseWorkspacePage({
                     {renderRichTextContent(
                       architecturePreviewProduct.body?.trim() || '',
                       'Este producto todavía no tiene instrucciones registradas.',
-                      'rich-html--structured',
+                      'rich-html--panel',
                     )}
                   </div>
                 </div>

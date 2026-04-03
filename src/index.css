@@ -9392,16 +9392,15 @@ body::after {
   font-size: 0.97rem;
 }
 
-.rich-html--structured {
-  display: grid;
-  gap: 12px;
+.rich-html--panel {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white 18%);
+  background: color-mix(in srgb, var(--surface-soft) 72%, white 28%);
 }
 
-.rich-html--structured > * {
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-soft) 72%, white 28%);
-  border: 1px solid color-mix(in srgb, var(--line) 82%, white 18%);
+.rich-html--panel > :last-child {
+  margin-bottom: 0;
 }
 
 .planning-section-stack {
@@ -9761,12 +9760,8 @@ body::after {
   gap: 8px;
 }
 
-.writing-queue__spec-list {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding-left: 18px;
-  color: var(--text-body);
+.writing-queue__instructions {
+  font-size: 0.96rem;
 }
 
 .writing-queue__muted {
