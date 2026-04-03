@@ -1998,13 +1998,14 @@ export function CourseWorkspacePage({
     onLoadTemplate?: () => void,
   ) {
     const previewItems = extractPreviewItems(product.body).slice(0, 6);
+    const isArchitectureProduct = product.stage === 'arquitectura';
 
     return (
       <div className="surface-muted product-guide">
         <div className="section-heading section-heading--compact">
           <div>
-            <span className="eyebrow">Guía estructurada</span>
-            <h3>Edición asistida del producto</h3>
+            <span className="eyebrow">{isArchitectureProduct ? 'Guía del producto' : 'Guía estructurada'}</span>
+            <h3>{isArchitectureProduct ? 'Descripción e instrucciones' : 'Edición asistida del producto'}</h3>
           </div>
 
           {onLoadTemplate ? (
@@ -3274,7 +3275,10 @@ export function CourseWorkspacePage({
       const unitTitleHints = (currentCourse.metadata.units ?? []).map((unit) => unit.tituloUnidad ?? '');
       type SuggestedArchitectureItem = {
         title?: unknown;
+        description?: unknown;
         summary?: unknown;
+        instructions?: unknown;
+        body?: unknown;
         format?: unknown;
         section?: unknown;
       };
@@ -3372,12 +3376,12 @@ export function CourseWorkspacePage({
               body: JSON.stringify({
                 courseSlug: currentCourse.slug,
                 title,
-                summary: String(item.summary ?? '').trim(),
+                summary: String(item.description ?? item.summary ?? '').trim(),
                 format: normalizeArchitectureProductFormat(String(item.format ?? '')),
                 stage: 'arquitectura',
                 owner: userRole,
                 status: 'Borrador',
-                body: '',
+                body: String(item.instructions ?? item.body ?? '').trim(),
                 tags: [],
                 version: '1.0',
                 section: String(item.section ?? '').trim(),
@@ -4062,7 +4066,7 @@ export function CourseWorkspacePage({
           <p className="section-lead">
             Aquí aparecen los productos creados en arquitectura y ya planificados para la fase de
             escritura. Se ordenan por fecha final y cada fila resume lo que se espera del experto
-            según el detalle estructurado del producto.
+            según las instrucciones del producto.
           </p>
         </article>
 
@@ -4132,7 +4136,7 @@ export function CourseWorkspacePage({
                     <p className="writing-queue__summary">{product.summary}</p>
 
                     <div className="writing-queue__specs">
-                      <span className="eyebrow">Detalle estructurado</span>
+                      <span className="eyebrow">Instrucciones</span>
                       {structuredLines.length > 0 ? (
                         <ul className="writing-queue__spec-list">
                           {structuredLines.map((line, index) => (
@@ -4140,7 +4144,7 @@ export function CourseWorkspacePage({
                           ))}
                         </ul>
                       ) : (
-                        <p className="writing-queue__muted">Sin detalle estructurado definido.</p>
+                        <p className="writing-queue__muted">Sin instrucciones definidas.</p>
                       )}
                     </div>
 
@@ -4893,7 +4897,7 @@ export function CourseWorkspacePage({
                         </label>
 
                         <label className="field field--full">
-                          <span>Descripción / propósito</span>
+                          <span>Descripción</span>
                           <div className="field__control field__control--textarea">
                             <textarea
                               rows={4}
@@ -4905,7 +4909,7 @@ export function CourseWorkspacePage({
                                   summary: event.target.value,
                                 }))
                               }
-                              placeholder="Describe qué hace este producto y por qué existe dentro del curso."
+                              placeholder="Describe qué es este producto y cuál es su propósito dentro del curso."
                               required
                             />
                           </div>
@@ -5041,7 +5045,7 @@ export function CourseWorkspacePage({
                         </label>
 
                         <label className="field field--full">
-                          <span>Resumen</span>
+                          <span>Descripción</span>
                           <div className="field__control field__control--textarea">
                             <textarea
                               className="rich-textarea"
@@ -5060,7 +5064,7 @@ export function CourseWorkspacePage({
                         </label>
 
                         <label className="field field--full">
-                          <span>Contenido del producto</span>
+                          <span>Instrucciones</span>
                           <div className="field__control field__control--textarea">
                             <textarea
                               className="rich-textarea"
@@ -5073,7 +5077,7 @@ export function CourseWorkspacePage({
                                   body: event.target.value,
                                 }))
                               }
-                              placeholder="Desarrolla aquí el contenido base del producto."
+                              placeholder="Define aquí las instrucciones, estructura esperada y criterios de producción del producto."
                               required
                             />
                           </div>
@@ -5117,7 +5121,7 @@ export function CourseWorkspacePage({
                             <div className="list-stack">
                               <div className="list-item">
                                 <div>
-                                  <strong>Resumen</strong>
+                                  <strong>Descripción</strong>
                                   <p>{product.summary}</p>
                                 </div>
                                 <div className="list-item__meta">
@@ -5128,7 +5132,7 @@ export function CourseWorkspacePage({
 
                               <div className="list-item">
                                 <div>
-                                  <strong>Contenido</strong>
+                                  <strong>Instrucciones</strong>
                                   <p style={{ whiteSpace: 'pre-wrap' }}>{product.body}</p>
                                 </div>
                               </div>
@@ -5227,7 +5231,7 @@ export function CourseWorkspacePage({
                                 </label>
 
                                 <label className="field field--full">
-                                  <span>Descripción / propósito</span>
+                                  <span>Descripción</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
                                       className="rich-textarea"
@@ -5359,7 +5363,7 @@ export function CourseWorkspacePage({
                                 </label>
 
                                 <label className="field field--full">
-                                  <span>Resumen</span>
+                                  <span>Descripción</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
                                       className="rich-textarea"
@@ -5373,7 +5377,7 @@ export function CourseWorkspacePage({
                                 </label>
 
                                 <label className="field field--full">
-                                  <span>Contenido del producto</span>
+                                  <span>Instrucciones</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
                                       className="rich-textarea"
@@ -5723,10 +5727,10 @@ export function CourseWorkspacePage({
                 </div>
                 <div className="list-item">
                   <div>
-                    <strong>Detalle estructurado</strong>
+                    <strong>Instrucciones</strong>
                     {renderRichTextList(
                       architecturePreviewProduct.body?.trim() || '',
-                      'Este producto todavía no tiene contenido estructurado adicional.',
+                      'Este producto todavía no tiene instrucciones registradas.',
                       'rich-copy--structured',
                     )}
                   </div>
@@ -6665,7 +6669,7 @@ export function CourseWorkspacePage({
           isOpen={Boolean(selectedWritingProduct)}
           onClose={closeWritingEditor}
           title={`Escritura · ${selectedWritingProduct.title}`}
-          description="Trabaja el producto en una pestaña dedicada. Puedes cargar un archivo, apoyarte en IA o redactar desde cero siguiendo el detalle estructurado."
+          description="Trabaja el producto en una pestaña dedicada. Puedes cargar un archivo, apoyarte en IA o redactar desde cero siguiendo las instrucciones del producto."
           sideLabel="Escritura"
           sideDescription="PRODUCTO"
           width="2xl"
@@ -6811,7 +6815,7 @@ export function CourseWorkspacePage({
                     </div>
                     <p className="field-help">
                       Adjunta documentos base o selecciona recursos de la biblioteca. La IA redacta
-                      cada parte usando el detalle estructurado del producto.
+                      cada parte usando las instrucciones del producto.
                     </p>
 
                     {canEditSelectedWritingProduct ? (
@@ -6949,7 +6953,7 @@ export function CourseWorkspacePage({
                       </div>
                     </div>
                     <p className="field-help">
-                      Usa el detalle estructurado como guía y redacta directamente el producto.
+                      Usa las instrucciones del producto como guía y redacta directamente el producto.
                     </p>
                     <label className="field">
                       <span>Texto del producto</span>
@@ -6977,11 +6981,11 @@ export function CourseWorkspacePage({
                   <div className="section-heading">
                     <div>
                       <span className="eyebrow">Guía</span>
-                      <h4>Detalle estructurado</h4>
+                      <h4>Instrucciones del producto</h4>
                     </div>
                   </div>
                   <pre className="writing-editor__structured-body">
-                    {selectedWritingProduct.body?.trim() || 'Sin detalle estructurado.'}
+                    {selectedWritingProduct.body?.trim() || 'Sin instrucciones del producto.'}
                   </pre>
                 </article>
 

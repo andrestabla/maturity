@@ -134,21 +134,28 @@ export default async function handler(request: Request | any, response?: any) {
 
       REGLA DE SALIDA:
       Devuelve un JSON estrictamente estructurado en tres bloques: "introduccion", "unidades" y "cierre".
-      Cada bloque es un arreglo de productos con: title, summary, format (ej: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación), y section (nombre de la sección o unidad).
+      Cada bloque es un arreglo de productos con estos campos OBLIGATORIOS:
+      - title
+      - description
+      - instructions
+      - format
+      - section
 
       Asegúrate de que el campo "format" coincida EXACTAMENTE con uno de estos valores: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación.
+      El campo "description" debe explicar en 1 o 2 frases qué es el producto y cuál es su propósito.
+      El campo "instructions" debe ser detallado, accionable y útil para quien tendrá que producir el recurso. Incluye estructura esperada, restricciones, componentes obligatorios, criterios pedagógicos y cualquier especificación relevante derivada del microcurrículo y los lineamientos institucionales.
 
       Asegúrate de que el campo "section" sea "Introducción", "Cierre" o exactamente una de estas unidades:
       ${units.length > 0 ? units.map((_: any, index: number) => `- Unidad ${index + 1}`).join('\n') : '- Unidad 1'}
 
       Ejemplo de formato:
       {
-        "introduccion": [{ "title": "Video de presentación", "summary": "...", "format": "Video", "section": "Introducción" }],
+        "introduccion": [{ "title": "Video de presentación", "description": "...", "instructions": "...", "format": "Video", "section": "Introducción" }],
         "unidades": [
-          { "title": "Lectura fundamental U1", "summary": "...", "format": "Documento", "section": "Unidad 1" },
-          { "title": "Actividad aplicada U2", "summary": "...", "format": "Actividad", "section": "Unidad 2" }
+          { "title": "Lectura fundamental U1", "description": "...", "instructions": "...", "format": "Documento", "section": "Unidad 1" },
+          { "title": "Actividad aplicada U2", "description": "...", "instructions": "...", "format": "Actividad", "section": "Unidad 2" }
         ],
-        "cierre": [{ "title": "Examen final", "summary": "...", "format": "Evaluación", "section": "Cierre" }]
+        "cierre": [{ "title": "Examen final", "description": "...", "instructions": "...", "format": "Evaluación", "section": "Cierre" }]
       }`;
 
       notify({ progress: 40, step: 'IA diseñando ruta instruccional...' });
