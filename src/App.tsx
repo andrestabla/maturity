@@ -82,9 +82,10 @@ export default function App() {
   const {
     appData,
     isLoading,
+    error,
     refreshAppData,
     mutateAppData,
-  } = useAppData(status === 'authenticated');
+  } = useAppData(status === 'authenticated', session.user?.id ?? 'anonymous');
   const authenticatedUser = session.user;
   const availableRoles =
     authenticatedUser?.role === 'Administrador'
@@ -248,6 +249,8 @@ export default function App() {
                 role={activeRole}
                 viewer={session.user}
                 appData={appData}
+                isLoading={isLoading}
+                dataError={error}
                 userRole={session.user.role}
                 refreshAppData={refreshAppData}
                 mutateAppData={mutateAppData}

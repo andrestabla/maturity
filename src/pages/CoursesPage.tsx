@@ -33,6 +33,8 @@ interface CoursesPageProps {
   role: Role;
   viewer: AuthUser;
   appData: AppData;
+  isLoading: boolean;
+  dataError: string | null;
   userRole: Role;
   refreshAppData: () => void;
   mutateAppData: (nextData: AppData | ((current: AppData) => AppData)) => void;
@@ -546,6 +548,8 @@ export function CoursesPage({
   role,
   viewer,
   appData,
+  isLoading,
+  dataError,
   userRole,
   refreshAppData,
   mutateAppData,
@@ -843,6 +847,10 @@ export function CoursesPage({
   const currentNode = parseNode(selectedNode);
   const isRootEntry = selectedNode === 'root';
   const isProgramEntry = currentNode.type === 'academicPeriod';
+  const isBootstrappingRepository =
+    isLoading && appData.courses.length === 0 && repositoryCourses.length === 0;
+  const hasBootstrapFailure =
+    !isLoading && Boolean(dataError) && appData.courses.length === 0 && repositoryCourses.length === 0;
   const activeFilterCount = [
     projectFilter !== 'Todos',
     institutionFilter !== 'Todas',
@@ -1403,7 +1411,23 @@ export function CoursesPage({
           </>
         ) : null}
 
-        {folderEntries.length > 0 ? (
+        {isBootstrappingRepository ? (
+          <div className="empty-state empty-state--embedded folder-browser__empty">
+            <strong>Cargando cursos y carpetas</strong>
+            <p>Estamos recuperando la estructura académica visible para esta sesión.</p>
+          </div>
+        ) : hasBootstrapFailure ? (
+          <div className="empty-state empty-state--embedded folder-browser__empty">
+            <strong>No pudimos cargar los cursos a tiempo</strong>
+            <p>
+              Conservamos la interfaz activa, pero esta carga no devolvió datos válidos. Intenta
+              revalidar para traer la estructura actualizada.
+            </p>
+            <button type="button" className="ghost-button" onClick={refreshAppData}>
+              <span>Reintentar carga</span>
+            </button>
+          </div>
+        ) : folderEntries.length > 0 ? (
           <div className="folder-grid">
             {folderEntries.map((entry) => (
               <button

@@ -14,10 +14,81 @@ interface SyncMessage {
   at: number;
 }
 
-export function useAppData(enabled: boolean) {
-  const [appData, setAppData] = useState<AppData>(() => createEmptyAppData());
+const APP_DATA_SNAPSHOT_PREFIX = 'maturity_app_snapshot_v2';
+const REQUEST_TIMEOUT_MS = 8000;
+
+function isAppDataSnapshot(value: unknown): value is AppData {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<AppData>;
+  return (
+    Array.isArray(candidate.courses) &&
+    Array.isArray(candidate.tasks) &&
+    Array.isArray(candidate.alerts) &&
+    Array.isArray(candidate.libraryResources) &&
+    Array.isArray(candidate.users)
+  );
+}
+
+function getSnapshotKey(scope: string) {
+  return `${APP_DATA_SNAPSHOT_PREFIX}:${scope}`;
+}
+
+function readAppDataSnapshot(scope: string) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getSnapshotKey(scope));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as { data?: unknown };
+    return isAppDataSnapshot(parsed.data) ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistAppDataSnapshot(scope: string, data: AppData) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      getSnapshotKey(scope),
+      JSON.stringify({
+        savedAt: Date.now(),
+        data,
+      }),
+    );
+  } catch {
+    /* noop */
+  }
+}
+
+function clearAppDataSnapshot(scope: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(getSnapshotKey(scope));
+  } catch {
+    /* noop */
+  }
+}
+
+export function useAppData(enabled: boolean, cacheScope = 'anonymous') {
+  const initialSnapshot = readAppDataSnapshot(cacheScope);
+  const [appData, setAppData] = useState<AppData>(() => initialSnapshot ?? createEmptyAppData());
   const [source, setSource] = useState<DataSource>('bootstrap');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled && !initialSnapshot);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -25,7 +96,8 @@ export function useAppData(enabled: boolean) {
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const requestSequenceRef = useRef(0);
   const latestAppliedSequenceRef = useRef(0);
-  const hasSuccessfulLoadRef = useRef(false);
+  const hasSuccessfulLoadRef = useRef(Boolean(initialSnapshot));
+  const cacheScopeRef = useRef(cacheScope);
 
   const queueRefresh = useCallback(() => {
     setRefreshKey((current) => current + 1);
@@ -98,8 +170,29 @@ export function useAppData(enabled: boolean) {
   }, [queueRefresh]);
 
   useEffect(() => {
+    if (cacheScopeRef.current === cacheScope) {
+      return;
+    }
+
+    cacheScopeRef.current = cacheScope;
+    const snapshot = readAppDataSnapshot(cacheScope);
+    hasSuccessfulLoadRef.current = Boolean(snapshot);
+    latestAppliedSequenceRef.current = 0;
+    requestSequenceRef.current = 0;
+    setError(null);
+    setSource(snapshot ? 'neon' : 'bootstrap');
+    setAppData(snapshot ?? createEmptyAppData());
+    setIsLoading(enabled && !snapshot);
+  }, [cacheScope, enabled]);
+
+  useEffect(() => {
     if (!enabled) {
+      hasSuccessfulLoadRef.current = false;
       setIsLoading(false);
+      setIsRefreshing(false);
+      setError(null);
+      setSource('bootstrap');
+      setAppData(createEmptyAppData());
       return;
     }
 
@@ -116,9 +209,15 @@ export function useAppData(enabled: boolean) {
         setIsRefreshing(true);
       }
 
+      const requestController = new AbortController();
+      const abortRequest = () => requestController.abort();
+      const timeout = window.setTimeout(abortRequest, REQUEST_TIMEOUT_MS);
+
+      controller.signal.addEventListener('abort', abortRequest);
+
       try {
         const response = await fetch('/api/bootstrap', {
-          signal: controller.signal,
+          signal: requestController.signal,
           credentials: 'same-origin',
           cache: 'no-store',
           headers: {
@@ -138,6 +237,7 @@ export function useAppData(enabled: boolean) {
 
         latestAppliedSequenceRef.current = requestSequence;
         hasSuccessfulLoadRef.current = true;
+        persistAppDataSnapshot(cacheScopeRef.current, payload.data);
 
         startTransition(() => {
           setAppData(payload.data);
@@ -151,7 +251,9 @@ export function useAppData(enabled: boolean) {
 
         const message =
           requestError instanceof Error
-            ? requestError.message
+            ? requestError.name === 'AbortError'
+              ? 'bootstrap_timeout'
+              : requestError.message
             : 'No fue posible leer la API de datos.';
         setError(message);
 
@@ -163,6 +265,9 @@ export function useAppData(enabled: boolean) {
           setIsLoading(false);
           setIsRefreshing(false);
         }
+
+        window.clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortRequest);
       }
     }
 
@@ -222,8 +327,15 @@ export function useAppData(enabled: boolean) {
     },
     mutateAppData: (nextData: AppData | ((current: AppData) => AppData)) => {
       startTransition(() => {
-        setAppData((current) => (typeof nextData === 'function' ? nextData(current) : nextData));
+        setAppData((current) => {
+          const resolved = typeof nextData === 'function' ? nextData(current) : nextData;
+          persistAppDataSnapshot(cacheScopeRef.current, resolved);
+          return resolved;
+        });
       });
+    },
+    clearCachedAppData: () => {
+      clearAppDataSnapshot(cacheScopeRef.current);
     },
   };
 }
