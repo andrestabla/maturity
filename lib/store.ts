@@ -1197,6 +1197,183 @@ function normalizeLongTextBlock(value?: string | null) {
     .trim();
 }
 
+function escapeHtmlBlock(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function hasHtmlLikeMarkup(value: string) {
+  return /<\/?[a-z][\s\S]*>/iu.test(value);
+}
+
+function normalizePlainTextToHtmlBlock(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtmlBlock(paragraph).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function stripHtmlToTextBlock(value: string) {
+  return value
+    .replace(/<br\s*\/?>/giu, '\n')
+    .replace(/<\/(p|div|li|ul|ol|blockquote|h[1-6])>/giu, '\n')
+    .replace(/<li>/giu, '• ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+const architectureInstructionLabels = [
+  'Ficha técnica',
+  'Estrategias sugeridas para el cierre',
+  'Instrucciones de redacción y enfoque',
+  'Especificación / instrucción',
+  'Propósito comunicativo',
+  'Estilo visual y narrativo',
+  'Recursos narrativos obligatorios',
+  'Aspecto',
+  'Función',
+  'Duración máxima',
+  'Inicio',
+  'Desarrollo',
+  'Cierre',
+  'Tono',
+] as const;
+
+function escapeRegexBlock(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasBrokenArchitectureInstructionMarkup(value: string) {
+  return (
+    /AspectoEspecificaci[oó]n\s*\/\s*instrucci[oó]n/iu.test(value) ||
+    /(?:Funci[oó]n|Prop[oó]sito comunicativo|Duraci[oó]n m[aá]xima|Inicio|Desarrollo|Cierre|Tono)(?=[A-ZÁÉÍÓÚÑ0-9])/u.test(
+      value,
+    ) ||
+    /<\/(?:strong|b|h3|h4|p|div)>\s*(?:Funci[oó]n|Prop[oó]sito comunicativo|Duraci[oó]n m[aá]xima|Inicio|Desarrollo|Cierre|Tono|Aspecto)/iu.test(
+      value,
+    )
+  );
+}
+
+function normalizeLegacyArchitectureInstructionText(value: string) {
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  const hasStructuredSignal =
+    /AspectoEspecificaci[oó]n\s*\/\s*instrucci[oó]n/i.test(normalized) ||
+    architectureInstructionLabels.some((label) =>
+      normalized.toLocaleLowerCase().includes(label.toLocaleLowerCase()),
+    ) ||
+    /\d+\.\s+[A-ZÁÉÍÓÚÑ]/u.test(normalized);
+
+  if (!hasStructuredSignal) {
+    return normalizePlainTextToHtmlBlock(normalized);
+  }
+
+  let working = normalized;
+
+  working = working.replace(
+    /AspectoEspecificaci[oó]n\s*\/\s*instrucci[oó]n/giu,
+    'Aspecto\nEspecificación / instrucción',
+  );
+  working = working.replace(
+    /([a-záéíóúñ0-9])(?=(Aspecto|Funci[oó]n|Prop[oó]sito comunicativo|Duraci[oó]n m[aá]xima|Inicio|Desarrollo|Cierre|Tono|Ficha t[eé]cnica|Estilo visual y narrativo|Recursos narrativos obligatorios|Estrategias sugeridas para el cierre))/giu,
+    '$1\n',
+  );
+
+  architectureInstructionLabels.forEach((label) => {
+    const pattern = new RegExp(`([^\\n])(${escapeRegexBlock(label)})(?=[A-ZÁÉÍÓÚÑ0-9])`, 'gu');
+    working = working.replace(pattern, '$1\n$2 ');
+  });
+
+  working = working.replace(/([^\n])((?:\d+)\.\s+[A-ZÁÉÍÓÚÑ])/gu, '$1\n\n$2');
+  working = working.replace(/\n{3,}/g, '\n\n');
+
+  const paragraphs = working
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  const blocks: string[] = [];
+  const sortedLabels = [...architectureInstructionLabels].sort(
+    (left, right) => right.length - left.length,
+  );
+
+  paragraphs.forEach((paragraph) => {
+    const lines = paragraph
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    lines.forEach((line) => {
+      const numberedMatch = line.match(/^(\d+\.\s+.+)$/u);
+
+      if (numberedMatch) {
+        blocks.push(`<h3>${escapeHtmlBlock(numberedMatch[1])}</h3>`);
+        return;
+      }
+
+      const label = sortedLabels.find((item) => line.startsWith(item));
+
+      if (label) {
+        const rest = line.slice(label.length).trim().replace(/^[:\-–]\s*/, '');
+        blocks.push(`<h4>${escapeHtmlBlock(label)}</h4>`);
+        if (rest) {
+          blocks.push(`<p>${escapeHtmlBlock(rest)}</p>`);
+        }
+        return;
+      }
+
+      blocks.push(`<p>${escapeHtmlBlock(line)}</p>`);
+    });
+  });
+
+  return blocks.join('');
+}
+
+function normalizeArchitectureInstructionHtml(value?: string | null) {
+  const normalized = normalizeLongTextBlock(value);
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (!hasHtmlLikeMarkup(normalized)) {
+    return normalizeLegacyArchitectureInstructionText(normalized);
+  }
+
+  const plainText = stripHtmlToTextBlock(normalized);
+
+  if (
+    hasBrokenArchitectureInstructionMarkup(normalized) ||
+    hasBrokenArchitectureInstructionMarkup(plainText)
+  ) {
+    return normalizeLegacyArchitectureInstructionText(plainText || normalized);
+  }
+
+  return normalized;
+}
+
 const genericArchitectureInstructionTemplate =
   'Desarrolla este producto siguiendo la descripción, la sección asignada y los lineamientos pedagógicos institucionales del curso.';
 
@@ -1287,12 +1464,14 @@ function splitLegacyArchitectureText({
   body?: string | null;
 }) {
   const normalizedSummary = normalizeLongTextBlock(summary);
-  const normalizedBody = normalizeLongTextBlock(body);
+  const normalizedBody = normalizeArchitectureInstructionHtml(body);
 
   if (!normalizedSummary && !normalizedBody) {
     return {
       summary: '',
-      body: buildArchitectureInstructionFallback({ title, format, section, summary }),
+      body: normalizeArchitectureInstructionHtml(
+        buildArchitectureInstructionFallback({ title, format, section, summary }),
+      ),
     };
   }
 
@@ -1325,7 +1504,7 @@ function splitLegacyArchitectureText({
     const nextBody = normalizeLongTextBlock(normalizedSummary.slice(firstMarkerIndex));
     return {
       summary: nextSummary,
-      body: nextBody,
+      body: normalizeArchitectureInstructionHtml(nextBody),
     };
   }
 
@@ -1339,12 +1518,14 @@ function splitLegacyArchitectureText({
   if (!summaryLooksOverloaded) {
     return {
       summary: normalizedSummary,
-      body: buildArchitectureInstructionFallback({
-        title,
-        format,
-        section,
-        summary: normalizedSummary,
-      }),
+      body: normalizeArchitectureInstructionHtml(
+        buildArchitectureInstructionFallback({
+          title,
+          format,
+          section,
+          summary: normalizedSummary,
+        }),
+      ),
     };
   }
 
@@ -1359,14 +1540,15 @@ function splitLegacyArchitectureText({
 
   return {
     summary: nextSummary,
-    body:
+    body: normalizeArchitectureInstructionHtml(
       nextBody ||
-      buildArchitectureInstructionFallback({
-        title,
-        format,
-        section,
-        summary: nextSummary,
-      }),
+        buildArchitectureInstructionFallback({
+          title,
+          format,
+          section,
+          summary: nextSummary,
+        }),
+    ),
   };
 }
 
@@ -2826,7 +3008,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 19; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 20; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3743,6 +3925,11 @@ async function ensureSchema() {
 
     // Migration 19: Tailor architecture instructions by product format and section
     if (currentVersion < 19) {
+      await backfillArchitectureProductTextFields();
+    }
+
+    // Migration 20: Repair malformed architecture instruction HTML and persist rich blocks
+    if (currentVersion < 20) {
       await backfillArchitectureProductTextFields();
     }
 

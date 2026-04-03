@@ -343,8 +343,14 @@ function sanitizeRichHtml(value: string) {
     return normalizeLegacyStructuredText(raw);
   }
 
+  const plainText = stripHtmlToText(raw);
+
+  if (hasBrokenInstructionMarkup(raw) || hasBrokenInstructionMarkup(plainText)) {
+    return normalizeLegacyStructuredText(plainText || raw);
+  }
+
   if (typeof window === 'undefined') {
-    return normalizePlainTextToHtml(stripHtmlToText(raw));
+    return normalizePlainTextToHtml(plainText);
   }
 
   const parser = new DOMParser();
@@ -495,12 +501,7 @@ function renderRichTextContent(text: string, emptyText: string, className = '') 
 
 function renderInstructionContent(text: string, emptyText: string, className = '') {
   const raw = text.trim();
-  const plainText = stripHtmlToText(raw);
-  const hasStructuredBlocks = /<(p|ul|ol|blockquote|h3|h4|li)\b/iu.test(raw);
-  const source =
-    hasBrokenInstructionMarkup(plainText || raw) && !hasStructuredBlocks
-      ? normalizeLegacyStructuredText(plainText || raw)
-      : sanitizeRichHtml(raw);
+  const source = sanitizeRichHtml(raw);
 
   if (!source) {
     return <p className={`rich-copy rich-copy--empty ${className}`.trim()}>{emptyText}</p>;
