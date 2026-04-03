@@ -958,6 +958,28 @@ export function TeamPage({
     });
   }
 
+  async function persistExtractedGuidelines(extracted: string[]) {
+    if (!institutionDraft || !structureDraft || !editingStructureId) {
+      return false;
+    }
+
+    const mergedDraft = normalizeStructureDraft({
+      ...structureDraft,
+      pedagogicalGuidelines: uniqueGuidelineValues([
+        ...structureDraft.pedagogicalGuidelines.filter(Boolean),
+        ...extracted,
+      ]),
+    });
+
+    const nextStructures = institutionDraft.structures.map((structure) =>
+      structure.id === editingStructureId ? mergedDraft : structure,
+    );
+    const nextInstitution = syncInstitutionSettingsStructures(institutionDraft, nextStructures);
+    const savedInstitution = await persistInstitutionSettings(nextInstitution);
+
+    return Boolean(savedInstitution);
+  }
+
   async function handleDeleteStructure(structure: InstitutionStructure) {
     if (!institutionDraft) {
       return;
@@ -1487,13 +1509,17 @@ export function TeamPage({
                 return {
                   ...current,
                   pedagogicalGuidelines: next.length > 0 ? next : ['']
-                };
+                  };
               });
+
+              const didPersist = await persistExtractedGuidelines(extracted);
 
               await showAlert({
                 tone: 'success',
                 title: 'Lineamientos extraídos',
-                message: `Se han identificado ${extracted.length} reglas pedagógicas en el documento y se han integrado a la estructura.`
+                message: didPersist
+                  ? `Se identificaron ${extracted.length} reglas pedagógicas y quedaron guardadas en la estructura institucional.`
+                  : `Se identificaron ${extracted.length} reglas pedagógicas y quedaron cargadas en el editor. Guarda la estructura para persistirlas.`
               });
             }
 
@@ -1520,13 +1546,17 @@ export function TeamPage({
                   return {
                     ...current,
                     pedagogicalGuidelines: next.length > 0 ? next : ['']
-                  };
+                    };
                 });
+
+                const didPersist = await persistExtractedGuidelines(extracted);
 
                 await showAlert({
                   tone: 'success',
                   title: 'Lineamientos extraídos',
-                  message: `Se han identificado ${extracted.length} reglas pedagógicas en el documento y se han integrado a la estructura.`
+                  message: didPersist
+                    ? `Se identificaron ${extracted.length} reglas pedagógicas y quedaron guardadas en la estructura institucional.`
+                    : `Se identificaron ${extracted.length} reglas pedagógicas y quedaron cargadas en el editor. Guarda la estructura para persistirlas.`
                 });
               }
 
@@ -2948,17 +2978,16 @@ export function TeamPage({
 
                 <div className="field field--full">
                   <span>Lineamientos pedagógicos</span>
-                  <div className="list-stack">
+                  <div className="list-stack rich-copy rich-copy--structured rich-copy--guidelines">
                     {selectedInstitutionStructure.pedagogicalGuidelines.length > 0 ? (
-                      selectedInstitutionStructure.pedagogicalGuidelines.map((guideline) => (
-                        <p key={guideline} className="institution-structure-summary">
-                          {guideline}
-                        </p>
+                      selectedInstitutionStructure.pedagogicalGuidelines.map((guideline, index) => (
+                        <div key={guideline} className="rich-copy__item">
+                          <strong className="rich-copy__label">{index + 1}.</strong>
+                          <span className="institution-structure-summary">{guideline}</span>
+                        </div>
                       ))
                     ) : (
-                      <p className="institution-structure-summary">
-                        Sin reglas pedagógicas registradas.
-                      </p>
+                      <p className="institution-structure-summary">Sin reglas pedagógicas registradas.</p>
                     )}
                   </div>
                 </div>

@@ -119,6 +119,44 @@ const validCourseSections: CourseSection[] = [
   'history',
 ];
 
+function splitRichTextLines(text: string) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split(/\n+|(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])/u)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function renderRichTextList(text: string, emptyText: string, className = '') {
+  const lines = splitRichTextLines(text);
+
+  if (lines.length === 0) {
+    return <p className={`rich-copy rich-copy--empty ${className}`.trim()}>{emptyText}</p>;
+  }
+
+  return (
+    <ul className={`rich-copy ${className}`.trim()}>
+      {lines.map((line, index) => {
+        const structuredMatch = line.match(/^([^:]{2,64}):\s*(.+)$/u);
+
+        return (
+          <li key={`${line}-${index}`} className="rich-copy__item">
+            {structuredMatch ? (
+              <>
+                <strong className="rich-copy__label">{structuredMatch[1]}:</strong>
+                <span>{structuredMatch[2]}</span>
+              </>
+            ) : (
+              <span>{line}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function isCourseSection(value: string | undefined): value is CourseSection {
   return Boolean(value && validCourseSections.includes(value as CourseSection));
 }
@@ -5006,6 +5044,7 @@ export function CourseWorkspacePage({
                           <span>Resumen</span>
                           <div className="field__control field__control--textarea">
                             <textarea
+                              className="rich-textarea"
                               rows={3}
                               value={newProductForm.summary}
                               onChange={(event) =>
@@ -5024,6 +5063,7 @@ export function CourseWorkspacePage({
                           <span>Contenido del producto</span>
                           <div className="field__control field__control--textarea">
                             <textarea
+                              className="rich-textarea"
                               rows={10}
                               value={newProductForm.body}
                               onChange={(event) =>
@@ -5190,6 +5230,7 @@ export function CourseWorkspacePage({
                                   <span>Descripción / propósito</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
+                                      className="rich-textarea"
                                       rows={4}
                                       value={draft.summary}
                                       onChange={(event) =>
@@ -5321,6 +5362,7 @@ export function CourseWorkspacePage({
                                   <span>Resumen</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
+                                      className="rich-textarea"
                                       rows={3}
                                       value={draft.summary}
                                       onChange={(event) =>
@@ -5334,6 +5376,7 @@ export function CourseWorkspacePage({
                                   <span>Contenido del producto</span>
                                   <div className="field__control field__control--textarea">
                                     <textarea
+                                      className="rich-textarea"
                                       rows={10}
                                       value={draft.body}
                                       onChange={(event) =>
@@ -5665,7 +5708,11 @@ export function CourseWorkspacePage({
                 <div className="list-item">
                   <div>
                     <strong>Descripción</strong>
-                    <p>{architecturePreviewProduct.summary || 'Sin descripción ampliada.'}</p>
+                    {renderRichTextList(
+                      architecturePreviewProduct.summary || '',
+                      'Sin descripción ampliada.',
+                      'rich-copy--compact',
+                    )}
                   </div>
                 </div>
                 <div className="list-item">
@@ -5677,11 +5724,11 @@ export function CourseWorkspacePage({
                 <div className="list-item">
                   <div>
                     <strong>Detalle estructurado</strong>
-                    <p>
-                      {architecturePreviewProduct.body?.trim()
-                        ? architecturePreviewProduct.body
-                        : 'Este producto todavía no tiene contenido estructurado adicional.'}
-                    </p>
+                    {renderRichTextList(
+                      architecturePreviewProduct.body?.trim() || '',
+                      'Este producto todavía no tiene contenido estructurado adicional.',
+                      'rich-copy--structured',
+                    )}
                   </div>
                 </div>
               </div>
@@ -5814,7 +5861,7 @@ export function CourseWorkspacePage({
                 <label className="form-label">Descripción / Propósito</label>
                 <textarea
                   rows={4}
-                  className="modern-textarea"
+                  className="modern-textarea rich-textarea"
                   value={newProductForm.summary}
                   onChange={(e) => setNewProductForm({ ...newProductForm, summary: e.target.value })}
                   placeholder="Describe brevemente qué se espera de este producto..."

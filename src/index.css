@@ -1882,6 +1882,21 @@ html.modal-active .app-shell {
 
 .field__control textarea {
   resize: vertical;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.rich-textarea {
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 500;
+  line-height: 1.78;
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 
 .form-error {
@@ -9204,7 +9219,61 @@ body::after {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
+  min-height: calc(1.55em * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.rich-copy {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rich-copy--compact {
+  gap: 8px;
+}
+
+.rich-copy--structured {
+  gap: 12px;
+}
+
+.rich-copy--guidelines {
+  margin-top: 6px;
+}
+
+.rich-copy__item {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.72;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.rich-copy--structured .rich-copy__item,
+.rich-copy--guidelines .rich-copy__item {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, white 28%);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white 18%);
+}
+
+.rich-copy__label {
+  color: var(--secondary);
+  font-weight: 800;
+}
+
+.rich-copy--empty {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.7;
 }
 
 .planning-section-stack {
