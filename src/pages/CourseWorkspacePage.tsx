@@ -273,9 +273,34 @@ function normalizeLegacyStructuredText(value: string) {
       .map((line) => line.trim())
       .filter(Boolean);
 
+    let textBuffer: string[] = [];
+    let listBuffer: string[] = [];
+
+    const flushTextBuffer = () => {
+      if (textBuffer.length === 0) {
+        return;
+      }
+
+      blocks.push(`<p>${escapeHtml(textBuffer.join(' '))}</p>`);
+      textBuffer = [];
+    };
+
+    const flushListBuffer = () => {
+      if (listBuffer.length === 0) {
+        return;
+      }
+
+      blocks.push(
+        `<ul>${listBuffer.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`,
+      );
+      listBuffer = [];
+    };
+
     lines.forEach((line) => {
       const numberedMatch = line.match(/^(\d+\.\s+.+)$/u);
       if (numberedMatch) {
+        flushTextBuffer();
+        flushListBuffer();
         blocks.push(`<h3>${escapeHtml(numberedMatch[1])}</h3>`);
         return;
       }
@@ -283,16 +308,33 @@ function normalizeLegacyStructuredText(value: string) {
       const label = sortedLabels.find((item) => line.startsWith(item));
 
       if (label) {
+        flushTextBuffer();
+        flushListBuffer();
         const rest = line.slice(label.length).trim().replace(/^[:\-–]\s*/, '');
         blocks.push(`<h4>${escapeHtml(label)}</h4>`);
         if (rest) {
-          blocks.push(`<p>${escapeHtml(rest)}</p>`);
+          textBuffer.push(rest);
         }
         return;
       }
 
-      blocks.push(`<p>${escapeHtml(line)}</p>`);
+      if (line === '•') {
+        flushTextBuffer();
+        return;
+      }
+
+      if (line.startsWith('• ')) {
+        flushTextBuffer();
+        listBuffer.push(line.replace(/^•\s*/, ''));
+        return;
+      }
+
+      flushListBuffer();
+      textBuffer.push(line);
     });
+
+    flushTextBuffer();
+    flushListBuffer();
   });
 
   return blocks.join('');
@@ -345,7 +387,11 @@ function sanitizeRichHtml(value: string) {
 
   const plainText = stripHtmlToText(raw);
 
-  if (hasBrokenInstructionMarkup(raw) || hasBrokenInstructionMarkup(plainText)) {
+  if (
+    hasBrokenInstructionMarkup(raw) ||
+    hasBrokenInstructionMarkup(plainText) ||
+    hasFragmentedInstructionHtml(raw)
+  ) {
     return normalizeLegacyStructuredText(plainText || raw);
   }
 
@@ -482,6 +528,16 @@ function hasBrokenInstructionMarkup(value: string) {
     ) ||
     /<\/(?:strong|b|h3|h4)>(?=[A-ZÁÉÍÓÚÑ0-9])/iu.test(value)
   );
+}
+
+function hasFragmentedInstructionHtml(value: string) {
+  const paragraphMatches = Array.from(value.matchAll(/<p>([\s\S]*?)<\/p>/giu));
+  const shortParagraphs = paragraphMatches.filter((match) => {
+    const text = stripHtmlToText(match[1] ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > 0 && text.length <= 36;
+  }).length;
+
+  return /<p>\s*•\s*<\/p>/iu.test(value) || (/<h[34]\b/iu.test(value) && shortParagraphs >= 4);
 }
 
 function renderRichTextContent(text: string, emptyText: string, className = '') {

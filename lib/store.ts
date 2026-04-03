@@ -1272,6 +1272,16 @@ function hasBrokenArchitectureInstructionMarkup(value: string) {
   );
 }
 
+function hasFragmentedArchitectureInstructionHtml(value: string) {
+  const paragraphMatches = Array.from(value.matchAll(/<p>([\s\S]*?)<\/p>/giu));
+  const shortParagraphs = paragraphMatches.filter((match) => {
+    const text = stripHtmlToTextBlock(match[1] ?? '').replace(/\s+/g, ' ').trim();
+    return text.length > 0 && text.length <= 36;
+  }).length;
+
+  return /<p>\s*•\s*<\/p>/iu.test(value) || (/<h[34]\b/iu.test(value) && shortParagraphs >= 4);
+}
+
 function normalizeLegacyArchitectureInstructionText(value: string) {
   const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
@@ -1325,10 +1335,35 @@ function normalizeLegacyArchitectureInstructionText(value: string) {
       .map((line) => line.trim())
       .filter(Boolean);
 
+    let textBuffer: string[] = [];
+    let listBuffer: string[] = [];
+
+    const flushTextBuffer = () => {
+      if (textBuffer.length === 0) {
+        return;
+      }
+
+      blocks.push(`<p>${escapeHtmlBlock(textBuffer.join(' '))}</p>`);
+      textBuffer = [];
+    };
+
+    const flushListBuffer = () => {
+      if (listBuffer.length === 0) {
+        return;
+      }
+
+      blocks.push(
+        `<ul>${listBuffer.map((item) => `<li>${escapeHtmlBlock(item)}</li>`).join('')}</ul>`,
+      );
+      listBuffer = [];
+    };
+
     lines.forEach((line) => {
       const numberedMatch = line.match(/^(\d+\.\s+.+)$/u);
 
       if (numberedMatch) {
+        flushTextBuffer();
+        flushListBuffer();
         blocks.push(`<h3>${escapeHtmlBlock(numberedMatch[1])}</h3>`);
         return;
       }
@@ -1336,16 +1371,33 @@ function normalizeLegacyArchitectureInstructionText(value: string) {
       const label = sortedLabels.find((item) => line.startsWith(item));
 
       if (label) {
+        flushTextBuffer();
+        flushListBuffer();
         const rest = line.slice(label.length).trim().replace(/^[:\-–]\s*/, '');
         blocks.push(`<h4>${escapeHtmlBlock(label)}</h4>`);
         if (rest) {
-          blocks.push(`<p>${escapeHtmlBlock(rest)}</p>`);
+          textBuffer.push(rest);
         }
         return;
       }
 
-      blocks.push(`<p>${escapeHtmlBlock(line)}</p>`);
+      if (line === '•') {
+        flushTextBuffer();
+        return;
+      }
+
+      if (line.startsWith('• ')) {
+        flushTextBuffer();
+        listBuffer.push(line.replace(/^•\s*/, ''));
+        return;
+      }
+
+      flushListBuffer();
+      textBuffer.push(line);
     });
+
+    flushTextBuffer();
+    flushListBuffer();
   });
 
   return blocks.join('');
@@ -1366,7 +1418,8 @@ function normalizeArchitectureInstructionHtml(value?: string | null) {
 
   if (
     hasBrokenArchitectureInstructionMarkup(normalized) ||
-    hasBrokenArchitectureInstructionMarkup(plainText)
+    hasBrokenArchitectureInstructionMarkup(plainText) ||
+    hasFragmentedArchitectureInstructionHtml(normalized)
   ) {
     return normalizeLegacyArchitectureInstructionText(plainText || normalized);
   }
@@ -3008,7 +3061,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 20; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 21; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3930,6 +3983,11 @@ async function ensureSchema() {
 
     // Migration 20: Repair malformed architecture instruction HTML and persist rich blocks
     if (currentVersion < 20) {
+      await backfillArchitectureProductTextFields();
+    }
+
+    // Migration 21: Regroup fragmented architecture instruction paragraphs
+    if (currentVersion < 21) {
       await backfillArchitectureProductTextFields();
     }
 
