@@ -347,6 +347,132 @@ export interface LibraryResource {
   summary: string;
 }
 
+export type LibraryGroup =
+  | 'Investigacion'
+  | 'Didacticos'
+  | 'YouTube'
+  | 'Institucional'
+  | 'Otros';
+
+export type LibraryProvider =
+  | 'institutional'
+  | 'semantic-scholar'
+  | 'openalex'
+  | 'arxiv'
+  | 'core'
+  | 'oer-commons'
+  | 'phet'
+  | 'redalyc'
+  | 'scielo'
+  | 'youtube';
+
+export type LibraryVisibility = 'Publico' | 'Institucional';
+
+export type LibraryPreviewKind =
+  | 'article'
+  | 'paper'
+  | 'video'
+  | 'pdf'
+  | 'audio'
+  | 'image'
+  | 'scorm'
+  | 'simulation'
+  | 'external-link'
+  | 'unknown';
+
+export interface LibraryLicense {
+  label: string;
+  code?: string;
+  url?: string;
+  open?: boolean;
+}
+
+export interface LibraryAssetFile {
+  id: string;
+  assetId: string;
+  fileName: string;
+  mimeType: string;
+  key: string;
+  url: string;
+  sizeBytes: number;
+  manifest?: Record<string, unknown> | null;
+  previewText?: string | null;
+  createdAt: string;
+}
+
+export interface LibraryAsset {
+  id: string;
+  canonicalKey: string;
+  provider: LibraryProvider;
+  providerRecordId: string;
+  group: LibraryGroup;
+  title: string;
+  authors: string[];
+  publishedAt: string;
+  abstract: string;
+  descriptionHtml: string;
+  doi?: string;
+  canonicalUrl: string;
+  resourceType: string;
+  language: string;
+  license?: LibraryLicense | null;
+  openAccess: boolean;
+  citationCount: number;
+  thumbnailUrl?: string;
+  embedUrl?: string;
+  institutionId?: string;
+  institutionName?: string;
+  visibility: LibraryVisibility;
+  previewKind: LibraryPreviewKind;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  files?: LibraryAssetFile[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LibraryCourseLink {
+  id: string;
+  assetId: string;
+  courseSlug: string;
+  targetStage?: string;
+  targetUnit?: string;
+  addedBy?: string;
+  addedAt: string;
+}
+
+export interface LibrarySearchResult {
+  id: string;
+  canonicalKey: string;
+  provider: LibraryProvider;
+  providerRecordId: string;
+  providers: LibraryProvider[];
+  group: LibraryGroup;
+  title: string;
+  authors: string[];
+  publishedAt: string;
+  abstract: string;
+  descriptionHtml: string;
+  doi?: string;
+  canonicalUrl: string;
+  resourceType: string;
+  language: string;
+  license?: LibraryLicense | null;
+  openAccess: boolean;
+  citationCount: number;
+  thumbnailUrl?: string;
+  embedUrl?: string;
+  institutionId?: string;
+  institutionName?: string;
+  visibility: LibraryVisibility;
+  previewKind: LibraryPreviewKind;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  score: number;
+  sourceKinds: string[];
+  cached: boolean;
+}
+
 export interface RoleProfile {
   role: Role;
   overview: string;
@@ -364,6 +490,8 @@ export interface AppData {
   tasks: Task[];
   alerts: Alert[];
   libraryResources: LibraryResource[];
+  libraryAssets: LibraryAsset[];
+  libraryCourseLinks: LibraryCourseLink[];
   roleProfiles: RoleProfile[];
   users: AuthUser[];
   institution: InstitutionSettings;
@@ -708,6 +836,43 @@ export interface LibraryResourceMutationInput {
   status: LibraryResource['status'];
   tags: string[];
   summary: string;
+}
+
+export interface LibraryAssetMutationInput {
+  title: string;
+  group: LibraryGroup;
+  provider: LibraryProvider;
+  resourceType: string;
+  language: string;
+  visibility: LibraryVisibility;
+  institutionId?: string;
+  institutionName?: string;
+  canonicalUrl: string;
+  abstract: string;
+  descriptionHtml: string;
+  tags: string[];
+  thumbnailUrl?: string;
+  embedUrl?: string;
+  license?: LibraryLicense | null;
+  openAccess?: boolean;
+  citationCount?: number;
+  metadata?: Record<string, unknown>;
+  files?: Array<{
+    fileName: string;
+    mimeType: string;
+    key: string;
+    url: string;
+    sizeBytes: number;
+    manifest?: Record<string, unknown> | null;
+    previewText?: string | null;
+  }>;
+}
+
+export interface LibraryCourseLinkMutationInput {
+  assetId: string;
+  courseSlug: string;
+  targetStage?: string;
+  targetUnit?: string;
 }
 
 export interface CourseMutationInput {

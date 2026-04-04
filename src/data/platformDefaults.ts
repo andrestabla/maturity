@@ -250,6 +250,8 @@ export function createEmptyAppData(): AppData {
     tasks: [],
     alerts: [],
     libraryResources: [],
+    libraryAssets: [],
+    libraryCourseLinks: [],
     roleProfiles: defaultRoleProfiles.map((profile) => ({
       ...profile,
       modules: profile.modules.map((module) => ({ ...module })),

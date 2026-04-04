@@ -32,6 +32,18 @@ function isAppDataSnapshot(value: unknown): value is AppData {
   );
 }
 
+function normalizeAppDataSnapshot(value: unknown): AppData | null {
+  if (!isAppDataSnapshot(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    libraryAssets: Array.isArray(value.libraryAssets) ? value.libraryAssets : [],
+    libraryCourseLinks: Array.isArray(value.libraryCourseLinks) ? value.libraryCourseLinks : [],
+  };
+}
+
 function getSnapshotKey(scope: string) {
   return `${APP_DATA_SNAPSHOT_PREFIX}:${scope}`;
 }
@@ -48,7 +60,7 @@ function readAppDataSnapshot(scope: string) {
     }
 
     const parsed = JSON.parse(raw) as { data?: unknown };
-    return isAppDataSnapshot(parsed.data) ? parsed.data : null;
+    return normalizeAppDataSnapshot(parsed.data);
   } catch {
     return null;
   }

@@ -1,21 +1,31 @@
-import { useEffect, useState } from 'react';
-import { ChevronDown, LibraryBig, NotebookTabs, PackageCheck, PencilLine, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { 
+  ChevronDown, 
+  LibraryBig, 
+  Search, 
+  Filter, 
+  Loader2, 
+  Globe, 
+  History,
+  GraduationCap,
+  PlayCircle,
+  Building2,
+  PackageCheck,
+  ExternalLink,
+  ChevronRight
+} from 'lucide-react';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
+import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import type {
   AppData,
   AuthUser,
-  LibraryResource,
-  LibraryResourceMutationInput,
+  LibraryGroup,
+  LibrarySearchResult,
   Role,
 } from '../types.js';
-import { getVisibleCourses, getVisibleResources } from '../utils/domain.js';
+import { getVisibleCourses } from '../utils/domain.js';
 import { buildCourseScopeLabel, countCoursesForStructure } from '../utils/institutions.js';
-import {
-  canCreateLibraryResources,
-  canDeleteLibraryResources,
-  canEditLibraryResource,
-} from '../utils/permissions.js';
 
 interface LibraryPageProps {
   role: Role;
@@ -25,705 +35,342 @@ interface LibraryPageProps {
   refreshAppData: () => void;
 }
 
-type ResourceFilter = 'Todos' | 'Curado' | 'Propio';
-
-function buildResourceForm(courseSlug: string): LibraryResourceMutationInput {
-  return {
-    title: '',
-    kind: 'Curado',
-    courseSlug,
-    unit: '',
-    source: '',
-    status: 'Pendiente',
-    tags: [],
-    summary: '',
-  };
-}
-
-function makeResourceDrafts(resources: LibraryResource[]) {
-  return Object.fromEntries(
-    resources.map((resource) => [
-      resource.id,
-      {
-        title: resource.title,
-        kind: resource.kind,
-        courseSlug: resource.courseSlug,
-        unit: resource.unit,
-        source: resource.source,
-        status: resource.status,
-        tags: resource.tags,
-        summary: resource.summary,
-      },
-    ]),
-  ) as Record<string, LibraryResourceMutationInput>;
-}
-
-/** Legacy tag conversion logic removed for SidePanel compatibility */
+const PROVIDER_GROUPS: { id: LibraryGroup; label: string; icon: any; description: string }[] = [
+  { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers de OpenAlex, Semantic Scholar y más.' },
+  { id: 'Didacticos', label: 'Didácticos', icon: Globe, description: 'Recursos abiertos y objetos de aprendizaje.' },
+  { id: 'YouTube', label: 'YouTube', icon: PlayCircle, description: 'Video-lecciones y contenido multimedia.' },
+  { id: 'Institucional', label: 'Institucional', icon: Building2, description: 'Tu propio repositorio y piezas curadas.' },
+];
 
 export function LibraryPage({
   role,
-  userRole,
   viewer,
   appData,
   refreshAppData,
 }: LibraryPageProps) {
-  const { showAlert, showConfirm } = useSystemDialog();
-  const [filter, setFilter] = useState<ResourceFilter>('Todos');
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const resources = getVisibleResources(appData, role, viewer);
+  const { showAlert } = useSystemDialog();
+  
+  // -- State --
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Institucional');
+  const [results, setResults] = useState<LibrarySearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isIntegrating, setIsIntegrating] = useState<LibrarySearchResult | null>(null);
+  const [integrationForm, setIntegrationForm] = useState({
+    courseSlug: '',
+    targetUnit: '',
+  });
+
   const visibleCourses = getVisibleCourses(appData, role, viewer);
-  const defaultCourseSlug = visibleCourses[0]?.slug ?? appData.courses[0]?.slug ?? '';
-  const courseBySlug = new Map(appData.courses.map((course) => [course.slug, course]));
   const courseOptions = visibleCourses.map((course) => ({
     value: course.slug,
     label: `${course.title} · ${buildCourseScopeLabel(course)}`,
   }));
-  const structureSummaries = appData.institution.structures.map((structure) => {
-    const linkedCourses = countCoursesForStructure(visibleCourses, structure);
-    const linkedResources = resources.filter((resource) => {
-      const institution = courseBySlug.get(resource.courseSlug)?.metadata.institution?.trim();
-      return institution === structure.institution;
-    }).length;
 
-    return {
-      structure,
-      linkedCourses,
-      linkedResources,
-    };
-  });
-  const filteredResources =
-    filter === 'Todos'
-      ? resources
-      : resources.filter((resource) => resource.kind === filter);
-  const readyCount = resources.filter((resource) => resource.status === 'Listo').length;
-  const canCreate = canCreateLibraryResources(userRole);
-  const canEdit = canEditLibraryResource(userRole);
-  const canDelete = canDeleteLibraryResources(userRole);
-  const [resourceForm, setResourceForm] = useState<LibraryResourceMutationInput>(() =>
-    buildResourceForm(defaultCourseSlug),
-  );
-  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
-  const [resourceDrafts, setResourceDrafts] = useState<Record<string, LibraryResourceMutationInput>>(
-    () => makeResourceDrafts(resources),
-  );
-
-  useEffect(() => {
-    setResourceForm((current) => ({
-      ...buildResourceForm(defaultCourseSlug),
-      kind: current.kind,
-      status: current.status,
-    }));
-  }, [defaultCourseSlug]);
-
-  useEffect(() => {
-    setResourceDrafts(makeResourceDrafts(resources));
-  }, [appData, role]);
-
-  const editingResource =
-    editingResourceId !== null
-      ? resources.find((resource) => resource.id === editingResourceId) ?? null
-      : null;
-  const editingResourceDraft =
-    editingResourceId !== null ? resourceDrafts[editingResourceId] ?? null : null;
-
-  function closeResourceEditor() {
-    if (editingResource) {
-      setResourceDrafts((current) => ({
-        ...current,
-        [editingResource.id]: {
-          title: editingResource.title,
-          kind: editingResource.kind,
-          courseSlug: editingResource.courseSlug,
-          unit: editingResource.unit,
-          source: editingResource.source,
-          status: editingResource.status,
-          tags: editingResource.tags,
-          summary: editingResource.summary,
-        },
-      }));
+  // -- Search Implementation --
+  const performSearch = useCallback(async (q: string, group: LibraryGroup) => {
+    setIsSearching(true);
+    try {
+      const resp = await fetch(`/api/library/search?q=${encodeURIComponent(q)}&group=${group}`);
+      if (!resp.ok) throw new Error('Error en el orquestador de búsqueda');
+      const data = await resp.json();
+      setResults(data.results || []);
+    } catch (err) {
+      console.error(err);
+      setResults([]);
+    } finally {
+      setIsSearching(false);
     }
+  }, []);
 
-    setEditingResourceId(null);
-  }
+  // Effect: Auto-search institutional when group changes or initially
+  useEffect(() => {
+    if (activeGroup === 'Institucional') {
+      void performSearch(searchQuery, 'Institucional');
+    }
+  }, [activeGroup, performSearch]);
 
-  async function handleCreateResource(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSaving(true);
+  const handleManualSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    void performSearch(searchQuery, activeGroup);
+  };
+
+  const handleAddToCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isIntegrating) return;
 
     try {
-      const response = await fetch('/api/resources', {
+      const resp = await fetch('/api/resources', {
         method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(resourceForm),
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          assetId: isIntegrating.id,
+          courseSlug: integrationForm.courseSlug,
+          unit: integrationForm.targetUnit,
+          // Legacy fields for backward compatibility
+          title: isIntegrating.title,
+          kind: isIntegrating.group === 'Institucional' ? 'Propio' : 'Curado',
+          source: isIntegrating.canonicalUrl,
+          status: 'Listo',
+          summary: isIntegrating.abstract,
+          tags: isIntegrating.tags
+        })
       });
 
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible crear el recurso.');
-      }
+      if (!resp.ok) throw new Error('No se pudo vincular el recurso');
 
       refreshAppData();
-      setResourceForm(buildResourceForm(defaultCourseSlug));
-      setIsComposerOpen(false);
-    } catch (error) {
+      setIsIntegrating(null);
       await showAlert({
-        title: 'No fue posible crear el recurso',
-        message: error instanceof Error ? error.message : 'No fue posible crear el recurso.',
-        tone: 'error',
-        confirmLabel: 'Entendido',
+        title: 'Recurso integrado',
+        message: 'El recurso ha sido vinculado exitosamente a tu curso.',
+        tone: 'success',
       });
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleSaveResource(resourceId: string) {
-    const draft = resourceDrafts[resourceId];
-
-    if (!draft) {
-      return;
-    }
-
-    const response = await fetch('/api/resources', {
-      method: 'PATCH',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: resourceId,
-        ...draft,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
+    } catch (err) {
       await showAlert({
-        title: 'No fue posible guardar el recurso',
-        message: payload.error ?? 'No fue posible guardar el recurso.',
+        title: 'Error de integración',
+        message: err instanceof Error ? err.message : 'Error desconocido',
         tone: 'error',
-        confirmLabel: 'Entendido',
       });
-      return;
     }
-
-    refreshAppData();
-    setEditingResourceId(null);
-  }
-
-  async function handleDeleteResource(resourceId: string) {
-    const confirmed = await showConfirm({
-      title: 'Eliminar recurso',
-      message:
-        'El recurso será eliminado del repositorio operativo. Esta acción no se puede deshacer.',
-      tone: 'warning',
-      confirmLabel: 'Eliminar recurso',
-      cancelLabel: 'Cancelar',
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const response = await fetch('/api/resources', {
-      method: 'DELETE',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: resourceId,
-      }),
-    });
-
-    const payload = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      await showAlert({
-        title: 'No fue posible eliminar el recurso',
-        message: payload.error ?? 'No fue posible eliminar el recurso.',
-        tone: 'error',
-        confirmLabel: 'Entendido',
-      });
-      return;
-    }
-
-    refreshAppData();
-    if (editingResourceId === resourceId) {
-      setEditingResourceId(null);
-    }
-  }
-
-  function updateResourceField<Key extends keyof LibraryResourceMutationInput>(
-    key: Key,
-    value: LibraryResourceMutationInput[Key],
-  ) {
-    setResourceForm((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  }
-
-  function updateResourceDraft<Key extends keyof LibraryResourceMutationInput>(
-    resourceId: string,
-    key: Key,
-    value: LibraryResourceMutationInput[Key],
-  ) {
-    setResourceDrafts((current) => ({
-      ...current,
-      [resourceId]: {
-        ...current[resourceId],
-        [key]: value,
-      },
-    }));
-  }
+  };
 
   return (
-    <div className="page-stack library-page">
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Biblioteca</span>
-            <h3>Recursos curados y propios</h3>
-          </div>
-          <LibraryBig size={18} />
+    <div className="page-stack library-page pb-20">
+      {/* Header Section */}
+      <section className="surface section-card section-card--compact overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+          <LibraryBig size={180} />
         </div>
-
-        <p className="section-lead">
-          Esta base concentra piezas de producción interna, referencias académicas y evidencia lista para cada curso.
-        </p>
-
-        <div className="metrics-grid metrics-grid--three">
-          <div className="mini-metric">
-            <span>Recursos visibles</span>
-            <strong>{resources.length}</strong>
-          </div>
-          <div className="mini-metric">
-            <span>Listos para integrar</span>
-            <strong>{readyCount}</strong>
-          </div>
-          <div className="mini-metric">
-            <span>Tipo dominante</span>
-            <strong>
-              {resources.filter((resource) => resource.kind === 'Curado').length >=
-              resources.filter((resource) => resource.kind === 'Propio').length
-                ? 'Curado'
-                : 'Propio'}
-            </strong>
-          </div>
-        </div>
-
-        <div className="toolbar">
-          {canCreate ? (
-            <div className="toolbar-header">
-              <button
-                type="button"
-                className={isComposerOpen ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setIsComposerOpen(true)}
-              >
-                <Plus size={16} />
-                <span>Nuevo recurso</span>
-              </button>
+        
+        <div className="relative z-10">
+          <div className="section-heading mb-2">
+            <div>
+              <span className="eyebrow flex items-center gap-2">
+                Hub Federado
+                <span className="w-1 h-1 rounded-full bg-secondary opacity-30"></span>
+                v2.0
+              </span>
+              <h1 className="text-4xl font-bold tracking-tight text-ink">Biblioteca Maturity</h1>
             </div>
-          ) : null}
-
-          <div className="chip-row">
-            {(['Todos', 'Curado', 'Propio'] as ResourceFilter[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={filter === item ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                onClick={() => setFilter(item)}
-              >
-                {item}
-              </button>
-            ))}
           </div>
+          <p className="text-lg text-secondary max-w-2xl leading-relaxed">
+            Busca, previsualiza e integra recursos académicos de cientos de repositorios externos, 
+            bases de datos científicas e institucionales en un solo lugar.
+          </p>
         </div>
-
-        {isComposerOpen ? (
-          <SidePanel
-            isOpen={isComposerOpen}
-            title="Registrar recurso"
-            description="Agrega piezas de producción o referencias académicas al repositorio operativo."
-            sideLabel="Recurso"
-            sideDescription="ALTA"
-            width="xl"
-            onClose={() => setIsComposerOpen(false)}
-          >
-            <form className="page-stack" onSubmit={handleCreateResource}>
-              <article className="detail-section">
-                <div className="section-heading mb-6 border-b border-line pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
-                      <Plus size={20} />
-                    </div>
-                    <h3 className="text-xl font-semibold tracking-tight">Nuevo recurso</h3>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  <div className="form-group lg:col-span-2">
-                    <label className="form-label">Título del recurso</label>
-                    <input
-                      className="modern-input"
-                      value={resourceForm.title}
-                      onChange={(event) => updateResourceField('title', event.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Tipo</label>
-                    <div className="modern-select-wrapper">
-                      <select
-                        className="modern-select"
-                        value={resourceForm.kind}
-                        onChange={(event) =>
-                          updateResourceField(
-                            'kind',
-                            event.target.value as any,
-                          )
-                        }
-                      >
-                        {['Curado', 'Propio'].map((item) => (
-                          <option key={item} value={item}>
-                            {item}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="modern-select-icon" size={16} />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Curso vinculado</label>
-                    <div className="modern-select-wrapper">
-                      <select
-                        className="modern-select"
-                        value={resourceForm.courseSlug}
-                        onChange={(event) => updateResourceField('courseSlug', event.target.value)}
-                        required
-                      >
-                        {courseOptions.map((course) => (
-                          <option key={course.value} value={course.value}>
-                            {course.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="modern-select-icon" size={16} />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Unidad / Módulo</label>
-                    <input
-                      className="modern-input"
-                      value={resourceForm.unit}
-                      onChange={(event) => updateResourceField('unit', event.target.value)}
-                      placeholder="Módulo 1..."
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Estado</label>
-                    <div className="modern-select-wrapper">
-                      <select
-                        className="modern-select"
-                        value={resourceForm.status}
-                        onChange={(event) =>
-                          updateResourceField(
-                            'status',
-                            event.target.value as any,
-                          )
-                        }
-                      >
-                        {['Pendiente', 'En revisión', 'Listo'].map((item) => (
-                          <option key={item} value={item}>
-                            {item}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="modern-select-icon" size={16} />
-                    </div>
-                  </div>
-
-                  <div className="form-group lg:col-span-3">
-                    <label className="form-label">Fuente / Referencia</label>
-                    <input
-                      className="modern-input"
-                      value={resourceForm.source}
-                      onChange={(event) => updateResourceField('source', event.target.value)}
-                      placeholder="URL o bibliografía..."
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group lg:col-span-3">
-                    <label className="form-label">Resumen y etiquetas</label>
-                    <textarea
-                      rows={3}
-                      className="modern-textarea"
-                      value={resourceForm.summary}
-                      onChange={(event) => updateResourceField('summary', event.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-4 mt-8 pt-6 border-t border-line">
-                  <button type="submit" className="cta-button" disabled={isSaving}>
-                    <Plus size={18} />
-                    <span>{isSaving ? 'Guardando…' : 'Crear recurso'}</span>
-                  </button>
-                  <button type="button" className="filter-chip px-6" onClick={() => setIsComposerOpen(false)}>
-                    Cancelar
-                  </button>
-                </div>
-              </article>
-            </form>
-          </SidePanel>
-        ) : null}
       </section>
 
-      <section className="surface section-card section-card--compact">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Directorio aplicado</span>
-            <h3>Estructuras institucionales vinculadas</h3>
-          </div>
-          <NotebookTabs size={18} />
+      {/* Search Hero Workspace */}
+      <section className="library-workspace">
+        <div className="search-hero surface border border-line shadow-2xl rounded-[32px] p-2 bg-white/40 backdrop-blur-xl">
+          <form onSubmit={handleManualSearch} className="flex flex-col md:flex-row gap-2">
+            <div className="flex-grow relative">
+              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-muted">
+                <Search size={22} strokeWidth={2.5} />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Busca papers, videos, guías o recursos institucionales..."
+                className="w-full pl-16 pr-6 py-6 text-xl bg-transparent border-0 focus:ring-0 placeholder:text-muted/60 font-medium"
+              />
+            </div>
+            
+            <div className="flex items-center gap-2 p-2 bg-ink/5 rounded-[24px]">
+              <div className="hidden lg:flex items-center gap-2 px-4 text-xs font-bold text-muted uppercase tracking-wider">
+                <Filter size={14} />
+                <span>Fuente</span>
+              </div>
+              <div className="chip-row p-1">
+                {PROVIDER_GROUPS.map((group) => {
+                  const Icon = group.icon;
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => setActiveGroup(group.id)}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-all ${
+                        activeGroup === group.id 
+                          ? 'bg-ink text-white shadow-lg shadow-ink/20 scale-105' 
+                          : 'hover:bg-ink/5 text-muted'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span>{group.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button 
+                type="submit" 
+                className="bg-ocean text-white p-5 rounded-full hover:bg-ocean-strong transition-all shadow-lg shadow-ocean/30 active:scale-95 ml-2"
+                disabled={isSearching}
+              >
+                {isSearching ? <Loader2 size={24} className="animate-spin" /> : <ChevronRight size={24} />}
+              </button>
+            </div>
+          </form>
         </div>
+      </section>
 
-        <p className="section-lead">
-          Biblioteca toma la institución de cada curso para ordenar recursos dentro del directorio académico definido en Gobierno.
-        </p>
-
-        {structureSummaries.length === 0 ? (
-          <div className="empty-state">
-            <strong>No hay estructuras institucionales configuradas</strong>
-            <p>Cuando el directorio institucional tenga estructuras, aparecerán aquí con su impacto en biblioteca.</p>
+      {/* Results View */}
+      <main className="results-container">
+        {isSearching && results.length === 0 ? (
+          <div className="grid place-items-center py-32">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 size={48} className="text-ocean animate-spin" />
+              <p className="text-lg font-bold text-secondary">Consultando repositorios federados...</p>
+            </div>
+          </div>
+        ) : results.length === 0 ? (
+          <div className="empty-state py-20 text-center border-dashed border-2 border-line rounded-[32px] bg-white/20">
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-6 bg-secondary/5 rounded-full text-secondary/30">
+                <History size={48} />
+              </div>
+              <h2 className="text-2xl font-bold text-ink">Comienza tu búsqueda</h2>
+              <p className="text-secondary max-w-sm mx-auto">
+                Ingresa palabras clave para explorar los recursos de {PROVIDER_GROUPS.find(g => g.id === activeGroup)?.label.toLowerCase()}.
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="institution-structure-grid">
-            {structureSummaries.map(({ structure, linkedCourses, linkedResources }) => (
-              <article key={structure.id} className="surface section-card section-card--compact">
-                <div className="institution-structure-card__header">
-                  <div>
-                    <span className="eyebrow">Institución</span>
-                    <h3>{structure.institution}</h3>
-                  </div>
-                  <span className="badge badge--outline">
-                    {structure.pedagogicalGuidelines.length} regla
-                    {structure.pedagogicalGuidelines.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-
-                <div className="metrics-grid metrics-grid--three">
-                  <div className="mini-metric">
-                    <span>Cursos visibles</span>
-                    <strong>{linkedCourses}</strong>
-                  </div>
-                  <div className="mini-metric">
-                    <span>Recursos visibles</span>
-                    <strong>{linkedResources}</strong>
-                  </div>
-                  <div className="mini-metric">
-                    <span>SSO automático</span>
-                    <strong>{structure.allowAutoProvisioning ? 'Sí' : 'No'}</strong>
-                  </div>
-                </div>
-
-                <p className="institution-structure-summary">
-                  Tipologías: {structure.courseTypes.join(', ') || 'Sin tipologías'}
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="insight-grid">
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Inventario</span>
-              <h3>Repositorio operativo</h3>
+          <div className="page-stack">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-3">
+                <span className="badge badge--ocean text-xs">{results.length} coincidencias</span>
+                <span className="text-sm font-medium text-secondary">ordenado por relevancia e impacto</span>
+              </div>
             </div>
-            <PackageCheck size={18} />
-          </div>
-
-          {filteredResources.length === 0 ? (
-            <div className="empty-state">
-              <strong>No hay recursos en esta vista</strong>
-              <p>Cuando se registren piezas nuevas o cambies de filtro, aparecerán aquí.</p>
-            </div>
-          ) : (
-            <div className="resource-grid">
-              {filteredResources.map((resource) => (
-                <div key={resource.id} className="resource-card">
-                  <div className="resource-card__top">
-                    <span className={resource.kind === 'Curado' ? 'badge badge--ocean' : 'badge badge--sage'}>
-                      {resource.kind}
-                    </span>
-                    <span className="badge badge--outline">{resource.status}</span>
-                  </div>
-                  <strong>{resource.title}</strong>
-                  <p>{resource.summary}</p>
-                  <div className="resource-card__meta">
-                    <span>{resource.source}</span>
-                    <span>{resource.unit}</span>
-                  </div>
-                  <div className="tag-row">
-                    {resource.tags.map((tag) => (
-                      <span key={tag} className="tag">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  {canEdit ? (
-                    <div className="action-row">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => setEditingResourceId(resource.id)}
-                      >
-                        <PencilLine size={16} />
-                        <span>Editar</span>
-                      </button>
-
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          className="danger-button danger-button--ghost"
-                          onClick={() => void handleDeleteResource(resource.id)}
-                        >
-                          <Trash2 size={16} />
-                          <span>Eliminar</span>
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+            
+            <div className="resource-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {results.map((asset) => (
+                <LibraryAssetCard 
+                  key={asset.id} 
+                  asset={asset} 
+                  onAddToCourse={(a) => {
+                    setIsIntegrating(a);
+                    setIntegrationForm({ courseSlug: visibleCourses[0]?.slug || '', targetUnit: '' });
+                  }}
+                />
               ))}
             </div>
-          )}
-        </article>
-
-        <article className="surface section-card">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Curaduría</span>
-              <h3>Criterios de calidad</h3>
-            </div>
-            <NotebookTabs size={18} />
           </div>
+        )}
+      </main>
 
-          <div className="checklist">
-            <div className="checklist__item">
-              <strong>Pertinencia por unidad</strong>
-              <p>Todo recurso debe indicar en qué módulo entra, qué resuelve y qué aprendizaje apoya.</p>
-            </div>
-            <div className="checklist__item">
-              <strong>Trazabilidad visible</strong>
-              <p>La fuente, justificación y estado del recurso acompañan el ciclo completo del curso.</p>
-            </div>
-            <div className="checklist__item">
-              <strong>Proyección móvil</strong>
-              <p>Las piezas nuevas se evalúan pensando en legibilidad, peso liviano y alternativa accesible.</p>
-            </div>
-            <div className="checklist__item">
-              <strong>Control de versiones</strong>
-              <p>Los recursos propios quedan listos para revisión, devolución o reemplazo sin perder historial.</p>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      {editingResource && editingResourceDraft ? (
+      {/* Sidebar Integration Panel */}
+      {isIntegrating && (
         <SidePanel
-          isOpen={!!editingResource}
-          title={`Editar recurso: ${editingResource?.title}`}
-          description="Actualiza la ficha técnica y descriptiva del recurso en biblioteca."
-          sideLabel="Recurso"
-          sideDescription="EDICIÓN"
-          width="xl"
-          onClose={closeResourceEditor}
+          isOpen={!!isIntegrating}
+          onClose={() => setIsIntegrating(null)}
+          title="Integrar a Curaduría"
+          description="Vincular este recurso a un curso y unidad específica de la institución."
+          width="md"
         >
-          <form
-            className="page-stack"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (editingResource) void handleSaveResource(editingResource.id);
-            }}
-          >
-            <article className="detail-section">
-              <div className="section-heading mb-6 border-b border-line pb-4">
+          <form className="page-stack" onSubmit={handleAddToCourse}>
+            <div className="p-6 bg-ocean/5 rounded-2xl border border-ocean/10 mb-6">
+              <h4 className="font-bold text-ocean mb-1">{isIntegrating.title}</h4>
+              <p className="text-xs text-ocean/70 line-clamp-2">{isIntegrating.abstract}</p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Seleccionar curso de destino</label>
+              <div className="modern-select-wrapper">
+                <select 
+                  className="modern-select"
+                  value={integrationForm.courseSlug}
+                  onChange={e => setIntegrationForm(prev => ({ ...prev, courseSlug: e.target.value }))}
+                  required
+                >
+                  <option value="">Selecciona un curso...</option>
+                  {courseOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="modern-select-icon" />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Unidad o Módulo (opcional)</label>
+              <input 
+                className="modern-input"
+                placeholder="Ej: Unidad 1, Semana 4..."
+                value={integrationForm.targetUnit}
+                onChange={e => setIntegrationForm(prev => ({ ...prev, targetUnit: e.target.value }))}
+              />
+            </div>
+
+            <div className="pt-8 flex gap-3">
+              <button type="submit" className="cta-button flex-grow justify-center py-4">
+                <PackageCheck size={20} />
+                <span>Confirmar Integración</span>
+              </button>
+              <button 
+                type="button" 
+                className="ghost-button px-8" 
+                onClick={() => setIsIntegrating(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+
+            <div className="mt-8 p-4 border border-line rounded-xl bg-secondary/5">
+              <h5 className="text-xs font-bold uppercase text-muted tracking-widest mb-2">Previsualización rápida</h5>
+              <a 
+                href={isIntegrating.canonicalUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                className="flex items-center justify-between p-3 bg-white border border-line rounded-lg hover:bg-ocean/5 transition-colors group"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-coral/10 text-coral rounded-lg">
-                    <PencilLine size={20} />
-                  </div>
-                  <h3 className="text-xl font-semibold tracking-tight">Editar información</h3>
+                  <ExternalLink size={18} className="text-ocean" />
+                  <span className="text-sm font-medium">Abrir en nueva pestaña</span>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <div className="form-group lg:col-span-2">
-                  <label className="form-label">Título</label>
-                  <input
-                    className="modern-input font-bold"
-                    value={editingResourceDraft?.title || ''}
-                    onChange={(event) =>
-                      editingResource && updateResourceDraft(editingResource.id, 'title', event.target.value)
-                    }
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Estado</label>
-                  <div className="modern-select-wrapper">
-                    <select
-                      className="modern-select"
-                      value={editingResourceDraft?.status || 'Pendiente'}
-                      onChange={(event) =>
-                        editingResource && updateResourceDraft(
-                          editingResource.id,
-                          'status',
-                          event.target.value as any,
-                        )
-                      }
-                    >
-                      {['Pendiente', 'En revisión', 'Listo'].map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="modern-select-icon" size={16} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-4 mt-8 pt-6 border-t border-line">
-                <button type="submit" className="cta-button">
-                  <PackageCheck size={18} />
-                  <span>Guardar cambios</span>
-                </button>
-                <button type="button" className="filter-chip px-6" onClick={closeResourceEditor}>
-                  Cancelar
-                </button>
-              </div>
-            </article>
+                <ChevronRight size={16} className="text-muted group-hover:translate-x-1 transition-transform" />
+              </a>
+            </div>
           </form>
         </SidePanel>
-      ) : null}
+      )}
+
+      {/* Directory Context (Footer of search) */}
+      <section className="mt-20 border-t border-line pt-12">
+        <div className="section-heading mb-8">
+          <div>
+            <span className="eyebrow">Gobierno de Datos</span>
+            <h3 className="text-xl font-bold">Estructuras del Directorio</h3>
+          </div>
+          <Building2 size={24} className="text-muted opacity-50" />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {appData.institution.structures.map((structure) => {
+            const linkedCourses = countCoursesForStructure(visibleCourses, structure);
+            return (
+              <article key={structure.id} className="surface section-card section-card--compact hover:shadow-lg transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-bold text-ink">{structure.institution}</h4>
+                  <span className="badge badge--outline">{linkedCourses} cursos</span>
+                </div>
+                <div className="text-xs text-secondary flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span>Tipologías</span>
+                    <span className="font-medium text-ink">{structure.courseTypes.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Guías Pedagógicas</span>
+                    <span className="font-medium text-ink">{structure.pedagogicalGuidelines.length}</span>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

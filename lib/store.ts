@@ -28,8 +28,17 @@ import type {
   LearningModuleMutationInput,
   InstitutionSettings,
   InstitutionStructure,
+  LibraryAsset,
+  LibraryAssetFile,
+  LibraryCourseLink,
+  LibraryGroup,
+  LibraryLicense,
+  LibraryPreviewKind,
+  LibraryProvider,
   LibraryResource,
   LibraryResourceMutationInput,
+  LibrarySearchResult,
+  LibraryVisibility,
   Observation,
   ObservationMutationInput,
   PasswordChangeInput,
@@ -108,6 +117,70 @@ interface CourseProductRow {
   writingData: JsonValue;
   createdAt: string;
   updatedAt: string;
+}
+
+interface LibraryAssetRow {
+  id: string;
+  canonicalKey: string;
+  provider: string;
+  providerRecordId: string;
+  group: string;
+  title: string;
+  authors: JsonValue;
+  publishedAt: string | null;
+  abstract: string;
+  descriptionHtml: string;
+  doi: string | null;
+  canonicalUrl: string;
+  resourceType: string;
+  language: string;
+  license: JsonValue | null;
+  openAccess: boolean;
+  citationCount: number;
+  thumbnailUrl: string | null;
+  embedUrl: string | null;
+  institutionId: string | null;
+  institutionName: string | null;
+  visibility: string;
+  previewKind: string;
+  tags: JsonValue;
+  metadata: JsonValue;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LibraryAssetFileRow {
+  id: string;
+  assetId: string;
+  fileName: string;
+  mimeType: string;
+  storageKey: string;
+  url: string;
+  sizeBytes: number;
+  manifest: JsonValue | null;
+  previewText: string | null;
+  createdAt: string;
+}
+
+interface LibraryCourseLinkRow {
+  id: string;
+  assetId: string;
+  courseSlug: string;
+  targetStage: string | null;
+  targetUnit: string | null;
+  addedBy: string | null;
+  addedAt: string;
+}
+
+interface LibrarySearchCacheRow {
+  id: string;
+  provider: string;
+  cacheKey: string;
+  query: string;
+  filters: JsonValue;
+  results: JsonValue;
+  fetchedAt: string;
+  expiresAt: string;
 }
 
 interface TaskRow {
@@ -1755,6 +1828,118 @@ function makeLibraryResourceRecord(input: LibraryResourceMutationInput): Library
   };
 }
 
+function normalizeLibraryAssetFile(
+  file: Partial<LibraryAssetFile> & {
+    fileName: string;
+    mimeType: string;
+    key: string;
+    url: string;
+    sizeBytes?: number;
+  },
+): LibraryAssetFile {
+  return {
+    id: file.id?.trim() || crypto.randomUUID(),
+    assetId: file.assetId?.trim() || '',
+    fileName: file.fileName.trim(),
+    mimeType: file.mimeType.trim(),
+    key: file.key.trim(),
+    url: file.url.trim(),
+    sizeBytes: Number.isFinite(file.sizeBytes) ? Math.max(0, Number(file.sizeBytes)) : 0,
+    manifest:
+      file.manifest && typeof file.manifest === 'object'
+        ? (file.manifest as Record<string, unknown>)
+        : null,
+    previewText: file.previewText?.trim() || null,
+    createdAt: file.createdAt?.trim() || new Date().toISOString(),
+  };
+}
+
+function normalizeLibraryAsset(
+  input: Partial<LibraryAsset> & {
+    canonicalKey: string;
+    provider: LibraryAsset['provider'];
+    providerRecordId: string;
+    group: LibraryAsset['group'];
+    title: string;
+    canonicalUrl: string;
+    resourceType: string;
+    visibility: LibraryAsset['visibility'];
+  },
+): LibraryAsset {
+  return {
+    id: input.id?.trim() || crypto.randomUUID(),
+    canonicalKey: input.canonicalKey.trim(),
+    provider: input.provider,
+    providerRecordId: input.providerRecordId.trim(),
+    group: input.group,
+    title: input.title.trim(),
+    authors: Array.isArray(input.authors)
+      ? input.authors.map((author) => author.trim()).filter(Boolean)
+      : [],
+    publishedAt: input.publishedAt?.trim() || '',
+    abstract: input.abstract?.trim() || '',
+    descriptionHtml:
+      input.descriptionHtml && input.descriptionHtml.trim()
+        ? input.descriptionHtml.trim()
+        : buildLegacyLibraryDescriptionHtml(input.abstract?.trim() || ''),
+    doi: input.doi?.trim() || undefined,
+    canonicalUrl: input.canonicalUrl.trim(),
+    resourceType: input.resourceType.trim(),
+    language: input.language?.trim() || 'es',
+    license:
+      input.license && typeof input.license === 'object'
+        ? {
+            label: input.license.label?.trim() || 'Licencia no especificada',
+            code: input.license.code?.trim() || undefined,
+            url: input.license.url?.trim() || undefined,
+            open: Boolean(input.license.open),
+          }
+        : null,
+    openAccess: Boolean(input.openAccess),
+    citationCount: Number.isFinite(input.citationCount)
+      ? Math.max(0, Number(input.citationCount))
+      : 0,
+    thumbnailUrl: input.thumbnailUrl?.trim() || undefined,
+    embedUrl: input.embedUrl?.trim() || undefined,
+    institutionId: input.institutionId?.trim() || undefined,
+    institutionName: input.institutionName?.trim() || undefined,
+    visibility: input.visibility,
+    previewKind: input.previewKind ?? 'unknown',
+    tags: Array.isArray(input.tags) ? input.tags.map((tag) => tag.trim()).filter(Boolean) : [],
+    metadata:
+      input.metadata && typeof input.metadata === 'object'
+        ? (input.metadata as Record<string, unknown>)
+        : {},
+    files: Array.isArray(input.files)
+      ? input.files.map((file) =>
+          normalizeLibraryAssetFile({
+            ...file,
+            assetId: input.id?.trim() || file.assetId || '',
+          }),
+        )
+      : [],
+    createdAt: input.createdAt?.trim() || new Date().toISOString(),
+    updatedAt: input.updatedAt?.trim() || new Date().toISOString(),
+  };
+}
+
+function normalizeLibraryCourseLink(
+  input: Partial<LibraryCourseLink> & {
+    assetId: string;
+    courseSlug: string;
+  },
+): LibraryCourseLink {
+  return {
+    id: input.id?.trim() || crypto.randomUUID(),
+    assetId: input.assetId.trim(),
+    courseSlug: input.courseSlug.trim(),
+    targetStage: input.targetStage?.trim() || undefined,
+    targetUnit: input.targetUnit?.trim() || undefined,
+    addedBy: input.addedBy?.trim() || undefined,
+    addedAt: input.addedAt?.trim() || new Date().toISOString(),
+  };
+}
+
 function makeAlertRecord(input: AlertMutationInput): Alert {
   return {
     id: crypto.randomUUID(),
@@ -1811,6 +1996,80 @@ function hashValue(value: string) {
 function buildScopedEntityId(prefix: string, scope: string, value: string) {
   const seed = `${scope}:${value.trim().toLowerCase()}`;
   return `${prefix}-${hashValue(seed)}`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildLegacyLibraryDescriptionHtml(summary: string) {
+  const normalizedSummary = summary.trim();
+
+  if (!normalizedSummary) {
+    return '';
+  }
+
+  const paragraphs = normalizedSummary
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return '';
+  }
+
+  return paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('');
+}
+
+function inferPreviewKindFromLegacyResource(
+  kind: string,
+  source: string,
+): LibraryAsset['previewKind'] {
+  const normalizedKind = kind.trim().toLowerCase();
+  const normalizedSource = source.trim().toLowerCase();
+
+  if (normalizedKind.includes('video')) {
+    return 'video';
+  }
+
+  if (normalizedKind.includes('podcast') || normalizedKind.includes('audio')) {
+    return 'audio';
+  }
+
+  if (normalizedKind.includes('infografia') || normalizedKind.includes('imagen')) {
+    return 'image';
+  }
+
+  if (normalizedKind.includes('scorm')) {
+    return 'scorm';
+  }
+
+  if (normalizedKind.includes('simul')) {
+    return 'simulation';
+  }
+
+  if (
+    normalizedKind.includes('pdf') ||
+    normalizedKind.includes('lectura') ||
+    normalizedKind.includes('documento')
+  ) {
+    return 'pdf';
+  }
+
+  if (normalizedSource.includes('youtube')) {
+    return 'video';
+  }
+
+  if (normalizedSource.includes('extern')) {
+    return 'external-link';
+  }
+
+  return 'unknown';
 }
 
 async function tableExists(tableName: string) {
@@ -3071,7 +3330,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 22; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 23; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4005,6 +4264,85 @@ async function ensureSchema() {
     if (currentVersion < 22) {
       await backfillArchitectureProductTextFields();
     }
+    
+    // Migration 23: Federated Library Infrastructure
+    if (currentVersion < 23) {
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_library_assets (
+          id TEXT PRIMARY KEY,
+          canonical_key TEXT UNIQUE NOT NULL,
+          provider TEXT NOT NULL,
+          provider_record_id TEXT NOT NULL,
+          group_name TEXT NOT NULL,
+          title TEXT NOT NULL,
+          authors JSONB NOT NULL DEFAULT '[]'::jsonb,
+          published_at TEXT,
+          abstract TEXT,
+          description_html TEXT,
+          doi TEXT,
+          canonical_url TEXT NOT NULL,
+          resource_type TEXT NOT NULL,
+          language TEXT NOT NULL DEFAULT 'es',
+          license JSONB,
+          open_access BOOLEAN NOT NULL DEFAULT false,
+          citation_count INTEGER NOT NULL DEFAULT 0,
+          thumbnail_url TEXT,
+          embed_url TEXT,
+          institution_id TEXT,
+          institution_name TEXT,
+          visibility TEXT NOT NULL DEFAULT 'Institucional',
+          preview_kind TEXT NOT NULL DEFAULT 'unknown',
+          tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_library_asset_files (
+          id TEXT PRIMARY KEY,
+          asset_id TEXT NOT NULL REFERENCES maturity_library_assets(id) ON DELETE CASCADE,
+          file_name TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          storage_key TEXT NOT NULL,
+          url TEXT NOT NULL,
+          size_bytes BIGINT NOT NULL DEFAULT 0,
+          manifest JSONB,
+          preview_text TEXT,
+          created_at TEXT NOT NULL
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_library_course_links (
+          id TEXT PRIMARY KEY,
+          asset_id TEXT NOT NULL REFERENCES maturity_library_assets(id) ON DELETE CASCADE,
+          course_slug TEXT NOT NULL REFERENCES maturity_courses(slug) ON DELETE CASCADE,
+          target_stage TEXT,
+          target_unit TEXT,
+          added_by TEXT,
+          added_at TEXT NOT NULL,
+          UNIQUE (asset_id, course_slug, target_unit)
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_library_search_cache (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL,
+          cache_key TEXT NOT NULL,
+          query TEXT NOT NULL,
+          filters JSONB NOT NULL DEFAULT '{}'::jsonb,
+          results JSONB NOT NULL DEFAULT '[]'::jsonb,
+          fetched_at TEXT NOT NULL,
+          expires_at TEXT NOT NULL,
+          UNIQUE (provider, cache_key)
+        )
+      `;
+
+      await migrateLegacyResourcesToAssets();
+    }
 
     // 4. Update the stored version to avoid running this again
     await sql`
@@ -4694,6 +5032,346 @@ async function readLibraryResources() {
   }));
 }
 
+function serializeLibraryAssetRow(row: LibraryAssetRow, files?: LibraryAssetFile[]): LibraryAsset {
+  return normalizeLibraryAsset({
+    ...row,
+    authors: parseJson<string[]>(row.authors ?? []),
+    license: parseJson<LibraryLicense>(row.license ?? null),
+    tags: parseJson<string[]>(row.tags ?? []),
+    metadata: parseJson<Record<string, unknown>>(row.metadata ?? {}),
+    files: files ?? [],
+    provider: row.provider as LibraryProvider,
+    group: row.group as LibraryGroup,
+    visibility: row.visibility as LibraryVisibility,
+    previewKind: row.previewKind as LibraryPreviewKind,
+  } as any);
+}
+
+async function readLibraryAssetFilesByAssetIds(assetIds: string[]) {
+  if (assetIds.length === 0) return new Map<string, LibraryAssetFile[]>();
+
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      asset_id AS "assetId",
+      file_name AS "fileName",
+      mime_type AS "mimeType",
+      storage_key AS "storageKey",
+      url,
+      size_bytes AS "sizeBytes",
+      manifest,
+      preview_text AS "previewText",
+      created_at AS "createdAt"
+    FROM maturity_library_asset_files
+    WHERE asset_id IN (${assetIds})
+  `) as LibraryAssetFileRow[];
+
+  const filesByAssetId = new Map<string, LibraryAssetFile[]>();
+  for (const row of rows) {
+    const list = filesByAssetId.get(row.assetId) ?? [];
+    list.push(
+      normalizeLibraryAssetFile({
+        ...row,
+        key: row.storageKey,
+      } as any),
+    );
+    filesByAssetId.set(row.assetId, list);
+  }
+
+  return filesByAssetId;
+}
+
+export async function readLibraryAssets() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      canonical_key AS "canonicalKey",
+      provider,
+      provider_record_id AS "providerRecordId",
+      group_name AS "group",
+      title,
+      authors,
+      published_at AS "publishedAt",
+      abstract,
+      description_html AS "descriptionHtml",
+      doi,
+      canonical_url AS "canonicalUrl",
+      resource_type AS "resourceType",
+      language,
+      license,
+      open_access AS "openAccess",
+      citation_count AS "citationCount",
+      thumbnail_url AS "thumbnailUrl",
+      embed_url AS "embedUrl",
+      institution_id AS "institutionId",
+      institution_name AS "institutionName",
+      visibility,
+      preview_kind AS "previewKind",
+      tags,
+      metadata,
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+    FROM maturity_library_assets
+    ORDER BY title ASC
+  `) as LibraryAssetRow[];
+
+  const filesByAssetId = await readLibraryAssetFilesByAssetIds(rows.map((row) => row.id));
+
+  return rows.map((row) => serializeLibraryAssetRow(row, filesByAssetId.get(row.id)));
+}
+
+async function readLibraryCourseLinks() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      asset_id AS "assetId",
+      course_slug AS "courseSlug",
+      target_stage AS "targetStage",
+      target_unit AS "targetUnit",
+      added_by AS "addedBy",
+      added_at AS "addedAt"
+    FROM maturity_library_course_links
+    ORDER BY added_at DESC
+  `) as LibraryCourseLinkRow[];
+
+  return rows.map((row) => normalizeLibraryCourseLink(row as any));
+}
+
+export async function persistLibraryAsset(asset: LibraryAsset) {
+  const sql = getSql();
+  await sql`
+    INSERT INTO maturity_library_assets (
+      id, canonical_key, provider, provider_record_id, group_name, title, authors,
+      published_at, abstract, description_html, doi, canonical_url, resource_type,
+      language, license, open_access, citation_count, thumbnail_url, embed_url,
+      institution_id, institution_name, visibility, preview_kind, tags, metadata,
+      created_at, updated_at
+    )
+    VALUES (
+      ${asset.id}, ${asset.canonicalKey}, ${asset.provider}, ${asset.providerRecordId},
+      ${asset.group}, ${asset.title}, ${JSON.stringify(asset.authors)}::jsonb,
+      ${asset.publishedAt}, ${asset.abstract}, ${asset.descriptionHtml}, ${asset.doi || null},
+      ${asset.canonicalUrl}, ${asset.resourceType}, ${asset.language},
+      ${JSON.stringify(asset.license)}::jsonb, ${asset.openAccess}, ${asset.citationCount},
+      ${asset.thumbnailUrl || null}, ${asset.embedUrl || null},
+      ${asset.institutionId || null}, ${asset.institutionName || null},
+      ${asset.visibility}, ${asset.previewKind}, ${JSON.stringify(asset.tags)}::jsonb,
+      ${JSON.stringify(asset.metadata)}::jsonb, ${asset.createdAt}, ${asset.updatedAt}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      canonical_key = EXCLUDED.canonical_key,
+      provider = EXCLUDED.provider,
+      provider_record_id = EXCLUDED.provider_record_id,
+      group_name = EXCLUDED.group_name,
+      title = EXCLUDED.title,
+      authors = EXCLUDED.authors,
+      published_at = EXCLUDED.published_at,
+      abstract = EXCLUDED.abstract,
+      description_html = EXCLUDED.description_html,
+      doi = EXCLUDED.doi,
+      canonical_url = EXCLUDED.canonical_url,
+      resource_type = EXCLUDED.resource_type,
+      language = EXCLUDED.language,
+      license = EXCLUDED.license,
+      open_access = EXCLUDED.open_access,
+      citation_count = EXCLUDED.citation_count,
+      thumbnail_url = EXCLUDED.thumbnail_url,
+      embed_url = EXCLUDED.embed_url,
+      institution_id = EXCLUDED.institution_id,
+      institution_name = EXCLUDED.institution_name,
+      visibility = EXCLUDED.visibility,
+      preview_kind = EXCLUDED.preview_kind,
+      tags = EXCLUDED.tags,
+      metadata = EXCLUDED.metadata,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  if (asset.files && asset.files.length > 0) {
+    for (const file of asset.files) {
+      await persistLibraryAssetFile(file);
+    }
+  }
+}
+
+async function persistLibraryAssetFile(file: LibraryAssetFile) {
+  const sql = getSql();
+  await sql`
+    INSERT INTO maturity_library_asset_files (
+      id, asset_id, file_name, mime_type, storage_key, url, size_bytes, manifest, preview_text, created_at
+    )
+    VALUES (
+      ${file.id}, ${file.assetId}, ${file.fileName}, ${file.mimeType}, ${file.key},
+      ${file.url}, ${file.sizeBytes}, ${JSON.stringify(file.manifest)}::jsonb,
+      ${file.previewText || null}, ${file.createdAt}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      file_name = EXCLUDED.file_name,
+      mime_type = EXCLUDED.mime_type,
+      storage_key = EXCLUDED.storage_key,
+      url = EXCLUDED.url,
+      size_bytes = EXCLUDED.size_bytes,
+      manifest = EXCLUDED.manifest,
+      preview_text = EXCLUDED.preview_text
+  `;
+}
+
+export async function createLibraryCourseLink(input: {
+  assetId: string;
+  courseSlug: string;
+  targetStage?: string;
+  targetUnit?: string;
+  addedBy?: string;
+}) {
+  const sql = getSql();
+  const link = normalizeLibraryCourseLink(input as any);
+  
+  await sql`
+    INSERT INTO maturity_library_course_links (
+      id, asset_id, course_slug, target_stage, target_unit, added_by, added_at
+    )
+    VALUES (
+      ${link.id}, ${link.assetId}, ${link.courseSlug}, ${link.targetStage || null},
+      ${link.targetUnit || null}, ${link.addedBy || null}, ${link.addedAt}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      target_stage = EXCLUDED.target_stage,
+      target_unit = EXCLUDED.target_unit,
+      added_by = EXCLUDED.added_by
+  `;
+  
+  return link;
+}
+
+export async function deleteLibraryCourseLink(linkId: string) {
+  const sql = getSql();
+  await sql`DELETE FROM maturity_library_course_links WHERE id = ${linkId}`;
+}
+
+async function migrateLegacyResourcesToAssets() {
+  const sql = getSql();
+  
+  // 1. Fetch all existing legacy resources
+  const legacyResources = (await readLibraryResources()) as any[];
+  if (legacyResources.length === 0) return;
+
+  const now = new Date().toISOString();
+
+  for (const res of legacyResources) {
+    // 2. Create a canonical key for the asset (using source + title hash or similar)
+    const canonicalKey = `legacy-${res.source.toLowerCase().replace(/\s+/g, '-')}-${res.title.toLowerCase().replace(/\s+/g, '-')}`;
+    
+    // 3. Create or Update Asset
+    // We use ON CONFLICT to merge duplicates from different courses into the same asset
+    const assetId = crypto.randomUUID();
+    const previewKind = inferPreviewKindFromLegacyResource(res.kind, res.source);
+    
+    await sql`
+      INSERT INTO maturity_library_assets (
+        id,
+        canonical_key,
+        provider,
+        provider_record_id,
+        group_name,
+        title,
+        abstract,
+        description_html,
+        canonical_url,
+        resource_type,
+        language,
+        visibility,
+        preview_kind,
+        tags,
+        metadata,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${assetId},
+        ${canonicalKey},
+        'institutional',
+        ${res.id},
+        'Institucional',
+        ${res.title},
+        ${res.summary || ''},
+        ${buildLegacyLibraryDescriptionHtml(res.summary || '')},
+        ${res.source},
+        ${res.kind},
+        'es',
+        'Institucional',
+        ${previewKind},
+        ${JSON.stringify(res.tags)}::jsonb,
+        '{}'::jsonb,
+        ${now},
+        ${now}
+      )
+      ON CONFLICT (canonical_key) DO UPDATE
+      SET updated_at = EXCLUDED.updated_at
+      RETURNING id
+    `;
+
+    // Get the actual asset ID (either new or existing)
+    const checkRow = (await sql`
+      SELECT id FROM maturity_library_assets WHERE canonical_key = ${canonicalKey} LIMIT 1
+    `) as Array<{ id: string }>;
+    
+    const realAssetId = checkRow[0]?.id;
+
+    if (realAssetId) {
+      // 4. Create Course Link
+      await sql`
+        INSERT INTO maturity_library_course_links (
+          id,
+          asset_id,
+          course_slug,
+          target_unit,
+          added_at
+        )
+        VALUES (
+          ${crypto.randomUUID()},
+          ${realAssetId},
+          ${res.courseSlug},
+          ${res.unit},
+          ${now}
+        )
+        ON CONFLICT (asset_id, course_slug, target_unit) DO NOTHING
+      `;
+    }
+  }
+}
+
+export async function readLibrarySearchCache(provider: LibraryProvider, query: string, filters: any) {
+  const sql = getSql();
+  const cacheKey = JSON.stringify({ query, filters });
+  const rows = (await sql`
+    SELECT
+      id,
+      provider,
+      cache_key AS "cacheKey",
+      query,
+      filters,
+      results,
+      fetched_at AS "fetchedAt",
+      expires_at AS "expiresAt"
+    FROM maturity_library_search_cache
+    WHERE provider = ${provider}
+      AND cache_key = ${cacheKey}
+      AND expires_at > ${new Date().toISOString()}
+    LIMIT 1
+  `) as LibrarySearchCacheRow[];
+
+  if (rows[0]) {
+    return {
+      results: parseJson<LibrarySearchResult[]>(rows[0].results),
+      fetchedAt: rows[0].fetchedAt,
+    };
+  }
+
+  return null;
+}
+
 async function readRoleProfiles() {
   const sql = getSql();
   const rows = (await sql`
@@ -4814,17 +5492,29 @@ export async function syncInstitutionSettingsRecord(settings: InstitutionSetting
 export async function loadAppData(): Promise<AppData> {
   await ensureInitialized();
 
-  const [roles, stages, courses, tasks, alerts, libraryResources, roleProfiles, users] =
-    await Promise.all([
-      readRoles(),
-      readStages(),
-      readCourses(),
-      readTasks(),
-      readAlerts(),
-      readLibraryResources(),
-      readRoleProfiles(),
-      readUsers(),
-    ]);
+  const [
+    roles,
+    stages,
+    courses,
+    tasks,
+    alerts,
+    libraryResources,
+    libraryAssets,
+    libraryCourseLinks,
+    roleProfiles,
+    users,
+  ] = await Promise.all([
+    readRoles(),
+    readStages(),
+    readCourses(),
+    readTasks(),
+    readAlerts(),
+    readLibraryResources(),
+    readLibraryAssets(),
+    readLibraryCourseLinks(),
+    readRoleProfiles(),
+    readUsers(),
+  ]);
 
   return {
     roles,
@@ -4833,6 +5523,8 @@ export async function loadAppData(): Promise<AppData> {
     tasks,
     alerts,
     libraryResources,
+    libraryAssets,
+    libraryCourseLinks,
     roleProfiles,
     users,
     institution: defaultInstitutionSettings,
