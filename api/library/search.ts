@@ -15,14 +15,17 @@ export const config = {
 
 /**
  * Federated Library Search — v3 (Full Phase 1+2+3)
- * Supports all 9 external providers + institutional.
+ * Supports all 8 external providers + institutional.
  * Returns results with per-provider status for UI live indicators.
  */
 export default async function handler(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return errorResponse(401, 'No autorizado');
 
-  const url = new URL(request.url);
+  const rawUrl = request.url ?? '';
+  const host = request.headers.get('host') ?? 'localhost';
+  const proto = host.includes('localhost') ? 'http' : 'https';
+  const url = new URL(rawUrl.startsWith('http') ? rawUrl : `${proto}://${host}${rawUrl}`);
   const q = url.searchParams.get('q')?.trim() ?? '';
   const group = (url.searchParams.get('group') as LibraryGroup) ?? 'Investigacion';
   const language = url.searchParams.get('language') ?? 'all';
@@ -57,6 +60,7 @@ export default async function handler(request: Request) {
     const cacheKey = buildCacheKey(group, q, cacheFilters);
 
     if (q) {
+      // Use group → primary provider for cache namespace
       const primaryProvider = getPrimaryProviderForGroup(group);
       const cached = await readLibrarySearchCache(primaryProvider, cacheKey, cacheFilters);
       if (cached) {
@@ -84,6 +88,7 @@ export default async function handler(request: Request) {
 
     const orchestratorResult = await federatedSearch(group, searchParams);
 
+    // Persist to cache if we have a real query
     if (q && orchestratorResult.results.length > 0) {
       const primaryProvider = getPrimaryProviderForGroup(group);
       void persistLibrarySearchCache(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {
@@ -106,6 +111,10 @@ export default async function handler(request: Request) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 function filterInstitutionalAssets(
   assets: LibraryAsset[],
   user: AuthUser,
@@ -113,6 +122,7 @@ function filterInstitutionalAssets(
   language: string,
 ): LibraryAsset[] {
   return assets.filter((asset) => {
+    // Visibility: 'Publico' → everyone; 'Institucional' → same institution or admin
     if (asset.visibility === 'Institucional' && asset.institutionId) {
       const isAdmin = user.role === 'Administrador' || user.role === 'Coordinador' || user.role === 'Auditor';
       const isMember =
@@ -121,8 +131,10 @@ function filterInstitutionalAssets(
       if (!isAdmin && !isMember) return false;
     }
 
+    // Language filter
     if (language && language !== 'all' && asset.language !== language) return false;
 
+    // Text search
     if (!q) return true;
     const ql = q.toLowerCase();
     return (
