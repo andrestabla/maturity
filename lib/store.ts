@@ -5372,6 +5372,41 @@ export async function readLibrarySearchCache(provider: LibraryProvider, query: s
   return null;
 }
 
+export async function persistLibrarySearchCache(
+  provider: LibraryProvider,
+  query: string,
+  filters: any,
+  results: LibrarySearchResult[],
+) {
+  const sql = getSql();
+  const cacheKey = JSON.stringify({ query, filters });
+  const resultsJson = JSON.stringify(results);
+
+  await sql`
+    INSERT INTO maturity_library_search_cache (
+      provider,
+      cache_key,
+      query,
+      filters,
+      results,
+      fetched_at,
+      expires_at
+    ) VALUES (
+      ${provider},
+      ${cacheKey},
+      ${query},
+      ${JSON.stringify(filters)}::jsonb,
+      ${resultsJson}::jsonb,
+      CURRENT_TIMESTAMP,
+      (CURRENT_TIMESTAMP + INTERVAL '24 hours')
+    )
+    ON CONFLICT (provider, cache_key) DO UPDATE SET
+      results = EXCLUDED.results,
+      fetched_at = EXCLUDED.fetched_at,
+      expires_at = EXCLUDED.expires_at
+  `;
+}
+
 async function readRoleProfiles() {
   const sql = getSql();
   const rows = (await sql`

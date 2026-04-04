@@ -55,6 +55,7 @@ export function LibraryPage({
   const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Institucional');
   const [results, setResults] = useState<LibrarySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchMeta, setSearchMeta] = useState<{ cached?: boolean; fetchedAt?: string }>({});
   const [isIntegrating, setIsIntegrating] = useState<LibrarySearchResult | null>(null);
   const [integrationForm, setIntegrationForm] = useState({
     courseSlug: '',
@@ -72,12 +73,17 @@ export function LibraryPage({
     setIsSearching(true);
     try {
       const resp = await fetch(`/api/library/search?q=${encodeURIComponent(q)}&group=${group}`);
-      if (!resp.ok) throw new Error('Error en el orquestador de búsqueda');
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || 'Error en el orquestador de búsqueda');
+      }
       const data = await resp.json();
       setResults(data.results || []);
+      setSearchMeta({ cached: data.cached, fetchedAt: data.fetchedAt });
     } catch (err) {
       console.error(err);
       setResults([]);
+      setSearchMeta({});
     } finally {
       setIsSearching(false);
     }
@@ -241,6 +247,12 @@ export function LibraryPage({
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-3">
                 <span className="badge badge--ocean text-xs">{results.length} coincidencias</span>
+                {searchMeta.cached && (
+                  <span className="badge badge--sage text-[10px] py-1 px-2 flex items-center gap-1">
+                    <History size={12} />
+                    Caché ({new Date(searchMeta.fetchedAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                )}
                 <span className="text-sm font-medium text-secondary">ordenado por relevancia e impacto</span>
               </div>
             </div>
