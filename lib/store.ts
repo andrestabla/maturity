@@ -7437,3 +7437,24 @@ export async function changeUserPassword(userId: string, payload: PasswordChange
     WHERE id = ${userId}
   `;
 }
+
+export async function readCourseContextForAI(slug: string): Promise<string> {
+  await ensureInitialized();
+  const course = await readCourseBySlug(slug);
+  if (!course) return 'Curso no encontrado.';
+
+  const modules = (course.modules || []).map(m => `- [Módulo: ${m.title}] Objetivos: ${m.learningGoal}`).join('\n');
+  const outcomes = (course.metadata?.learningOutcomes || []).map(o => `- ${o}`).join('\n') || 'No especificados';
+  const units = (course.metadata?.units || []).map(u => `- [Unidad: ${u.tituloUnidad}] Temas: ${u.tematicas.join(', ')}`).join('\n') || 'No especificadas';
+
+  return `
+CURSO: ${course.title} (${course.code})
+RESUMEN: ${course.summary}
+RESULTADOS DE APRENDIZAJE:
+${outcomes}
+ESTRUCTURA DE MÓDULOS:
+${modules}
+UNIDADES DETALLADAS:
+${units}
+  `.trim();
+}

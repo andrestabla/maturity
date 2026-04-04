@@ -11,12 +11,14 @@ import {
   PlayCircle,
   Building2,
   PackageCheck,
-  ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  X
 } from 'lucide-react';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
+import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
 import type {
   AppData,
   AuthUser,
@@ -57,6 +59,11 @@ export function LibraryPage({
   const [isSearching, setIsSearching] = useState(false);
   const [searchMeta, setSearchMeta] = useState<{ cached?: boolean; fetchedAt?: string }>({});
   const [isIntegrating, setIsIntegrating] = useState<LibrarySearchResult | null>(null);
+  
+  // -- Phase 3 State: Batch Operations --
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
+  
   const [integrationForm, setIntegrationForm] = useState({
     courseSlug: '',
     targetUnit: '',
@@ -68,9 +75,12 @@ export function LibraryPage({
     label: `${course.title} · ${buildCourseScopeLabel(course)}`,
   }));
 
+  const selectedAssets = results.filter(r => selectedIds.includes(r.id));
+
   // -- Search Implementation --
   const performSearch = useCallback(async (q: string, group: LibraryGroup) => {
     setIsSearching(true);
+    setSelectedIds([]); // Clear selection on new search
     try {
       const resp = await fetch(`/api/library/search?q=${encodeURIComponent(q)}&group=${group}`);
       if (!resp.ok) {
@@ -101,6 +111,10 @@ export function LibraryPage({
     void performSearch(searchQuery, activeGroup);
   };
 
+  const toggleSelect = (id: string, selected: boolean) => {
+    setSelectedIds(prev => selected ? [...prev, id] : prev.filter(i => i !== id));
+  };
+
   const handleAddToCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isIntegrating) return;
@@ -113,9 +127,8 @@ export function LibraryPage({
           assetId: isIntegrating.id,
           courseSlug: integrationForm.courseSlug,
           unit: integrationForm.targetUnit,
-          // Legacy fields for backward compatibility
           title: isIntegrating.title,
-          kind: isIntegrating.group === 'Institucional' ? 'Propio' : 'Curado',
+          kind: 'Curado',
           source: isIntegrating.canonicalUrl,
           status: 'Listo',
           summary: isIntegrating.abstract,
@@ -142,7 +155,7 @@ export function LibraryPage({
   };
 
   return (
-    <div className="page-stack library-page pb-20">
+    <div className="page-stack library-page pb-32">
       {/* Header Section */}
       <section className="surface section-card section-card--compact overflow-hidden relative">
         <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
@@ -155,14 +168,14 @@ export function LibraryPage({
               <span className="eyebrow flex items-center gap-2">
                 Hub Federado
                 <span className="w-1 h-1 rounded-full bg-secondary opacity-30"></span>
-                v2.0
+                v3.0 (Smart Assistant)
               </span>
               <h1 className="text-4xl font-bold tracking-tight text-ink">Biblioteca Maturity</h1>
             </div>
           </div>
           <p className="text-lg text-secondary max-w-2xl leading-relaxed">
-            Busca, previsualiza e integra recursos académicos de cientos de repositorios externos, 
-            bases de datos científicas e institucionales en un solo lugar.
+            Busca, previsualiza e integra recursos académicos de cientos de repositorios externos. 
+            Utiliza la IA para mapear colecciones enteras a tu currículo.
           </p>
         </div>
       </section>
@@ -227,7 +240,10 @@ export function LibraryPage({
           <div className="grid place-items-center py-32">
             <div className="flex flex-col items-center gap-4">
               <Loader2 size={48} className="text-ocean animate-spin" />
-              <p className="text-lg font-bold text-secondary">Consultando repositorios federados...</p>
+              <p className="text-lg font-bold text-secondary text-center">
+                Consultando repositorios federados... <br />
+                <span className="text-sm font-medium opacity-60">Preparando IA para asistencia curricular</span>
+              </p>
             </div>
           </div>
         ) : results.length === 0 ? (
@@ -262,6 +278,8 @@ export function LibraryPage({
                 <LibraryAssetCard 
                   key={asset.id} 
                   asset={asset} 
+                  isSelected={selectedIds.includes(asset.id)}
+                  onToggleSelect={toggleSelect}
                   onAddToCourse={(a) => {
                     setIsIntegrating(a);
                     setIntegrationForm({ courseSlug: visibleCourses[0]?.slug || '', targetUnit: '' });
@@ -273,7 +291,53 @@ export function LibraryPage({
         )}
       </main>
 
-      {/* Sidebar Integration Panel */}
+      {/* Floating Batch Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-8">
+          <div className="bg-ink text-white py-4 px-6 rounded-[24px] shadow-2xl flex items-center gap-6 border border-white/10 backdrop-blur-xl">
+            <div className="flex items-center gap-3 border-r border-white/10 pr-6 mr-0">
+              <div className="bg-ocean text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                {selectedIds.length}
+              </div>
+              <span className="text-sm font-medium hidden sm:inline">seleccionados</span>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsBatchPanelOpen(true)}
+                className="bg-gold text-ink font-bold px-5 py-2.5 rounded-full flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-gold/20"
+              >
+                <Sparkles size={18} />
+                <span>Integrar con IA</span>
+              </button>
+              
+              <button 
+                onClick={() => setSelectedIds([])}
+                className="hover:bg-white/10 p-2.5 rounded-full transition-colors"
+                title="Limpiar selección"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Integration Panels */}
+      {isBatchPanelOpen && (
+        <BatchIntegrationPanel
+          isOpen={isBatchPanelOpen}
+          onClose={() => {
+            setIsBatchPanelOpen(false);
+            setSelectedIds([]);
+          }}
+          selectedAssets={selectedAssets}
+          appData={appData}
+          courseSlug={visibleCourses[0]?.slug || ''}
+          refreshAppData={refreshAppData}
+        />
+      )}
+
       {isIntegrating && (
         <SidePanel
           isOpen={!!isIntegrating}
@@ -329,27 +393,11 @@ export function LibraryPage({
                 Cancelar
               </button>
             </div>
-
-            <div className="mt-8 p-4 border border-line rounded-xl bg-secondary/5">
-              <h5 className="text-xs font-bold uppercase text-muted tracking-widest mb-2">Previsualización rápida</h5>
-              <a 
-                href={isIntegrating.canonicalUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                className="flex items-center justify-between p-3 bg-white border border-line rounded-lg hover:bg-ocean/5 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <ExternalLink size={18} className="text-ocean" />
-                  <span className="text-sm font-medium">Abrir en nueva pestaña</span>
-                </div>
-                <ChevronRight size={16} className="text-muted group-hover:translate-x-1 transition-transform" />
-              </a>
-            </div>
           </form>
         </SidePanel>
       )}
 
-      {/* Directory Context (Footer of search) */}
+      {/* Directory Context */}
       <section className="mt-20 border-t border-line pt-12">
         <div className="section-heading mb-8">
           <div>

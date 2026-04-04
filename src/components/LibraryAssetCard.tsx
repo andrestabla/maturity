@@ -4,14 +4,36 @@ import type { LibrarySearchResult } from '../types.js';
 interface LibraryAssetCardProps {
   asset: LibrarySearchResult;
   onAddToCourse: (asset: LibrarySearchResult) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string, selected: boolean) => void;
 }
 
-export function LibraryAssetCard({ asset, onAddToCourse }: LibraryAssetCardProps) {
+export function LibraryAssetCard({ 
+  asset, 
+  onAddToCourse,
+  isSelected = false,
+  onToggleSelect
+}: LibraryAssetCardProps) {
   const isInstitutional = asset.provider === 'institutional';
   
   return (
-    <article className="resource-card group flex flex-col h-full transition-all hover:shadow-xl hover:-translate-y-1">
-      <div className="resource-card__top mb-3">
+    <article className={`resource-card group flex flex-col h-full transition-all border-2 ${
+      isSelected ? 'border-ocean bg-ocean/5 shadow-xl' : 'border-transparent shadow-md'
+    } hover:shadow-xl hover:-translate-y-1 relative`}>
+      
+      {/* Multi-select overlay checkbox */}
+      <div className="absolute top-4 right-4 z-20">
+        <label className="flex items-center cursor-pointer">
+          <input 
+            type="checkbox"
+            className="w-5 h-5 rounded border-line text-ocean focus:ring-ocean transition-all cursor-pointer"
+            checked={isSelected}
+            onChange={(e) => onToggleSelect?.(asset.id, e.target.checked)}
+          />
+        </label>
+      </div>
+
+      <div className="resource-card__top mb-3 pr-8">
         <div className="flex items-center gap-2">
           <span className={`badge ${isInstitutional ? 'badge--ocean' : 'badge--sage'}`}>
             {isInstitutional ? 'Institucional' : asset.provider}
@@ -20,7 +42,7 @@ export function LibraryAssetCard({ asset, onAddToCourse }: LibraryAssetCardProps
             <span className="badge badge--outline">Open Access</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-gold/10 text-gold rounded-full text-xs font-bold">
+        <div className="flex items-center gap-1.5 px-2 py-1 bg-gold/10 text-gold rounded-full text-xs font-bold whitespace-nowrap">
           <Star size={12} fill="currentColor" />
           <span>{asset.score.toFixed(1)}</span>
         </div>
