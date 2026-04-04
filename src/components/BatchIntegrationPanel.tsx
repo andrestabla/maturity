@@ -68,22 +68,24 @@ export function BatchIntegrationPanel({
   const handleIntegrateAll = async () => {
     setIsIntegrating(true);
     try {
-      // Execute each integration using the existing API
       const promises = selectedAssets.map(asset => {
         const mapping = mappings.find(m => m.assetId === asset.id);
-        return fetch('/api/resources', {
+        return fetch('/api/library/course-links', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            assetId: asset.id,
+            asset: {
+              ...asset,
+              tags: [...new Set([...asset.tags, ...(mapping?.suggestedTags || [])])],
+              metadata: {
+                ...asset.metadata,
+                pedagogicalSummary: mapping?.pedagogicalSummary,
+                aiJustification: mapping?.justification,
+              },
+            },
             courseSlug,
-            unit: mapping?.suggestedUnit || 'Sin unidad',
-            title: asset.title,
-            kind: 'Curado',
-            source: asset.canonicalUrl,
-            status: 'Listo',
-            summary: mapping?.pedagogicalSummary || asset.abstract,
-            tags: [...new Set([...asset.tags, ...(mapping?.suggestedTags || [])])]
+            targetStage: mapping?.suggestedModuleId,
+            targetUnit: mapping?.suggestedUnit || 'Sin unidad',
           })
         });
       });
@@ -124,8 +126,8 @@ export function BatchIntegrationPanel({
             <div>
               <h4 className="font-bold">Error en el análisis</h4>
               <p className="text-sm">{error}</p>
-              <button 
-                onClick={() => void runAIAnalysis()} 
+              <button
+                onClick={() => void runAIAnalysis()}
                 className="mt-4 text-xs font-bold underline"
               >
                 Reintentar análisis
@@ -138,7 +140,7 @@ export function BatchIntegrationPanel({
               {selectedAssets.map(asset => {
                 const mapping = mappings.find(m => m.assetId === asset.id);
                 const targetModule = modules.find(m => m.id === mapping?.suggestedModuleId);
-                
+
                 return (
                   <div key={asset.id} className="p-4 bg-white border border-line rounded-2xl shadow-sm hover:border-ocean transition-all group">
                     <div className="flex justify-between items-start mb-3">
