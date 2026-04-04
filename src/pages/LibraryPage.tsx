@@ -11,9 +11,11 @@ import {
   PlayCircle,
   Building2,
   PackageCheck,
-  ChevronRight,
   Sparkles,
-  X
+  X,
+  Plus,
+  BookOpen,
+  ArrowRight
 } from 'lucide-react';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
@@ -38,10 +40,10 @@ interface LibraryPageProps {
 }
 
 const PROVIDER_GROUPS: { id: LibraryGroup; label: string; icon: any; description: string }[] = [
-  { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers de OpenAlex, Semantic Scholar y más.' },
-  { id: 'Didacticos', label: 'Didácticos', icon: Globe, description: 'Recursos abiertos y objetos de aprendizaje.' },
-  { id: 'YouTube', label: 'YouTube', icon: PlayCircle, description: 'Video-lecciones y contenido multimedia.' },
-  { id: 'Institucional', label: 'Institucional', icon: Building2, description: 'Tu propio repositorio y piezas curadas.' },
+  { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers científicos y académicos.' },
+  { id: 'Didacticos', label: 'Didácticos', icon: Globe, description: 'Recursos abiertos (OER).' },
+  { id: 'YouTube', label: 'YouTube', icon: PlayCircle, description: 'Lecciones en video.' },
+  { id: 'Institucional', label: 'Institucional', icon: Building2, description: 'Repositorio propio.' },
 ];
 
 export function LibraryPage({
@@ -52,17 +54,19 @@ export function LibraryPage({
 }: LibraryPageProps) {
   const { showAlert } = useSystemDialog();
   
-  // -- State --
+  // -- Search & Results State --
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Institucional');
+  const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Investigacion');
   const [results, setResults] = useState<LibrarySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchMeta, setSearchMeta] = useState<{ cached?: boolean; fetchedAt?: string }>({});
-  const [isIntegrating, setIsIntegrating] = useState<LibrarySearchResult | null>(null);
   
-  // -- Phase 3 State: Batch Operations --
+  // -- UI State --
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(24);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
+  const [isIntegrating, setIsIntegrating] = useState<LibrarySearchResult | null>(null);
   
   const [integrationForm, setIntegrationForm] = useState({
     courseSlug: '',
@@ -76,11 +80,13 @@ export function LibraryPage({
   }));
 
   const selectedAssets = results.filter(r => selectedIds.includes(r.id));
+  const visibleResults = results.slice(0, visibleLimit);
 
   // -- Search Implementation --
   const performSearch = useCallback(async (q: string, group: LibraryGroup) => {
     setIsSearching(true);
-    setSelectedIds([]); // Clear selection on new search
+    setSelectedIds([]); 
+    setVisibleLimit(24);
     try {
       const resp = await fetch(`/api/library/search?q=${encodeURIComponent(q)}&group=${group}`);
       if (!resp.ok) {
@@ -99,12 +105,12 @@ export function LibraryPage({
     }
   }, []);
 
-  // Effect: Auto-search institutional when group changes or initially
   useEffect(() => {
-    if (activeGroup === 'Institucional') {
-      void performSearch(searchQuery, 'Institucional');
+    // Initial search for Research group
+    if (results.length === 0 && !isSearching) {
+      void performSearch('', activeGroup);
     }
-  }, [activeGroup, performSearch]);
+  }, []);
 
   const handleManualSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +148,7 @@ export function LibraryPage({
       setIsIntegrating(null);
       await showAlert({
         title: 'Recurso integrado',
-        message: 'El recurso ha sido vinculado exitosamente a tu curso.',
+        message: 'El recurso ha sido vinculado exitosamente.',
         tone: 'success',
       });
     } catch (err) {
@@ -156,125 +162,167 @@ export function LibraryPage({
 
   return (
     <div className="page-stack library-page pb-32">
-      {/* Header Section */}
-      <section className="surface section-card section-card--compact overflow-hidden relative">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-          <LibraryBig size={180} />
+      {/* Premium Hero Section */}
+      <section className="relative overflow-hidden pt-12 pb-20 px-8 rounded-[40px] bg-ink text-white shadow-2xl">
+        <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none overflow-hidden">
+          <LibraryBig size={400} className="absolute -top-20 -right-20 rotate-12" />
         </div>
         
-        <div className="relative z-10">
-          <div className="section-heading mb-2">
-            <div>
-              <span className="eyebrow flex items-center gap-2">
-                Hub Federado
-                <span className="w-1 h-1 rounded-full bg-secondary opacity-30"></span>
-                v3.0 (Smart Assistant)
+        <div className="relative z-10 max-w-4xl">
+          <header className="mb-10">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="bg-ocean text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-ocean/30">
+                Hub Federado v4.0
               </span>
-              <h1 className="text-4xl font-bold tracking-tight text-ink">Biblioteca Maturity</h1>
+              <div className="w-1 h-1 rounded-full bg-white/20" />
+              <span className="text-white/50 text-[10px] font-bold uppercase tracking-widest">
+                IA Curatorial Activa
+              </span>
             </div>
+            <h1 className="text-6xl font-bold leading-none tracking-tighter mb-4 font-display">
+              Biblioteca Inteligente
+            </h1>
+            <p className="text-xl text-white/60 max-w-2xl font-medium leading-relaxed">
+              Metabuscador de alta densidad sincronizado con repositorios globales. 
+              Encuentra, previsualiza e integra conocimiento científico y multimedia en segundos.
+            </p>
+          </header>
+
+          {/* Smart Search Bar */}
+          <div className="search-container relative group">
+            <form onSubmit={handleManualSearch} className="flex flex-col gap-3">
+              <div className="flex items-center bg-white/10 hover:bg-white/15 backdrop-blur-2xl border border-white/10 rounded-[28px] p-2 transition-all shadow-2xl focus-within:ring-4 focus-within:ring-ocean/20">
+                <div className="pl-6 pr-4 text-white/40">
+                  <Search size={24} strokeWidth={2.5} />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Busca por DOI, título, autor o palabras clave..."
+                  className="flex-grow bg-transparent border-0 focus:ring-0 text-xl text-white placeholder:text-white/30 font-medium py-4"
+                />
+                <div className="flex items-center gap-2 pr-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className={`p-4 rounded-2xl transition-all ${showAdvanced ? 'bg-white text-ink shadow-lg' : 'hover:bg-white/10 text-white/60'}`}
+                  >
+                    <Filter size={20} />
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={isSearching}
+                    className="bg-ocean hover:bg-ocean-strong text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-xl shadow-ocean/20 flex items-center gap-2 active:scale-95"
+                  >
+                    {isSearching ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />}
+                    <span>Buscar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Advanced Filters Drawer */}
+              {showAdvanced && (
+                <div className="advanced-filters grid grid-cols-1 md:grid-cols-3 gap-4 p-6 bg-white/5 border border-white/10 rounded-[32px] backdrop-blur-xl animate-in slide-in-from-top-4">
+                  <div className="filter-group">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2 px-1">Idioma</label>
+                    <select className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-ocean/50">
+                      <option className="bg-ink">Todos los idiomas</option>
+                      <option className="bg-ink">Español</option>
+                      <option className="bg-ink">Inglés</option>
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2 px-1">Acceso</label>
+                    <div className="flex gap-2">
+                      <button className="bg-white text-ink px-4 py-3 rounded-xl text-xs font-bold flex-grow transition-all">Open Access</button>
+                      <button className="bg-white/10 text-white px-4 py-3 rounded-xl text-xs font-bold flex-grow hover:bg-white/20 transition-all">Todos</button>
+                    </div>
+                  </div>
+                  <div className="filter-group">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2 px-1">Antigüedad</label>
+                    <select className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-ocean/50">
+                      <option className="bg-ink">Último año</option>
+                      <option className="bg-ink">Últimos 5 años</option>
+                      <option className="bg-ink">Histórico</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </form>
           </div>
-          <p className="text-lg text-secondary max-w-2xl leading-relaxed">
-            Busca, previsualiza e integra recursos académicos de cientos de repositorios externos. 
-            Utiliza la IA para mapear colecciones enteras a tu currículo.
-          </p>
         </div>
       </section>
 
-      {/* Search Hero Workspace */}
-      <section className="library-workspace">
-        <div className="search-hero surface border border-line shadow-2xl rounded-[32px] p-2 bg-white/40 backdrop-blur-xl">
-          <form onSubmit={handleManualSearch} className="flex flex-col md:flex-row gap-2">
-            <div className="flex-grow relative">
-              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-muted">
-                <Search size={22} strokeWidth={2.5} />
+      {/* Provider Selector & Results Header */}
+      <section className="library-controls px-4 -mt-8 relative z-20">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 p-4 bg-white border border-line shadow-xl rounded-[32px]">
+          <div className="flex items-center gap-1 overflow-x-auto pb-2 md:pb-0 scrollbar-hide no-scrollbar w-full md:w-auto">
+            {PROVIDER_GROUPS.map((group) => {
+              const Icon = group.icon;
+              const isActive = activeGroup === group.id;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    setActiveGroup(group.id);
+                    void performSearch(searchQuery, group.id);
+                  }}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all whitespace-nowrap shadow-sm active:scale-95 ${
+                    isActive 
+                      ? 'bg-ink text-white shadow-xl shadow-ink/10' 
+                      : 'hover:bg-ink/5 text-muted'
+                  }`}
+                >
+                  <Icon size={18} />
+                  <span className="text-sm">{group.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          
+          {results.length > 0 && (
+            <div className="flex items-center gap-4 border-l border-line pl-6">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold text-muted uppercase tracking-widest">{results.length} Hallazgos</span>
+                <span className="text-xs font-bold text-ink">Mostrando {visibleLimit}</span>
               </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Busca papers, videos, guías o recursos institucionales..."
-                className="w-full pl-16 pr-6 py-6 text-xl bg-transparent border-0 focus:ring-0 placeholder:text-muted/60 font-medium"
-              />
+              {searchMeta.cached && (
+                <div className="bg-sage/10 text-sage p-2 rounded-full" title="Resultados optimizados por caché">
+                  <History size={18} />
+                </div>
+              )}
             </div>
-            
-            <div className="flex items-center gap-2 p-2 bg-ink/5 rounded-[24px]">
-              <div className="hidden lg:flex items-center gap-2 px-4 text-xs font-bold text-muted uppercase tracking-wider">
-                <Filter size={14} />
-                <span>Fuente</span>
-              </div>
-              <div className="chip-row p-1">
-                {PROVIDER_GROUPS.map((group) => {
-                  const Icon = group.icon;
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      onClick={() => setActiveGroup(group.id)}
-                      className={`flex items-center gap-2 px-5 py-3 rounded-full font-bold transition-all ${
-                        activeGroup === group.id 
-                          ? 'bg-ink text-white shadow-lg shadow-ink/20 scale-105' 
-                          : 'hover:bg-ink/5 text-muted'
-                      }`}
-                    >
-                      <Icon size={18} />
-                      <span>{group.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button 
-                type="submit" 
-                className="bg-ocean text-white p-5 rounded-full hover:bg-ocean-strong transition-all shadow-lg shadow-ocean/30 active:scale-95 ml-2"
-                disabled={isSearching}
-              >
-                {isSearching ? <Loader2 size={24} className="animate-spin" /> : <ChevronRight size={24} />}
-              </button>
-            </div>
-          </form>
+          )}
         </div>
       </section>
 
-      {/* Results View */}
-      <main className="results-container">
+      {/* Results High-Density Grid */}
+      <main className="results-view px-4 mt-12">
         {isSearching && results.length === 0 ? (
-          <div className="grid place-items-center py-32">
-            <div className="flex flex-col items-center gap-4">
-              <Loader2 size={48} className="text-ocean animate-spin" />
-              <p className="text-lg font-bold text-secondary text-center">
-                Consultando repositorios federados... <br />
-                <span className="text-sm font-medium opacity-60">Preparando IA para asistencia curricular</span>
-              </p>
+          <div className="flex flex-col items-center justify-center py-40 gap-6 opacity-60">
+            <Loader2 size={64} className="text-ocean animate-spin" />
+            <div className="text-center">
+              <h3 className="text-2xl font-bold font-display">Interconectando nodos externos</h3>
+              <p className="text-secondary">Consultando repositorios federados y aplicando filtros de impacto...</p>
             </div>
           </div>
         ) : results.length === 0 ? (
-          <div className="empty-state py-20 text-center border-dashed border-2 border-line rounded-[32px] bg-white/20">
-            <div className="flex flex-col items-center gap-4">
-              <div className="p-6 bg-secondary/5 rounded-full text-secondary/30">
-                <History size={48} />
-              </div>
-              <h2 className="text-2xl font-bold text-ink">Comienza tu búsqueda</h2>
-              <p className="text-secondary max-w-sm mx-auto">
-                Ingresa palabras clave para explorar los recursos de {PROVIDER_GROUPS.find(g => g.id === activeGroup)?.label.toLowerCase()}.
-              </p>
-            </div>
+          <div className="empty-state py-40 text-center bg-white/40 border-2 border-dashed border-line rounded-[40px]">
+             <div className="max-w-md mx-auto page-stack items-center">
+                <div className="bg-ocean/5 text-ocean p-8 rounded-full mb-4">
+                  <BookOpen size={64} strokeWidth={1.5} />
+                </div>
+                <h3 className="text-3xl font-bold font-display text-ink">Explora el conocimiento global</h3>
+                <p className="text-secondary leading-relaxed">
+                  Ingresa una temática para descubrir recursos en {PROVIDER_GROUPS.find(g => g.id === activeGroup)?.label}.
+                </p>
+             </div>
           </div>
         ) : (
-          <div className="page-stack">
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-3">
-                <span className="badge badge--ocean text-xs">{results.length} coincidencias</span>
-                {searchMeta.cached && (
-                  <span className="badge badge--sage text-[10px] py-1 px-2 flex items-center gap-1">
-                    <History size={12} />
-                    Caché ({new Date(searchMeta.fetchedAt!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                  </span>
-                )}
-                <span className="text-sm font-medium text-secondary">ordenado por relevancia e impacto</span>
-              </div>
-            </div>
-            
-            <div className="resource-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {results.map((asset) => (
+          <div className="results-stack space-y-12">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+              {visibleResults.map((asset) => (
                 <LibraryAssetCard 
                   key={asset.id} 
                   asset={asset} 
@@ -287,34 +335,49 @@ export function LibraryPage({
                 />
               ))}
             </div>
+
+            {/* Load More Trigger */}
+            {visibleLimit < results.length && (
+              <div className="flex justify-center pt-8">
+                <button 
+                  onClick={() => setVisibleLimit(prev => prev + 24)}
+                  className="bg-white border-2 border-ink text-ink font-bold px-12 py-5 rounded-[24px] hover:bg-ink hover:text-white transition-all shadow-xl active:scale-95 flex items-center gap-3"
+                >
+                  <span>Ver más recursos</span>
+                  <ArrowRight size={20} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
 
-      {/* Floating Batch Action Bar */}
+      {/* Floating Batch Action Bar (Phase 3 Integration) */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-8">
-          <div className="bg-ink text-white py-4 px-6 rounded-[24px] shadow-2xl flex items-center gap-6 border border-white/10 backdrop-blur-xl">
-            <div className="flex items-center gap-3 border-r border-white/10 pr-6 mr-0">
-              <div className="bg-ocean text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+          <div className="bg-ink text-white py-5 px-8 rounded-[32px] shadow-2xl flex items-center gap-8 border border-white/10 backdrop-blur-2xl">
+            <div className="flex items-center gap-4 pr-8 border-r border-white/10">
+              <div className="w-10 h-10 bg-ocean rounded-full flex items-center justify-center font-bold text-lg shadow-lg shadow-ocean/30">
                 {selectedIds.length}
               </div>
-              <span className="text-sm font-medium hidden sm:inline">seleccionados</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold opacity-40 uppercase tracking-widest">Seleccionados</span>
+                <span className="font-bold">Recursos listos</span>
+              </div>
             </div>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsBatchPanelOpen(true)}
-                className="bg-gold text-ink font-bold px-5 py-2.5 rounded-full flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-gold/20"
+                className="bg-gold text-ink font-bold px-8 py-3 rounded-2xl flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl shadow-gold/20"
               >
                 <Sparkles size={18} />
-                <span>Integrar con IA</span>
+                <span>Mapear con IA</span>
               </button>
               
               <button 
                 onClick={() => setSelectedIds([])}
-                className="hover:bg-white/10 p-2.5 rounded-full transition-colors"
-                title="Limpiar selección"
+                className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-all text-white/50 hover:text-white"
               >
                 <X size={20} />
               </button>
@@ -323,7 +386,7 @@ export function LibraryPage({
         </div>
       )}
 
-      {/* Integration Panels */}
+      {/* Panels */}
       {isBatchPanelOpen && (
         <BatchIntegrationPanel
           isOpen={isBatchPanelOpen}
@@ -342,18 +405,18 @@ export function LibraryPage({
         <SidePanel
           isOpen={!!isIntegrating}
           onClose={() => setIsIntegrating(null)}
-          title="Integrar a Curaduría"
-          description="Vincular este recurso a un curso y unidad específica de la institución."
+          title="Integración Individual"
+          description="Vincula este activo a una unidad específica del curso."
           width="md"
         >
           <form className="page-stack" onSubmit={handleAddToCourse}>
-            <div className="p-6 bg-ocean/5 rounded-2xl border border-ocean/10 mb-6">
-              <h4 className="font-bold text-ocean mb-1">{isIntegrating.title}</h4>
-              <p className="text-xs text-ocean/70 line-clamp-2">{isIntegrating.abstract}</p>
+            <div className="p-6 bg-ocean/5 rounded-2xl border border-ocean/10 mb-2">
+              <h4 className="font-bold text-ocean text-lg leading-tight mb-2">{isIntegrating.title}</h4>
+              <p className="text-xs text-secondary leading-relaxed line-clamp-3">{isIntegrating.abstract}</p>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Seleccionar curso de destino</label>
+            <div className="form-group pt-4">
+              <label className="form-label">Destino</label>
               <div className="modern-select-wrapper">
                 <select 
                   className="modern-select"
@@ -361,7 +424,6 @@ export function LibraryPage({
                   onChange={e => setIntegrationForm(prev => ({ ...prev, courseSlug: e.target.value }))}
                   required
                 >
-                  <option value="">Selecciona un curso...</option>
                   {courseOptions.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -370,27 +432,20 @@ export function LibraryPage({
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Unidad o Módulo (opcional)</label>
+            <div className="form-group pt-2">
+              <label className="form-label">Unidad de Ubicación</label>
               <input 
                 className="modern-input"
-                placeholder="Ej: Unidad 1, Semana 4..."
+                placeholder="Ej: Unidad 2, Módulo 1..."
                 value={integrationForm.targetUnit}
                 onChange={e => setIntegrationForm(prev => ({ ...prev, targetUnit: e.target.value }))}
               />
             </div>
 
             <div className="pt-8 flex gap-3">
-              <button type="submit" className="cta-button flex-grow justify-center py-4">
+              <button type="submit" className="cta-button flex-grow justify-center py-4 text-lg">
                 <PackageCheck size={20} />
-                <span>Confirmar Integración</span>
-              </button>
-              <button 
-                type="button" 
-                className="ghost-button px-8" 
-                onClick={() => setIsIntegrating(null)}
-              >
-                Cancelar
+                <span>Integrar</span>
               </button>
             </div>
           </form>
@@ -398,37 +453,44 @@ export function LibraryPage({
       )}
 
       {/* Directory Context */}
-      <section className="mt-20 border-t border-line pt-12">
-        <div className="section-heading mb-8">
-          <div>
-            <span className="eyebrow">Gobierno de Datos</span>
-            <h3 className="text-xl font-bold">Estructuras del Directorio</h3>
+      <section className="mt-40 px-4">
+        <div className="max-w-7xl mx-auto border-t border-line pt-20">
+          <div className="section-heading mb-12 flex justify-between items-end">
+            <div>
+              <span className="eyebrow">Gobierno de Datos</span>
+              <h3 className="text-4xl font-bold font-display mt-2">Arquitectura Institucional</h3>
+            </div>
+            <Building2 size={48} className="text-muted opacity-10 pb-2" />
           </div>
-          <Building2 size={24} className="text-muted opacity-50" />
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {appData.institution.structures.map((structure) => {
-            const linkedCourses = countCoursesForStructure(visibleCourses, structure);
-            return (
-              <article key={structure.id} className="surface section-card section-card--compact hover:shadow-lg transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-ink">{structure.institution}</h4>
-                  <span className="badge badge--outline">{linkedCourses} cursos</span>
-                </div>
-                <div className="text-xs text-secondary flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span>Tipologías</span>
-                    <span className="font-medium text-ink">{structure.courseTypes.length}</span>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {appData.institution.structures.slice(0, 4).map((structure) => {
+              const linkedCourses = countCoursesForStructure(visibleCourses, structure);
+              return (
+                <article key={structure.id} className="surface group p-8 hover:shadow-2xl transition-all cursor-default">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="bg-secondary/5 group-hover:bg-ocean/10 p-3 rounded-2xl transition-colors">
+                      <Building2 size={24} className="text-muted group-hover:text-ocean transition-colors" />
+                    </div>
+                    <span className="badge badge--outline font-bold">{linkedCourses} cursos</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>Guías Pedagógicas</span>
-                    <span className="font-medium text-ink">{structure.pedagogicalGuidelines.length}</span>
+                  <h4 className="text-lg font-bold text-ink mb-1">{structure.institution}</h4>
+                  <p className="text-xs text-muted font-medium mb-6 uppercase tracking-wider">{structure.programs.length} Programas Activos</p>
+                  
+                  <div className="space-y-3 pt-6 border-t border-line/40">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted">Tipologías</span>
+                      <span className="font-bold text-ink">{structure.courseTypes.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted">Políticas Pedagógicas</span>
+                      <span className="font-bold text-ink">{structure.pedagogicalGuidelines.length}</span>
+                    </div>
                   </div>
-                </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+          </div>
         </div>
       </section>
     </div>

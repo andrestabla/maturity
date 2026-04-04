@@ -8,6 +8,10 @@ interface LibraryAssetCardProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
 }
 
+/**
+ * Compact, High-Density Resource Card for a 6-Column Grid.
+ * Optimized for scannability and quick selection.
+ */
 export function LibraryAssetCard({ 
   asset, 
   onAddToCourse,
@@ -17,90 +21,86 @@ export function LibraryAssetCard({
   const isInstitutional = asset.provider === 'institutional';
   
   return (
-    <article className={`resource-card group flex flex-col h-full transition-all border-2 ${
-      isSelected ? 'border-ocean bg-ocean/5 shadow-xl' : 'border-transparent shadow-md'
-    } hover:shadow-xl hover:-translate-y-1 relative`}>
+    <article className={`resource-card-compact group flex flex-col h-full transition-all border-2 rounded-2xl p-3 overflow-hidden relative ${
+      isSelected 
+        ? 'border-ocean bg-ocean/5 shadow-md shadow-ocean/10' 
+        : 'border-line/20 bg-white/40 hover:border-ocean/40 hover:bg-white/60 hover:shadow-xl'
+    }`}>
       
-      {/* Multi-select overlay checkbox */}
-      <div className="absolute top-4 right-4 z-20">
-        <label className="flex items-center cursor-pointer">
-          <input 
-            type="checkbox"
-            className="w-5 h-5 rounded border-line text-ocean focus:ring-ocean transition-all cursor-pointer"
-            checked={isSelected}
-            onChange={(e) => onToggleSelect?.(asset.id, e.target.checked)}
-          />
-        </label>
+      {/* Multi-select Checkbox (Simplified for density) */}
+      <div className="absolute top-2 right-2 z-20">
+        <input 
+          type="checkbox"
+          className="w-4 h-4 rounded border-line text-ocean focus:ring-ocean transition-all cursor-pointer accent-ocean"
+          checked={isSelected}
+          onChange={(e) => onToggleSelect?.(asset.id, e.target.checked)}
+        />
       </div>
 
-      <div className="resource-card__top mb-3 pr-8">
-        <div className="flex items-center gap-2">
-          <span className={`badge ${isInstitutional ? 'badge--ocean' : 'badge--sage'}`}>
-            {isInstitutional ? 'Institucional' : asset.provider}
-          </span>
-          {asset.openAccess && (
-            <span className="badge badge--outline">Open Access</span>
+      <div className="flex flex-col gap-2 flex-grow">
+        {/* Source & Score */}
+        <div className="flex items-center justify-between gap-1 pr-6">
+          <div className="flex items-center gap-1.5 opacity-80 overflow-hidden">
+            <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded truncate ${
+              isInstitutional ? 'bg-ocean/10 text-ocean' : 'bg-secondary/10 text-secondary'
+            }`}>
+              {isInstitutional ? 'Institucional' : asset.provider}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] font-bold text-gold">
+            <Star size={10} fill="currentColor" />
+            <span>{asset.score.toFixed(1)}</span>
+          </div>
+        </div>
+
+        {/* Title (High-priority) */}
+        <strong className="block text-sm leading-tight text-ink font-bold line-clamp-2 group-hover:text-ocean transition-colors">
+          {asset.title}
+        </strong>
+
+        {/* Preview Summary (Very compact) */}
+        {asset.abstract && (
+          <p className="text-[11px] text-muted line-clamp-2 leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
+            {asset.abstract}
+          </p>
+        )}
+
+        {/* Authors (Minor) */}
+        {asset.authors && asset.authors.length > 0 && (
+          <div className="flex items-center gap-1 text-[10px] text-muted overflow-hidden">
+            <Users size={10} className="shrink-0" />
+            <span className="truncate">{asset.authors[0]} {asset.authors.length > 1 ? `+${asset.authors.length - 1}` : ''}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 pt-2 border-t border-line/10 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 text-[10px] text-secondary/60">
+          <Layers size={12} />
+          <span className="capitalize">{asset.resourceType}</span>
+        </div>
+        
+        <div className="flex items-center gap-1">
+          {asset.canonicalUrl && (
+            <a
+              href={asset.canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 hover:bg-ocean/10 text-ocean rounded-lg transition-colors"
+              title="Ver fuente original"
+            >
+              <ExternalLink size={14} />
+            </a>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-1 bg-gold/10 text-gold rounded-full text-xs font-bold whitespace-nowrap">
-          <Star size={12} fill="currentColor" />
-          <span>{asset.score.toFixed(1)}</span>
-        </div>
-      </div>
-
-      <strong className="block text-lg mb-1 leading-tight group-hover:text-ocean transition-colors">
-        {asset.title}
-      </strong>
-      
-      {asset.authors && asset.authors.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs text-secondary mb-3">
-          <Users size={12} />
-          <span className="line-clamp-1">{asset.authors.join(', ')}</span>
-        </div>
-      )}
-      
-      <p className="text-sm text-secondary line-clamp-3 mb-4 flex-grow">
-        {asset.abstract || 'Sin resumen disponible.'}
-      </p>
-
-      <div className="resource-card__meta mb-3 flex items-center justify-between text-xs font-medium border-t border-line/50 pt-3">
-        <div className="flex items-center gap-1.5 opacity-70">
-          <Layers size={14} />
-          <span>{asset.resourceType}</span>
-        </div>
-        {asset.publishedAt && (
-          <span className="opacity-70">{asset.publishedAt}</span>
-        )}
-      </div>
-
-      <div className="tag-row mb-4">
-        {asset.tags.slice(0, 3).map((tag) => (
-          <span key={tag} className="tag text-[10px] py-1 px-2">
-            {tag}
-          </span>
-        ))}
-      </div>
-
-      <div className="action-row mt-auto grid grid-cols-2 gap-2">
-        {asset.canonicalUrl && (
-          <a
-            href={asset.canonicalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ghost-button justify-center py-2"
+          <button
+            type="button"
+            className="p-1.5 bg-ink text-white hover:bg-ocean rounded-lg transition-all shadow-sm active:scale-90"
+            onClick={() => onAddToCourse(asset)}
+            title="Integrar recurso"
           >
-            <ExternalLink size={16} />
-            <span>Ver fuente</span>
-          </a>
-        )}
-        <button
-          type="button"
-          className="cta-button cta-button--small justify-center py-2"
-          onClick={() => onAddToCourse(asset)}
-        >
-          <Plus size={16} />
-          <span>Integrar</span>
-        </button>
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
     </article>
   );
