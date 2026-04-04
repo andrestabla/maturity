@@ -1,120 +1,140 @@
 import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
-import { readLibraryAssets, readLibrarySearchCache, persistLibrarySearchCache } from '../../lib/store.js';
-import type { LibraryAsset, LibraryGroup, LibrarySearchResult, LibraryProvider } from '../../src/types.js';
-import { searchYouTube } from '../../lib/library/adapters/youtube.js';
-import { searchSemanticScholar } from '../../lib/library/adapters/semanticScholar.js';
-import { searchOpenAlex } from '../../lib/library/adapters/openAlex.js';
+import {
+  readLibraryAssets,
+  readLibrarySearchCache,
+  persistLibrarySearchCache,
+} from '../../lib/store.js';
+import type { AuthUser, LibraryAsset, LibraryGroup, LibraryProvider, LibrarySearchResult } from '../../src/types.js';
+import { federatedSearch } from '../../lib/library/orchestrator.js';
+import type { SearchParams } from '../../lib/library/orchestrator.js';
 
 export const config = {
   runtime: 'nodejs',
 };
 
 /**
- * Federated Library Search Orchestrator v2
- * Dispatches concurrent requests to multiple providers and caches results.
+ * Federated Library Search — v3 (Full Phase 1+2+3)
+ * Supports all 9 external providers + institutional.
+ * Returns results with per-provider status for UI live indicators.
  */
 export default async function handler(request: Request) {
   const user = await getSessionUser(request);
-
-  if (!user) {
-    return errorResponse(401, 'No autorizado');
-  }
+  if (!user) return errorResponse(401, 'No autorizado');
 
   const url = new URL(request.url);
-  const q = url.searchParams.get('q')?.trim() || '';
-  const group = (url.searchParams.get('group') as LibraryGroup) || 'Investigacion';
+  const q = url.searchParams.get('q')?.trim() ?? '';
+  const group = (url.searchParams.get('group') as LibraryGroup) ?? 'Investigacion';
+  const language = url.searchParams.get('language') ?? 'all';
+  const yearStr = url.searchParams.get('year');
+  const year = yearStr ? parseInt(yearStr, 10) : undefined;
+  const openAccess = url.searchParams.get('open_access') === 'true';
+  const providersParam = url.searchParams.get('providers');
+  const requestedProviders = providersParam
+    ? (providersParam.split(',').filter(Boolean) as LibraryProvider[])
+    : undefined;
+  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '25', 10), 100);
 
   try {
-    // 1. Mode A: Institutional Search (Local DB) - No caching needed for local
+    // ── Institutional: served from DB ────────────────────────────────────────
     if (group === 'Institucional') {
       const assets = (await readLibraryAssets()) as LibraryAsset[];
-      const results = assets
-        .filter((asset: LibraryAsset) => 
-          !q || 
-          asset.title.toLowerCase().includes(q.toLowerCase()) || 
-          asset.abstract.toLowerCase().includes(q.toLowerCase()) ||
-          asset.tags.some((t: string) => t.toLowerCase().includes(q.toLowerCase()))
-        )
-        .map(normalizeAssetToSearchResult);
+      const filtered = filterInstitutionalAssets(assets, user, q, language);
 
       return jsonResponse({
-        results: results.slice(0, 50),
-        total: results.length,
+        results: filtered.slice(0, limit).map(assetToSearchResult),
+        total: filtered.length,
         group,
         query: q,
+        providerStates: [{ provider: 'institutional', count: filtered.length, durationMs: 0 }],
         cached: false,
+        fetchedAt: new Date().toISOString(),
       });
     }
 
-    // 2. Mode B: Federated Search (Cache First)
+    // ── Cache lookup (keyed by group + query + all filters) ──────────────────
+    const cacheFilters = { language, year, openAccess, providers: requestedProviders };
+    const cacheKey = buildCacheKey(group, q, cacheFilters);
+
     if (q) {
-      const cacheGroupMap: Record<string, LibraryProvider> = {
-        'Investigacion': 'semantic-scholar',
-        'YouTube': 'youtube',
-        'Didacticos': 'oer-commons'
-      };
-      
-      const provider = cacheGroupMap[group];
-      if (provider) {
-        const cached = await readLibrarySearchCache(provider, q, {});
-        if (cached) {
-          return jsonResponse({
-            results: cached.results.slice(0, 50),
-            total: cached.results.length,
-            group,
-            query: q,
-            cached: true,
-            fetchedAt: cached.fetchedAt,
-          });
-        }
+      const primaryProvider = getPrimaryProviderForGroup(group);
+      const cached = await readLibrarySearchCache(primaryProvider, cacheKey, cacheFilters);
+      if (cached) {
+        return jsonResponse({
+          results: cached.results.slice(0, limit),
+          total: cached.results.length,
+          group,
+          query: q,
+          providerStates: [],
+          cached: true,
+          fetchedAt: cached.fetchedAt,
+        });
       }
     }
 
-    // 3. Mode C: Federated Search (Adapter Execution)
-    let results: LibrarySearchResult[] = [];
+    // ── Federated search ─────────────────────────────────────────────────────
+    const searchParams: SearchParams = {
+      query: q || (group === 'Didacticos' ? 'educacion' : group === 'YouTube' ? 'clase' : 'learning'),
+      language: language !== 'all' ? language : undefined,
+      year,
+      openAccess: openAccess || undefined,
+      limit,
+      providers: requestedProviders,
+    };
 
-    if (group === 'YouTube') {
-      const apiKey = process.env.YOUTUBE_API_KEY || '';
-      // Fallback for demo/dev if key is not strict
-      if (!apiKey) {
-        console.warn('YOUTUBE_API_KEY no detectada. Búsqueda externa YouTube fallará.');
-      }
-      
-      results = await searchYouTube(q, apiKey);
-      if (q) await persistLibrarySearchCache('youtube', q, {}, results);
-    } 
-    else if (group === 'Investigacion') {
-      // Concurrent dispatch via Promise.allSettled for resilience
-      const [ssResults, oaResults] = await Promise.allSettled([
-        searchSemanticScholar(q),
-        searchOpenAlex(q),
-      ]);
+    const orchestratorResult = await federatedSearch(group, searchParams);
 
-      const ssData = ssResults.status === 'fulfilled' ? ssResults.value : [];
-      const oaData = oaResults.status === 'fulfilled' ? oaResults.value : [];
-      
-      // Merge results and de-duplicate by normalized title/authors
-      results = mergeSearchResults([...ssData, ...oaData]);
-      
-      // Persist to cache (using semantic-scholar as primary key for this group)
-      if (q) await persistLibrarySearchCache('semantic-scholar', q, {}, results);
+    if (q && orchestratorResult.results.length > 0) {
+      const primaryProvider = getPrimaryProviderForGroup(group);
+      void persistLibrarySearchCache(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {
+        /* non-blocking */
+      });
     }
 
     return jsonResponse({
-      results: results.slice(0, 50),
-      total: results.length,
+      results: orchestratorResult.results.slice(0, limit),
+      total: orchestratorResult.total,
       group,
       query: q,
+      providerStates: orchestratorResult.providerStates,
       cached: false,
+      fetchedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('[LibrarySearch] Orchestrator Error:', err);
-    return errorResponse(500, err instanceof Error ? err.message : 'Error interno en el orquestador de búsqueda');
+    console.error('[LibrarySearch] Orchestrator error:', err);
+    return errorResponse(500, err instanceof Error ? err.message : 'Error interno en la búsqueda federada');
   }
 }
 
-function normalizeAssetToSearchResult(asset: LibraryAsset): LibrarySearchResult {
+function filterInstitutionalAssets(
+  assets: LibraryAsset[],
+  user: AuthUser,
+  q: string,
+  language: string,
+): LibraryAsset[] {
+  return assets.filter((asset) => {
+    if (asset.visibility === 'Institucional' && asset.institutionId) {
+      const isAdmin = user.role === 'Administrador' || user.role === 'Coordinador' || user.role === 'Auditor';
+      const isMember =
+        user.institutionId === asset.institutionId ||
+        (user.memberships ?? []).some((m) => m.institutionId === asset.institutionId);
+      if (!isAdmin && !isMember) return false;
+    }
+
+    if (language && language !== 'all' && asset.language !== language) return false;
+
+    if (!q) return true;
+    const ql = q.toLowerCase();
+    return (
+      asset.title.toLowerCase().includes(ql) ||
+      asset.abstract.toLowerCase().includes(ql) ||
+      asset.tags.some((t) => t.toLowerCase().includes(ql)) ||
+      (asset.institutionName ?? '').toLowerCase().includes(ql)
+    );
+  });
+}
+
+function assetToSearchResult(asset: LibraryAsset): LibrarySearchResult {
   return {
     id: asset.id,
     canonicalKey: asset.canonicalKey,
@@ -131,7 +151,7 @@ function normalizeAssetToSearchResult(asset: LibraryAsset): LibrarySearchResult 
     canonicalUrl: asset.canonicalUrl,
     resourceType: asset.resourceType,
     language: asset.language,
-    license: asset.license,
+    license: asset.license ?? undefined,
     openAccess: asset.openAccess,
     citationCount: asset.citationCount,
     thumbnailUrl: asset.thumbnailUrl,
@@ -148,12 +168,17 @@ function normalizeAssetToSearchResult(asset: LibraryAsset): LibrarySearchResult 
   };
 }
 
-function mergeSearchResults(allResults: LibrarySearchResult[]): LibrarySearchResult[] {
-  const seen = new Set<string>();
-  return allResults.filter(r => {
-    const key = (r.title + (r.authors[0] || '')).toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function buildCacheKey(group: string, query: string, filters: Record<string, unknown>): string {
+  return JSON.stringify({ group, query, ...filters });
+}
+
+function getPrimaryProviderForGroup(group: LibraryGroup): LibraryProvider {
+  const map: Record<LibraryGroup, LibraryProvider> = {
+    Investigacion: 'semantic-scholar',
+    Didacticos: 'oer-commons',
+    YouTube: 'youtube',
+    Institucional: 'institutional',
+    Otros: 'institutional',
+  };
+  return map[group] ?? 'semantic-scholar';
 }
