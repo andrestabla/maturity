@@ -1,50 +1,119 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
+import type { SearchParams } from '../orchestrator.js';
+
+const SS_BASE = 'https://api.semanticscholar.org/graph/v1';
+const FIELDS =
+  'paperId,title,abstract,authors,year,url,doi,citationCount,openAccessPdf,' +
+  'publicationTypes,venue,externalIds,fieldsOfStudy,s2FieldsOfStudy,referenceCount';
 
 /**
  * Semantic Scholar API Adapter
+ * Docs: https://api.semanticscholar.org/api-docs/
  */
-export async function searchSemanticScholar(query: string): Promise<LibrarySearchResult[]> {
-  const params = new URLSearchParams({
-    query: query,
-    limit: '25',
-    fields: 'paperId,title,abstract,authors,year,url,doi,citationCount,openAccessPdf,publicationTypes,venue',
+export async function searchSemanticScholar(
+  params: SearchParams,
+  signal?: AbortSignal,
+): Promise<LibrarySearchResult[]> {
+  const { query, language, year, openAccess, limit = 20 } = params;
+
+  const urlParams = new URLSearchParams({
+    query,
+    limit: String(Math.min(limit, 100)),
+    fields: FIELDS,
   });
 
-  const response = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?${params.toString()}`);
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Semantic Scholar Error: ${error.message || response.statusText}`);
+  if (year) {
+    urlParams.set('year', `${year}-`);
   }
 
-  const data = await response.json() as any;
-  
-  return (data.data || []).map((item: any): LibrarySearchResult => ({
-    id: `ss-${item.paperId}`,
-    canonicalKey: `semantic-scholar:${item.paperId}`,
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim();
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+
+  const response = await fetch(`${SS_BASE}/paper/search?${urlParams.toString()}`, {
+    headers,
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({})) as Record<string, unknown>;
+    throw new Error(`Semantic Scholar ${response.status}: ${String(error.message ?? response.statusText)}`);
+  }
+
+  const data = await response.json() as { data?: unknown[] };
+
+  return (data.data ?? [])
+    .map((item) => normalizeSSResult(item as Record<string, unknown>))
+    .filter((r) => !openAccess || r.openAccess)
+    .filter((r) => !language || r.language === language || language === 'all');
+}
+
+function normalizeSSResult(item: Record<string, unknown>): LibrarySearchResult {
+  const externalIds = (item.externalIds ?? {}) as Record<string, string>;
+  const doi = String(externalIds.DOI ?? item.doi ?? '');
+  const arxivId = String(externalIds.ArXiv ?? '');
+  const canonicalKey = doi
+    ? `doi:${doi.toLowerCase()}`
+    : arxivId
+      ? `arxiv:${arxivId}`
+      : `semantic-scholar:${String(item.paperId ?? '')}`;
+
+  const openAccessPdf = (item.openAccessPdf ?? {}) as Record<string, unknown>;
+  const authors = ((item.authors as unknown[]) ?? []) as Array<Record<string, unknown>>;
+  const publicationTypes = ((item.publicationTypes as unknown[]) ?? []) as string[];
+  const fields = ((item.s2FieldsOfStudy as unknown[]) ?? []) as Array<Record<string, unknown>>;
+
+  const citationCount = Number(item.citationCount ?? 0);
+  const year = item.year ? String(item.year) : '';
+
+  return {
+    id: `ss-${String(item.paperId ?? '')}`,
+    canonicalKey,
     provider: 'semantic-scholar',
-    providerRecordId: item.paperId,
+    providerRecordId: String(item.paperId ?? ''),
     providers: ['semantic-scholar'],
     group: 'Investigacion',
-    title: item.title,
-    authors: (item.authors || []).map((a: any) => a.name),
-    publishedAt: item.year ? String(item.year) : '',
-    abstract: item.abstract || '',
+    title: String(item.title ?? '(sin título)'),
+    authors: authors.map((a) => String(a.name ?? '')).filter(Boolean),
+    publishedAt: year,
+    abstract: String(item.abstract ?? ''),
     descriptionHtml: '',
-    doi: item.doi || '',
-    canonicalUrl: item.url || `https://www.semanticscholar.org/paper/${item.paperId}`,
-    resourceType: 'Articulo Investigacion',
+    doi,
+    canonicalUrl:
+      String(item.url ?? '') ||
+      (doi ? `https://doi.org/${doi}` : `https://www.semanticscholar.org/paper/${String(item.paperId ?? '')}`),
+    resourceType: publicationTypes[0] ?? 'Artículo',
     language: 'en',
-    openAccess: !!item.openAccessPdf,
-    citationCount: item.citationCount || 0,
+    openAccess: Boolean(openAccessPdf.url ?? item.openAccessPdf),
+    citationCount,
+    thumbnailUrl: undefined,
+    embedUrl: openAccessPdf.url ? String(openAccessPdf.url) : undefined,
+    institutionId: undefined,
+    institutionName: undefined,
     visibility: 'Publico',
-    previewKind: 'external-link',
-    tags: item.publicationTypes || [],
+    previewKind: openAccessPdf.url ? 'pdf' : 'external-link',
+    tags: [
+      ...publicationTypes,
+      ...fields.map((f) => String(f.category ?? '')).filter(Boolean),
+    ],
     metadata: {
       venue: item.venue,
-      openAccessPdf: item.openAccessPdf?.url,
+      referenceCount: item.referenceCount,
+      openAccessPdfUrl: openAccessPdf.url,
     },
-    score: 1.0,
+    score: computeAcademicScore(citationCount, year),
     sourceKinds: ['Semantic Scholar'],
     cached: false,
-  }));
+  };
+}
+
+function computeAcademicScore(citations: number, year: string): number {
+  const citScore = Math.min(0.7, Math.log10(citations + 2) / 5);
+  const recency = year ? Math.max(0, 1 - (new Date().getFullYear() - parseInt(year, 10)) / 20) * 0.3 : 0;
+  return Math.min(1.0, 0.3 + citScore + recency);
 }
