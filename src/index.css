@@ -10632,17 +10632,20 @@ body::after {
   grid-template-columns: repeat(2, 1fr);
 }
 
-@media (min-width: 768px) {
+@media (min-width: 640px) {
   .library-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (min-width: 1024px) {
   .library-grid { grid-template-columns: repeat(4, 1fr); }
 }
-@media (min-width: 1440px) {
+@media (min-width: 1280px) {
   .library-grid { grid-template-columns: repeat(5, 1fr); }
 }
-@media (min-width: 1920px) {
+@media (min-width: 1600px) {
   .library-grid { grid-template-columns: repeat(6, 1fr); }
+}
+@media (min-width: 1920px) {
+  .library-grid { grid-template-columns: repeat(7, 1fr); }
 }
 
 /* Asset Card */
@@ -10846,41 +10849,7 @@ body::after {
 }
 
 /* Preview Modal Overlay */
-.library-preview-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  z-index: 999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  animation: fadeIn 200ms ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.library-preview-panel {
-  background: white;
-  border-radius: 24px;
-  width: 100%;
-  max-width: 900px;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 40px 100px rgba(0,0,0,0.25);
-  animation: slideUp 250ms ease-out;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* Library preview — right-side drawer (animation handled by framer-motion) */
 
 .library-preview-panel__head {
   padding: 20px 24px;

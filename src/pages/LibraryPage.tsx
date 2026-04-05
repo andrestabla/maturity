@@ -9,7 +9,6 @@ import {
   GraduationCap,
   LibraryBig,
   Loader2,
-  PackageCheck,
   PlayCircle,
   Search,
   Sparkles,
@@ -22,7 +21,6 @@ import {
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
 import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
-import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
@@ -154,8 +152,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
-  const [integrating, setIntegrating] = useState<LibrarySearchResult | null>(null);
-  const [integrationForm, setIntegrationForm] = useState({ courseSlug: '', targetUnit: '', targetStage: '' });
 
   const searchRef = useRef<HTMLFormElement>(null);
   const visibleCourses = getVisibleCourses(appData, role, viewer);
@@ -240,20 +236,12 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
   // ── Add to course ───────────────────────────────────────────────────────────────────
 
-  async function handleAddToCourse(e: React.FormEvent) {
-    e.preventDefault();
-    if (!integrating) return;
-
+  async function handleAddToCourse(asset: LibrarySearchResult, courseSlug: string, targetUnit?: string) {
     try {
       const resp = await fetch('/api/library/course-links', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          asset: integrating,
-          courseSlug: integrationForm.courseSlug,
-          targetStage: integrationForm.targetStage || undefined,
-          targetUnit: integrationForm.targetUnit || undefined,
-        }),
+        body: JSON.stringify({ asset, courseSlug, targetUnit: targetUnit || undefined }),
       });
 
       if (!resp.ok) {
@@ -262,30 +250,14 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       }
 
       refreshAppData();
-      setIntegrating(null);
-      setPreviewAsset(null);
-      await showAlert({
-        title: 'Recurso integrado',
-        message: 'El recurso ha sido vinculado exitosamente al curso.',
-        tone: 'success',
-      });
     } catch (err) {
       await showAlert({
         title: 'Error de integración',
         message: err instanceof Error ? err.message : 'Error desconocido',
         tone: 'error',
       });
+      throw err;
     }
-  }
-
-  function openAddToCourse(asset: LibrarySearchResult) {
-    setPreviewAsset(null);
-    setIntegrating(asset);
-    setIntegrationForm({
-      courseSlug: visibleCourses[0]?.slug ?? '',
-      targetUnit: '',
-      targetStage: '',
-    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -612,7 +584,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                     setSelectedIds((prev) => sel ? [...prev, id] : prev.filter((i) => i !== id))
                   }
                   onPreview={setPreviewAsset}
-                  onAddToCourse={openAddToCourse}
+                  onAddToCourse={setPreviewAsset}
                 />
               ))}
             </div>
@@ -712,72 +684,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
       )}
 
-      {/* ── Preview modal ────────────────────────────────────────────────────── */}
+      {/* ── Preview panel (right-side drawer) ──────────────────────────────── */}
       <LibraryPreviewModal
         asset={previewAsset}
+        courseOptions={courseOptions}
         onClose={() => setPreviewAsset(null)}
-        onAddToCourse={openAddToCourse}
+        onAddToCourse={handleAddToCourse}
       />
-
-      {/* ── Add to course panel ─────────────────────────────────────────────── */}
-      {integrating && (
-        <SidePanel
-          isOpen={!!integrating}
-          onClose={() => setIntegrating(null)}
-          title="Añadir al curso"
-          description="Vincula este activo como recurso de una unidad específica."
-          width="md"
-        >
-          <form className="page-stack" onSubmit={handleAddToCourse}>
-            <div className="p-5 rounded-2xl border border-line bg-slate-50 mb-2">
-              <div
-                className="text-[10px] font-black uppercase tracking-widest mb-2"
-                style={{ color: PROVIDER_COLORS[integrating.provider] ?? '#6b7280' }}
-              >
-                {PROVIDER_LABELS[integrating.provider] ?? integrating.provider} · {integrating.resourceType}
-              </div>
-              <h4 className="font-bold text-ink leading-snug line-clamp-2">{integrating.title}</h4>
-              {integrating.authors[0] && (
-                <p className="text-xs text-muted mt-1">{integrating.authors[0]}</p>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Curso de destino</label>
-              <div className="modern-select-wrapper">
-                <select
-                  className="modern-select"
-                  value={integrationForm.courseSlug}
-                  onChange={(e) => setIntegrationForm((f) => ({ ...f, courseSlug: e.target.value }))}
-                  required
-                >
-                  {courseOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="modern-select-icon" />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Unidad / Módulo <span className="text-muted font-normal">(opcional)</span></label>
-              <input
-                className="modern-input"
-                placeholder="Ej: Unidad 2 · Módulo 1"
-                value={integrationForm.targetUnit}
-                onChange={(e) => setIntegrationForm((f) => ({ ...f, targetUnit: e.target.value }))}
-              />
-            </div>
-
-            <div className="pt-4">
-              <button type="submit" className="cta-button w-full justify-center py-4 text-base">
-                <PackageCheck size={18} />
-                <span>Integrar recurso</span>
-              </button>
-            </div>
-          </form>
-        </SidePanel>
-      )}
 
       {/* ── Batch AI panel ────────────────────────────────────────────────────── */}
       {isBatchPanelOpen && (
