@@ -9,7 +9,6 @@ import {
   GraduationCap,
   LibraryBig,
   Loader2,
-  PackageCheck,
   PlayCircle,
   Search,
   Sparkles,
@@ -22,7 +21,6 @@ import {
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
 import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
-import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
@@ -110,6 +108,45 @@ const PROVIDER_COLORS: Record<string, string> = {
   institutional: '#4f46e5',
 };
 
+// ─── Descubridor Inteligente ─────────────────────────────────────────────────
+
+const DISCOVERY_TOPICS: Partial<Record<LibraryGroup, string[]>> = {
+  Investigacion: [
+    'inteligencia artificial', 'aprendizaje automático', 'cambio climático', 'neurociencia',
+    'bioinformática', 'computación cuántica', 'salud pública', 'economía conductual',
+    'robótica', 'genómica', 'ética en IA', 'sostenibilidad',
+  ],
+  Didacticos: [
+    'pensamiento crítico', 'aprendizaje colaborativo', 'gamificación', 'STEM',
+    'diseño instruccional', 'evaluación formativa', 'aula invertida', 'ABP',
+    'matemáticas interactivas', 'física experimental', 'química laboratorio',
+  ],
+  YouTube: [
+    'conferencias TED educación', 'tutoriales programación', 'documentales ciencia',
+    'lecciones Khan Academy', 'cursos universitarios', 'divulgación científica',
+    'clases magistrales', 'debates académicos',
+  ],
+  Institucional: [],
+};
+
+const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: string; description: string; icon: string }[]>> = {
+  Investigacion: [
+    { query: 'large language models education', title: 'IA en Educación', description: 'Últimos papers sobre modelos de lenguaje y su impacto pedagógico.', icon: '🤖' },
+    { query: 'climate change mitigation', title: 'Cambio Climático', description: 'Investigaciones de vanguardia en mitigación y adaptación climática.', icon: '🌍' },
+    { query: 'CRISPR gene therapy', title: 'Biotecnología', description: 'Avances en edición genómica y terapias de nueva generación.', icon: '🧬' },
+  ],
+  Didacticos: [
+    { query: 'project based learning', title: 'Aprendizaje por Proyectos', description: 'Recursos OER para implementar ABP en el aula.', icon: '📐' },
+    { query: 'physics simulation', title: 'Simulaciones PhET', description: 'Laboratorios virtuales interactivos de física y química.', icon: '⚡' },
+    { query: 'math games elementary', title: 'Matemáticas Gamificadas', description: 'Juegos y actividades que hacen las matemáticas divertidas.', icon: '🎯' },
+  ],
+  YouTube: [
+    { query: 'MIT OpenCourseWare lecture', title: 'Clases MIT', description: 'Conferencias completas del MIT sobre tecnología y ciencias.', icon: '🎓' },
+    { query: 'TED talk education innovation', title: 'TED · Educación', description: 'Charlas inspiradoras sobre el futuro del aprendizaje.', icon: '💡' },
+    { query: 'science documentary BBC', title: 'Documentales Ciencia', description: 'Documentales de alta calidad para complementar clases.', icon: '🔬' },
+  ],
+};
+
 const LANGUAGES = [
   { value: 'all', label: 'Todos los idiomas' },
   { value: 'es', label: 'Español' },
@@ -154,8 +191,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
-  const [integrating, setIntegrating] = useState<LibrarySearchResult | null>(null);
-  const [integrationForm, setIntegrationForm] = useState({ courseSlug: '', targetUnit: '', targetStage: '' });
 
   const searchRef = useRef<HTMLFormElement>(null);
   const visibleCourses = getVisibleCourses(appData, role, viewer);
@@ -183,8 +218,14 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       const resp = await fetch(`/api/library/search?${params.toString()}`);
 
       if (!resp.ok) {
-        const err = await resp.json() as { error?: string };
-        throw new Error(err.error ?? 'Error en la búsqueda federada');
+        let errMsg = 'Error en la búsqueda federada';
+        try {
+          const err = await resp.json() as { error?: string };
+          errMsg = err.error ?? errMsg;
+        } catch {
+          errMsg = `Error del servidor (${resp.status})`;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await resp.json() as {
@@ -240,52 +281,23 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
   // ── Add to course ──────────────────────────────────────────────────────────
 
-  async function handleAddToCourse(e: React.FormEvent) {
-    e.preventDefault();
-    if (!integrating) return;
-
-    try {
-      const resp = await fetch('/api/library/course-links', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          asset: integrating,
-          courseSlug: integrationForm.courseSlug,
-          targetStage: integrationForm.targetStage || undefined,
-          targetUnit: integrationForm.targetUnit || undefined,
-        }),
-      });
-
-      if (!resp.ok) {
-        const err = await resp.json() as { error?: string };
-        throw new Error(err.error ?? 'No se pudo vincular el recurso');
-      }
-
-      refreshAppData();
-      setIntegrating(null);
-      setPreviewAsset(null);
-      await showAlert({
-        title: 'Recurso integrado',
-        message: 'El recurso ha sido vinculado exitosamente al curso.',
-        tone: 'success',
-      });
-    } catch (err) {
-      await showAlert({
-        title: 'Error de integración',
-        message: err instanceof Error ? err.message : 'Error desconocido',
-        tone: 'error',
-      });
-    }
-  }
-
-  function openAddToCourse(asset: LibrarySearchResult) {
-    setPreviewAsset(null);
-    setIntegrating(asset);
-    setIntegrationForm({
-      courseSlug: visibleCourses[0]?.slug ?? '',
-      targetUnit: '',
-      targetStage: '',
+  async function handleAddToCourse(asset: LibrarySearchResult, courseSlug: string, targetUnit?: string) {
+    const resp = await fetch('/api/library/course-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ asset, courseSlug, targetUnit }),
     });
+
+    if (!resp.ok) {
+      let errMsg = 'No se pudo vincular el recurso';
+      try {
+        const err = await resp.json() as { error?: string };
+        errMsg = err.error ?? errMsg;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+
+    refreshAppData();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -585,21 +597,78 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             </div>
           </div>
         ) : results.length === 0 ? (
-          <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
-            <div className="max-w-sm mx-auto">
-              <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
-                <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.6 }} />
+          query ? (
+            /* No results for a query */
+            <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
+              <div className="max-w-sm mx-auto">
+                <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
+                  <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.6 }} />
+                </div>
+                <h3 className="text-2xl font-bold font-display text-ink mb-2">Sin resultados</h3>
+                <p className="text-sm text-muted leading-relaxed">
+                  {`No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`}
+                </p>
               </div>
-              <h3 className="text-2xl font-bold font-display text-ink mb-2">
-                {query ? 'Sin resultados' : `Explora ${activeGroupCfg.label}`}
-              </h3>
-              <p className="text-sm text-muted leading-relaxed">
-                {query
-                  ? `No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`
-                  : activeGroupCfg.description}
-              </p>
             </div>
-          </div>
+          ) : (
+            /* ── Descubridor Inteligente (initial empty state) ───────── */
+            <div className="max-w-5xl mx-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl" style={{ backgroundColor: `${activeGroupCfg.color}15` }}>
+                  <Sparkles size={18} style={{ color: activeGroupCfg.color }} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-display text-ink">Descubridor Inteligente</h3>
+                  <p className="text-xs text-muted">Tópicos sugeridos para {activeGroupCfg.label}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-10">
+                {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
+                  <button
+                    key={topic}
+                    onClick={() => {
+                      setQuery(topic);
+                      void performSearch(topic, activeGroup, filters);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full border font-semibold text-sm transition-all hover:shadow-md active:scale-95"
+                    style={{
+                      borderColor: `${activeGroupCfg.color}30`,
+                      color: activeGroupCfg.color,
+                      backgroundColor: `${activeGroupCfg.color}08`,
+                    }}
+                  >
+                    <Sparkles size={11} />
+                    {topic}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {DISCOVERY_FEATURED[activeGroup]?.map((item) => (
+                  <button
+                    key={item.query}
+                    onClick={() => {
+                      setQuery(item.query);
+                      void performSearch(item.query, activeGroup, filters);
+                    }}
+                    className="text-left p-6 rounded-[24px] border border-line bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all group"
+                  >
+                    <div
+                      className="text-3xl mb-3 w-12 h-12 rounded-2xl flex items-center justify-center"
+                      style={{ backgroundColor: `${activeGroupCfg.color}10` }}
+                    >
+                      {item.icon}
+                    </div>
+                    <h4 className="font-bold text-ink mb-1 font-display group-hover:text-ocean transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-muted leading-relaxed">{item.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -612,7 +681,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                     setSelectedIds((prev) => sel ? [...prev, id] : prev.filter((i) => i !== id))
                   }
                   onPreview={setPreviewAsset}
-                  onAddToCourse={openAddToCourse}
+                  onAddToCourse={setPreviewAsset}
                 />
               ))}
             </div>
@@ -712,72 +781,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
       )}
 
-      {/* ── Preview modal ─────────────────────────────────────────────── */}
+      {/* ── Preview panel (right-side drawer) ────────────────────────── */}
       <LibraryPreviewModal
         asset={previewAsset}
         onClose={() => setPreviewAsset(null)}
-        onAddToCourse={openAddToCourse}
+        courseOptions={courseOptions}
+        onAddToCourse={handleAddToCourse}
       />
-
-      {/* ── Add to course panel ───────────────────────────────────────── */}
-      {integrating && (
-        <SidePanel
-          isOpen={!!integrating}
-          onClose={() => setIntegrating(null)}
-          title="Añadir al curso"
-          description="Vincula este activo como recurso de una unidad específica."
-          width="md"
-        >
-          <form className="page-stack" onSubmit={handleAddToCourse}>
-            <div className="p-5 rounded-2xl border border-line bg-slate-50 mb-2">
-              <div
-                className="text-[10px] font-black uppercase tracking-widest mb-2"
-                style={{ color: PROVIDER_COLORS[integrating.provider] ?? '#6b7280' }}
-              >
-                {PROVIDER_LABELS[integrating.provider] ?? integrating.provider} · {integrating.resourceType}
-              </div>
-              <h4 className="font-bold text-ink leading-snug line-clamp-2">{integrating.title}</h4>
-              {integrating.authors[0] && (
-                <p className="text-xs text-muted mt-1">{integrating.authors[0]}</p>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Curso de destino</label>
-              <div className="modern-select-wrapper">
-                <select
-                  className="modern-select"
-                  value={integrationForm.courseSlug}
-                  onChange={(e) => setIntegrationForm((f) => ({ ...f, courseSlug: e.target.value }))}
-                  required
-                >
-                  {courseOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="modern-select-icon" />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Unidad / Módulo <span className="text-muted font-normal">(opcional)</span></label>
-              <input
-                className="modern-input"
-                placeholder="Ej: Unidad 2 · Módulo 1"
-                value={integrationForm.targetUnit}
-                onChange={(e) => setIntegrationForm((f) => ({ ...f, targetUnit: e.target.value }))}
-              />
-            </div>
-
-            <div className="pt-4">
-              <button type="submit" className="cta-button w-full justify-center py-4 text-base">
-                <PackageCheck size={18} />
-                <span>Integrar recurso</span>
-              </button>
-            </div>
-          </form>
-        </SidePanel>
-      )}
 
       {/* ── Batch AI panel ────────────────────────────────────────────── */}
       {isBatchPanelOpen && (
