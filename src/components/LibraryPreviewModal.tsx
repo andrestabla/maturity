@@ -6,16 +6,11 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
-  Download,
   ExternalLink,
   FileText,
-  Globe,
   Layers,
   Loader2,
   Microscope,
-  Play,
-  Plus,
-  Puzzle,
   Sparkles,
   Users,
   X,
@@ -46,6 +41,38 @@ const PROVIDER_LABELS: Record<string, { label: string; color: string }> = {
   youtube: { label: 'YouTube', color: '#dc2626' },
   institutional: { label: 'Institucional', color: '#4f46e5' },
 };
+
+function ScoreRing({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const r = 18;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - Math.min(score, 1));
+  const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#ca8a04' : '#dc2626';
+
+  return (
+    <div className="flex items-center gap-2">
+      <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+        <svg width="48" height="48" style={{ transform: 'rotate(-90deg)', position: 'absolute', inset: 0 }}>
+          <circle cx="24" cy="24" r={r} fill="none" stroke="#e2e8f0" strokeWidth="3" />
+          <circle
+            cx="24" cy="24" r={r} fill="none"
+            stroke={color} strokeWidth="3"
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 900, color }}>{pct}%</span>
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-bold text-muted uppercase tracking-wider">Puntuación</div>
+        <div className="text-xs font-bold" style={{ color }}>de Madurez</div>
+      </div>
+    </div>
+  );
+}
 
 export function LibraryPreviewModal({
   asset,
@@ -89,51 +116,6 @@ export function LibraryPreviewModal({
     }
   }
 
-  function renderEmbedPreview() {
-    if (!asset) return null;
-
-    if (asset.previewKind === 'video' && asset.embedUrl) {
-      return (
-        <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-xl">
-          <iframe
-            src={asset.embedUrl}
-            className="w-full h-full"
-            title={asset.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      );
-    }
-
-    if (asset.previewKind === 'simulation' && asset.embedUrl) {
-      return (
-        <div className="rounded-2xl overflow-hidden bg-slate-900 aspect-video shadow-xl">
-          <iframe
-            src={asset.embedUrl}
-            className="w-full h-full"
-            title={asset.title}
-            allow="fullscreen"
-          />
-        </div>
-      );
-    }
-
-    if (asset.previewKind === 'pdf' && asset.embedUrl) {
-      return (
-        <div className="rounded-2xl overflow-hidden bg-gray-100 shadow-inner" style={{ height: 360 }}>
-          <iframe
-            src={`https://docs.google.com/viewer?url=${encodeURIComponent(asset.embedUrl)}&embedded=true`}
-            className="w-full h-full"
-            title={`Preview: ${asset.title}`}
-          />
-        </div>
-      );
-    }
-
-    return null;
-  }
-
   const panel = (
     <AnimatePresence>
       {asset && (
@@ -147,12 +129,10 @@ export function LibraryPreviewModal({
             transition={{ duration: 0.2 }}
             onClick={onClose}
             style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 400,
-              background: 'rgba(15,23,42,0.22)',
-              backdropFilter: 'blur(2px)',
-              WebkitBackdropFilter: 'blur(2px)',
+              position: 'fixed', inset: 0, zIndex: 400,
+              background: 'rgba(15,23,42,0.25)',
+              backdropFilter: 'blur(3px)',
+              WebkitBackdropFilter: 'blur(3px)',
             }}
           />
 
@@ -164,171 +144,181 @@ export function LibraryPreviewModal({
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 260 }}
             style={{
-              position: 'fixed',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: 'min(540px, 100vw)',
+              position: 'fixed', top: 0, right: 0, bottom: 0,
+              width: 'min(480px, 100vw)',
               zIndex: 401,
-              background: 'white',
+              background: '#f8fafc',
               borderRadius: '20px 0 0 20px',
-              boxShadow: '-24px 0 80px rgba(0,0,0,0.13)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
+              boxShadow: '-32px 0 80px rgba(0,0,0,0.18)',
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* ── Header ──────────────────────────────────────────────── */}
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+            {/* ── Header ── */}
+            <div style={{ padding: '18px 20px 14px', background: 'white', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
               <div className="flex items-start gap-3">
-                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-                  {asset.providers.map((p) => {
-                    const cfg = PROVIDER_LABELS[p] ?? { label: p, color: '#6b7280' };
-                    return (
-                      <span
-                        key={p}
-                        className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border"
-                        style={{ color: cfg.color, borderColor: `${cfg.color}40`, backgroundColor: `${cfg.color}10` }}
-                      >
-                        {cfg.label}
-                      </span>
-                    );
-                  })}
-                  {asset.providers.length > 1 && (
-                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200">
-                      ✦ Multifuente
-                    </span>
-                  )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">
+                    Detalles del Recurso
+                  </div>
+                  <h2 className="text-sm font-bold text-ink leading-snug line-clamp-2 font-display">
+                    {asset.title}
+                  </h2>
                 </div>
                 <button
                   onClick={onClose}
-                  className="flex-shrink-0 p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                  aria-label="Cerrar"
+                  className="flex-shrink-0 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
+              </div>
+
+              {/* Provider + badges */}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {asset.providers.map((p) => {
+                  const cfg = PROVIDER_LABELS[p] ?? { label: p, color: '#6b7280' };
+                  return (
+                    <span
+                      key={p}
+                      className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border"
+                      style={{ color: cfg.color, borderColor: `${cfg.color}40`, backgroundColor: `${cfg.color}10` }}
+                    >
+                      {cfg.label}
+                    </span>
+                  );
+                })}
+                {asset.openAccess && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Open Access
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* ── Body (scrollable) ────────────────────────────────────── */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }} className="space-y-6">
+            {/* ── Body (scrollable) ── */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }} className="space-y-3">
 
-              {/* Title & meta */}
-              <div>
-                <h2 className="text-2xl font-bold leading-tight text-ink mb-3 font-display">
-                  {asset.title}
-                </h2>
-
-                <div className="flex flex-wrap items-center gap-3 text-sm text-secondary">
-                  {asset.authors.length > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <Users size={13} className="text-muted" />
-                      <span className="text-xs">
-                        {asset.authors.slice(0, 3).join(', ')}
-                        {asset.authors.length > 3 ? ` +${asset.authors.length - 3}` : ''}
-                      </span>
-                    </div>
-                  )}
-                  {asset.publishedAt && (
-                    <span className="px-2 py-0.5 bg-slate-100 rounded-lg font-semibold text-xs text-slate-600">
-                      {asset.publishedAt.slice(0, 4)}
-                    </span>
-                  )}
-                  {asset.openAccess && (
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg font-bold text-[10px] uppercase tracking-widest">
-                      Open Access
-                    </span>
-                  )}
-                  {asset.citationCount > 0 && (
-                    <div className="flex items-center gap-1 text-xs text-muted">
-                      <Microscope size={12} />
-                      <span>{asset.citationCount.toLocaleString()} citas</span>
-                    </div>
-                  )}
-                  {asset.license?.label && (
-                    <span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg font-semibold text-xs">
-                      {asset.license.label}
-                    </span>
-                  )}
-                </div>
-
-                {asset.doi && (
-                  <div className="flex items-center gap-2 mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <FileText size={13} className="text-muted flex-shrink-0" />
-                    <span className="text-xs text-slate-500 font-mono truncate flex-1">doi:{asset.doi}</span>
-                    <button
-                      onClick={copyDOI}
-                      className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-muted hover:text-ink flex-shrink-0"
-                      title="Copiar DOI"
-                    >
-                      {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                    </button>
-                  </div>
-                )}
-
-                {asset.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {asset.tags.slice(0, 8).map((tag) => (
-                      <span key={tag} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[11px] font-medium">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* ── AI Summary ──────────────────────────────────────────── */}
+              {/* ── AI Summary block (gradient purple→blue) ── */}
               {asset.abstract && (
                 <div
-                  className="rounded-2xl p-5 border"
+                  className="rounded-2xl p-5"
                   style={{
-                    background: `linear-gradient(135deg, ${providerCfg.color}06 0%, transparent 60%)`,
-                    borderColor: `${providerCfg.color}20`,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 40%, #2563eb 100%)',
+                    color: 'white',
                   }}
                 >
                   <div className="flex items-center gap-2 mb-3">
-                    <div
-                      className="p-1.5 rounded-lg"
-                      style={{ backgroundColor: `${providerCfg.color}15` }}
-                    >
-                      <Sparkles size={14} style={{ color: providerCfg.color }} />
+                    <div className="p-1.5 bg-white/20 rounded-lg">
+                      <Sparkles size={14} className="text-white" />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: providerCfg.color }}>
-                      Resumen del recurso
+                    <span className="text-xs font-black uppercase tracking-widest text-white/90">
+                      Resumen de IA
                     </span>
                   </div>
-                  <p className="text-sm leading-relaxed text-slate-700">
-                    {asset.abstract}
+                  <p className="text-sm leading-relaxed text-white/90">
+                    {asset.abstract.slice(0, 320)}{asset.abstract.length > 320 ? '…' : ''}
                   </p>
                 </div>
               )}
 
-              {/* ── Embed preview ────────────────────────────────────────── */}
-              {renderEmbedPreview()}
+              {/* ── Metadata card ── */}
+              <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1px solid #f1f5f9' }}>
+                {/* Score ring */}
+                <ScoreRing score={asset.score} />
 
-              {/* Fallback if no abstract and no embed */}
-              {!asset.abstract && !asset.embedUrl && (
-                <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
-                  <Globe size={36} className="mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Vista previa no disponible. Abre el enlace externo para leer el recurso.</p>
-                </div>
-              )}
-
-              {/* ── Institutional info ───────────────────────────────────── */}
-              {asset.institutionName && (
-                <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
-                  <Layers size={14} className="text-indigo-500 flex-shrink-0" />
-                  <span className="text-xs font-semibold text-indigo-700">{asset.institutionName}</span>
-                  {asset.visibility === 'Institucional' && (
-                    <span className="ml-auto text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full">
-                      Privado
-                    </span>
+                <div
+                  className="grid grid-cols-2 gap-3 pt-3"
+                  style={{ borderTop: '1px solid #f8fafc' }}
+                >
+                  <div>
+                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-0.5">Fuente</div>
+                    <div className="text-xs font-bold" style={{ color: providerCfg.color }}>{providerCfg.label}</div>
+                  </div>
+                  {asset.publishedAt && (
+                    <div>
+                      <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-0.5">Fecha</div>
+                      <div className="text-xs font-semibold text-ink">{asset.publishedAt.slice(0, 10)}</div>
+                    </div>
+                  )}
+                  {asset.authors.length > 0 && (
+                    <div className="col-span-2">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <Users size={10} className="text-muted" />
+                        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Autores</span>
+                      </div>
+                      <div className="text-xs text-ink leading-relaxed">
+                        {asset.authors.slice(0, 3).join(', ')}{asset.authors.length > 3 ? ` +${asset.authors.length - 3}` : ''}
+                      </div>
+                    </div>
+                  )}
+                  {asset.citationCount > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <Microscope size={10} className="text-muted" />
+                        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Citas</span>
+                      </div>
+                      <div className="text-xs font-bold text-ink">{asset.citationCount.toLocaleString()}</div>
+                    </div>
                   )}
                 </div>
+
+                {/* DOI */}
+                {asset.doi && (
+                  <div
+                    className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl"
+                    style={{ borderTop: '1px solid #f1f5f9' }}
+                  >
+                    <FileText size={12} className="text-muted flex-shrink-0" />
+                    <span className="text-[10px] text-slate-500 font-mono truncate flex-1">doi:{asset.doi}</span>
+                    <button
+                      onClick={copyDOI}
+                      className="p-1 hover:bg-slate-200 rounded-lg transition-colors text-muted"
+                      title="Copiar DOI"
+                    >
+                      {copied ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              {asset.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {asset.tags.slice(0, 8).map((tag) => (
+                    <span key={tag} className="px-2 py-0.5 bg-white text-slate-500 rounded-md text-[10px] font-medium border border-line/30">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               )}
 
-              {/* ── Inline Add to Course form ────────────────────────────── */}
+              {/* Embed (video/sim/pdf) */}
+              {asset.previewKind === 'video' && asset.embedUrl && (
+                <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-lg">
+                  <iframe
+                    src={asset.embedUrl}
+                    className="w-full h-full"
+                    title={asset.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              {asset.previewKind === 'simulation' && asset.embedUrl && (
+                <div className="rounded-2xl overflow-hidden bg-slate-900 aspect-video shadow-lg">
+                  <iframe src={asset.embedUrl} className="w-full h-full" title={asset.title} allow="fullscreen" />
+                </div>
+              )}
+
+              {/* Institutional */}
+              {asset.institutionName && (
+                <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <Layers size={13} className="text-indigo-500 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-indigo-700">{asset.institutionName}</span>
+                </div>
+              )}
+
+              {/* Inline course form */}
               <AnimatePresence>
                 {showCourseForm && (
                   <motion.div
@@ -336,26 +326,22 @@ export function LibraryPreviewModal({
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                    transition={{ duration: 0.2 }}
                     style={{ overflow: 'hidden' }}
                   >
                     {addSuccess ? (
-                      <div className="flex flex-col items-center gap-3 py-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                        <CheckCircle2 size={36} className="text-emerald-500" />
-                        <div className="text-sm font-bold text-emerald-700">¡Recurso integrado al curso!</div>
+                      <div className="flex flex-col items-center gap-2 py-5 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                        <CheckCircle2 size={32} className="text-emerald-500" />
+                        <div className="text-sm font-bold text-emerald-700">¡Recurso vinculado al curso!</div>
                       </div>
                     ) : (
-                      <form
-                        onSubmit={handleAddSubmit}
-                        className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3"
-                      >
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
-                          Vincular al curso
+                      <form onSubmit={handleAddSubmit} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-2.5">
+                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          Seleccionar curso
                         </div>
-
                         <div className="relative">
                           <select
-                            className="w-full bg-white border border-slate-200 text-sm rounded-xl py-2.5 px-3 pr-8 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 appearance-none text-ink"
+                            className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl py-2.5 px-3 pr-8 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 appearance-none text-ink"
                             value={selectedCourse}
                             onChange={(e) => setSelectedCourse(e.target.value)}
                             required
@@ -364,38 +350,23 @@ export function LibraryPreviewModal({
                               <option key={opt.value} value={opt.value}>{opt.label}</option>
                             ))}
                           </select>
-                          <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
-
                         <input
                           type="text"
-                          className="w-full bg-white border border-slate-200 text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 placeholder:text-slate-400"
+                          className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 placeholder:text-slate-400"
                           placeholder="Unidad / Módulo (opcional)"
                           value={targetUnit}
                           onChange={(e) => setTargetUnit(e.target.value)}
                         />
-
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setShowCourseForm(false)}
-                            className="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold border border-slate-200 text-slate-500 hover:bg-slate-100 transition-all"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={isAdding || !selectedCourse}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold bg-ink text-white hover:bg-ocean transition-all disabled:opacity-60 shadow-lg"
-                          >
-                            {isAdding ? (
-                              <Loader2 size={15} className="animate-spin" />
-                            ) : (
-                              <Check size={15} />
-                            )}
-                            <span>{isAdding ? 'Integrando…' : 'Integrar'}</span>
-                          </button>
-                        </div>
+                        <button
+                          type="submit"
+                          disabled={isAdding || !selectedCourse}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60 shadow"
+                        >
+                          {isAdding ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                          <span>{isAdding ? 'Vinculando…' : 'Confirmar'}</span>
+                        </button>
                       </form>
                     )}
                   </motion.div>
@@ -403,53 +374,36 @@ export function LibraryPreviewModal({
               </AnimatePresence>
             </div>
 
-            {/* ── Footer ──────────────────────────────────────────────── */}
+            {/* ── Footer CTAs ── */}
             <div
-              style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}
-              className="flex items-center gap-2 flex-wrap"
+              style={{ padding: '16px 16px 20px', background: 'white', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}
+              className="space-y-2.5"
             >
+              <button
+                onClick={() => { setShowCourseForm((v) => !v); setAddSuccess(false); }}
+                disabled={courseOptions.length === 0}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-[0.98] disabled:opacity-40"
+                style={{
+                  background: showCourseForm
+                    ? 'linear-gradient(135deg, #475569, #334155)'
+                    : 'linear-gradient(135deg, #4f46e5 0%, #2563eb 100%)',
+                  color: 'white',
+                }}
+              >
+                <span>{showCourseForm ? '✕ Cancelar' : '🔗 Vincular a mi Curso Actual'}</span>
+              </button>
+
               {asset.canonicalUrl && (
                 <a
                   href={asset.canonicalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-line font-bold text-sm text-ink hover:border-ink hover:bg-ink hover:text-white transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all border-2 border-line hover:border-ink hover:bg-ink hover:text-white text-ink"
                 >
                   <ExternalLink size={15} />
-                  <span>Ver fuente</span>
+                  <span>Abrir Original</span>
                 </a>
               )}
-
-              {asset.embedUrl && (asset.previewKind === 'pdf' || asset.previewKind === 'external-link') && (
-                <a
-                  href={asset.embedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-line font-bold text-sm text-ink hover:border-ink hover:bg-ink hover:text-white transition-all"
-                >
-                  <Download size={15} />
-                  <span>PDF</span>
-                </a>
-              )}
-
-              <button
-                onClick={() => {
-                  setShowCourseForm((v) => !v);
-                  setAddSuccess(false);
-                }}
-                disabled={courseOptions.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm ml-auto transition-all shadow-lg active:scale-95 disabled:opacity-40"
-                style={{ backgroundColor: showCourseForm ? '#64748b' : 'var(--ink, #0f172a)', color: 'white' }}
-              >
-                {asset.previewKind === 'video' ? (
-                  <Play size={15} />
-                ) : asset.previewKind === 'simulation' ? (
-                  <Puzzle size={15} />
-                ) : (
-                  <Plus size={15} />
-                )}
-                <span>{showCourseForm ? 'Cancelar' : 'Añadir al curso'}</span>
-              </button>
             </div>
           </motion.div>
         </>

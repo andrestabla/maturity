@@ -64,6 +64,8 @@ interface SearchFilters {
   year: string;
   openAccess: boolean;
   providers: LibraryProvider[];
+  resourceTypes: string[];
+  minScore: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,6 +185,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     year: '',
     openAccess: false,
     providers: [],
+    resourceTypes: [],
+    minScore: 0,
   });
 
   // UI state
@@ -199,7 +203,18 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     label: `${c.title} · ${buildCourseScopeLabel(c)}`,
   }));
   const selectedAssets = results.filter((r) => selectedIds.includes(r.id));
-  const visibleResults = results.slice(0, visibleLimit);
+
+  // Client-side post-filtering for resource type and score
+  const filteredResults = results.filter((r) => {
+    if (filters.minScore > 0 && r.score * 100 < filters.minScore) return false;
+    if (filters.resourceTypes.length > 0) {
+      const rt = r.resourceType.toLowerCase();
+      const match = filters.resourceTypes.some((t) => rt.includes(t.toLowerCase()));
+      if (!match) return false;
+    }
+    return true;
+  });
+  const visibleResults = filteredResults.slice(0, visibleLimit);
 
   // ── Search ─────────────────────────────────────────────────────────────────
 
@@ -305,7 +320,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   // ─────────────────────────────────────────────────────────────────────────
 
   const activeGroupCfg = GROUPS.find((g) => g.id === activeGroup)!;
-  const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0;
+  const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0 || filters.resourceTypes.length > 0 || filters.minScore > 0;
 
   return (
     <div className="page-stack library-page pb-32">
@@ -386,101 +401,150 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
             {/* Advanced filters drawer */}
             {showFilters && (
-              <div className="mt-3 p-5 bg-white/8 border border-white/10 rounded-[20px] backdrop-blur-xl grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Language */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Idioma</label>
-                  <div className="relative">
-                    <select
-                      className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                      value={filters.language}
-                      onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+              <div className="mt-3 p-5 bg-white/8 border border-white/10 rounded-[20px] backdrop-blur-xl space-y-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Language */}
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Idioma</label>
+                    <div className="relative">
+                      <select
+                        className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
+                        value={filters.language}
+                        onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+                      >
+                        {LANGUAGES.map((l) => (
+                          <option key={l.value} value={l.value} className="bg-ink">{l.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Year */}
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Publicación</label>
+                    <div className="relative">
+                      <select
+                        className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
+                        value={filters.year}
+                        onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y.value} value={y.value} className="bg-ink">{y.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Open Access toggle */}
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Acceso</label>
+                    <button
+                      type="button"
+                      onClick={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
+                      className={`w-full py-2.5 px-3 rounded-xl text-sm font-bold transition-all border ${
+                        filters.openAccess
+                          ? 'bg-emerald-500 text-white border-emerald-400'
+                          : 'bg-white/10 text-white/60 border-white/10 hover:bg-white/15'
+                      }`}
                     >
-                      {LANGUAGES.map((l) => (
-                        <option key={l.value} value={l.value} className="bg-ink">{l.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+                      {filters.openAccess ? '✓ Open Access' : 'Open Access'}
+                    </button>
+                  </div>
+
+                  {/* Apply button */}
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => applyFilters(filters)}
+                      className="w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-ink hover:bg-white/90 transition-all shadow"
+                    >
+                      Aplicar filtros
+                    </button>
                   </div>
                 </div>
 
-                {/* Year */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Publicación</label>
-                  <div className="relative">
-                    <select
-                      className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                      value={filters.year}
-                      onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
-                    >
-                      {YEAR_OPTIONS.map((y) => (
-                        <option key={y.value} value={y.value} className="bg-ink">{y.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Open Access */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Acceso</label>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
-                    className={`w-full py-2.5 px-3 rounded-xl text-sm font-bold transition-all border ${
-                      filters.openAccess
-                        ? 'bg-emerald-500 text-white border-emerald-400'
-                        : 'bg-white/10 text-white/60 border-white/10 hover:bg-white/15'
-                    }`}
-                  >
-                    {filters.openAccess ? '✓ Open Access' : 'Open Access'}
-                  </button>
-                </div>
-
-                {/* Apply button */}
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() => applyFilters(filters)}
-                    className="w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-ink hover:bg-white/90 transition-all shadow"
-                  >
-                    Aplicar filtros
-                  </button>
-                </div>
-
-                {/* Provider toggles (Investigacion only) */}
-                {activeGroup === 'Investigacion' && (
-                  <div className="col-span-2 md:col-span-4">
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Fuentes activas</label>
-                    <div className="flex flex-wrap gap-2">
-                      {INVESTIGATION_PROVIDERS.map((p) => {
-                        const active = filters.providers.length === 0 || filters.providers.includes(p);
+                {/* ── Tipo de Recurso (checkboxes) ── */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Tipo de Recurso</label>
+                    <div className="space-y-1.5">
+                      {['Paper', 'Video', 'Artículo', 'Dataset'].map((type) => {
+                        const checked = filters.resourceTypes.includes(type);
                         return (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => {
-                              setFilters((f) => {
-                                const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
-                                const next = all.includes(p)
-                                  ? all.filter((x) => x !== p)
-                                  : [...all, p];
-                                return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
-                              });
-                            }}
-                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
-                              active
-                                ? 'border-white/20 text-white bg-white/15'
-                                : 'border-white/5 text-white/30 bg-transparent'
-                            }`}
-                          >
-                            {PROVIDER_LABELS[p] ?? p}
-                          </button>
+                          <label key={type} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setFilters((f) => ({
+                                ...f,
+                                resourceTypes: checked
+                                  ? f.resourceTypes.filter((t) => t !== type)
+                                  : [...f.resourceTypes, type],
+                              }))}
+                              className="w-3.5 h-3.5 rounded accent-white cursor-pointer"
+                            />
+                            <span className="text-xs text-white/70 group-hover:text-white transition-colors">{type}</span>
+                          </label>
                         );
                       })}
                     </div>
                   </div>
-                )}
+
+                  {/* ── Fuentes (checkboxes, Investigacion only) ── */}
+                  {activeGroup === 'Investigacion' && (
+                    <div>
+                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Fuente</label>
+                      <div className="space-y-1.5">
+                        {INVESTIGATION_PROVIDERS.map((p) => {
+                          const active = filters.providers.length === 0 || filters.providers.includes(p);
+                          return (
+                            <label key={p} className="flex items-center gap-2 cursor-pointer group">
+                              <input
+                                type="checkbox"
+                                checked={active}
+                                onChange={() => {
+                                  setFilters((f) => {
+                                    const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
+                                    const next = all.includes(p)
+                                      ? all.filter((x) => x !== p)
+                                      : [...all, p];
+                                    return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
+                                  });
+                                }}
+                                className="w-3.5 h-3.5 rounded accent-white cursor-pointer"
+                              />
+                              <span className="text-xs text-white/70 group-hover:text-white transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Puntuación Mínima (slider) ── */}
+                  <div>
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">
+                      Puntuación Mínima
+                      <span className="ml-2 text-white/70 normal-case">{filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={90}
+                      step={10}
+                      value={filters.minScore}
+                      onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
+                      className="w-full h-1.5 rounded-full appearance-none bg-white/20 accent-white cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] text-white/30 mt-1">
+                      <span>0%</span>
+                      <span>50%</span>
+                      <span>90%</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </form>
@@ -523,8 +587,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             ) : results.length > 0 ? (
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <div className="text-[10px] font-bold text-muted uppercase tracking-widest">{results.length} resultados</div>
-                  <div className="text-xs font-bold text-ink">Mostrando {Math.min(visibleLimit, results.length)}</div>
+                  <div className="text-[10px] font-bold text-muted uppercase tracking-widest">
+                    {filteredResults.length}{filteredResults.length < results.length ? ` / ${results.length}` : ''} resultados
+                  </div>
+                  <div className="text-xs font-bold text-ink">Mostrando {Math.min(visibleLimit, filteredResults.length)}</div>
                 </div>
                 {searchMeta.cached && (
                   <div className="p-2 bg-gold/10 text-gold rounded-xl" title="Desde caché">
@@ -686,13 +752,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               ))}
             </div>
 
-            {visibleLimit < results.length && (
+            {visibleLimit < filteredResults.length && (
               <div className="flex justify-center mt-10">
                 <button
                   onClick={() => setVisibleLimit((n) => n + 24)}
                   className="flex items-center gap-2 px-10 py-4 rounded-[20px] border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white transition-all shadow-lg active:scale-95"
                 >
-                  <span>Cargar más ({results.length - visibleLimit} restantes)</span>
+                  <span>Cargar más ({filteredResults.length - visibleLimit} restantes)</span>
                   <ArrowRight size={18} />
                 </button>
               </div>
