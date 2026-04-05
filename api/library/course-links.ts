@@ -24,6 +24,7 @@ interface CourseLinkRequestBody {
  * This replaces the old /api/resources pattern for federated assets.
  */
 export default async function handler(request: Request) {
+  try {
   const user = await getSessionUser(request);
   if (!user) return errorResponse(401, 'No autorizado');
 
@@ -99,5 +100,9 @@ export default async function handler(request: Request) {
   } catch (err) {
     console.error('[CourseLinks] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error al crear el vínculo');
+  }
+  } catch (err) {
+    console.error('[CourseLinks] Unhandled error:', err);
+    return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
   }
 }
