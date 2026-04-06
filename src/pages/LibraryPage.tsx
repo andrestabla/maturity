@@ -323,152 +323,109 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0 || filters.resourceTypes.length > 0 || filters.minScore > 0;
 
   return (
-    <div className="page-stack library-page pb-32">
+    <div className="library-page pb-32" style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="library-hero relative overflow-hidden pt-10 pb-16 px-8 rounded-[40px] bg-ink text-white shadow-2xl">
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-1/3 h-full opacity-5 pointer-events-none overflow-hidden">
-          <LibraryBig size={380} className="absolute -top-16 -right-16 rotate-12" />
-        </div>
-        <div
-          className="absolute bottom-0 left-0 w-64 h-64 rounded-full opacity-10 pointer-events-none"
-          style={{ background: `radial-gradient(circle, ${activeGroupCfg.color} 0%, transparent 70%)`, transform: 'translate(-30%, 50%)' }}
-        />
+      {/* ── Top header: search + group tabs ──────────────────────────── */}
+      <div className="bg-white border-b border-line sticky top-0 z-30 shadow-sm">
+        <div className="max-w-6xl mx-auto px-6 pt-6 pb-4 space-y-4">
 
-        <div className="relative z-10 max-w-4xl">
-          {/* Eyebrow */}
-          <div className="flex items-center gap-3 mb-6 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/10 border border-white/10 text-white/70">
-              Hub Federado · {INVESTIGATION_PROVIDERS.length + DIDACTICOS_PROVIDERS.length + 1} Fuentes
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <LibraryBig size={18} className="text-muted" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted">
+                  Barra de Búsqueda Semántica
+                </span>
+                {searchMeta.cached && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                    <Clock size={9} />
+                    Caché
+                  </span>
+                )}
+              </div>
+              <h1 className="text-xl font-bold text-ink font-display leading-none">
+                Biblioteca Inteligente
+              </h1>
+            </div>
+            <span className="text-[10px] font-bold text-muted hidden md:block">
+              {INVESTIGATION_PROVIDERS.length + DIDACTICOS_PROVIDERS.length + 1} fuentes federadas
             </span>
-            {searchMeta.cached && (
-              <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-gold/20 text-gold border border-gold/20">
-                <Clock size={10} />
-                Caché activa
-              </span>
-            )}
           </div>
 
-          <h1 className="text-5xl font-bold leading-none tracking-tighter mb-3 font-display">
-            Biblioteca Inteligente
-          </h1>
-          <p className="text-lg text-white/50 max-w-2xl font-medium leading-relaxed mb-8">
-            Metabuscador federado: artículos científicos, recursos educativos abiertos, simulaciones y video académico en una búsqueda unificada.
-          </p>
-
           {/* Search bar */}
-          <form ref={searchRef} onSubmit={handleSearch}>
-            <div className="flex items-center bg-white/10 hover:bg-white/14 backdrop-blur-2xl border border-white/10 rounded-[24px] p-1.5 transition-all shadow-2xl focus-within:ring-2 focus-within:ring-white/20">
-              <div className="pl-5 pr-3 text-white/30">
-                <Search size={22} strokeWidth={2.5} />
+          <form ref={searchRef} onSubmit={handleSearch} className="relative">
+            <div
+              className="flex items-center bg-white border-2 rounded-2xl transition-all shadow-sm"
+              style={{ borderColor: showFilters || hasActiveFilters ? activeGroupCfg.color : '#e2e8f0' }}
+            >
+              <div className="pl-4 pr-2 text-slate-300">
+                <Search size={20} strokeWidth={2} />
               </div>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Busca en ${activeGroupCfg.label}... título, DOI, autor, tema`}
-                className="flex-grow bg-transparent border-0 focus:ring-0 text-lg text-white placeholder:text-white/25 font-medium py-3.5"
+                placeholder="¿Qué concepto necesitas dominar hoy?"
+                className="flex-grow bg-transparent border-0 focus:ring-0 text-base text-ink placeholder:text-slate-300 font-medium py-3"
                 autoComplete="off"
               />
-              <div className="flex items-center gap-1.5 pr-1.5">
+              <div className="flex items-center gap-1 pr-1.5">
                 <button
                   type="button"
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-3 rounded-xl transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     showFilters || hasActiveFilters
-                      ? 'bg-white text-ink shadow-lg'
-                      : 'hover:bg-white/10 text-white/50'
+                      ? 'text-white shadow'
+                      : 'hover:bg-slate-100 text-muted'
                   }`}
+                  style={showFilters || hasActiveFilters ? { backgroundColor: activeGroupCfg.color } : {}}
                   title="Filtros avanzados"
                 >
-                  <Filter size={18} />
-                  {hasActiveFilters && !showFilters && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-gold rounded-full" />
+                  <Filter size={14} />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {hasActiveFilters && (
+                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
                   )}
                 </button>
                 <button
                   type="submit"
                   disabled={isSearching}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-xl active:scale-95 text-ink"
-                  style={{ backgroundColor: isSearching ? '#6b7280' : activeGroupCfg.color === '#dc2626' ? '#ef4444' : activeGroupCfg.color }}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-sm transition-all shadow active:scale-95 text-white"
+                  style={{ backgroundColor: isSearching ? '#94a3b8' : activeGroupCfg.color }}
                 >
-                  {isSearching ? <Loader2 size={18} className="animate-spin text-white" /> : <Zap size={18} className="text-white" />}
-                  <span className="text-white">{isSearching ? 'Buscando…' : 'Buscar'}</span>
+                  {isSearching
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Zap size={16} />}
+                  <span>{isSearching ? 'Buscando…' : 'Buscar'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Advanced filters drawer */}
+            {/* ── Filtros Avanzados dropdown ── */}
             {showFilters && (
-              <div className="mt-3 p-5 bg-white/8 border border-white/10 rounded-[20px] backdrop-blur-xl space-y-5">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Language */}
-                  <div>
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Idioma</label>
-                    <div className="relative">
-                      <select
-                        className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                        value={filters.language}
-                        onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
-                      >
-                        {LANGUAGES.map((l) => (
-                          <option key={l.value} value={l.value} className="bg-ink">{l.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Year */}
-                  <div>
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Publicación</label>
-                    <div className="relative">
-                      <select
-                        className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                        value={filters.year}
-                        onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
-                      >
-                        {YEAR_OPTIONS.map((y) => (
-                          <option key={y.value} value={y.value} className="bg-ink">{y.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Open Access toggle */}
-                  <div>
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Acceso</label>
-                    <button
-                      type="button"
-                      onClick={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
-                      className={`w-full py-2.5 px-3 rounded-xl text-sm font-bold transition-all border ${
-                        filters.openAccess
-                          ? 'bg-emerald-500 text-white border-emerald-400'
-                          : 'bg-white/10 text-white/60 border-white/10 hover:bg-white/15'
-                      }`}
-                    >
-                      {filters.openAccess ? '✓ Open Access' : 'Open Access'}
-                    </button>
-                  </div>
-
-                  {/* Apply button */}
-                  <div className="flex items-end">
-                    <button
-                      type="button"
-                      onClick={() => applyFilters(filters)}
-                      className="w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-ink hover:bg-white/90 transition-all shadow"
-                    >
-                      Aplicar filtros
-                    </button>
-                  </div>
+              <div
+                className="absolute top-full left-0 right-0 mt-2 bg-white border border-line rounded-2xl shadow-2xl z-40 p-5 space-y-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-black uppercase tracking-widest" style={{ color: activeGroupCfg.color }}>
+                    Filtros Avanzados (Adaptadores)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => applyFilters(filters)}
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white shadow transition-all"
+                    style={{ backgroundColor: activeGroupCfg.color }}
+                  >
+                    Aplicar Filtros
+                  </button>
                 </div>
 
-                {/* ── Tipo de Recurso (checkboxes) ── */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                  {/* Tipo de Recurso */}
                   <div>
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Tipo de Recurso</label>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Tipo de Recurso</label>
                     <div className="space-y-1.5">
                       {['Paper', 'Video', 'Artículo', 'Dataset'].map((type) => {
                         const checked = filters.resourceTypes.includes(type);
@@ -483,79 +440,111 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                                   ? f.resourceTypes.filter((t) => t !== type)
                                   : [...f.resourceTypes, type],
                               }))}
-                              className="w-3.5 h-3.5 rounded accent-white cursor-pointer"
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
                             />
-                            <span className="text-xs text-white/70 group-hover:text-white transition-colors">{type}</span>
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{type}</span>
                           </label>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* ── Fuentes (checkboxes, Investigacion only) ── */}
-                  {activeGroup === 'Investigacion' && (
-                    <div>
-                      <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Fuente</label>
-                      <div className="space-y-1.5">
-                        {INVESTIGATION_PROVIDERS.map((p) => {
-                          const active = filters.providers.length === 0 || filters.providers.includes(p);
-                          return (
-                            <label key={p} className="flex items-center gap-2 cursor-pointer group">
-                              <input
-                                type="checkbox"
-                                checked={active}
-                                onChange={() => {
-                                  setFilters((f) => {
-                                    const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
-                                    const next = all.includes(p)
-                                      ? all.filter((x) => x !== p)
-                                      : [...all, p];
-                                    return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
-                                  });
-                                }}
-                                className="w-3.5 h-3.5 rounded accent-white cursor-pointer"
-                              />
-                              <span className="text-xs text-white/70 group-hover:text-white transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Puntuación Mínima (slider) ── */}
+                  {/* Fuente */}
                   <div>
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Fuente</label>
+                    <div className="space-y-1.5">
+                      {(activeGroup === 'Investigacion' ? INVESTIGATION_PROVIDERS : activeGroup === 'Didacticos' ? DIDACTICOS_PROVIDERS : []).map((p) => {
+                        const active = filters.providers.length === 0 || filters.providers.includes(p);
+                        return (
+                          <label key={p} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => {
+                                setFilters((f) => {
+                                  const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
+                                  const next = all.includes(p) ? all.filter((x) => x !== p) : [...all, p];
+                                  return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
+                            />
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Puntuación Mínima */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">
                       Puntuación Mínima
-                      <span className="ml-2 text-white/70 normal-case">{filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}</span>
+                      <span className="ml-2 font-bold" style={{ color: activeGroupCfg.color }}>
+                        {filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}
+                      </span>
                     </label>
                     <input
                       type="range"
-                      min={0}
-                      max={90}
-                      step={10}
+                      min={0} max={90} step={10}
                       value={filters.minScore}
                       onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
-                      className="w-full h-1.5 rounded-full appearance-none bg-white/20 accent-white cursor-pointer"
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer"
+                      style={{ accentColor: activeGroupCfg.color }}
                     />
-                    <div className="flex justify-between text-[9px] text-white/30 mt-1">
-                      <span>0%</span>
-                      <span>50%</span>
-                      <span>90%</span>
+                    <div className="flex justify-between text-[9px] text-muted mt-1">
+                      <span>0%</span><span>50%</span><span>90%</span>
                     </div>
+                  </div>
+
+                  {/* Other filters */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Idioma</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.language}
+                          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+                        >
+                          {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Año</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.year}
+                          onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
+                        >
+                          {YEAR_OPTIONS.map((y) => <option key={y.value} value={y.value}>{y.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.openAccess}
+                        onChange={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
+                        className="w-3.5 h-3.5 rounded cursor-pointer"
+                        style={{ accentColor: activeGroupCfg.color }}
+                      />
+                      <span className="text-xs text-secondary font-medium">Solo Open Access</span>
+                    </label>
                   </div>
                 </div>
               </div>
             )}
           </form>
-        </div>
-      </section>
 
-      {/* ── Group tabs + stats ────────────────────────────────────────── */}
-      <section className="library-controls px-4 -mt-6 relative z-20">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center gap-3 p-3 bg-white border border-line shadow-2xl rounded-[28px]">
-          {/* Group tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1">
+          {/* ── Group tabs ── */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {GROUPS.map((g) => {
               const Icon = g.icon;
               const isActive = activeGroup === g.id;
@@ -563,52 +552,42 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                 <button
                   key={g.id}
                   onClick={() => switchGroup(g.id)}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
-                    isActive
-                      ? 'text-white shadow-lg'
-                      : 'hover:bg-slate-50 text-muted'
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
+                    isActive ? 'text-white shadow' : 'hover:bg-slate-50 text-muted'
                   }`}
                   style={isActive ? { backgroundColor: g.color } : {}}
                 >
-                  <Icon size={16} />
+                  <Icon size={14} />
                   <span>{g.label}</span>
                 </button>
               );
             })}
-          </div>
 
-          {/* Stats & meta */}
-          <div className="flex items-center gap-3 px-4 border-t md:border-t-0 md:border-l border-line pt-3 md:pt-0 flex-shrink-0">
-            {isSearching ? (
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Loader2 size={16} className="animate-spin" style={{ color: activeGroupCfg.color }} />
-                <span>Consultando fuentes…</span>
-              </div>
-            ) : results.length > 0 ? (
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <div className="text-[10px] font-bold text-muted uppercase tracking-widest">
-                    {filteredResults.length}{filteredResults.length < results.length ? ` / ${results.length}` : ''} resultados
-                  </div>
-                  <div className="text-xs font-bold text-ink">Mostrando {Math.min(visibleLimit, filteredResults.length)}</div>
+            {/* Stats inline with tabs */}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-line">
+              {isSearching ? (
+                <div className="flex items-center gap-1.5 text-xs text-muted">
+                  <Loader2 size={13} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+                  <span>Consultando…</span>
                 </div>
-                {searchMeta.cached && (
-                  <div className="p-2 bg-gold/10 text-gold rounded-xl" title="Desde caché">
-                    <Clock size={16} />
-                  </div>
-                )}
-                <button
-                  onClick={() => void performSearch(query, activeGroup, filters)}
-                  className="p-2 hover:bg-slate-100 text-muted hover:text-ink rounded-xl transition-colors"
-                  title="Actualizar resultados"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-            ) : null}
+              ) : filteredResults.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted">
+                    {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
+                  </span>
+                  <button
+                    onClick={() => void performSearch(query, activeGroup, filters)}
+                    className="p-1.5 hover:bg-slate-100 text-muted hover:text-ink rounded-lg transition-colors"
+                    title="Actualizar"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ── Provider status pills ─────────────────────────────────────── */}
       {searchMeta.providerStates && searchMeta.providerStates.length > 0 && (
