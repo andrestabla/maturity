@@ -189,11 +189,11 @@ function buildCacheKey(group: string, query: string, filters: Record<string, unk
 
 function getPrimaryProviderForGroup(group: LibraryGroup): LibraryProvider {
   const map: Record<LibraryGroup, LibraryProvider> = {
-    Investigacion: 'semantic-scholar',
-    Didacticos: 'oer-commons',
+    Investigacion: 'openalex',
+    Didacticos: 'phet',
     YouTube: 'youtube',
     Institucional: 'institutional',
     Otros: 'institutional',
   };
-  return map[group] ?? 'semantic-scholar';
+  return map[group] ?? 'openalex';
 }

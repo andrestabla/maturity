@@ -1,5 +1,6 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
 const OA_BASE = 'https://api.openalex.org';
 const FIELDS =
@@ -15,13 +16,21 @@ export async function searchOpenAlex(
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
   const { query, language, year, openAccess, limit = 20 } = params;
+  const integration = params.providerIntegrations?.openalex;
+  const baseUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || OA_BASE;
+  const mailto = getProviderConfigValue(integration, ['OPENALEX_MAILTO'], 'mailto') || 'library@maturity.app';
+  const apiKey = getProviderConfigValue(integration, ['OPENALEX_API_KEY'], 'apiKey');
 
   const urlParams = new URLSearchParams({
     search: query,
     per_page: String(Math.min(limit, 200)),
     select: FIELDS,
-    mailto: 'library@maturity.app',
+    mailto,
   });
+
+  if (apiKey) {
+    urlParams.set('api_key', apiKey);
+  }
 
   if (language && language !== 'all') {
     urlParams.set('filter', buildFilter(language, year, openAccess));
@@ -32,8 +41,11 @@ export async function searchOpenAlex(
     if (filterParts.length) urlParams.set('filter', filterParts.join(','));
   }
 
-  const response = await fetch(`${OA_BASE}/works?${urlParams.toString()}`, {
-    headers: { Accept: 'application/json' },
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/works?${urlParams.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Maturity360 Library/1.0',
+    },
     signal,
   });
 

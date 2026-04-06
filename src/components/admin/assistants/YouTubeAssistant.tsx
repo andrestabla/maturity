@@ -27,7 +27,7 @@ export function YouTubeAssistant({ config, onConfigChange }: YouTubeAssistantPro
           <div className="integration-assistant__steps">
             {[
               'Genera una API Key en Google Cloud para YouTube Data API.',
-              'Cárgala como YOUTUBE_API_KEY en el runtime privado de Vercel.',
+              'Puedes guardarla aquí en Gobierno o seguir usando YOUTUBE_API_KEY en runtime.',
               'Define módulos autorizados, región y nivel de filtrado, luego corre una prueba desde Gobierno.',
             ].map((step, index) => (
               <div key={index} className="integration-assistant__step">
@@ -39,17 +39,20 @@ export function YouTubeAssistant({ config, onConfigChange }: YouTubeAssistantPro
         </div>
 
         <div className="assistant-form-box">
-          <h5>Runtime y reglas de uso</h5>
+          <h5>Credencial y reglas de uso</h5>
           <div className="form-grid">
-            <div className="field">
-              <span>Credencial</span>
-              <div className="field__control" style={{ minHeight: '52px' }}>
+            <label className="field">
+              <span>API Key</span>
+              <div className="field__control">
                 <KeyRound size={16} className="field__icon" />
-                <div style={{ paddingLeft: '2.5rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  YOUTUBE_API_KEY en runtime privado
-                </div>
+                <input
+                  type="password"
+                  value={config.youtubeApiKey || ''}
+                  onChange={(event) => onConfigChange('youtubeApiKey', event.target.value)}
+                  placeholder="AIza..."
+                />
               </div>
-            </div>
+            </label>
 
             <div className="form-row">
               <label className="field">

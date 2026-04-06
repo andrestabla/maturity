@@ -1,7 +1,8 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
-const OER_BASE = 'https://oercommons.org/api';
+const OER_BASE = 'https://www.oercommons.org/api/search';
 
 /**
  * OER Commons API Adapter
@@ -13,17 +14,19 @@ export async function searchOERCommons(
   params: SearchParams,
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
-  const apiKey = process.env.OER_COMMONS_API_KEY?.trim();
+  const integration = params.providerIntegrations?.['oer-commons'];
+  const apiKey = getProviderConfigValue(integration, ['OER_COMMONS_API_KEY'], 'apiKey', 'token');
   if (!apiKey) {
     console.info('[OER Commons] No OER_COMMONS_API_KEY configured — skipping.');
     return [];
   }
 
   const { query, language, year, openAccess, limit = 15 } = params;
+  const baseUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || OER_BASE;
 
   const urlParams = new URLSearchParams({
     token: apiKey,
-    q: query,
+    'f.search': query,
     batch_size: String(Math.min(limit, 50)),
     batch_start: '0',
   });
@@ -33,14 +36,14 @@ export async function searchOERCommons(
   }
 
   if (year) {
-    urlParams.set('f.date_min', `${year}-01-01`);
+    urlParams.set('f.published_on', `${year}-01-01`);
   }
 
   if (openAccess) {
     urlParams.set('f.license', 'cc-by,cc-by-sa,cc-by-nc,public-domain');
   }
 
-  const response = await fetch(`${OER_BASE}/v1.2/?${urlParams.toString()}`, {
+  const response = await fetch(`${baseUrl}?${urlParams.toString()}`, {
     headers: { Accept: 'application/json' },
     signal,
   });

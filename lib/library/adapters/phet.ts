@@ -1,5 +1,6 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
 const PHET_METADATA_URL =
   'https://phet.colorado.edu/services/metadata/1.2/simulations?format=json&type=html&locale=en&summary';
@@ -15,8 +16,10 @@ export async function searchPhET(
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
   const { query, limit = 20 } = params;
+  const integration = params.providerIntegrations?.phet;
+  const metadataUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || PHET_METADATA_URL;
 
-  const response = await fetch(PHET_METADATA_URL, {
+  const response = await fetch(metadataUrl, {
     headers: { Accept: 'application/json' },
     signal,
   });

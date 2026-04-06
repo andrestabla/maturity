@@ -1,5 +1,6 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
 const SS_BASE = 'https://api.semanticscholar.org/graph/v1';
 const FIELDS =
@@ -15,6 +16,15 @@ export async function searchSemanticScholar(
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
   const { query, language, year, openAccess, limit = 20 } = params;
+  const integration = params.providerIntegrations?.['semantic-scholar'];
+  const baseUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || SS_BASE;
+  const apiKey = getProviderConfigValue(
+    integration,
+    ['SEMANTIC_SCHOLAR_API_KEY'],
+    'apiKey',
+    'semanticScholarApiKey',
+  );
+  const retries = Number.parseInt(integration?.config.retryCount || '1', 10);
 
   const urlParams = new URLSearchParams({
     query,
@@ -30,15 +40,18 @@ export async function searchSemanticScholar(
     Accept: 'application/json',
   };
 
-  const apiKey = process.env.SEMANTIC_SCHOLAR_API_KEY?.trim();
   if (apiKey) {
     headers['x-api-key'] = apiKey;
   }
 
-  const response = await fetch(`${SS_BASE}/paper/search?${urlParams.toString()}`, {
-    headers,
-    signal,
-  });
+  const response = await fetchWithRateLimitRetry(
+    `${baseUrl.replace(/\/$/, '')}/paper/search?${urlParams.toString()}`,
+    {
+      headers,
+      signal,
+    },
+    retries,
+  );
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -51,6 +64,21 @@ export async function searchSemanticScholar(
     .map((item) => normalizeSSResult(item as Record<string, unknown>))
     .filter((r) => !openAccess || r.openAccess)
     .filter((r) => !language || r.language === language || language === 'all');
+}
+
+async function fetchWithRateLimitRetry(url: string, init: RequestInit, retries: number) {
+  let attempt = 0;
+
+  while (true) {
+    const response = await fetch(url, init);
+    if (response.status !== 429 || attempt >= retries) {
+      return response;
+    }
+
+    const retryAfterSeconds = Number.parseInt(response.headers.get('retry-after') || '2', 10);
+    await new Promise((resolve) => setTimeout(resolve, Math.max(1, retryAfterSeconds) * 1000));
+    attempt += 1;
+  }
 }
 
 function normalizeSSResult(item: Record<string, unknown>): LibrarySearchResult {

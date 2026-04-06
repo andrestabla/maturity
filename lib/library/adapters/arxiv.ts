@@ -1,5 +1,6 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
 const ARXIV_BASE = 'https://export.arxiv.org/api/query';
 
@@ -13,6 +14,10 @@ export async function searchArxiv(
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
   const { query, year, limit = 20 } = params;
+  const integration = params.providerIntegrations?.arxiv;
+  const baseUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || ARXIV_BASE;
+  const clientName =
+    getProviderConfigValue(integration, ['ARXIV_CLIENT_NAME'], 'clientName') || 'Maturity360 Library';
 
   // arXiv search_query supports ti (title), abs (abstract), au (author), all
   const searchQuery = buildArxivQuery(query, year);
@@ -25,8 +30,11 @@ export async function searchArxiv(
     sortOrder: 'descending',
   });
 
-  const response = await fetch(`${ARXIV_BASE}?${urlParams.toString()}`, {
-    headers: { Accept: 'application/atom+xml' },
+  const response = await fetch(`${baseUrl}?${urlParams.toString()}`, {
+    headers: {
+      Accept: 'application/atom+xml',
+      'User-Agent': `${clientName} (https://maturity360.co)`,
+    },
     signal,
   });
 

@@ -132,6 +132,19 @@ function createIntegrationDraft(
   };
 }
 
+function formatIntegrationConfigLabel(key: string) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_.-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\w/, (match) => match.toUpperCase());
+}
+
+function isSensitiveIntegrationConfigKey(key: string) {
+  return /(api.?key|token|secret|password)/i.test(key);
+}
+
 function uniqueListValues(values: string[]) {
   return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, 'es'),
@@ -4574,9 +4587,10 @@ export function TeamPage({
                   <div className="form-grid">
                     {Object.entries(integrationDraft.config).map(([key, value]) => (
                       <label key={`${selectedIntegration.id}-${key}`} className="field">
-                        <span>{key}</span>
+                        <span>{formatIntegrationConfigLabel(key)}</span>
                         <div className="field__control">
                           <input
+                            type={isSensitiveIntegrationConfigKey(key) ? 'password' : 'text'}
                             value={value}
                             onChange={(event) =>
                               setIntegrationDraft((current) =>

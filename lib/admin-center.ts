@@ -404,6 +404,166 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
     fallbackTo: 'Biblioteca propia',
   },
   {
+    id: 'openalex',
+    name: 'OpenAlex',
+    category: 'Académicas',
+    provider: 'OpenAlex API',
+    description: 'Metadatos abiertos de investigación para descubrimiento académico en Library.',
+    enabled: true,
+    status: 'Pendiente',
+    requiredEnvKeys: ['OPENALEX_API_KEY', 'OPENALEX_MAILTO'],
+    scopes: ['Biblioteca', 'Investigación', 'Curación'],
+    config: {
+      apiBaseUrl: 'https://api.openalex.org',
+      mailto: 'library@maturity360.co',
+      apiKey: '',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'OpenAlex funciona sin API key, pero se recomienda configurar mailto y api_key para mejor trazabilidad.',
+    fallbackTo: 'arXiv',
+  },
+  {
+    id: 'arxiv',
+    name: 'arXiv',
+    category: 'Académicas',
+    provider: 'arXiv API',
+    description: 'Preprints y papers abiertos para el flujo de descubrimiento de investigación.',
+    enabled: true,
+    status: 'Pendiente',
+    requiredEnvKeys: ['ARXIV_CLIENT_NAME'],
+    scopes: ['Biblioteca', 'Investigación'],
+    config: {
+      apiBaseUrl: 'https://export.arxiv.org/api/query',
+      clientName: 'Maturity360 Library',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'arXiv recomienda identificar el cliente y respetar una frecuencia baja de consultas.',
+    fallbackTo: 'OpenAlex',
+  },
+  {
+    id: 'semantic-scholar',
+    name: 'Semantic Scholar',
+    category: 'Académicas',
+    provider: 'Semantic Scholar Graph API',
+    description: 'Búsqueda de papers y señales de citación para investigación priorizada.',
+    enabled: false,
+    status: 'Pendiente',
+    requiredEnvKeys: ['SEMANTIC_SCHOLAR_API_KEY'],
+    scopes: ['Biblioteca', 'Investigación', 'Ranking'],
+    config: {
+      apiBaseUrl: 'https://api.semanticscholar.org/graph/v1',
+      apiKey: '',
+      retryCount: '1',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'Se recomienda API key para evitar 429 y sostener uso productivo.',
+    fallbackTo: 'OpenAlex',
+  },
+  {
+    id: 'scielo',
+    name: 'SciELO',
+    category: 'Académicas',
+    provider: 'SciELO ArticleMeta',
+    description: 'Catálogo abierto de artículos SciELO para búsqueda regional y científica.',
+    enabled: true,
+    status: 'Pendiente',
+    requiredEnvKeys: [],
+    scopes: ['Biblioteca', 'Investigación', 'LatAm'],
+    config: {
+      apiBaseUrl: 'https://articlemeta.scielo.org/api/v1/articles/',
+      collection: 'scl',
+      pageSize: '30',
+      scanWindow: '50',
+      lookbackYears: '4',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'Se usa ArticleMeta porque el buscador público bloquea requests servidor-servidor con 403.',
+    fallbackTo: 'Redalyc',
+  },
+  {
+    id: 'redalyc',
+    name: 'Redalyc',
+    category: 'Académicas',
+    provider: 'Redalyc OAI-PMH',
+    description: 'Harvest incremental desde Redalyc para búsqueda académica regional.',
+    enabled: true,
+    status: 'Pendiente',
+    requiredEnvKeys: [],
+    scopes: ['Biblioteca', 'Investigación', 'LatAm'],
+    config: {
+      apiBaseUrl: 'http://148.215.1.70/redalyc/oai',
+      metadataPrefix: 'oai_dc',
+      lookbackYears: '2',
+      maxPages: '3',
+      pageRecordCap: '80',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'Redalyc expone OAI-PMH, no una API JSON de búsqueda por palabra clave.',
+    fallbackTo: 'SciELO',
+  },
+  {
+    id: 'oer-commons',
+    name: 'OER Commons',
+    category: 'Académicas',
+    provider: 'OER Commons API',
+    description: 'Recursos didácticos abiertos para el carril de contenidos y apoyos educativos.',
+    enabled: false,
+    status: 'Pendiente',
+    requiredEnvKeys: ['OER_COMMONS_API_KEY'],
+    scopes: ['Biblioteca', 'Didácticos', 'Curación'],
+    config: {
+      apiBaseUrl: 'https://www.oercommons.org/api/search',
+      apiKey: '',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'OER Commons requiere token de acceso emitido por su equipo.',
+    fallbackTo: 'PhET',
+  },
+  {
+    id: 'phet',
+    name: 'PhET',
+    category: 'Académicas',
+    provider: 'PhET Metadata Service',
+    description: 'Simulaciones interactivas STEM para el carril didáctico de Library.',
+    enabled: true,
+    status: 'Pendiente',
+    requiredEnvKeys: [],
+    scopes: ['Biblioteca', 'Didácticos', 'Simulaciones'],
+    config: {
+      apiBaseUrl:
+        'https://phet.colorado.edu/services/metadata/1.2/simulations?format=json&type=html&locale=en&summary',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'Catálogo público sin credenciales; la relevancia depende del dominio consultado.',
+    fallbackTo: 'OER Commons',
+  },
+  {
+    id: 'core',
+    name: 'CORE',
+    category: 'Académicas',
+    provider: 'CORE API v3',
+    description: 'Agregador adicional de papers abiertos y metadatos de investigación.',
+    enabled: false,
+    status: 'Pendiente',
+    requiredEnvKeys: ['CORE_API_KEY'],
+    scopes: ['Biblioteca', 'Investigación'],
+    config: {
+      apiBaseUrl: 'https://api.core.ac.uk/v3',
+      apiKey: '',
+    },
+    lastTestAt: null,
+    lastError: null,
+    notes: 'CORE se mantiene opcional y se activa cuando haya credencial disponible.',
+    fallbackTo: 'OpenAlex',
+  },
+  {
     id: 'google-sso',
     name: 'Google SSO',
     category: 'Google',
@@ -603,6 +763,78 @@ const integrationAssistantMap: Record<
       'Corre una consulta de prueba y revisa trazabilidad.',
     ],
   },
+  openalex: {
+    assistantTitle: 'Asistente OpenAlex',
+    assistantSummary: 'Configura mailto, api_key opcional y prueba el proveedor académico abierto.',
+    assistantSteps: [
+      'Define mailto operativo para entrar al polite pool.',
+      'Agrega api_key si tu operación lo requiere.',
+      'Guarda y ejecuta una prueba de búsqueda real.',
+    ],
+  },
+  arxiv: {
+    assistantTitle: 'Asistente arXiv',
+    assistantSummary: 'Ajusta identificación del cliente y valida la consulta Atom del proveedor.',
+    assistantSteps: [
+      'Configura nombre de cliente o contacto visible.',
+      'Mantén el endpoint oficial de arXiv.',
+      'Corre una prueba de consulta y revisa el parseo.',
+    ],
+  },
+  'semantic-scholar': {
+    assistantTitle: 'Asistente Semantic Scholar',
+    assistantSummary: 'Controla API key, reintentos y disponibilidad del Academic Graph.',
+    assistantSteps: [
+      'Registra la API key para evitar rate limiting.',
+      'Ajusta cantidad de reintentos si aplica.',
+      'Prueba la búsqueda y confirma que no devuelve 429.',
+    ],
+  },
+  scielo: {
+    assistantTitle: 'Asistente SciELO',
+    assistantSummary: 'Gestiona ArticleMeta, colección y ventana de escaneo para el catálogo SciELO.',
+    assistantSteps: [
+      'Confirma el endpoint de ArticleMeta y la colección operativa.',
+      'Ajusta tamaño de página y ventana de escaneo.',
+      'Ejecuta una prueba de catálogo y valida resultados filtrados.',
+    ],
+  },
+  redalyc: {
+    assistantTitle: 'Asistente Redalyc',
+    assistantSummary: 'Configura el harvesting OAI-PMH y la ventana de registros recientes.',
+    assistantSteps: [
+      'Mantén el baseURL oficial de OAI-PMH.',
+      'Ajusta lookback, páginas máximas y cupo por página.',
+      'Ejecuta una prueba para revisar parseo XML y resumption tokens.',
+    ],
+  },
+  'oer-commons': {
+    assistantTitle: 'Asistente OER Commons',
+    assistantSummary: 'Registra el token y el endpoint oficial de búsqueda didáctica.',
+    assistantSteps: [
+      'Solicita el token al equipo de OER Commons.',
+      'Guárdalo en la configuración de la integración.',
+      'Ejecuta una consulta de prueba con filtros educativos.',
+    ],
+  },
+  phet: {
+    assistantTitle: 'Asistente PhET',
+    assistantSummary: 'Valida el catálogo público de simulaciones y su uso en la biblioteca didáctica.',
+    assistantSteps: [
+      'Verifica el endpoint oficial de metadatos.',
+      'Guarda la configuración base.',
+      'Corre una prueba para confirmar lectura del catálogo.',
+    ],
+  },
+  core: {
+    assistantTitle: 'Asistente CORE',
+    assistantSummary: 'Activa el agregador CORE cuando exista API key operativa.',
+    assistantSteps: [
+      'Registra la API key de CORE.',
+      'Mantén el endpoint v3 como base.',
+      'Ejecuta una búsqueda real para validar la credencial.',
+    ],
+  },
   'google-sso': {
     assistantTitle: 'Asistente Google SSO',
     assistantSummary: 'Configura modo de acceso, aprovisionamiento y dominio institucional permitido.',
@@ -696,11 +928,6 @@ function sanitizeSensitiveIntegrationConfig(
     delete nextConfig.apiKey;
   }
 
-  if (integrationId === 'youtube-data-api') {
-    delete nextConfig.youtubeApiKey;
-    delete nextConfig.apiKey;
-  }
-
   return nextConfig;
 }
 
@@ -779,7 +1006,10 @@ async function verifyGemini(_config: Record<string, string>): Promise<Integratio
 }
 
 async function verifyYoutube(config: Record<string, string>): Promise<IntegrationTestResult> {
-  const apiKey = cleanSecretCandidate(process.env.YOUTUBE_API_KEY);
+  const apiKey =
+    cleanSecretCandidate(process.env.YOUTUBE_API_KEY) ||
+    cleanSecretCandidate(config.youtubeApiKey) ||
+    cleanSecretCandidate(config.apiKey);
 
   if (!apiKey) {
     return {
@@ -817,6 +1047,283 @@ async function verifyYoutube(config: Record<string, string>): Promise<Integratio
   return {
     status: 'Activa',
     detail: 'YouTube Data API respondió correctamente a una búsqueda de prueba.',
+    lastError: null,
+  };
+}
+
+async function verifyOpenAlex(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'https://api.openalex.org';
+  const params = new URLSearchParams({
+    search: 'machine learning',
+    per_page: '1',
+    select: 'id,title',
+  });
+  const mailto = cleanSecretCandidate(process.env.OPENALEX_MAILTO) || cleanSecretCandidate(config.mailto);
+  const apiKey = cleanSecretCandidate(process.env.OPENALEX_API_KEY) || cleanSecretCandidate(config.apiKey);
+
+  if (mailto) {
+    params.set('mailto', mailto);
+  }
+  if (apiKey) {
+    params.set('api_key', apiKey);
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/works?${params.toString()}`);
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `OpenAlex respondió con error (${response.status}).`,
+      lastError: detail || `OpenAlex validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'OpenAlex respondió correctamente a la búsqueda de prueba.',
+    lastError: null,
+  };
+}
+
+async function verifyArxiv(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'https://export.arxiv.org/api/query';
+  const params = new URLSearchParams({
+    search_query: 'all:machine learning',
+    start: '0',
+    max_results: '1',
+  });
+  const response = await fetch(`${baseUrl}?${params.toString()}`, {
+    headers: {
+      Accept: 'application/atom+xml',
+      'User-Agent': `${cleanSecretCandidate(config.clientName) || 'Maturity360 Library'} (https://maturity360.co)`,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `arXiv respondió con error (${response.status}).`,
+      lastError: detail || `arXiv validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'arXiv respondió correctamente a la consulta Atom.',
+    lastError: null,
+  };
+}
+
+async function verifySemanticScholar(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey =
+    cleanSecretCandidate(process.env.SEMANTIC_SCHOLAR_API_KEY) ||
+    cleanSecretCandidate(config.apiKey) ||
+    cleanSecretCandidate(config.semanticScholarApiKey);
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'Semantic Scholar requiere API key para un uso estable en producción.',
+      lastError: 'Missing Semantic Scholar API key',
+    };
+  }
+
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'https://api.semanticscholar.org/graph/v1';
+  const params = new URLSearchParams({
+    query: 'machine learning',
+    limit: '1',
+    fields: 'paperId,title',
+  });
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/paper/search?${params.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      'x-api-key': apiKey,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `Semantic Scholar respondió con error (${response.status}).`,
+      lastError: detail || `Semantic Scholar validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'Semantic Scholar respondió correctamente a la búsqueda de prueba.',
+    lastError: null,
+  };
+}
+
+async function verifySciELO(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'https://articlemeta.scielo.org/api/v1/articles/';
+  const url = new URL(baseUrl);
+  url.searchParams.set('collection', cleanSecretCandidate(config.collection) || 'scl');
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('offset', '0');
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Maturity360 Library/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `SciELO ArticleMeta respondió con error (${response.status}).`,
+      lastError: detail || `SciELO validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'SciELO ArticleMeta respondió correctamente a la validación del catálogo.',
+    lastError: null,
+  };
+}
+
+async function verifyRedalyc(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'http://148.215.1.70/redalyc/oai';
+  const response = await fetch(`${baseUrl}?verb=Identify`, {
+    headers: {
+      Accept: 'application/xml,text/xml',
+      'User-Agent': 'Maturity360 Library/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `Redalyc OAI-PMH respondió con error (${response.status}).`,
+      lastError: detail || `Redalyc validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'Redalyc respondió correctamente al Identify de OAI-PMH.',
+    lastError: null,
+  };
+}
+
+async function verifyOerCommons(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey =
+    cleanSecretCandidate(process.env.OER_COMMONS_API_KEY) ||
+    cleanSecretCandidate(config.apiKey) ||
+    cleanSecretCandidate(config.token);
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'OER Commons requiere token de acceso.',
+      lastError: 'Missing OER Commons token',
+    };
+  }
+
+  const baseUrl = cleanSecretCandidate(config.apiBaseUrl) || 'https://www.oercommons.org/api/search';
+  const params = new URLSearchParams({
+    token: apiKey,
+    'f.search': 'machine learning',
+    batch_size: '1',
+    batch_start: '0',
+  });
+  const response = await fetch(`${baseUrl}?${params.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Maturity360 Library/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `OER Commons respondió con error (${response.status}).`,
+      lastError: detail || `OER Commons validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'OER Commons respondió correctamente a la búsqueda de prueba.',
+    lastError: null,
+  };
+}
+
+async function verifyPhET(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const baseUrl =
+    cleanSecretCandidate(config.apiBaseUrl) ||
+    'https://phet.colorado.edu/services/metadata/1.2/simulations?format=json&type=html&locale=en&summary';
+  const response = await fetch(baseUrl, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Maturity360 Library/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `PhET respondió con error (${response.status}).`,
+      lastError: detail || `PhET validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'PhET respondió correctamente a la lectura del catálogo.',
+    lastError: null,
+  };
+}
+
+async function verifyCore(config: Record<string, string>): Promise<IntegrationTestResult> {
+  const apiKey =
+    cleanSecretCandidate(process.env.CORE_API_KEY) ||
+    cleanSecretCandidate(config.apiKey) ||
+    cleanSecretCandidate(config.coreApiKey);
+
+  if (!apiKey) {
+    return {
+      status: 'Con error',
+      detail: 'CORE requiere API key para operar.',
+      lastError: 'Missing CORE API key',
+    };
+  }
+
+  const response = await fetch(`${cleanSecretCandidate(config.apiBaseUrl) || 'https://api.core.ac.uk/v3'}/search/works`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      q: 'machine learning',
+      limit: 1,
+      offset: 0,
+      fields: ['id', 'title'],
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await readResponseText(response);
+    return {
+      status: 'Con error',
+      detail: `CORE respondió con error (${response.status}).`,
+      lastError: detail || `CORE validation failed with ${response.status}`,
+    };
+  }
+
+  return {
+    status: 'Activa',
+    detail: 'CORE respondió correctamente a la búsqueda de prueba.',
     lastError: null,
   };
 }
@@ -1233,6 +1740,97 @@ function evaluateIntegrationRuntime(
           : 'No hay endpoint académico configurado.',
       };
     }
+    case 'openalex': {
+      const ready = Boolean((config.apiBaseUrl || 'https://api.openalex.org').trim());
+      return {
+        ready,
+        source: 'governance',
+        summary: ready
+          ? `OpenAlex listo${config.mailto?.trim() ? ` con mailto ${config.mailto.trim()}.` : '.'}`
+          : 'No hay endpoint configurado para OpenAlex.',
+      };
+    }
+    case 'arxiv': {
+      const ready = Boolean((config.apiBaseUrl || 'https://export.arxiv.org/api/query').trim());
+      return {
+        ready,
+        source: 'governance',
+        summary: ready
+          ? `arXiv listo con cliente ${config.clientName?.trim() || 'Maturity360 Library'}.`
+          : 'No hay endpoint configurado para arXiv.',
+      };
+    }
+    case 'semantic-scholar': {
+      const apiKey =
+        cleanSecretCandidate(process.env.SEMANTIC_SCHOLAR_API_KEY) ||
+        cleanSecretCandidate(config.apiKey) ||
+        cleanSecretCandidate(config.semanticScholarApiKey);
+      const ready = Boolean(apiKey);
+      return {
+        ready,
+        source: config.apiKey?.trim() || config.semanticScholarApiKey?.trim() ? 'governance' : ready ? 'runtime' : 'none',
+        summary: ready
+          ? 'Semantic Scholar listo con API key.'
+          : 'Falta API key de Semantic Scholar para un uso productivo estable.',
+      };
+    }
+    case 'scielo': {
+      const ready = Boolean((config.apiBaseUrl || 'https://articlemeta.scielo.org/api/v1/articles/').trim());
+      return {
+        ready,
+        source: 'governance',
+        summary: ready
+          ? `SciELO listo vía ArticleMeta (${config.collection?.trim() || 'scl'}).`
+          : 'No hay endpoint configurado para SciELO.',
+      };
+    }
+    case 'redalyc': {
+      const ready = Boolean((config.apiBaseUrl || 'http://148.215.1.70/redalyc/oai').trim());
+      return {
+        ready,
+        source: 'governance',
+        summary: ready
+          ? 'Redalyc listo vía OAI-PMH.'
+          : 'No hay endpoint configurado para Redalyc.',
+      };
+    }
+    case 'oer-commons': {
+      const token =
+        cleanSecretCandidate(process.env.OER_COMMONS_API_KEY) ||
+        cleanSecretCandidate(config.apiKey) ||
+        cleanSecretCandidate(config.token);
+      const ready = Boolean(token);
+      return {
+        ready,
+        source: config.apiKey?.trim() || config.token?.trim() ? 'governance' : ready ? 'runtime' : 'none',
+        summary: ready
+          ? 'OER Commons listo con token de acceso.'
+          : 'Falta token de OER Commons.',
+      };
+    }
+    case 'phet': {
+      const ready = Boolean(
+        (config.apiBaseUrl ||
+          'https://phet.colorado.edu/services/metadata/1.2/simulations?format=json&type=html&locale=en&summary').trim(),
+      );
+      return {
+        ready,
+        source: 'governance',
+        summary: ready ? 'PhET listo con catálogo público.' : 'No hay endpoint configurado para PhET.',
+      };
+    }
+    case 'core': {
+      const apiKey =
+        cleanSecretCandidate(process.env.CORE_API_KEY) ||
+        cleanSecretCandidate(config.apiKey) ||
+        cleanSecretCandidate(config.coreApiKey);
+      const ready = Boolean(apiKey);
+      return {
+        ready,
+        source: config.apiKey?.trim() || config.coreApiKey?.trim() ? 'governance' : ready ? 'runtime' : 'none',
+        summary: ready ? 'CORE listo con API key.' : 'Falta CORE_API_KEY.',
+      };
+    }
     case 'google-sso':
     case 'google-calendar':
     case 'google-meet': {
@@ -1278,14 +1876,19 @@ function evaluateIntegrationRuntime(
       };
     }
     case 'youtube-data-api': {
-      const ready = Boolean(cleanSecretCandidate(process.env.YOUTUBE_API_KEY));
-      const source: AdminIntegrationSource = ready ? 'runtime' : 'none';
+      const ready = Boolean(
+        cleanSecretCandidate(process.env.YOUTUBE_API_KEY) ||
+          cleanSecretCandidate(config.youtubeApiKey) ||
+          cleanSecretCandidate(config.apiKey),
+      );
+      const source: AdminIntegrationSource =
+        config.youtubeApiKey?.trim() || config.apiKey?.trim() ? 'governance' : ready ? 'runtime' : 'none';
       return {
         ready,
         source,
         summary: ready
-          ? 'YouTube Data API lista desde runtime.'
-          : 'Falta YOUTUBE_API_KEY en runtime.',
+          ? `YouTube Data API lista desde ${source === 'governance' ? 'Gobierno' : 'runtime'}.`
+          : 'Falta YOUTUBE_API_KEY o credencial guardada en Gobierno.',
       };
     }
     case 'neon-database': {
@@ -1333,6 +1936,8 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
       ? 'En prueba'
       : row.status === 'Con error' || (row.lastTestAt && row.lastError)
         ? 'Con error'
+        : !runtime.ready
+          ? 'Con error'
         : row.status === 'Activa' && row.lastTestAt && !row.lastError && runtime.ready
           ? 'Activa'
           : 'Pendiente';
@@ -1366,6 +1971,10 @@ function serializeIntegrationRow(row: AdminIntegrationRow): AdminIntegration {
   };
 }
 
+function shouldHideIntegration(integrationId: string) {
+  return integrationId === 'academic-databases';
+}
+
 async function readIntegrations() {
   await seedAdminCenterDefaults();
   const sql = getSql();
@@ -1389,7 +1998,7 @@ async function readIntegrations() {
     ORDER BY category ASC, name ASC
   `) as AdminIntegrationRow[];
 
-  return rows.map(serializeIntegrationRow);
+  return rows.filter((row) => !shouldHideIntegration(row.id)).map(serializeIntegrationRow);
 }
 
 async function readIntegrationRowById(id: string) {
@@ -1427,6 +2036,19 @@ export async function getIntegrationConfig(id: string) {
   }
 
   return sanitizeSensitiveIntegrationConfig(id, parseJson<Record<string, string>>(row.config));
+}
+
+export async function getAdminIntegrations() {
+  return readIntegrations();
+}
+
+export async function getAdminIntegration(id: string) {
+  const row = await readIntegrationRowById(id);
+  if (!row || shouldHideIntegration(row.id)) {
+    return null;
+  }
+
+  return serializeIntegrationRow(row);
 }
 
 async function readLogs() {
@@ -1767,7 +2389,7 @@ export async function updateIntegrationSettings(
   const nextConfig = sanitizeSensitiveIntegrationConfig(
     input.id,
     Object.fromEntries(
-    Object.entries(input.config).map(([key, value]) => [key, value.trim()]),
+      Object.entries(input.config).map(([key, value]) => [key, value.trim()]),
     ),
   );
   const nextScopes = uniqueValues(input.scopes);
@@ -1804,15 +2426,15 @@ export async function updateIntegrationSettings(
         ...current,
         enabled: input.enabled,
         status: nextStatus,
-      scopes: nextScopes,
-      config: nextConfig,
-      notes: input.notes.trim(),
-      fallbackTo: input.fallbackTo.trim(),
-      lastTestAt: null,
-      lastError: null,
-      updatedAt: timestamp,
+        scopes: nextScopes,
+        config: nextConfig,
+        notes: input.notes.trim(),
+        fallbackTo: input.fallbackTo.trim(),
+        lastTestAt: null,
+        lastError: null,
+        updatedAt: timestamp,
+      }),
     }),
-  }),
   });
   await recordAdminLog({
     category: 'Integración',
@@ -1888,6 +2510,30 @@ export async function runIntegrationConnectivityTest(id: string, actor: AdminAct
           break;
         case 'youtube-data-api':
           result = await verifyYoutube(serialized.config);
+          break;
+        case 'openalex':
+          result = await verifyOpenAlex(serialized.config);
+          break;
+        case 'arxiv':
+          result = await verifyArxiv(serialized.config);
+          break;
+        case 'semantic-scholar':
+          result = await verifySemanticScholar(serialized.config);
+          break;
+        case 'scielo':
+          result = await verifySciELO(serialized.config);
+          break;
+        case 'redalyc':
+          result = await verifyRedalyc(serialized.config);
+          break;
+        case 'oer-commons':
+          result = await verifyOerCommons(serialized.config);
+          break;
+        case 'phet':
+          result = await verifyPhET(serialized.config);
+          break;
+        case 'core':
+          result = await verifyCore(serialized.config);
           break;
         case 'academic-databases':
           result = await verifyAcademicDatabase(serialized.config);

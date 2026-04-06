@@ -12,6 +12,10 @@ import { searchRedalyc } from './adapters/redalyc.js';
 import { searchScielo } from './adapters/scielo.js';
 import { searchSemanticScholar } from './adapters/semanticScholar.js';
 import { searchYouTube } from './adapters/youtube.js';
+import {
+  getLibraryProviderIntegrationStates,
+  type LibraryProviderIntegrationState,
+} from './provider-settings.js';
 
 export interface SearchParams {
   query: string;
@@ -20,6 +24,7 @@ export interface SearchParams {
   openAccess?: boolean;
   limit?: number;
   providers?: LibraryProvider[];
+  providerIntegrations?: Partial<Record<LibraryProvider, LibraryProviderIntegrationState>>;
 }
 
 export interface ProviderResult {
@@ -103,16 +108,42 @@ export async function federatedSearch(
   group: LibraryGroup,
   params: SearchParams,
 ): Promise<OrchestratorResult> {
-  const providers = getProvidersForGroup(group, params.providers);
+  const providerIntegrations = params.providerIntegrations ?? (await getLibraryProviderIntegrationStates());
+  const requestedProviders = getProvidersForGroup(group, params.providers);
+  const providerStates: ProviderResult[] = [];
+  const providers = requestedProviders.filter((provider) => {
+    const integration = providerIntegrations[provider];
+
+    if (!integration?.enabled) {
+      providerStates.push({
+        provider,
+        count: 0,
+        error: 'Deshabilitada en Gobierno.',
+        durationMs: 0,
+      });
+      return false;
+    }
+
+    if (!integration.envReady) {
+      providerStates.push({
+        provider,
+        count: 0,
+        error: integration.runtimeSummary || 'La integración no está lista para operar.',
+        durationMs: 0,
+      });
+      return false;
+    }
+
+    return true;
+  });
 
   if (providers.length === 0) {
-    return { results: [], total: 0, providerStates: [], cached: false };
+    return { results: [], total: 0, providerStates, cached: false };
   }
 
   // Dispatch all providers concurrently
   const settled = await Promise.allSettled(providers.map((p) => runProvider(p, params)));
 
-  const providerStates: ProviderResult[] = [];
   const allRaw: LibrarySearchResult[] = [];
 
   for (const outcome of settled) {

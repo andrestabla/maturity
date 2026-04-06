@@ -1,5 +1,6 @@
 import type { LibrarySearchResult } from '../../../src/types.js';
 import type { SearchParams } from '../orchestrator.js';
+import { getProviderConfigValue } from '../provider-settings.js';
 
 const CORE_BASE = 'https://api.core.ac.uk/v3';
 
@@ -13,13 +14,15 @@ export async function searchCore(
   params: SearchParams,
   signal?: AbortSignal,
 ): Promise<LibrarySearchResult[]> {
-  const apiKey = process.env.CORE_API_KEY?.trim();
+  const integration = params.providerIntegrations?.core;
+  const apiKey = getProviderConfigValue(integration, ['CORE_API_KEY'], 'apiKey', 'coreApiKey');
   if (!apiKey) {
     console.info('[CORE] No CORE_API_KEY configured — skipping.');
     return [];
   }
 
   const { query, language, year, openAccess, limit = 20 } = params;
+  const baseUrl = getProviderConfigValue(integration, [], 'apiBaseUrl') || CORE_BASE;
 
   const body: Record<string, unknown> = {
     q: buildCoreQuery(query, language, year, openAccess),
@@ -32,7 +35,7 @@ export async function searchCore(
     ],
   };
 
-  const response = await fetch(`${CORE_BASE}/search/works`, {
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/search/works`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
