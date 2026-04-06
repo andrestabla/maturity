@@ -456,6 +456,7 @@ const defaultIntegrationPresets: IntegrationPreset[] = [
       apiBaseUrl: 'https://api.semanticscholar.org/graph/v1',
       apiKey: '',
       retryCount: '1',
+      rateLimitMs: '1000',
     },
     lastTestAt: null,
     lastError: null,
@@ -786,6 +787,7 @@ const integrationAssistantMap: Record<
     assistantSummary: 'Controla API key, reintentos y disponibilidad del Academic Graph.',
     assistantSteps: [
       'Registra la API key para evitar rate limiting.',
+      'Mantén el límite de 1 request por segundo configurado en Gobierno.',
       'Ajusta cantidad de reintentos si aplica.',
       'Prueba la búsqueda y confirma que no devuelve 429.',
     ],

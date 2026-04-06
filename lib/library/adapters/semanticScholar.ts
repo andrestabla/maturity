@@ -6,6 +6,9 @@ const SS_BASE = 'https://api.semanticscholar.org/graph/v1';
 const FIELDS =
   'paperId,title,abstract,authors,year,url,doi,citationCount,openAccessPdf,' +
   'publicationTypes,venue,externalIds,fieldsOfStudy,s2FieldsOfStudy,referenceCount';
+const DEFAULT_MIN_INTERVAL_MS = 1000;
+let semanticScholarRequestChain = Promise.resolve();
+let semanticScholarLastRequestStartedAt = 0;
 
 /**
  * Semantic Scholar API Adapter
@@ -25,6 +28,10 @@ export async function searchSemanticScholar(
     'semanticScholarApiKey',
   );
   const retries = Number.parseInt(integration?.config.retryCount || '1', 10);
+  const minIntervalMs = Number.parseInt(
+    integration?.config.rateLimitMs || String(DEFAULT_MIN_INTERVAL_MS),
+    10,
+  );
 
   const urlParams = new URLSearchParams({
     query,
@@ -51,6 +58,7 @@ export async function searchSemanticScholar(
       signal,
     },
     retries,
+    Number.isNaN(minIntervalMs) ? DEFAULT_MIN_INTERVAL_MS : Math.max(DEFAULT_MIN_INTERVAL_MS, minIntervalMs),
   );
 
   if (!response.ok) {
@@ -66,10 +74,16 @@ export async function searchSemanticScholar(
     .filter((r) => !language || r.language === language || language === 'all');
 }
 
-async function fetchWithRateLimitRetry(url: string, init: RequestInit, retries: number) {
+async function fetchWithRateLimitRetry(
+  url: string,
+  init: RequestInit,
+  retries: number,
+  minIntervalMs: number,
+) {
   let attempt = 0;
 
   while (true) {
+    await waitForSemanticScholarSlot(minIntervalMs);
     const response = await fetch(url, init);
     if (response.status !== 429 || attempt >= retries) {
       return response;
@@ -79,6 +93,24 @@ async function fetchWithRateLimitRetry(url: string, init: RequestInit, retries: 
     await new Promise((resolve) => setTimeout(resolve, Math.max(1, retryAfterSeconds) * 1000));
     attempt += 1;
   }
+}
+
+async function waitForSemanticScholarSlot(minIntervalMs: number) {
+  const previous = semanticScholarRequestChain;
+  let release!: () => void;
+  semanticScholarRequestChain = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+
+  const elapsed = Date.now() - semanticScholarLastRequestStartedAt;
+  if (elapsed < minIntervalMs) {
+    await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
+  }
+
+  semanticScholarLastRequestStartedAt = Date.now();
+  release();
 }
 
 function normalizeSSResult(item: Record<string, unknown>): LibrarySearchResult {
