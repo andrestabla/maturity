@@ -5,6 +5,7 @@ const SCIELO_SEARCH = 'https://search.scielo.org/api/v1/article/search/';
 
 /**
  * SciELO Search API Adapter
+ * Docs: https://scielo.readthedocs.io/
  * Uses the SciELO SOLR-based search API — free, no key required.
  */
 export async function searchScielo(
@@ -21,6 +22,7 @@ export async function searchScielo(
     format: 'json',
   });
 
+  // SciELO language filter: 'es', 'en', 'pt'
   if (language && language !== 'all') {
     urlParams.set('lang', language);
   }
@@ -40,6 +42,7 @@ export async function searchScielo(
 
   const data = await response.json() as Record<string, unknown>;
 
+  // SciELO SOLR response structure
   const response2 = (data.response ?? data) as Record<string, unknown>;
   const docs = ((response2.docs ?? data.results ?? []) as unknown[]) as Array<Record<string, unknown>>;
 
@@ -96,7 +99,7 @@ function normalizeScieloResult(doc: Record<string, unknown>): LibrarySearchResul
     canonicalUrl: doi ? `https://doi.org/${doi}` : scieloUrl,
     resourceType: 'Artículo Científico',
     language: lang,
-    openAccess: true,
+    openAccess: true, // SciELO is open access by definition
     citationCount: Number(doc.citations ?? doc.citation_count ?? 0),
     thumbnailUrl: undefined,
     embedUrl: undefined,
@@ -121,5 +124,5 @@ function normalizeScieloResult(doc: Record<string, unknown>): LibrarySearchResul
 
 function computeScieloScore(year: string): number {
   const recency = year ? Math.max(0, 1 - (new Date().getFullYear() - parseInt(year, 10)) / 20) * 0.3 : 0;
-  return Math.min(1.0, 0.4 + recency);
+  return Math.min(1.0, 0.4 + recency); // SciELO = peer-reviewed, high base score
 }

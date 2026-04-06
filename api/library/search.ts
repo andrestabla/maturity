@@ -19,29 +19,31 @@ export const config = {
  * Returns results with per-provider status for UI live indicators.
  */
 export default async function handler(request: Request) {
-  const user = await getSessionUser(request);
-  if (!user) return errorResponse(401, 'No autorizado');
-
-  const rawUrl = request.url ?? '';
-  const host = request.headers.get('host') ?? 'localhost';
-  const proto = host.includes('localhost') ? 'http' : 'https';
-  const url = new URL(rawUrl.startsWith('http') ? rawUrl : `${proto}://${host}${rawUrl}`);
-  const q = url.searchParams.get('q')?.trim() ?? '';
-  const group = (url.searchParams.get('group') as LibraryGroup) ?? 'Investigacion';
-  const language = url.searchParams.get('language') ?? 'all';
-  const yearStr = url.searchParams.get('year');
-  const year = yearStr ? parseInt(yearStr, 10) : undefined;
-  const openAccess = url.searchParams.get('open_access') === 'true';
-  const providersParam = url.searchParams.get('providers');
-  const requestedProviders = providersParam
-    ? (providersParam.split(',').filter(Boolean) as LibraryProvider[])
-    : undefined;
-  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '25', 10), 100);
-
   try {
+    // Session check inside outer try/catch so DB/init failures return JSON, not Vercel HTML
+    const user = await getSessionUser(request);
+    if (!user) return errorResponse(401, 'No autorizado');
+
+    const rawUrl = request.url ?? '';
+    const host = request.headers.get('host') ?? 'localhost';
+    const proto = host.includes('localhost') ? 'http' : 'https';
+    const url = new URL(rawUrl.startsWith('http') ? rawUrl : `${proto}://${host}${rawUrl}`);
+
+    const q = url.searchParams.get('q')?.trim() ?? '';
+    const group = (url.searchParams.get('group') as LibraryGroup) ?? 'Investigacion';
+    const language = url.searchParams.get('language') ?? 'all';
+    const yearStr = url.searchParams.get('year');
+    const year = yearStr ? parseInt(yearStr, 10) : undefined;
+    const openAccess = url.searchParams.get('open_access') === 'true';
+    const providersParam = url.searchParams.get('providers');
+    const requestedProviders = providersParam
+      ? (providersParam.split(',').filter(Boolean) as LibraryProvider[])
+      : undefined;
+    const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '25', 10), 100);
+
     // ── Institutional: served from DB ────────────────────────────────────────
     if (group === 'Institucional') {
-      const assets = (await readLibraryAssets()) as LibraryAsset[];
+      const assets = await readLibraryAssets().catch(() => []) as LibraryAsset[];
       const filtered = filterInstitutionalAssets(assets, user, q, language);
 
       return jsonResponse({
@@ -60,25 +62,28 @@ export default async function handler(request: Request) {
     const cacheKey = buildCacheKey(group, q, cacheFilters);
 
     if (q) {
-      // Use group → primary provider for cache namespace
-      const primaryProvider = getPrimaryProviderForGroup(group);
-      const cached = await readLibrarySearchCache(primaryProvider, cacheKey, cacheFilters);
-      if (cached) {
-        return jsonResponse({
-          results: cached.results.slice(0, limit),
-          total: cached.results.length,
-          group,
-          query: q,
-          providerStates: [],
-          cached: true,
-          fetchedAt: cached.fetchedAt,
-        });
+      try {
+        const primaryProvider = getPrimaryProviderForGroup(group);
+        const cached = await readLibrarySearchCache(primaryProvider, cacheKey, cacheFilters);
+        if (cached) {
+          return jsonResponse({
+            results: cached.results.slice(0, limit),
+            total: cached.results.length,
+            group,
+            query: q,
+            providerStates: [],
+            cached: true,
+            fetchedAt: cached.fetchedAt,
+          });
+        }
+      } catch {
+        // Cache table may not exist yet — skip gracefully
       }
     }
 
     // ── Federated search ─────────────────────────────────────────────────────
     const searchParams: SearchParams = {
-      query: q || (group === 'Didacticos' ? 'educacion' : group === 'YouTube' ? 'clase' : 'learning'),
+      query: q || (group === 'Didacticos' ? 'educacion' : group === 'YouTube' ? 'aprendizaje' : 'learning'),
       language: language !== 'all' ? language : undefined,
       year,
       openAccess: openAccess || undefined,
@@ -88,12 +93,10 @@ export default async function handler(request: Request) {
 
     const orchestratorResult = await federatedSearch(group, searchParams);
 
-    // Persist to cache if we have a real query
+    // Persist to cache (non-blocking, swallow DB errors)
     if (q && orchestratorResult.results.length > 0) {
       const primaryProvider = getPrimaryProviderForGroup(group);
-      void persistLibrarySearchCache(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {
-        /* non-blocking */
-      });
+      void persistLibrarySearchCache(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {});
     }
 
     return jsonResponse({
@@ -106,7 +109,7 @@ export default async function handler(request: Request) {
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('[LibrarySearch] Orchestrator error:', err);
+    console.error('[LibrarySearch] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error interno en la búsqueda federada');
   }
 }

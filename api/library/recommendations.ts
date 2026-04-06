@@ -16,6 +16,7 @@ export const config = { runtime: 'nodejs' };
  * Otherwise falls back to keyword-based heuristic matching.
  */
 export default async function handler(request: Request) {
+  try {
   const user = await getSessionUser(request);
   if (!user) return errorResponse(401, 'No autorizado');
 
@@ -192,6 +193,10 @@ export default async function handler(request: Request) {
   } catch (err) {
     console.error('[LibraryRecommendations] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error al generar recomendaciones');
+  }
+  } catch (err) {
+    console.error('[LibraryRecommendations] Unhandled error:', err);
+    return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
   }
 }
 

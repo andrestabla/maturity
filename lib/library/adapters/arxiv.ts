@@ -14,6 +14,7 @@ export async function searchArxiv(
 ): Promise<LibrarySearchResult[]> {
   const { query, year, limit = 20 } = params;
 
+  // arXiv search_query supports ti (title), abs (abstract), au (author), all
   const searchQuery = buildArxivQuery(query, year);
 
   const urlParams = new URLSearchParams({
@@ -40,13 +41,14 @@ export async function searchArxiv(
 function buildArxivQuery(query: string, year?: number): string {
   const base = `all:${query.replace(/[()]/g, '')}`;
   if (year) {
+    // arXiv uses submittedDate:[YYYYMMDDHHmm TO YYYYMMDDHHmm]
     return `${base} AND submittedDate:[${year}01010000 TO ${new Date().getFullYear()}12312359]`;
   }
   return base;
 }
 
 function extractAll(xml: string, tag: string): string[] {
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'g');
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'g');
   const results: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
@@ -61,12 +63,14 @@ function extractAttr(xml: string, tag: string, attr: string): string {
 }
 
 function parseArxivAtom(xml: string): LibrarySearchResult[] {
+  // Split entries
   const entryBlocks = xml.split(/<entry[^>]*>/).slice(1);
 
   return entryBlocks
     .map((block) => {
       const rawBlock = `<entry>${block.split('</entry>')[0]}</entry>`;
 
+      // id: https://arxiv.org/abs/XXXX.XXXXX
       const rawId = extractAll(rawBlock, 'id')[0] ?? '';
       const arxivId = rawId.split('/abs/').pop()?.split('v')[0] ?? rawId;
 
@@ -76,20 +80,24 @@ function parseArxivAtom(xml: string): LibrarySearchResult[] {
       const updated = extractAll(rawBlock, 'updated')[0] ?? '';
       const year = (published || updated).slice(0, 4);
 
+      // Authors
       const authorBlocks = rawBlock.match(/<author>([\s\S]*?)<\/author>/g) ?? [];
       const authors = authorBlocks
         .map((b) => extractAll(b, 'name')[0] ?? '')
         .filter(Boolean);
 
+      // DOI from arxiv:doi tag or link
       const doiTag = extractAll(rawBlock, 'arxiv:doi')[0] ?? '';
       const doiLink = extractAttr(rawBlock, 'link', 'title') === 'doi' ? extractAttr(rawBlock, 'link', 'href') : '';
       const doi = (doiTag || doiLink).replace('https://doi.org/', '');
 
+      // PDF link
       const pdfHref = (() => {
         const pdfMatch = rawBlock.match(/href="(https:\/\/arxiv\.org\/pdf\/[^"]+)"/);
         return pdfMatch?.[1] ?? `https://arxiv.org/pdf/${arxivId}`;
       })();
 
+      // Categories
       const categories = extractAll(rawBlock, 'arxiv:primary_category')
         .concat(extractAll(rawBlock, 'category'))
         .map((c) => {
@@ -139,5 +147,6 @@ function computeArxivScore(year: string): number {
   const recency = year
     ? Math.max(0, 1 - (new Date().getFullYear() - parseInt(year, 10)) / 15) * 0.4
     : 0;
+  // arXiv papers are always open access — add bonus
   return Math.min(1.0, 0.45 + recency);
 }

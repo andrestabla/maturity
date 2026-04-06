@@ -33,9 +33,9 @@ import type {
 import { getVisibleCourses } from '../utils/domain.js';
 import { buildCourseScopeLabel, countCoursesForStructure } from '../utils/institutions.js';
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface LibraryPageProps {
   role: Role;
@@ -64,11 +64,13 @@ interface SearchFilters {
   year: string;
   openAccess: boolean;
   providers: LibraryProvider[];
+  resourceTypes: string[];
+  minScore: number;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Constants
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 const GROUPS: { id: LibraryGroup; label: string; icon: React.ElementType; description: string; color: string }[] = [
   { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers, preprints y artículos científicos de repositorios globales.', color: '#1d4ed8' },
@@ -108,6 +110,45 @@ const PROVIDER_COLORS: Record<string, string> = {
   institutional: '#4f46e5',
 };
 
+// ─── Descubridor Inteligente ─────────────────────────────────────────────────
+
+const DISCOVERY_TOPICS: Partial<Record<LibraryGroup, string[]>> = {
+  Investigacion: [
+    'inteligencia artificial', 'aprendizaje automático', 'cambio climático', 'neurociencia',
+    'bioinformática', 'computación cuántica', 'salud pública', 'economía conductual',
+    'robótica', 'genómica', 'ética en IA', 'sostenibilidad',
+  ],
+  Didacticos: [
+    'pensamiento crítico', 'aprendizaje colaborativo', 'gamificación', 'STEM',
+    'diseño instruccional', 'evaluación formativa', 'aula invertida', 'ABP',
+    'matemáticas interactivas', 'física experimental', 'química laboratorio',
+  ],
+  YouTube: [
+    'conferencias TED educación', 'tutoriales programación', 'documentales ciencia',
+    'lecciones Khan Academy', 'cursos universitarios', 'divulgación científica',
+    'clases magistrales', 'debates académicos',
+  ],
+  Institucional: [],
+};
+
+const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: string; description: string; icon: string }[]>> = {
+  Investigacion: [
+    { query: 'large language models education', title: 'IA en Educación', description: 'Últimos papers sobre modelos de lenguaje y su impacto pedagógico.', icon: '🤖' },
+    { query: 'climate change mitigation', title: 'Cambio Climático', description: 'Investigaciones de vanguardia en mitigación y adaptación climática.', icon: '🌍' },
+    { query: 'CRISPR gene therapy', title: 'Biotecnología', description: 'Avances en edición genómica y terapias de nueva generación.', icon: '🧬' },
+  ],
+  Didacticos: [
+    { query: 'project based learning', title: 'Aprendizaje por Proyectos', description: 'Recursos OER para implementar ABP en el aula.', icon: '📐' },
+    { query: 'physics simulation', title: 'Simulaciones PhET', description: 'Laboratorios virtuales interactivos de física y química.', icon: '⚡' },
+    { query: 'math games elementary', title: 'Matemáticas Gamificadas', description: 'Juegos y actividades que hacen las matemáticas divertidas.', icon: '🎯' },
+  ],
+  YouTube: [
+    { query: 'MIT OpenCourseWare lecture', title: 'Clases MIT', description: 'Conferencias completas del MIT sobre tecnología y ciencias.', icon: '🎓' },
+    { query: 'TED talk education innovation', title: 'TED · Educación', description: 'Charlas inspiradoras sobre el futuro del aprendizaje.', icon: '💡' },
+    { query: 'science documentary BBC', title: 'Documentales Ciencia', description: 'Documentales de alta calidad para complementar clases.', icon: '🔬' },
+  ],
+};
+
 const LANGUAGES = [
   { value: 'all', label: 'Todos los idiomas' },
   { value: 'es', label: 'Español' },
@@ -126,9 +167,9 @@ const YEAR_OPTIONS = [
   { value: String(CURRENT_YEAR - 10), label: `Desde ${CURRENT_YEAR - 10}` },
 ];
 
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Component
-// ───────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPageProps) {
   const { showAlert } = useSystemDialog();
@@ -144,6 +185,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     year: '',
     openAccess: false,
     providers: [],
+    resourceTypes: [],
+    minScore: 0,
   });
 
   // UI state
@@ -160,9 +203,20 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     label: `${c.title} · ${buildCourseScopeLabel(c)}`,
   }));
   const selectedAssets = results.filter((r) => selectedIds.includes(r.id));
-  const visibleResults = results.slice(0, visibleLimit);
 
-  // ── Search ──────────────────────────────────────────────────────────────────────
+  // Client-side post-filtering for resource type and score
+  const filteredResults = results.filter((r) => {
+    if (filters.minScore > 0 && r.score * 100 < filters.minScore) return false;
+    if (filters.resourceTypes.length > 0) {
+      const rt = r.resourceType.toLowerCase();
+      const match = filters.resourceTypes.some((t) => rt.includes(t.toLowerCase()));
+      if (!match) return false;
+    }
+    return true;
+  });
+  const visibleResults = filteredResults.slice(0, visibleLimit);
+
+  // ── Search ─────────────────────────────────────────────────────────────────
 
   const performSearch = useCallback(async (q: string, group: LibraryGroup, f: SearchFilters) => {
     setIsSearching(true);
@@ -179,8 +233,14 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       const resp = await fetch(`/api/library/search?${params.toString()}`);
 
       if (!resp.ok) {
-        const err = await resp.json() as { error?: string };
-        throw new Error(err.error ?? 'Error en la búsqueda federada');
+        let errMsg = 'Error en la búsqueda federada';
+        try {
+          const err = await resp.json() as { error?: string };
+          errMsg = err.error ?? errMsg;
+        } catch {
+          errMsg = `Error del servidor (${resp.status})`;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await resp.json() as {
@@ -234,224 +294,257 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     void performSearch(query, activeGroup, newFilters);
   }
 
-  // ── Add to course ───────────────────────────────────────────────────────────────────
+  // ── Add to course ──────────────────────────────────────────────────────────
 
   async function handleAddToCourse(asset: LibrarySearchResult, courseSlug: string, targetUnit?: string) {
-    try {
-      const resp = await fetch('/api/library/course-links', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ asset, courseSlug, targetUnit: targetUnit || undefined }),
-      });
+    const resp = await fetch('/api/library/course-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ asset, courseSlug, targetUnit }),
+    });
 
-      if (!resp.ok) {
+    if (!resp.ok) {
+      let errMsg = 'No se pudo vincular el recurso';
+      try {
         const err = await resp.json() as { error?: string };
-        throw new Error(err.error ?? 'No se pudo vincular el recurso');
-      }
-
-      refreshAppData();
-    } catch (err) {
-      await showAlert({
-        title: 'Error de integración',
-        message: err instanceof Error ? err.message : 'Error desconocido',
-        tone: 'error',
-      });
-      throw err;
+        errMsg = err.error ?? errMsg;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
     }
+
+    refreshAppData();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   // Render
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
 
   const activeGroupCfg = GROUPS.find((g) => g.id === activeGroup)!;
-  const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0;
+  const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0 || filters.resourceTypes.length > 0 || filters.minScore > 0;
 
   return (
-    <div className="page-stack library-page pb-32">
+    <div className="library-page pb-32" style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="library-hero relative overflow-hidden pt-10 pb-16 px-8 rounded-[40px] bg-ink text-white shadow-2xl">
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-1/3 h-full opacity-5 pointer-events-none overflow-hidden">
-          <LibraryBig size={380} className="absolute -top-16 -right-16 rotate-12" />
-        </div>
-        <div
-          className="absolute bottom-0 left-0 w-64 h-64 rounded-full opacity-10 pointer-events-none"
-          style={{ background: `radial-gradient(circle, ${activeGroupCfg.color} 0%, transparent 70%)`, transform: 'translate(-30%, 50%)' }}
-        />
+      {/* ── Top header: search + group tabs ──────────────────────────── */}
+      <div className="bg-white border-b border-line sticky top-0 z-30 shadow-sm">
+        <div className="max-w-6xl mx-auto px-6 pt-6 pb-4 space-y-4">
 
-        <div className="relative z-10 max-w-4xl">
-          {/* Eyebrow */}
-          <div className="flex items-center gap-3 mb-6 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/10 border border-white/10 text-white/70">
-              Hub Federado · {INVESTIGATION_PROVIDERS.length + DIDACTICOS_PROVIDERS.length + 1} Fuentes
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <LibraryBig size={18} className="text-muted" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted">
+                  Barra de Búsqueda Semántica
+                </span>
+                {searchMeta.cached && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                    <Clock size={9} />
+                    Caché
+                  </span>
+                )}
+              </div>
+              <h1 className="text-xl font-bold text-ink font-display leading-none">
+                Biblioteca Inteligente
+              </h1>
+            </div>
+            <span className="text-[10px] font-bold text-muted hidden md:block">
+              {INVESTIGATION_PROVIDERS.length + DIDACTICOS_PROVIDERS.length + 1} fuentes federadas
             </span>
-            {searchMeta.cached && (
-              <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-gold/20 text-gold border border-gold/20">
-                <Clock size={10} />
-                Caché activa
-              </span>
-            )}
           </div>
 
-          <h1 className="text-5xl font-bold leading-none tracking-tighter mb-3 font-display">
-            Biblioteca Inteligente
-          </h1>
-          <p className="text-lg text-white/50 max-w-2xl font-medium leading-relaxed mb-8">
-            Metabuscador federado: artículos científicos, recursos educativos abiertos, simulaciones y video académico en una búsqueda unificada.
-          </p>
-
           {/* Search bar */}
-          <form ref={searchRef} onSubmit={handleSearch}>
-            <div className="flex items-center bg-white/10 hover:bg-white/14 backdrop-blur-2xl border border-white/10 rounded-[24px] p-1.5 transition-all shadow-2xl focus-within:ring-2 focus-within:ring-white/20">
-              <div className="pl-5 pr-3 text-white/30">
-                <Search size={22} strokeWidth={2.5} />
+          <form ref={searchRef} onSubmit={handleSearch} className="relative">
+            <div
+              className="flex items-center bg-white border-2 rounded-2xl transition-all shadow-sm"
+              style={{ borderColor: showFilters || hasActiveFilters ? activeGroupCfg.color : '#e2e8f0' }}
+            >
+              <div className="pl-4 pr-2 text-slate-300">
+                <Search size={20} strokeWidth={2} />
               </div>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Busca en ${activeGroupCfg.label}... título, DOI, autor, tema`}
-                className="flex-grow bg-transparent border-0 focus:ring-0 text-lg text-white placeholder:text-white/25 font-medium py-3.5"
+                placeholder="¿Qué concepto necesitas dominar hoy?"
+                className="flex-grow bg-transparent border-0 focus:ring-0 text-base text-ink placeholder:text-slate-300 font-medium py-3"
                 autoComplete="off"
               />
-              <div className="flex items-center gap-1.5 pr-1.5">
+              <div className="flex items-center gap-1 pr-1.5">
                 <button
                   type="button"
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-3 rounded-xl transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     showFilters || hasActiveFilters
-                      ? 'bg-white text-ink shadow-lg'
-                      : 'hover:bg-white/10 text-white/50'
+                      ? 'text-white shadow'
+                      : 'hover:bg-slate-100 text-muted'
                   }`}
+                  style={showFilters || hasActiveFilters ? { backgroundColor: activeGroupCfg.color } : {}}
                   title="Filtros avanzados"
                 >
-                  <Filter size={18} />
-                  {hasActiveFilters && !showFilters && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-gold rounded-full" />
+                  <Filter size={14} />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {hasActiveFilters && (
+                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
                   )}
                 </button>
                 <button
                   type="submit"
                   disabled={isSearching}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-xl active:scale-95 text-ink"
-                  style={{ backgroundColor: isSearching ? '#6b7280' : activeGroupCfg.color === '#dc2626' ? '#ef4444' : activeGroupCfg.color }}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-sm transition-all shadow active:scale-95 text-white"
+                  style={{ backgroundColor: isSearching ? '#94a3b8' : activeGroupCfg.color }}
                 >
-                  {isSearching ? <Loader2 size={18} className="animate-spin text-white" /> : <Zap size={18} className="text-white" />}
-                  <span className="text-white">{isSearching ? 'Buscando…' : 'Buscar'}</span>
+                  {isSearching
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Zap size={16} />}
+                  <span>{isSearching ? 'Buscando…' : 'Buscar'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Advanced filters drawer */}
+            {/* ── Filtros Avanzados dropdown ── */}
             {showFilters && (
-              <div className="mt-3 p-5 bg-white/8 border border-white/10 rounded-[20px] backdrop-blur-xl grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Language */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Idioma</label>
-                  <div className="relative">
-                    <select
-                      className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                      value={filters.language}
-                      onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
-                    >
-                      {LANGUAGES.map((l) => (
-                        <option key={l.value} value={l.value} className="bg-ink">{l.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Year */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Publicación</label>
-                  <div className="relative">
-                    <select
-                      className="w-full bg-white/10 border-0 text-white text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-1 focus:ring-white/30 appearance-none"
-                      value={filters.year}
-                      onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
-                    >
-                      {YEAR_OPTIONS.map((y) => (
-                        <option key={y.value} value={y.value} className="bg-ink">{y.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-                  </div>
-                </div>
-
-                {/* Open Access */}
-                <div>
-                  <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Acceso</label>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
-                    className={`w-full py-2.5 px-3 rounded-xl text-sm font-bold transition-all border ${
-                      filters.openAccess
-                        ? 'bg-emerald-500 text-white border-emerald-400'
-                        : 'bg-white/10 text-white/60 border-white/10 hover:bg-white/15'
-                    }`}
-                  >
-                    {filters.openAccess ? '✓ Open Access' : 'Open Access'}
-                  </button>
-                </div>
-
-                {/* Apply button */}
-                <div className="flex items-end">
+              <div
+                className="absolute top-full left-0 right-0 mt-2 bg-white border border-line rounded-2xl shadow-2xl z-40 p-5 space-y-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-black uppercase tracking-widest" style={{ color: activeGroupCfg.color }}>
+                    Filtros Avanzados (Adaptadores)
+                  </span>
                   <button
                     type="button"
                     onClick={() => applyFilters(filters)}
-                    className="w-full py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-ink hover:bg-white/90 transition-all shadow"
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white shadow transition-all"
+                    style={{ backgroundColor: activeGroupCfg.color }}
                   >
-                    Aplicar filtros
+                    Aplicar Filtros
                   </button>
                 </div>
 
-                {/* Provider toggles (Investigacion only) */}
-                {activeGroup === 'Investigacion' && (
-                  <div className="col-span-2 md:col-span-4">
-                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest block mb-2">Fuentes activas</label>
-                    <div className="flex flex-wrap gap-2">
-                      {INVESTIGATION_PROVIDERS.map((p) => {
-                        const active = filters.providers.length === 0 || filters.providers.includes(p);
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                  {/* Tipo de Recurso */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Tipo de Recurso</label>
+                    <div className="space-y-1.5">
+                      {['Paper', 'Video', 'Artículo', 'Dataset'].map((type) => {
+                        const checked = filters.resourceTypes.includes(type);
                         return (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => {
-                              setFilters((f) => {
-                                const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
-                                const next = all.includes(p)
-                                  ? all.filter((x) => x !== p)
-                                  : [...all, p];
-                                return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
-                              });
-                            }}
-                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
-                              active
-                                ? 'border-white/20 text-white bg-white/15'
-                                : 'border-white/5 text-white/30 bg-transparent'
-                            }`}
-                          >
-                            {PROVIDER_LABELS[p] ?? p}
-                          </button>
+                          <label key={type} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setFilters((f) => ({
+                                ...f,
+                                resourceTypes: checked
+                                  ? f.resourceTypes.filter((t) => t !== type)
+                                  : [...f.resourceTypes, type],
+                              }))}
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
+                            />
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{type}</span>
+                          </label>
                         );
                       })}
                     </div>
                   </div>
-                )}
+
+                  {/* Fuente */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Fuente</label>
+                    <div className="space-y-1.5">
+                      {(activeGroup === 'Investigacion' ? INVESTIGATION_PROVIDERS : activeGroup === 'Didacticos' ? DIDACTICOS_PROVIDERS : []).map((p) => {
+                        const active = filters.providers.length === 0 || filters.providers.includes(p);
+                        return (
+                          <label key={p} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => {
+                                setFilters((f) => {
+                                  const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
+                                  const next = all.includes(p) ? all.filter((x) => x !== p) : [...all, p];
+                                  return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
+                            />
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Puntuación Mínima */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">
+                      Puntuación Mínima
+                      <span className="ml-2 font-bold" style={{ color: activeGroupCfg.color }}>
+                        {filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}
+                      </span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0} max={90} step={10}
+                      value={filters.minScore}
+                      onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer"
+                      style={{ accentColor: activeGroupCfg.color }}
+                    />
+                    <div className="flex justify-between text-[9px] text-muted mt-1">
+                      <span>0%</span><span>50%</span><span>90%</span>
+                    </div>
+                  </div>
+
+                  {/* Other filters */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Idioma</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.language}
+                          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+                        >
+                          {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Año</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.year}
+                          onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
+                        >
+                          {YEAR_OPTIONS.map((y) => <option key={y.value} value={y.value}>{y.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.openAccess}
+                        onChange={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
+                        className="w-3.5 h-3.5 rounded cursor-pointer"
+                        style={{ accentColor: activeGroupCfg.color }}
+                      />
+                      <span className="text-xs text-secondary font-medium">Solo Open Access</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
           </form>
-        </div>
-      </section>
 
-      {/* ── Group tabs + stats ──────────────────────────────────────────── */}
-      <section className="library-controls px-4 -mt-6 relative z-20">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center gap-3 p-3 bg-white border border-line shadow-2xl rounded-[28px]">
-          {/* Group tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1">
+          {/* ── Group tabs ── */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {GROUPS.map((g) => {
               const Icon = g.icon;
               const isActive = activeGroup === g.id;
@@ -459,52 +552,44 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                 <button
                   key={g.id}
                   onClick={() => switchGroup(g.id)}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
-                    isActive
-                      ? 'text-white shadow-lg'
-                      : 'hover:bg-slate-50 text-muted'
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
+                    isActive ? 'text-white shadow' : 'hover:bg-slate-50 text-muted'
                   }`}
                   style={isActive ? { backgroundColor: g.color } : {}}
                 >
-                  <Icon size={16} />
+                  <Icon size={14} />
                   <span>{g.label}</span>
                 </button>
               );
             })}
-          </div>
 
-          {/* Stats & meta */}
-          <div className="flex items-center gap-3 px-4 border-t md:border-t-0 md:border-l border-line pt-3 md:pt-0 flex-shrink-0">
-            {isSearching ? (
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Loader2 size={16} className="animate-spin" style={{ color: activeGroupCfg.color }} />
-                <span>Consultando fuentes…</span>
-              </div>
-            ) : results.length > 0 ? (
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <div className="text-[10px] font-bold text-muted uppercase tracking-widest">{results.length} resultados</div>
-                  <div className="text-xs font-bold text-ink">Mostrando {Math.min(visibleLimit, results.length)}</div>
+            {/* Stats inline with tabs */}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-line">
+              {isSearching ? (
+                <div className="flex items-center gap-1.5 text-xs text-muted">
+                  <Loader2 size={13} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+                  <span>Consultando…</span>
                 </div>
-                {searchMeta.cached && (
-                  <div className="p-2 bg-gold/10 text-gold rounded-xl" title="Desde caché">
-                    <Clock size={16} />
-                  </div>
-                )}
-                <button
-                  onClick={() => void performSearch(query, activeGroup, filters)}
-                  className="p-2 hover:bg-slate-100 text-muted hover:text-ink rounded-xl transition-colors"
-                  title="Actualizar resultados"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-            ) : null}
+              ) : filteredResults.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted">
+                    {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
+                  </span>
+                  <button
+                    onClick={() => void performSearch(query, activeGroup, filters)}
+                    className="p-1.5 hover:bg-slate-100 text-muted hover:text-ink rounded-lg transition-colors"
+                    title="Actualizar"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* ── Provider status pills ───────────────────────────────────────── */}
+      {/* ── Provider status pills ─────────────────────────────────────── */}
       {searchMeta.providerStates && searchMeta.providerStates.length > 0 && (
         <div className="px-4">
           <div className="flex flex-wrap gap-2 max-w-7xl mx-auto">
@@ -541,7 +626,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
       )}
 
-      {/* ── Results ──────────────────────────────────────────────────────── */}
+      {/* ── Results ──────────────────────────────────────────────────── */}
       <main className="px-4 mt-4">
         {isSearching && results.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 gap-6">
@@ -557,21 +642,78 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             </div>
           </div>
         ) : results.length === 0 ? (
-          <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
-            <div className="max-w-sm mx-auto">
-              <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
-                <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.6 }} />
+          query ? (
+            /* No results for a query */
+            <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
+              <div className="max-w-sm mx-auto">
+                <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
+                  <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.6 }} />
+                </div>
+                <h3 className="text-2xl font-bold font-display text-ink mb-2">Sin resultados</h3>
+                <p className="text-sm text-muted leading-relaxed">
+                  {`No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`}
+                </p>
               </div>
-              <h3 className="text-2xl font-bold font-display text-ink mb-2">
-                {query ? 'Sin resultados' : `Explora ${activeGroupCfg.label}`}
-              </h3>
-              <p className="text-sm text-muted leading-relaxed">
-                {query
-                  ? `No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`
-                  : activeGroupCfg.description}
-              </p>
             </div>
-          </div>
+          ) : (
+            /* ── Descubridor Inteligente (initial empty state) ───────── */
+            <div className="max-w-5xl mx-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl" style={{ backgroundColor: `${activeGroupCfg.color}15` }}>
+                  <Sparkles size={18} style={{ color: activeGroupCfg.color }} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-display text-ink">Descubridor Inteligente</h3>
+                  <p className="text-xs text-muted">Tópicos sugeridos para {activeGroupCfg.label}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-10">
+                {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
+                  <button
+                    key={topic}
+                    onClick={() => {
+                      setQuery(topic);
+                      void performSearch(topic, activeGroup, filters);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full border font-semibold text-sm transition-all hover:shadow-md active:scale-95"
+                    style={{
+                      borderColor: `${activeGroupCfg.color}30`,
+                      color: activeGroupCfg.color,
+                      backgroundColor: `${activeGroupCfg.color}08`,
+                    }}
+                  >
+                    <Sparkles size={11} />
+                    {topic}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {DISCOVERY_FEATURED[activeGroup]?.map((item) => (
+                  <button
+                    key={item.query}
+                    onClick={() => {
+                      setQuery(item.query);
+                      void performSearch(item.query, activeGroup, filters);
+                    }}
+                    className="text-left p-6 rounded-[24px] border border-line bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all group"
+                  >
+                    <div
+                      className="text-3xl mb-3 w-12 h-12 rounded-2xl flex items-center justify-center"
+                      style={{ backgroundColor: `${activeGroupCfg.color}10` }}
+                    >
+                      {item.icon}
+                    </div>
+                    <h4 className="font-bold text-ink mb-1 font-display group-hover:text-ocean transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-muted leading-relaxed">{item.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -589,13 +731,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               ))}
             </div>
 
-            {visibleLimit < results.length && (
+            {visibleLimit < filteredResults.length && (
               <div className="flex justify-center mt-10">
                 <button
                   onClick={() => setVisibleLimit((n) => n + 24)}
                   className="flex items-center gap-2 px-10 py-4 rounded-[20px] border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white transition-all shadow-lg active:scale-95"
                 >
-                  <span>Cargar más ({results.length - visibleLimit} restantes)</span>
+                  <span>Cargar más ({filteredResults.length - visibleLimit} restantes)</span>
                   <ArrowRight size={18} />
                 </button>
               </div>
@@ -648,7 +790,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </section>
       )}
 
-      {/* ── Floating batch bar ──────────────────────────────────────────── */}
+      {/* ── Floating batch bar ────────────────────────────────────────── */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-6">
           <div className="bg-ink text-white py-4 px-7 rounded-[28px] shadow-2xl flex items-center gap-6 border border-white/10">
@@ -684,15 +826,15 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
       )}
 
-      {/* ── Preview panel (right-side drawer) ──────────────────────────────── */}
+      {/* ── Preview panel (right-side drawer) ────────────────────────── */}
       <LibraryPreviewModal
         asset={previewAsset}
-        courseOptions={courseOptions}
         onClose={() => setPreviewAsset(null)}
+        courseOptions={courseOptions}
         onAddToCourse={handleAddToCourse}
       />
 
-      {/* ── Batch AI panel ────────────────────────────────────────────────────── */}
+      {/* ── Batch AI panel ────────────────────────────────────────────── */}
       {isBatchPanelOpen && (
         <BatchIntegrationPanel
           isOpen={isBatchPanelOpen}

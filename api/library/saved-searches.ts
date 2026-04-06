@@ -12,6 +12,7 @@ export const config = { runtime: 'nodejs' };
  * DELETE ?id=X — Remove a saved search
  */
 export default async function handler(request: Request) {
+  try {
   const user = await getSessionUser(request);
   if (!user) return errorResponse(401, 'No autorizado');
 
@@ -90,4 +91,8 @@ export default async function handler(request: Request) {
   }
 
   return errorResponse(405, 'Método no permitido');
+  } catch (err) {
+    console.error('[SavedSearches] Unhandled error:', err);
+    return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
+  }
 }

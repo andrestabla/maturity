@@ -12,12 +12,13 @@ export const config = {
  * Analyzes assets vs course curriculum to provide mapping suggestions.
  */
 export default async function handler(request: Request) {
-  const user = await getSessionUser(request);
-  if (!user) return errorResponse(401, 'No autorizado');
-
-  if (request.method !== 'POST') return errorResponse(405, 'Método no permitido');
-
   try {
+    const user = await getSessionUser(request);
+    if (!user) return errorResponse(401, 'No autorizado');
+
+    if (request.method !== 'POST') return errorResponse(405, 'Método no permitido');
+
+    {
     const body = await request.json() as any;
     const { courseSlug, assets } = body;
 
@@ -83,8 +84,9 @@ RESPONDE EXCLUSIVAMENTE EN JSON CON ESTE FORMATO:
 
     return jsonResponse(result);
 
+    }
   } catch (err) {
-    console.error('[AI Assistant] Analysis Error:', err);
+    console.error('[AI Assistant] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error interno en el análisis de IA');
   }
 }

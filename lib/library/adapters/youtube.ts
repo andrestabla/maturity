@@ -26,7 +26,7 @@ export async function searchYouTube(
     q: query,
     maxResults: String(Math.min(limit, 50)),
     key: apiKey,
-    videoCategoryId: '27',
+    videoCategoryId: '27', // Education category
     relevanceLanguage: language && language !== 'all' ? language : 'es',
     safeSearch: 'moderate',
     order: 'relevance',
@@ -45,6 +45,7 @@ export async function searchYouTube(
 
   const results = items.map((item) => normalizeYouTubeResult(item));
 
+  // Apply academic ranking — sort by computed score
   return results.sort((a, b) => b.score - a.score);
 }
 
@@ -101,6 +102,7 @@ function normalizeYouTubeResult(item: Record<string, unknown>): LibrarySearchRes
   };
 }
 
+// Academic channel patterns — channels known for educational content
 const ACADEMIC_CHANNEL_PATTERNS = [
   /university|universidad|académi|academic|professor|lecture|coursera|khan|mit|stanford|harvard/i,
   /edx|udacity|ocw|opencourseware|facultad|department|institute|school of/i,
@@ -122,16 +124,20 @@ function computeYouTubeAcademicScore(
   title: string,
   description: string,
 ): number {
-  let score = 0.40;
+  let score = 0.40; // Base score
 
+  // Academic channel bonus
   const isAcademic = ACADEMIC_CHANNEL_PATTERNS.some((p) => p.test(channelTitle));
   if (isAcademic) score += 0.30;
 
+  // Entertainment penalty
   const isEntertainment = ENTERTAINMENT_PATTERNS.some((p) => p.test(channelTitle + ' ' + title));
   if (isEntertainment) score -= 0.25;
 
+  // Academic keywords in title
   if (ACADEMIC_TITLE_KEYWORDS.test(title)) score += 0.15;
 
+  // Description length (longer = more educational)
   if (description.length > 200) score += 0.05;
   if (description.length > 500) score += 0.05;
 

@@ -18,6 +18,7 @@ export const config = { runtime: 'nodejs' };
  *   ?top=10              — number of top-reused assets to return
  */
 export default async function handler(request: Request) {
+  try {
   const user = await getSessionUser(request);
   if (!user) return errorResponse(401, 'No autorizado');
 
@@ -116,5 +117,9 @@ export default async function handler(request: Request) {
   } catch (err) {
     console.error('[LibraryMetrics] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error al obtener métricas');
+  }
+  } catch (err) {
+    console.error('[LibraryMetrics] Unhandled error:', err);
+    return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
   }
 }

@@ -8,6 +8,7 @@ const PHET_METADATA_URL =
  * PhET Interactive Simulations Adapter
  * No API key required. Uses the public PhET metadata endpoint.
  * Docs: https://phet.colorado.edu/services/metadata/1.2/simulations
+ * Returns all simulations as a catalog (cached aggressively — they don't change often).
  */
 export async function searchPhET(
   params: SearchParams,
@@ -26,6 +27,7 @@ export async function searchPhET(
 
   const data = await response.json() as Record<string, unknown>;
 
+  // PhET returns { projects: [...] } where each project has simulations array
   const projects = ((data.projects ?? []) as unknown[]) as Array<Record<string, unknown>>;
 
   const sims: LibrarySearchResult[] = [];
@@ -38,6 +40,7 @@ export async function searchPhET(
     }
   }
 
+  // Search filter by query keywords
   const q = query.toLowerCase().trim();
   const filtered = q
     ? sims.filter((s) =>
@@ -47,6 +50,7 @@ export async function searchPhET(
       )
     : sims;
 
+  // Sort by relevance score
   return filtered
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
@@ -117,6 +121,7 @@ function normalizePhetSim(
   };
 }
 
+// PhET sims are always high-quality educational content
 function computePhetScore(title: string, tags: string[]): number {
   const hasSTEM = /physics|chemistry|biology|math|earth|energy|wave|force|circuit|atom|motion/i.test(
     [title, ...tags].join(' '),

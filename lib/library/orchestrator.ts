@@ -201,7 +201,7 @@ function mergeResults(a: LibrarySearchResult, b: LibrarySearchResult): LibrarySe
   const bestDoi = a.doi || b.doi;
   const bestPdfUrl = a.embedUrl || b.embedUrl;
   const bestPreviewKind = bestPdfUrl ? 'pdf' : a.previewKind !== 'external-link' ? a.previewKind : b.previewKind;
-  const bestScore = Math.max(a.score, b.score) + 0.05 * Math.min(providers.length - 1, 3);
+  const bestScore = Math.max(a.score, b.score) + 0.05 * Math.min(providers.length - 1, 3); // bonus for multi-source
   const bestAuthors = a.authors.length >= b.authors.length ? a.authors : b.authors;
   const allTags = [...new Set([...a.tags, ...b.tags])].slice(0, 10);
 

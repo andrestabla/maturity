@@ -7,6 +7,8 @@ const REDALYC_BASE = 'http://api.redalyc.org/api';
  * Redalyc API Adapter
  * Docs: http://api.redalyc.org/docs/#/
  * Requires REDALYC_API_KEY environment variable.
+ * Fallback: graceful empty if no key.
+ *
  * Redalyc is the main open-access repository for Latin American academic journals.
  */
 export async function searchRedalyc(
@@ -90,7 +92,7 @@ function normalizeRedalycResult(doc: Record<string, unknown>): LibrarySearchResu
     canonicalUrl: doi ? `https://doi.org/${doi}` : url,
     resourceType: 'Artículo Científico',
     language: lang,
-    openAccess: true,
+    openAccess: true, // Redalyc is open access
     citationCount: Number(doc.citaciones ?? doc.citations ?? 0),
     thumbnailUrl: undefined,
     embedUrl: undefined,
