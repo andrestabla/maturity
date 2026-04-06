@@ -4,7 +4,6 @@ import { errorResponse } from '../lib/http.js';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-// @ts-expect-error Direct import for Vercel
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 
 export const config = {
