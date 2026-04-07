@@ -1,10 +1,6 @@
 import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
-import {
-  readLibraryAssets,
-  readLibrarySearchCache,
-  persistLibrarySearchCache,
-} from '../../lib/store.js';
+import { getSql } from '../../lib/db.js';
 import type { AuthUser, LibraryAsset, LibraryGroup, LibraryProvider, LibrarySearchResult } from '../../src/types.js';
 import { federatedSearch } from '../../lib/library/orchestrator.js';
 import type { SearchParams } from '../../lib/library/orchestrator.js';
@@ -43,7 +39,7 @@ export default async function handler(request: Request) {
 
     // ── Institutional: served from DB ────────────────────────────────────────
     if (group === 'Institucional') {
-      const assets = await readLibraryAssets().catch(() => []) as LibraryAsset[];
+      const assets = await readInstitutionalAssetsFast().catch(() => []) as LibraryAsset[];
       const filtered = filterInstitutionalAssets(assets, user, q, language);
 
       return jsonResponse({
@@ -64,7 +60,7 @@ export default async function handler(request: Request) {
     if (q) {
       try {
         const primaryProvider = getPrimaryProviderForGroup(group);
-        const cached = await readLibrarySearchCache(primaryProvider, cacheKey, cacheFilters);
+        const cached = await readLibrarySearchCacheFast(primaryProvider, cacheKey, cacheFilters);
         if (cached) {
           return jsonResponse({
             results: cached.results.slice(0, limit),
@@ -96,7 +92,7 @@ export default async function handler(request: Request) {
     // Persist to cache (non-blocking, swallow DB errors)
     if (q && orchestratorResult.results.length > 0) {
       const primaryProvider = getPrimaryProviderForGroup(group);
-      void persistLibrarySearchCache(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {});
+      void persistLibrarySearchCacheFast(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {});
     }
 
     return jsonResponse({
@@ -196,4 +192,179 @@ function getPrimaryProviderForGroup(group: LibraryGroup): LibraryProvider {
     Otros: 'institutional',
   };
   return map[group] ?? 'openalex';
+}
+
+interface LibrarySearchCacheFastRow {
+  results: unknown;
+  fetchedAt: string;
+}
+
+interface LibraryAssetFastRow {
+  id: string;
+  canonicalKey: string;
+  provider: string;
+  providerRecordId: string;
+  group: string;
+  title: string;
+  authors: unknown;
+  publishedAt: string | null;
+  abstract: string;
+  descriptionHtml: string;
+  doi: string | null;
+  canonicalUrl: string;
+  resourceType: string;
+  language: string;
+  license: unknown;
+  openAccess: boolean;
+  citationCount: number;
+  thumbnailUrl: string | null;
+  embedUrl: string | null;
+  institutionId: string | null;
+  institutionName: string | null;
+  visibility: string;
+  previewKind: string;
+  tags: unknown;
+  metadata: unknown;
+}
+
+function parseJsonSafe<T>(value: unknown, fallback: T): T {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  return value as T;
+}
+
+async function readLibrarySearchCacheFast(provider: LibraryProvider, query: string, filters: unknown) {
+  const sql = getSql();
+  const cacheKey = JSON.stringify({ query, filters });
+  const rows = (await sql`
+    SELECT
+      results,
+      fetched_at AS "fetchedAt"
+    FROM maturity_library_search_cache
+    WHERE provider = ${provider}
+      AND cache_key = ${cacheKey}
+      AND expires_at > ${new Date().toISOString()}
+    LIMIT 1
+  `) as LibrarySearchCacheFastRow[];
+
+  if (!rows[0]) {
+    return null;
+  }
+
+  return {
+    results: parseJsonSafe<LibrarySearchResult[]>(rows[0].results, []),
+    fetchedAt: rows[0].fetchedAt,
+  };
+}
+
+async function persistLibrarySearchCacheFast(
+  provider: LibraryProvider,
+  query: string,
+  filters: unknown,
+  results: LibrarySearchResult[],
+) {
+  const sql = getSql();
+  const cacheKey = JSON.stringify({ query, filters });
+
+  await sql`
+    INSERT INTO maturity_library_search_cache (
+      provider,
+      cache_key,
+      query,
+      filters,
+      results,
+      fetched_at,
+      expires_at
+    ) VALUES (
+      ${provider},
+      ${cacheKey},
+      ${query},
+      ${JSON.stringify(filters)}::jsonb,
+      ${JSON.stringify(results)}::jsonb,
+      CURRENT_TIMESTAMP,
+      (CURRENT_TIMESTAMP + INTERVAL '24 hours')
+    )
+    ON CONFLICT (provider, cache_key) DO UPDATE SET
+      results = EXCLUDED.results,
+      fetched_at = EXCLUDED.fetched_at,
+      expires_at = EXCLUDED.expires_at
+  `;
+}
+
+async function readInstitutionalAssetsFast() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      canonical_key AS "canonicalKey",
+      provider,
+      provider_record_id AS "providerRecordId",
+      group_name AS "group",
+      title,
+      authors,
+      published_at AS "publishedAt",
+      abstract,
+      description_html AS "descriptionHtml",
+      doi,
+      canonical_url AS "canonicalUrl",
+      resource_type AS "resourceType",
+      language,
+      license,
+      open_access AS "openAccess",
+      citation_count AS "citationCount",
+      thumbnail_url AS "thumbnailUrl",
+      embed_url AS "embedUrl",
+      institution_id AS "institutionId",
+      institution_name AS "institutionName",
+      visibility,
+      preview_kind AS "previewKind",
+      tags,
+      metadata
+    FROM maturity_library_assets
+    WHERE group_name = ${'Institucional'}
+       OR visibility = ${'Institucional'}
+       OR provider = ${'institutional'}
+    ORDER BY title ASC
+  `) as LibraryAssetFastRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    canonicalKey: row.canonicalKey,
+    provider: row.provider as LibraryProvider,
+    providerRecordId: row.providerRecordId,
+    group: row.group as LibraryGroup,
+    title: row.title,
+    authors: parseJsonSafe<string[]>(row.authors, []),
+    publishedAt: row.publishedAt ?? '',
+    abstract: row.abstract,
+    descriptionHtml: row.descriptionHtml,
+    doi: row.doi ?? undefined,
+    canonicalUrl: row.canonicalUrl,
+    resourceType: row.resourceType,
+    language: row.language,
+    license: parseJsonSafe(row.license, null),
+    openAccess: row.openAccess,
+    citationCount: row.citationCount,
+    thumbnailUrl: row.thumbnailUrl ?? undefined,
+    embedUrl: row.embedUrl ?? undefined,
+    institutionId: row.institutionId ?? undefined,
+    institutionName: row.institutionName ?? undefined,
+    visibility: row.visibility as LibraryAsset['visibility'],
+    previewKind: row.previewKind as LibrarySearchResult['previewKind'],
+    tags: parseJsonSafe<string[]>(row.tags, []),
+    metadata: parseJsonSafe<Record<string, unknown>>(row.metadata, {}),
+    files: [],
+    createdAt: '',
+    updatedAt: '',
+  } satisfies LibraryAsset));
 }
