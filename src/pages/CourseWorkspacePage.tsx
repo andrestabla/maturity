@@ -5089,67 +5089,79 @@ export function CourseWorkspacePage({
       }
 
       if (extractedTextOverride?.trim()) {
-        const extractedText = extractedTextOverride.trim();
-        const baseSections =
-          writingDraft.sections.length > 0
-            ? writingDraft.sections
-            : buildWritingSectionsFromProduct(selectedWritingProduct);
-        const hydratedSections = hydrateWritingSectionsFromText(baseSections, extractedText);
-        const writingData: ProductWritingData = {
-          ...writingDraft,
-          mode: 'upload',
-          submittedAsset: uploadedAsset,
-          extractedText,
-          draftText: createWritingDraftTextFromSections(hydratedSections),
-          sections: hydratedSections,
-          lastSavedAt: new Date().toISOString(),
-        };
+        try {
+          const extractedText = extractedTextOverride.trim();
+          const baseSections =
+            writingDraft.sections.length > 0
+              ? writingDraft.sections
+              : buildWritingSectionsFromProduct(selectedWritingProduct);
+          const hydratedSections = hydrateWritingSectionsFromText(baseSections, extractedText);
+          const writingData: ProductWritingData = {
+            ...writingDraft,
+            mode: 'upload',
+            submittedAsset: uploadedAsset,
+            extractedText,
+            draftText: createWritingDraftTextFromSections(hydratedSections),
+            sections: hydratedSections,
+            lastSavedAt: new Date().toISOString(),
+          };
 
-        controller = new AbortController();
-        timeoutId = window.setTimeout(() => controller?.abort(), WRITING_SAVE_REQUEST_TIMEOUT_MS);
-        setWritingProcessingProgress((current) => Math.max(current, 96));
+          const fastPathController = new AbortController();
+          const fastPathTimeoutId = window.setTimeout(
+            () => fastPathController.abort(),
+            WRITING_SAVE_REQUEST_TIMEOUT_MS,
+          );
+          setWritingProcessingProgress((current) => Math.max(current, 96));
 
-        const response = await fetch('/api/course-writing', {
-          method: 'POST',
-          credentials: 'same-origin',
-          signal: controller.signal,
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'save',
-            courseSlug: currentCourse.slug,
-            productId: selectedWritingProduct.id,
-            writingData,
-          }),
-        });
+          try {
+            const response = await fetch('/api/course-writing', {
+              method: 'POST',
+              credentials: 'same-origin',
+              signal: fastPathController.signal,
+              headers: {
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'save',
+                courseSlug: currentCourse.slug,
+                productId: selectedWritingProduct.id,
+                writingData,
+              }),
+            });
 
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string; product?: CourseProduct }
-          | null;
+            const payload = (await response.json().catch(() => null)) as
+              | { error?: string; product?: CourseProduct }
+              | null;
 
-        if (!response.ok) {
-          throw new Error(payload?.error ?? 'No fue posible guardar la digitalización del documento.');
+            if (!response.ok) {
+              throw new Error(payload?.error ?? 'No fue posible guardar la digitalización del documento.');
+            }
+
+            const normalized = normalizeWritingDraft(payload?.product ?? {
+              ...selectedWritingProduct,
+              writingData,
+            });
+            setWritingDraft(normalized);
+            const completedSections = countFilledWritingSections(normalized.sections);
+            setWritingProcessingProgress(100);
+            completed = true;
+            refreshAppData();
+            void showAlert({
+              title: 'Documento procesado',
+              message:
+                completedSections > 0
+                  ? `Digitalización completa. ${completedSections}/${normalized.sections.length} secciones quedaron con contenido editable.`
+                  : 'Digitalización completa. Revisa y ajusta el contenido por secciones.',
+              tone: 'success',
+            });
+            return;
+          } finally {
+            window.clearTimeout(fastPathTimeoutId);
+          }
+        } catch {
+          setWritingProcessingProgress((current) => Math.max(current, 74));
+          // Reintentamos con el flujo server-side si la ruta rápida no termina correctamente.
         }
-
-        const normalized = normalizeWritingDraft(payload?.product ?? {
-          ...selectedWritingProduct,
-          writingData,
-        });
-        setWritingDraft(normalized);
-        const completedSections = countFilledWritingSections(normalized.sections);
-        setWritingProcessingProgress(100);
-        completed = true;
-        refreshAppData();
-        void showAlert({
-          title: 'Documento procesado',
-          message:
-            completedSections > 0
-              ? `Digitalización completa. ${completedSections}/${normalized.sections.length} secciones quedaron con contenido editable.`
-              : 'Digitalización completa. Revisa y ajusta el contenido por secciones.',
-          tone: 'success',
-        });
-        return;
       }
 
       if (file.size <= WRITING_INLINE_EXTRACTION_MAX_BYTES) {
