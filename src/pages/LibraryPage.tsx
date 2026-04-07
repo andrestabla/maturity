@@ -640,7 +640,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       if (nextFilters.openAccess) params.set('open_access', 'true');
       if (providerFilters.length > 0) params.set('providers', providerFilters.join(','));
 
-      const response = await fetch(`/api/library-search?${params.toString()}`, {
+      const response = await fetch(`/api/discovery-search?${params.toString()}`, {
         signal: controller.signal,
       });
 
