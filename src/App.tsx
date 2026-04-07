@@ -230,7 +230,7 @@ export default function App() {
           <Suspense fallback={<RouteSkeleton />}>
             <Routes>
           <Route
-            path="/"
+            path="/dashboard"
             element={
               <DashboardPage
                 role={activeRole}
@@ -242,6 +242,7 @@ export default function App() {
               />
             }
           />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/courses"
             element={
@@ -397,7 +398,7 @@ export default function App() {
           />
           <Route path="/team" element={<LegacyAdminRedirect />} />
           <Route path="/team/:section" element={<LegacyAdminRedirect />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>
         </AppShell>

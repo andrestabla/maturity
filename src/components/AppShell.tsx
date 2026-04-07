@@ -55,7 +55,7 @@ const commandKindLabel: Record<CommandItem['kind'], string> = {
 };
 
 const primaryNavigation = [
-  { to: '/', label: 'Pulse', icon: LayoutDashboard },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
   { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
@@ -146,8 +146,8 @@ export function AppShell({
   const mobileNavigation = [...shellNavigation, ...secondaryNavigation];
 
   const breadcrumbs = useMemo(() => {
-    if (location.pathname === '/') {
-      return [{ label: 'Pulse', path: '/' }];
+    if (location.pathname === '/dashboard' || location.pathname === '/') {
+      return [{ label: 'Dashboard', path: '/dashboard' }];
     }
 
     if (location.pathname === '/courses') {
@@ -333,7 +333,7 @@ export function AppShell({
 
     return {
       kicker: 'Vista principal',
-      title: 'Pulse',
+      title: 'Dashboard',
     };
   }, [
     activeCourse,
@@ -377,12 +377,12 @@ export function AppShell({
   const commandItems = useMemo<CommandItem[]>(() => {
     const coreViews: CommandItem[] = [
       {
-        id: 'view-pulse',
-        title: 'Pulse',
+        id: 'view-dashboard',
+        title: 'Dashboard',
         meta: 'Vista general del flujo',
-        path: '/',
+        path: '/dashboard',
         kind: 'view',
-        keywords: 'dashboard pulse inicio overview workflow',
+        keywords: 'dashboard pulse inicio overview workflow principal',
       },
       {
         id: 'view-courses',
@@ -541,7 +541,7 @@ export function AppShell({
 
       <div className="control-layout">
         <aside className="sidebar sidebar--rail surface">
-          <NavLink to="/" className="sidebar-brand" aria-label={branding.logoText}>
+          <NavLink to="/dashboard" className="sidebar-brand" aria-label={branding.logoText}>
             {renderBrandMark()}
           </NavLink>
 

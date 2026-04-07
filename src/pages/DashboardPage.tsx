@@ -3,24 +3,20 @@ import {
   BriefcaseBusiness,
   CircleAlert,
   FolderClock,
+  Gauge,
+  ListTodo,
   RadioTower,
   ShieldCheck,
   Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useSystemDialog } from '../components/SystemDialogProvider.js';
-import { CourseCard } from '../components/CourseCard.js';
-import { ProgressRing } from '../components/ProgressRing.js';
 import { Link } from 'react-router-dom';
+import { ProgressRing } from '../components/ProgressRing.js';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type { AppData, AuthUser, Role } from '../types.js';
+import { getStageMeta, getVisibleAlerts, getVisibleCourses, getVisibleTasks, averageProgress } from '../utils/domain.js';
 import { formatDate } from '../utils/format.js';
-import {
-  averageProgress,
-  getStageMeta,
-  getVisibleAlerts,
-  getVisibleCourses,
-  getVisibleTasks,
-} from '../utils/domain.js';
 import { canManageAlerts } from '../utils/permissions.js';
 
 interface DashboardPageProps {
@@ -32,14 +28,22 @@ interface DashboardPageProps {
   refreshAppData: () => void;
 }
 
+interface WorkflowSignal {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'ocean' | 'sage' | 'gold' | 'coral';
+  to: string;
+  icon: LucideIcon;
+}
+
 const roleMessage: Record<Role, string> = {
   Administrador: 'Vista global para gobernar indicadores, permisos y throughput completo de la operación.',
   Coordinador: 'Control del ritmo operativo, capacidad de equipos y bloqueos que afectan la entrega.',
   Experto: 'Espacio enfocado en autoría, criterio disciplinar y piezas que todavía requieren validación.',
-  'Diseñador instruccional':
-    'Lectura técnica de arquitectura, observaciones y decisiones pedagógicas que destraban el flujo.',
-  'Diseñador multimedia':
-    'Seguimiento de recursos, entregas visuales y puntos de accesibilidad listos para producción.',
+  'Diseñador instruccional': 'Lectura técnica de arquitectura, observaciones y decisiones pedagógicas que destraban el flujo.',
+  'Diseñador multimedia': 'Seguimiento de recursos, entregas visuales y puntos de accesibilidad listos para producción.',
   'Gestor LMS': 'Radar técnico sobre cursos listos para montaje y elementos que afectan la experiencia final.',
   'Analista QA': 'Panel de revisión con hallazgos, aprobaciones y riesgos que no deberían escapar.',
   Auditor: 'Trazabilidad de punta a punta para validar consistencia operativa y cierres del flujo.',
@@ -48,35 +52,14 @@ const roleMessage: Record<Role, string> = {
 function DashboardSkeleton() {
   return (
     <div className="page-stack page-stack--loading">
-      <section className="control-hero surface">
-        <div className="control-hero__main">
-          <div className="skeleton-line skeleton-line--eyebrow" />
-          <div className="skeleton-line skeleton-line--title" />
-          <div className="skeleton-line skeleton-line--wide" />
-          <div className="workflow-legend">
-            <div className="skeleton-stat" />
-            <div className="skeleton-stat" />
-            <div className="skeleton-stat" />
-            <div className="skeleton-stat" />
-          </div>
-        </div>
-        <div className="control-hero__side skeleton-panel skeleton-panel--medium" />
+      <section className="surface section-card">
+        <div className="skeleton-line skeleton-line--eyebrow" />
+        <div className="skeleton-line skeleton-line--title" />
+        <div className="skeleton-line skeleton-line--wide" />
       </section>
 
-      <section className="dashboard-workspace">
-        <div className="dashboard-workspace__grid">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <article key={index} className="course-card surface skeleton-panel" />
-          ))}
-        </div>
-        <div className="dashboard-workspace__side">
-          <article className="surface section-card skeleton-panel skeleton-panel--medium" />
-          <article className="surface section-card skeleton-panel skeleton-panel--medium" />
-        </div>
-      </section>
-
-      <section className="dashboard-bottom">
-        {Array.from({ length: 2 }).map((_, index) => (
+      <section className="metrics-grid metrics-grid--three">
+        {Array.from({ length: 3 }).map((_, index) => (
           <article key={index} className="surface section-card skeleton-panel skeleton-panel--medium" />
         ))}
       </section>
@@ -100,50 +83,97 @@ export function DashboardPage({
   }
 
   const visibleCourses = getVisibleCourses(appData, role, viewer);
+  const visibleAlerts = getVisibleAlerts(appData, role, viewer);
   const visibleTasks = getVisibleTasks(appData, role, viewer).sort((left, right) =>
     left.dueDate.localeCompare(right.dueDate),
   );
-  const visibleAlerts = getVisibleAlerts(appData, role, viewer);
-  const averageQuality =
-    visibleCourses.length === 0
-      ? 0
-      : Math.round(
-          visibleCourses.reduce((sum, course) => sum + course.pulse.quality, 0) /
-            visibleCourses.length,
-        );
+  const pendingTasks = visibleTasks.filter((task) => task.status !== 'Lista');
+  const overdueTasks = pendingTasks.filter((task) => Date.parse(task.dueDate) < Date.now()).length;
+  const averageCourseProgress = averageProgress(visibleCourses);
 
   const stageCounts = appData.stages.map((stage) => ({
     ...stage,
     count: visibleCourses.filter((course) => course.stageId === stage.id).length,
   }));
-
-  const spotlightCourses = visibleCourses.slice().sort((left, right) => right.progress - left.progress).slice(0, 5);
   const busiestStage = stageCounts.slice().sort((left, right) => right.count - left.count)[0];
-  const syncFeed = [
-    ...visibleTasks.slice(0, 2).map((task) => {
+
+  const courseSignals = visibleCourses
+    .map((course) => {
+      const taskCount = pendingTasks.filter((task) => task.courseSlug === course.slug).length;
+      const alertCount = visibleAlerts.filter((alert) => alert.courseSlug === course.slug).length;
+
+      return {
+        course,
+        stageName: getStageMeta(appData, course.stageId)?.name ?? course.stageId,
+        taskCount,
+        alertCount,
+      };
+    })
+    .sort((left, right) => {
+      const leftSignal = left.taskCount + left.alertCount * 2;
+      const rightSignal = right.taskCount + right.alertCount * 2;
+      if (leftSignal !== rightSignal) return rightSignal - leftSignal;
+      return right.course.progress - left.course.progress;
+    })
+    .slice(0, 8);
+
+  const workflowSignals: WorkflowSignal[] = [
+    {
+      key: 'portfolio',
+      label: 'Cursos activos',
+      value: String(visibleCourses.length),
+      detail: 'en tu portafolio actual',
+      tone: 'ocean',
+      to: '/courses',
+      icon: BriefcaseBusiness,
+    },
+    {
+      key: 'progress',
+      label: 'Avance promedio',
+      value: `${averageCourseProgress}%`,
+      detail: 'progreso del portafolio',
+      tone: 'sage',
+      to: '/courses',
+      icon: Gauge,
+    },
+    {
+      key: 'tasks',
+      label: 'Tareas pendientes',
+      value: String(pendingTasks.length),
+      detail: `${overdueTasks} vencidas`,
+      tone: 'gold',
+      to: '/courses',
+      icon: ListTodo,
+    },
+    {
+      key: 'alerts',
+      label: 'Alertas activas',
+      value: String(visibleAlerts.length),
+      detail: 'bloqueos y riesgos abiertos',
+      tone: 'coral',
+      to: '/dashboard#alertas',
+      icon: CircleAlert,
+    },
+  ];
+
+  const liveSync = [
+    ...pendingTasks.slice(0, 3).map((task) => {
       const course = visibleCourses.find((item) => item.slug === task.courseSlug);
       return {
         id: task.id,
-        title: `Neon -> ${course?.title ?? 'Curso'}`,
-        detail: `${task.title} · ${task.summary}`,
+        title: task.title,
+        detail: `${course?.title ?? 'Curso'} · vence ${formatDate(task.dueDate)}`,
       };
     }),
-    ...visibleAlerts.slice(0, 2).map((alert) => {
+    ...visibleAlerts.slice(0, 3).map((alert) => {
       const course = visibleCourses.find((item) => item.slug === alert.courseSlug);
       return {
         id: alert.id,
-        title: `Neon -> ${course?.title ?? 'Curso'}`,
-        detail: alert.title,
+        title: alert.title,
+        detail: `${course?.title ?? 'Curso'} · ${alert.owner}`,
       };
     }),
-  ].slice(0, 4);
-
-  const workflowSignals = [
-    { label: 'Mi portafolio', tone: 'ocean', value: visibleCourses.length },
-    { label: 'Tareas', tone: 'sage', value: visibleTasks.length },
-    { label: 'Biblioteca', tone: 'gold', value: appData.libraryResources.length },
-    { label: 'Alertas', tone: 'coral', value: visibleAlerts.length },
-  ];
+  ].slice(0, 6);
 
   async function handleDismissAlert(alertId: string) {
     setDismissingAlertId(alertId);
@@ -155,13 +185,10 @@ export function DashboardPage({
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          id: alertId,
-        }),
+        body: JSON.stringify({ id: alertId }),
       });
 
       const payload = (await response.json()) as { error?: string };
-
       if (!response.ok) {
         throw new Error(payload.error ?? 'No fue posible resolver la alerta.');
       }
@@ -180,56 +207,148 @@ export function DashboardPage({
   }
 
   return (
-    <div className="page-stack dashboard-page dashboard-page--reference">
-      <section className="control-hero surface">
-        <div className="control-hero__main">
-          <div className="section-heading section-heading--control">
-            <div>
-              <span className="eyebrow">UNIFIED WORKFLOW</span>
-              <h3>Unified workflow</h3>
-            </div>
-            <Link to="/courses" className="control-link">
-              <span>Abrir portafolio</span>
-              <ArrowUpRight size={14} />
-            </Link>
+    <div className="page-stack dashboard-page dashboard-page--unified">
+      <section className="surface dashboard-unified-hero">
+        <div className="section-heading section-heading--control">
+          <div>
+            <span className="eyebrow">UNIFIED WORKFLOW</span>
+            <h3>Dashboard operativo</h3>
           </div>
-
-          <p className="section-lead">
-            Live data feed para seguir portafolio, entregables, tareas y señales de riesgo desde una sola lectura operativa. {roleMessage[role]}
-          </p>
-
-          <div className="workflow-legend">
-            {workflowSignals.map((signal) => (
-              <div key={signal.label} className="workflow-legend__item">
-                <span className={`status-dot status-dot--${signal.tone}`} />
-                <div>
-                  <strong>{signal.label}</strong>
-                  <span>{signal.value} activos</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Link to="/courses" className="control-link">
+            <span>Abrir portafolio</span>
+            <ArrowUpRight size={14} />
+          </Link>
         </div>
 
-        <aside className="control-hero__side surface-muted">
-          <div className="sync-panel">
+        <p className="section-lead">
+          Visualiza cursos activos, progreso, tareas por vencer y alertas en una sola lectura para actuar rápido. {roleMessage[role]}
+        </p>
+
+        <div className="dashboard-workflow-cards">
+          {workflowSignals.map((signal) => {
+            const Icon = signal.icon;
+
+            return (
+              <Link
+                key={signal.key}
+                to={signal.to}
+                className={`dashboard-workflow-card dashboard-workflow-card--${signal.tone}`}
+              >
+                <div className="dashboard-workflow-card__icon">
+                  <Icon size={18} />
+                </div>
+                <strong>{signal.label}</strong>
+                <span className="dashboard-workflow-card__value">{signal.value}</span>
+                <small>{signal.detail}</small>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="dashboard-unified-layout">
+        <div className="dashboard-unified-main">
+          <article className="surface section-card dashboard-panel">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">CURSOS ACTIVOS</span>
+                <h3>Cursos en los que estás trabajando</h3>
+              </div>
+              <span className="badge badge--outline">{visibleCourses.length}</span>
+            </div>
+
+            {courseSignals.length === 0 ? (
+              <div className="empty-state">
+                <strong>Aún no hay cursos visibles</strong>
+                <p>Cuando tengas cursos asignados, aquí verás su avance y señales de atención.</p>
+              </div>
+            ) : (
+              <div className="dashboard-course-grid">
+                {courseSignals.map((item) => (
+                  <Link key={item.course.id} to={`/courses/${item.course.slug}`} className="dashboard-course-tile">
+                    <div className="dashboard-course-tile__head">
+                      <span className="eyebrow">{item.course.code}</span>
+                      <ArrowUpRight size={16} />
+                    </div>
+                    <h4>{item.course.title}</h4>
+                    <p>{item.course.summary}</p>
+
+                    <div className="dashboard-course-tile__signals">
+                      <span>{item.stageName}</span>
+                      <span>{item.taskCount} tareas</span>
+                      <span>{item.alertCount} alertas</span>
+                    </div>
+
+                    <div className="dashboard-course-tile__progress">
+                      <strong>{item.course.progress}%</strong>
+                      <div className="progress-bar">
+                        <span style={{ width: `${item.course.progress}%` }} />
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="surface section-card dashboard-panel">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">TAREAS</span>
+                <h3>Pendientes priorizados</h3>
+              </div>
+              <FolderClock size={16} />
+            </div>
+
+            <div className="dashboard-task-list">
+              {pendingTasks.length === 0 ? (
+                <div className="empty-state empty-state--positive">
+                  <strong>Sin tareas pendientes</strong>
+                  <p>Tu cola está al día. No hay actividades abiertas para este rol.</p>
+                </div>
+              ) : (
+                pendingTasks.slice(0, 6).map((task) => {
+                  const course = visibleCourses.find((item) => item.slug === task.courseSlug);
+                  const isOverdue = Date.parse(task.dueDate) < Date.now();
+
+                  return (
+                    <div key={task.id} className={`dashboard-task-row ${isOverdue ? 'is-overdue' : ''}`}>
+                      <div className="dashboard-task-row__head">
+                        <span className="badge badge--outline">{task.priority}</span>
+                        <strong>{task.title}</strong>
+                      </div>
+                      <p>{task.summary}</p>
+                      <div className="dashboard-task-row__meta">
+                        <span>{course?.title ?? 'Curso'}</span>
+                        <span>Vence {formatDate(task.dueDate)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </article>
+        </div>
+
+        <aside className="dashboard-unified-side">
+          <article className="surface section-card dashboard-panel dashboard-panel--alerts" id="alertas">
             <div className="section-heading section-heading--compact">
               <div>
                 <span className="eyebrow">LIVE SYNC</span>
-                <h3>Live sync</h3>
+                <h3>Alertas y actividad</h3>
               </div>
               <RadioTower size={16} />
             </div>
 
-            <div className="sync-feed">
-              {syncFeed.length === 0 ? (
+            <div className="dashboard-live-feed">
+              {liveSync.length === 0 ? (
                 <div className="empty-state empty-state--positive">
                   <strong>Sin eventos recientes</strong>
-                  <p>No hay nuevos movimientos para este rol en este corte.</p>
+                  <p>No hay nuevos movimientos para este rol.</p>
                 </div>
               ) : (
-                syncFeed.map((item) => (
-                  <div key={item.id} className="sync-feed__item">
+                liveSync.map((item) => (
+                  <div key={item.id} className="dashboard-live-feed__item">
                     <span className="status-dot status-dot--ocean" />
                     <div>
                       <strong>{item.title}</strong>
@@ -240,37 +359,41 @@ export function DashboardPage({
               )}
             </div>
 
-            <Link to="/courses" className="control-button">
-              Sincronizar
-            </Link>
-          </div>
-        </aside>
-      </section>
+            <div className="dashboard-alert-list">
+              {visibleAlerts.slice(0, 5).map((alert) => {
+                const course = visibleCourses.find((item) => item.slug === alert.courseSlug);
+                const canDismiss = canManageAlerts(userRole, alert.owner);
 
-      <section className="dashboard-workspace">
-        <div className="dashboard-workspace__grid">
-          {spotlightCourses.length === 0 ? (
-            <div className="empty-state">
-              <strong>Aún no hay cursos visibles</strong>
-              <p>Cuando haya cursos asignados a este rol, aparecerán aquí con su avance y próxima entrega.</p>
+                return (
+                  <div key={alert.id} className="dashboard-alert-row">
+                    <span className={`status-dot status-dot--${alert.tone}`} />
+                    <div>
+                      <strong>{alert.title}</strong>
+                      <p>{alert.detail}</p>
+                      <small>{course?.title ?? 'Curso'} · {alert.owner}</small>
+                    </div>
+                    {canDismiss ? (
+                      <button
+                        type="button"
+                        className="ghost-button ghost-button--icon"
+                        aria-label="Resolver alerta"
+                        disabled={dismissingAlertId === alert.id}
+                        onClick={() => void handleDismissAlert(alert.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            spotlightCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                stageName={getStageMeta(appData, course.stageId)?.name ?? course.stageId}
-              />
-            ))
-          )}
-        </div>
+          </article>
 
-        <aside className="dashboard-workspace__side">
-          <article className="surface section-card dashboard-sidecard">
+          <article className="surface section-card dashboard-panel dashboard-panel--role">
             <div className="section-heading section-heading--compact">
               <div>
-                <span className="eyebrow">ROLE CONTROL</span>
-                <h3>Role control</h3>
+                <span className="eyebrow">ROLE SNAPSHOT</span>
+                <h3>Control de rol</h3>
               </div>
               <ShieldCheck size={16} />
             </div>
@@ -281,134 +404,28 @@ export function DashboardPage({
                 <strong>{role}</strong>
               </div>
               <div className="role-control-list__item">
-                <span>Hot zone</span>
+                <span>Etapa con mayor carga</span>
                 <strong>{busiestStage?.name ?? 'Sin etapa dominante'}</strong>
               </div>
               <div className="role-control-list__item">
-                <span>Quality</span>
-                <strong>{averageQuality}%</strong>
+                <span>Tareas vencidas</span>
+                <strong>{overdueTasks}</strong>
+              </div>
+              <div className="role-control-list__item">
+                <span>Tareas completadas</span>
+                <strong>{visibleTasks.length - pendingTasks.length}</strong>
               </div>
             </div>
-          </article>
 
-          <article className="surface section-card dashboard-sidecard dashboard-sidecard--progress">
-            <ProgressRing
-              value={averageProgress(visibleCourses)}
-              label="Visible throughput"
-              detail="Promedio de avance del portafolio visible para este rol."
-            />
-          </article>
-
-          <article className="surface section-card dashboard-sidecard">
-            <div className="section-heading section-heading--compact">
-              <div>
-                <span className="eyebrow">ALERTAS</span>
-                <h3>Alertas activas</h3>
-              </div>
-              <CircleAlert size={16} />
-            </div>
-
-            <div className="sync-feed">
-              {visibleAlerts.length === 0 ? (
-                <div className="empty-state empty-state--positive">
-                  <strong>Sin alertas abiertas</strong>
-                  <p>La operación visible para este rol no tiene bloqueos ni llamados pendientes.</p>
-                </div>
-              ) : (
-                visibleAlerts.slice(0, 4).map((alert) => {
-                  const course = visibleCourses.find((item) => item.slug === alert.courseSlug);
-                  const canDismiss = canManageAlerts(userRole, alert.owner);
-
-                  return (
-                    <div key={alert.id} className="sync-feed__item sync-feed__item--alert">
-                      <span className={`status-dot status-dot--${alert.tone}`} />
-                      <div>
-                        <strong>{alert.title}</strong>
-                        <p>{alert.detail}</p>
-                        <div className="task-item__meta">
-                          <span>{course?.title ?? 'Curso'}</span>
-                          <span>{alert.owner}</span>
-                        </div>
-                      </div>
-
-                      {canDismiss ? (
-                        <button
-                          type="button"
-                          className="ghost-button ghost-button--icon"
-                          disabled={dismissingAlertId === alert.id}
-                          onClick={() => void handleDismissAlert(alert.id)}
-                          aria-label="Resolver alerta"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })
-              )}
+            <div className="dashboard-role-progress">
+              <ProgressRing
+                value={averageCourseProgress}
+                label="Avance del portafolio"
+                detail="Porcentaje promedio de progreso de cursos visibles."
+              />
             </div>
           </article>
         </aside>
-      </section>
-
-      <section className="dashboard-bottom">
-        <article className="surface section-card">
-          <div className="section-heading section-heading--compact">
-            <div>
-              <span className="eyebrow">DISTRIBUTION</span>
-              <h3>Distribución por etapas</h3>
-            </div>
-            <BriefcaseBusiness size={16} />
-          </div>
-
-          <div className="stage-grid stage-grid--compact">
-            {stageCounts.map((stage) => (
-              <div key={stage.id} className={`stage-summary stage-summary--${stage.tone}`}>
-                <span>{stage.name}</span>
-                <strong>{stage.count}</strong>
-                <p>{stage.description}</p>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="surface section-card">
-          <div className="section-heading section-heading--compact">
-            <div>
-              <span className="eyebrow">QUEUE</span>
-              <h3>Lo siguiente en cola</h3>
-            </div>
-            <FolderClock size={16} />
-          </div>
-
-          <div className="list-stack">
-            {visibleTasks.length === 0 ? (
-              <div className="empty-state empty-state--positive">
-                <strong>La cola está despejada</strong>
-                <p>No aparecen tareas urgentes para este rol en este momento.</p>
-              </div>
-            ) : (
-              visibleTasks.slice(0, 4).map((task) => {
-                const course = visibleCourses.find((item) => item.slug === task.courseSlug);
-
-                return (
-                  <div key={task.id} className="task-item">
-                    <div>
-                      <span className="badge badge--outline">{task.priority}</span>
-                      <strong>{task.title}</strong>
-                      <p>{task.summary}</p>
-                      {task.productTitle ? <p>Producto: {task.productTitle}</p> : null}
-                    </div>
-                    <div className="task-item__meta">
-                      <span>{course?.title ?? 'Curso'}</span>
-                      <span>Vence {formatDate(task.dueDate)}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </article>
       </section>
     </div>
   );
