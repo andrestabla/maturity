@@ -132,6 +132,8 @@ const writingWorkspaceRoutes: WritingWorkspaceRoute[] = ['upload', 'ai', 'manual
 
 const WRITING_LAUNCH_STORAGE_KEY = 'maturity-writing-launch-v1';
 const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
+const WRITING_EXTRACTION_REQUEST_TIMEOUT_MS = 25000;
+const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
 
 interface WritingLaunchSnapshot {
   courseSlug: string;
@@ -4776,22 +4778,40 @@ export function CourseWorkspacePage({
       return;
     }
 
+    const extension = file.name.split('.').pop()?.trim().toLowerCase() ?? '';
+    if (!WRITING_UPLOAD_ALLOWED_EXTENSIONS.has(extension)) {
+      setWritingError('Formato no soportado para digitalización. Usa PDF o DOCX.');
+      return;
+    }
+
     setWritingError(null);
     setIsWritingExtracting(true);
     setWritingUploadProgress(0);
     setWritingProcessingProgress(0);
+    let controller: AbortController | null = null;
+    let timeoutId: number | null = null;
+    let uploadedAsset: ProductWritingAsset | null = null;
+    let completed = false;
 
     try {
-      const asset = await uploadFileToR2WithProgress(
+      uploadedAsset = await uploadFileToR2WithProgress(
         file,
         `${currentCourse.slug}-writing`,
         setWritingUploadProgress,
       );
+      updateWritingDraft((current) => ({
+        ...current,
+        mode: 'upload',
+        submittedAsset: uploadedAsset ?? current.submittedAsset,
+      }));
       setWritingProcessingProgress(18);
+      controller = new AbortController();
+      timeoutId = window.setTimeout(() => controller?.abort(), WRITING_EXTRACTION_REQUEST_TIMEOUT_MS);
 
       const response = await fetch('/api/course-writing', {
         method: 'POST',
         credentials: 'same-origin',
+        signal: controller.signal,
         headers: {
           'content-type': 'application/json',
         },
@@ -4799,13 +4819,13 @@ export function CourseWorkspacePage({
           action: 'extract-upload',
           courseSlug: currentCourse.slug,
           productId: selectedWritingProduct.id,
-          asset,
+          asset: uploadedAsset,
         }),
       });
       setWritingProcessingProgress(72);
 
       const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
+        | { error?: string; warning?: string; product?: CourseProduct }
         | null;
 
       if (!response.ok) {
@@ -4815,15 +4835,41 @@ export function CourseWorkspacePage({
       if (payload?.product) {
         setWritingDraft(normalizeWritingDraft(payload.product));
       }
+      if (payload?.warning) {
+        setWritingError(payload.warning);
+      }
       setWritingProcessingProgress(100);
+      completed = true;
 
       refreshAppData();
     } catch (error) {
+      if (uploadedAsset) {
+        updateWritingDraft((current) => ({
+          ...current,
+          mode: 'upload',
+          submittedAsset: uploadedAsset ?? current.submittedAsset,
+        }));
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        setWritingError(
+          'La digitalización tardó más de lo esperado. El archivo quedó cargado y puedes continuar editando por secciones.',
+        );
+        return;
+      }
+
       setWritingError(
         error instanceof Error ? error.message : 'No fue posible digitalizar el producto cargado.',
       );
     } finally {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
       setIsWritingExtracting(false);
+      if (!completed) {
+        setWritingUploadProgress(0);
+        setWritingProcessingProgress(0);
+      }
     }
   }
 
@@ -5368,10 +5414,12 @@ export function CourseWorkspacePage({
                           accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                           disabled={isWritingExtracting}
                           onChange={(event) => {
+                            const input = event.currentTarget;
                             const file = event.target.files?.[0];
                             if (file) {
                               void handleWritingSubmissionUpload(file);
                             }
+                            input.value = '';
                           }}
                         />
                       </div>

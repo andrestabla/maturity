@@ -66,6 +66,50 @@ const writingSectionTemplatesByFormat: Record<string, string[]> = {
   guia: ['Título', 'Introducción', 'Desarrollo', 'Cierre', 'Bibliografía'],
 };
 
+const DEFAULT_EXTRACTION_TIMEOUT_MS = 20000;
+const DEFAULT_SYNC_EXTRACTION_MAX_BYTES = 12 * 1024 * 1024;
+
+function resolveExtractionTimeoutMs() {
+  const configured = Number(process.env.WRITING_EXTRACTION_TIMEOUT_MS ?? DEFAULT_EXTRACTION_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_EXTRACTION_TIMEOUT_MS;
+  }
+  return Math.max(5000, Math.min(90000, Math.trunc(configured)));
+}
+
+function resolveSyncExtractionMaxBytes() {
+  const configured = Number(process.env.WRITING_SYNC_EXTRACT_MAX_BYTES ?? DEFAULT_SYNC_EXTRACTION_MAX_BYTES);
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_SYNC_EXTRACTION_MAX_BYTES;
+  }
+  return Math.max(2 * 1024 * 1024, Math.min(40 * 1024 * 1024, Math.trunc(configured)));
+}
+
+class ExtractionTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExtractionTimeoutError';
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new ExtractionTimeoutError(message));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function normalizeWritingTemplateKey(format: string) {
   return format
     .normalize('NFD')
@@ -404,16 +448,71 @@ export default async function handler(request: Request) {
       return errorResponse(400, 'Se requiere un archivo válido para digitalizar.');
     }
 
-    const extractedText = await readR2AssetText(payload.asset);
     const baseSections =
       currentWritingData.sections.length > 0
         ? currentWritingData.sections
         : buildStructuredSections(product);
-    const sections = hydrateWritingSectionsFromText(baseSections, extractedText);
-    const draftText = createWritingDraftTextFromSections(sections);
-    const writingData = mergeWritingData(currentWritingData, {
+    const stagedWritingData = mergeWritingData(currentWritingData, {
       mode: 'upload',
       submittedAsset: payload.asset,
+      extractedText: '',
+      draftText: currentWritingData.draftText,
+      sections: baseSections,
+      lastSavedAt: new Date().toISOString(),
+    });
+    const stagedProduct = await updateCourseProductRecord(payload.courseSlug, payload.productId, {
+      writingData: stagedWritingData,
+    });
+
+    const maxBytes = resolveSyncExtractionMaxBytes();
+    if (payload.asset.size && payload.asset.size > maxBytes) {
+      return jsonResponse({
+        product: stagedProduct,
+        extractedText: '',
+        warning:
+          `El archivo quedó cargado, pero supera ${(maxBytes / (1024 * 1024)).toFixed(0)} MB ` +
+          'para digitalización rápida. Puedes continuar editando por secciones o cargar una versión más liviana.',
+      });
+    }
+
+    let extractedText = '';
+    try {
+      extractedText = await withTimeout(
+        readR2AssetText(payload.asset),
+        resolveExtractionTimeoutMs(),
+        'La digitalización tardó demasiado para esta carga.',
+      );
+    } catch (error) {
+      if (error instanceof Error && /Formato no soportado/i.test(error.message)) {
+        return errorResponse(400, error.message);
+      }
+
+      if (error instanceof ExtractionTimeoutError || error instanceof Error) {
+        return jsonResponse({
+          product: stagedProduct,
+          extractedText: '',
+          warning:
+            'El archivo quedó cargado, pero la digitalización automática no terminó a tiempo. ' +
+            'Puedes continuar editando por secciones y reintentar la carga cuando quieras.',
+        });
+      }
+
+      throw error;
+    }
+
+    if (!extractedText.trim()) {
+      return jsonResponse({
+        product: stagedProduct,
+        extractedText: '',
+        warning:
+          'El archivo se cargó correctamente, pero no se detectó texto procesable. ' +
+          'Puedes continuar con edición manual por secciones.',
+      });
+    }
+
+    const sections = hydrateWritingSectionsFromText(baseSections, extractedText);
+    const draftText = createWritingDraftTextFromSections(sections);
+    const writingData = mergeWritingData(stagedWritingData, {
       extractedText,
       draftText,
       sections,
