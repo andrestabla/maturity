@@ -10264,6 +10264,12 @@ body::after {
   background: var(--surface-soft);
 }
 
+.writing-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .writing-flow-card {
   gap: 20px;
 }

@@ -260,7 +260,7 @@ export interface ProductWritingSection {
 
 export interface ProductWritingData {
   mode: ProductWritingMode;
-  submittedAsset?: ProductWritingAsset;
+  submittedAsset?: ProductWritingAsset | null;
   supportAssets: ProductWritingAsset[];
   libraryResourceIds: string[];
   aiPrompt?: string;

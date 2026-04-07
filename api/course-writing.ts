@@ -291,10 +291,11 @@ function hydrateWritingSectionsFromText(
   }
 
   const nextSections = baseSections.map((section) => ({ ...section, content: '' }));
+  const now = new Date().toISOString();
 
   if (nextSections.length === 1) {
     nextSections[0].content = normalizePlainTextToHtml(cleanText);
-    nextSections[0].updatedAt = new Date().toISOString();
+    nextSections[0].updatedAt = now;
     return nextSections;
   }
 
@@ -333,7 +334,7 @@ function hydrateWritingSectionsFromText(
 
     if (paragraphs.length <= 1 || nextSections.length <= 1) {
       nextSections[0].content = normalizePlainTextToHtml(cleanText);
-      nextSections[0].updatedAt = new Date().toISOString();
+      nextSections[0].updatedAt = now;
       return nextSections;
     }
 
@@ -350,9 +351,57 @@ function hydrateWritingSectionsFromText(
       const chunkText = chunks[index].join('\n\n').trim();
       if (chunkText) {
         section.content = normalizePlainTextToHtml(chunkText);
-        section.updatedAt = new Date().toISOString();
+        section.updatedAt = now;
       }
     });
+
+    const titleIndex = nextSections.findIndex((section) => /t[ií]tulo/i.test(section.title));
+    const introIndex = nextSections.findIndex((section) =>
+      /(introducci[oó]n|inicio|apertura)/i.test(section.title),
+    );
+
+    if (titleIndex >= 0 && introIndex >= 0 && titleIndex !== introIndex) {
+      const titlePlain = stripHtml(nextSections[titleIndex].content);
+      const introPlain = stripHtml(nextSections[introIndex].content);
+
+      if (!introPlain.trim() && titlePlain.trim()) {
+        const introMarker = /\b(?:introducci[oó]n|inicio|apertura)\s*:/i;
+        const markerMatch = introMarker.exec(titlePlain);
+
+        if (markerMatch && typeof markerMatch.index === 'number') {
+          const titlePart = titlePlain.slice(0, markerMatch.index).trim();
+          const introPart = titlePlain
+            .slice(markerMatch.index)
+            .replace(introMarker, '')
+            .trim();
+
+          if (introPart) {
+            if (titlePart) {
+              nextSections[titleIndex].content = normalizePlainTextToHtml(titlePart);
+              nextSections[titleIndex].updatedAt = now;
+            }
+            nextSections[introIndex].content = normalizePlainTextToHtml(introPart);
+            nextSections[introIndex].updatedAt = now;
+          }
+        } else {
+          const paragraphParts = titlePlain
+            .split(/\n{2,}/)
+            .map((paragraph) => paragraph.trim())
+            .filter(Boolean);
+
+          if (paragraphParts.length > 1) {
+            const titlePart = paragraphParts[0];
+            const introPart = paragraphParts.slice(1).join('\n\n').trim();
+            if (introPart) {
+              nextSections[titleIndex].content = normalizePlainTextToHtml(titlePart);
+              nextSections[titleIndex].updatedAt = now;
+              nextSections[introIndex].content = normalizePlainTextToHtml(introPart);
+              nextSections[introIndex].updatedAt = now;
+            }
+          }
+        }
+      }
+    }
 
     return nextSections;
   }
@@ -360,7 +409,7 @@ function hydrateWritingSectionsFromText(
   return nextSections.map((section, index) => ({
     ...section,
     content: normalizePlainTextToHtml(buffers[index].join('\n').trim()),
-    updatedAt: buffers[index].join('').trim() ? new Date().toISOString() : section.updatedAt,
+    updatedAt: buffers[index].join('').trim() ? now : section.updatedAt,
   }));
 }
 
@@ -374,10 +423,16 @@ function mergeWritingData(
   current: ProductWritingData,
   next?: Partial<ProductWritingData>,
 ): ProductWritingData {
+  const hasSubmittedAssetOverride = Boolean(
+    next && Object.prototype.hasOwnProperty.call(next, 'submittedAsset'),
+  );
+
   return {
     ...current,
     ...(next ?? {}),
-    submittedAsset: next?.submittedAsset ?? current.submittedAsset,
+    submittedAsset: hasSubmittedAssetOverride
+      ? next?.submittedAsset ?? undefined
+      : current.submittedAsset,
     supportAssets: next?.supportAssets ?? current.supportAssets,
     libraryResourceIds: next?.libraryResourceIds ?? current.libraryResourceIds,
     aiPrompt: next?.aiPrompt ?? current.aiPrompt,

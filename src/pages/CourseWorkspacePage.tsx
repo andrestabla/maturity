@@ -1891,6 +1891,7 @@ export function CourseWorkspacePage({
   const [writingDraft, setWritingDraft] = useState<ProductWritingData | null>(null);
   const [activeWritingSectionTab, setActiveWritingSectionTab] = useState<string | null>(null);
   const activeWritingProductIdRef = useRef<string | null>(null);
+  const writingUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
     makeTeamMemberForm(),
   );
@@ -4985,7 +4986,19 @@ export function CourseWorkspacePage({
       }
 
       if (payload?.product) {
-        setWritingDraft(normalizeWritingDraft(payload.product));
+        const normalized = normalizeWritingDraft(payload.product);
+        setWritingDraft(normalized);
+        if (!payload?.warning) {
+          const completedSections = countFilledWritingSections(normalized.sections);
+          await showAlert({
+            title: 'Documento procesado',
+            message:
+              completedSections > 0
+                ? `Digitalización completa. ${completedSections}/${normalized.sections.length} secciones quedaron con contenido editable.`
+                : 'Digitalización completa. Revisa y ajusta el contenido por secciones.',
+            tone: 'success',
+          });
+        }
       }
       if (payload?.warning) {
         setWritingError(payload.warning);
@@ -5025,6 +5038,85 @@ export function CourseWorkspacePage({
         setWritingUploadProgress(0);
         setWritingProcessingProgress(0);
       }
+    }
+  }
+
+  async function handleResetWritingUploadProcess() {
+    if (!selectedWritingProduct || !writingDraft) {
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Reiniciar proceso de carga',
+      message:
+        'Se limpiará el texto digitalizado y las secciones volverán a estado pendiente para que cargues un nuevo documento.',
+      tone: 'warning',
+      confirmLabel: 'Reiniciar',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingSaving(true);
+
+    try {
+      const clearedSections = writingDraft.sections.map((section) => ({
+        ...section,
+        content: '',
+        updatedAt: undefined,
+      }));
+
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'save',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          writingData: {
+            ...writingDraft,
+            submittedAsset: null,
+            extractedText: '',
+            draftText: '',
+            sections: clearedSections,
+            lastSavedAt: new Date().toISOString(),
+          },
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible reiniciar el proceso de carga.');
+      }
+
+      if (payload?.product) {
+        setWritingDraft(normalizeWritingDraft(payload.product));
+      }
+
+      setWritingUploadProgress(0);
+      setWritingProcessingProgress(0);
+      refreshAppData();
+
+      await showAlert({
+        title: 'Proceso reiniciado',
+        message: 'Ya puedes cargar un nuevo documento para digitalizar.',
+        tone: 'success',
+      });
+    } catch (error) {
+      setWritingError(
+        error instanceof Error ? error.message : 'No fue posible reiniciar el proceso de carga.',
+      );
+    } finally {
+      setIsWritingSaving(false);
     }
   }
 
@@ -5570,6 +5662,7 @@ export function CourseWorkspacePage({
                       <span>Archivo del producto</span>
                       <div className="field__control">
                         <input
+                          ref={writingUploadInputRef}
                           type="file"
                           accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                           disabled={isWritingExtracting}
@@ -5584,6 +5677,27 @@ export function CourseWorkspacePage({
                         />
                       </div>
                     </label>
+                  ) : null}
+
+                  {canEditSelectedWritingProduct ? (
+                    <div className="writing-upload-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isWritingExtracting}
+                        onClick={() => writingUploadInputRef.current?.click()}
+                      >
+                        Cargar nuevo documento
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        disabled={isWritingExtracting || isWritingSaving}
+                        onClick={() => void handleResetWritingUploadProcess()}
+                      >
+                        Reiniciar proceso
+                      </button>
+                    </div>
                   ) : null}
 
                   {writingDraft.submittedAsset ? (
