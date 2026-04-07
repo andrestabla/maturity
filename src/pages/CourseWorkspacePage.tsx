@@ -137,6 +137,11 @@ const WRITING_SAVE_REQUEST_TIMEOUT_MS = 20000;
 const WRITING_INLINE_EXTRACTION_MAX_BYTES = 2 * 1024 * 1024;
 const WRITING_CLIENT_EXTRACTION_TIMEOUT_MS = 120000;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
+const WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS = 90000;
+const WRITING_AI_GENERATION_MAX_ATTEMPTS = 4;
+const WRITING_AI_GENERATION_COOLDOWN_MS = 900;
+const WRITING_AI_RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+const WRITING_AI_RETRY_DELAYS_MS = [1200, 2400, 3600, 4800] as const;
 
 interface WritingLaunchSnapshot {
   courseSlug: string;
@@ -422,6 +427,12 @@ function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
         window.clearTimeout(timer);
         reject(error);
       });
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
   });
 }
 
@@ -4909,6 +4920,75 @@ export function CourseWorkspacePage({
     });
   }
 
+  async function requestWritingSectionGeneration(
+    section: ProductWritingSection,
+    options?: {
+      supportAssets?: ProductWritingAsset[];
+      libraryResourceIds?: string[];
+      timeoutMs?: number;
+    },
+  ) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      options?.timeoutMs ?? WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS,
+    );
+
+    try {
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'generate-section',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct?.id,
+          sectionId: section.id,
+          sectionTitle: section.title,
+          sectionInstructions: section.instructions,
+          supportAssets: options?.supportAssets ?? writingDraft?.supportAssets ?? [],
+          libraryResourceIds: options?.libraryResourceIds ?? writingDraft?.libraryResourceIds ?? [],
+          aiPrompt: writingDraft?.aiPrompt,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        const error = new Error(
+          payload?.error ?? `No fue posible generar "${section.title}".`,
+        ) as Error & { retryable?: boolean; status?: number };
+        error.retryable = WRITING_AI_RETRYABLE_STATUSES.has(response.status);
+        error.status = response.status;
+        throw error;
+      }
+
+      return payload;
+    } catch (rawError) {
+      if (rawError instanceof Error && rawError.name === 'AbortError') {
+        const timeoutError = new Error(
+          `La generación de "${section.title}" tardó demasiado.`,
+        ) as Error & { retryable?: boolean; status?: number };
+        timeoutError.retryable = true;
+        timeoutError.status = 408;
+        throw timeoutError;
+      }
+
+      const error = rawError as Error & { retryable?: boolean; status?: number };
+      if (typeof error.retryable !== 'boolean') {
+        error.retryable = true;
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
   async function handleGenerateWritingProduct() {
     if (!selectedWritingProduct || !writingDraft || writingDraft.sections.length === 0) {
       return;
@@ -4920,46 +5000,87 @@ export function CourseWorkspacePage({
 
     try {
       const total = writingDraft.sections.length;
+      const failedSections: string[] = [];
 
       for (let index = 0; index < total; index += 1) {
         const section = writingDraft.sections[index];
         setWritingGeneratingSectionId(section.id);
+        const stepStart = Math.round((index / total) * 100);
+        const stepTarget = Math.round(((index + 1) / total) * 100);
+        setWritingGenerationProgress((current) => Math.max(current, stepStart));
 
-        const response = await fetch('/api/course-writing', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'generate-section',
-            courseSlug: currentCourse.slug,
-            productId: selectedWritingProduct.id,
-            sectionId: section.id,
-            sectionTitle: section.title,
-            sectionInstructions: section.instructions,
-            supportAssets: writingDraft.supportAssets,
-            libraryResourceIds: writingDraft.libraryResourceIds,
-            aiPrompt: writingDraft.aiPrompt,
-          }),
-        });
+        let stepTicker: number | null = window.setInterval(() => {
+          setWritingGenerationProgress((current) => {
+            if (current >= stepTarget - 3) {
+              return current;
+            }
+            return Math.min(stepTarget - 3, current + 1);
+          });
+        }, 350);
 
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: string; product?: CourseProduct }
-          | null;
+        let sectionCompleted = false;
+        let sectionErrorMessage = '';
 
-        if (!response.ok) {
-          throw new Error(payload?.error ?? `No fue posible generar "${section.title}".`);
+        for (let attempt = 1; attempt <= WRITING_AI_GENERATION_MAX_ATTEMPTS; attempt += 1) {
+          const shouldUseLiteContext = attempt >= 3;
+          try {
+            const payload = await requestWritingSectionGeneration(section, {
+              supportAssets: shouldUseLiteContext ? [] : writingDraft.supportAssets,
+              libraryResourceIds: shouldUseLiteContext ? [] : writingDraft.libraryResourceIds,
+            });
+
+            if (payload?.product) {
+              setWritingDraft(normalizeWritingDraft(payload.product));
+            }
+
+            sectionCompleted = true;
+            break;
+          } catch (rawError) {
+            const error = rawError as Error & { retryable?: boolean };
+            sectionErrorMessage = error.message || `No fue posible generar "${section.title}".`;
+            const canRetry =
+              error.retryable !== false && attempt < WRITING_AI_GENERATION_MAX_ATTEMPTS;
+
+            if (!canRetry) {
+              break;
+            }
+
+            await sleep(
+              WRITING_AI_RETRY_DELAYS_MS[Math.min(attempt - 1, WRITING_AI_RETRY_DELAYS_MS.length - 1)],
+            );
+          }
         }
 
-        if (payload?.product) {
-          setWritingDraft(normalizeWritingDraft(payload.product));
+        if (stepTicker !== null) {
+          window.clearInterval(stepTicker);
+          stepTicker = null;
         }
 
-        setWritingGenerationProgress(Math.round(((index + 1) / total) * 100));
+        if (!sectionCompleted) {
+          failedSections.push(section.title);
+          setWritingError(sectionErrorMessage || `No fue posible generar "${section.title}".`);
+        }
+
+        setWritingGenerationProgress(stepTarget);
+
+        if (index < total - 1) {
+          await sleep(WRITING_AI_GENERATION_COOLDOWN_MS);
+        }
+      }
+
+      if (failedSections.length > 0) {
+        throw new Error(
+          `No se pudieron completar ${failedSections.length} secciones: ${failedSections.join(', ')}. ` +
+            'Puedes reintentar la generación; el sistema conserva el avance logrado.',
+        );
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Producto generado',
+        message: `La IA completó ${total}/${total} secciones del producto.`,
+        tone: 'success',
+      });
     } catch (error) {
       setWritingError(
         error instanceof Error ? error.message : 'No fue posible generar el producto con IA.',
@@ -5434,31 +5555,22 @@ export function CourseWorkspacePage({
     setWritingGeneratingSectionId(section.id);
 
     try {
-      const response = await fetch('/api/course-writing', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'generate-section',
-          courseSlug: currentCourse.slug,
-          productId: selectedWritingProduct.id,
-          sectionId: section.id,
-          sectionTitle: section.title,
-          sectionInstructions: section.instructions,
-          supportAssets: writingDraft.supportAssets,
-          libraryResourceIds: writingDraft.libraryResourceIds,
-          aiPrompt: writingDraft.aiPrompt,
-        }),
-      });
-
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? `No fue posible generar "${section.title}".`);
+      let payload: { error?: string; product?: CourseProduct } | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          payload = await requestWritingSectionGeneration(section, {
+            supportAssets: attempt >= 3 ? [] : writingDraft.supportAssets,
+            libraryResourceIds: attempt >= 3 ? [] : writingDraft.libraryResourceIds,
+          });
+          break;
+        } catch (rawError) {
+          const error = rawError as Error & { retryable?: boolean };
+          const canRetry = error.retryable !== false && attempt < 3;
+          if (!canRetry) {
+            throw error;
+          }
+          await sleep(WRITING_AI_RETRY_DELAYS_MS[Math.min(attempt - 1, WRITING_AI_RETRY_DELAYS_MS.length - 1)]);
+        }
       }
 
       if (payload?.product) {
@@ -5466,6 +5578,11 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Sección generada',
+        message: `La sección "${section.title}" quedó actualizada.`,
+        tone: 'success',
+      });
     } catch (error) {
       setWritingError(
         error instanceof Error ? error.message : `No fue posible generar "${section.title}".`,
@@ -5490,6 +5607,10 @@ export function CourseWorkspacePage({
     );
     const aiPromptValue = writingDraft.aiPrompt?.trim() || suggestedWritingPrompt;
     const activeWritingMode = activeWritingRoute;
+    const generatingSectionTitle =
+      writingDraft.sections.find((section) => section.id === writingGeneratingSectionId)?.title ?? '';
+    const generationCompletionRatio =
+      totalSections > 0 ? Math.round((filledSections / totalSections) * 100) : 0;
 
     const renderStepBadge = (status: 'done' | 'active' | 'pending') => {
       if (status === 'done') {
@@ -5681,22 +5802,35 @@ export function CourseWorkspacePage({
         key: 'generate',
         title: 'Generar producto',
         detail:
-          isWritingGeneratingAll || writingGenerationProgress > 0
-            ? 'La IA está construyendo el producto por secciones.'
+          isWritingGeneratingAll
+            ? generatingSectionTitle
+              ? `Generando sección "${generatingSectionTitle}" (${Math.max(1, Math.min(99, writingGenerationProgress))}%).`
+              : `La IA está construyendo el producto por secciones (${Math.max(1, Math.min(99, writingGenerationProgress))}%).`
+            : generationCompletionRatio >= 100
+              ? 'La generación por IA completó todas las secciones.'
+              : generationCompletionRatio > 0
+                ? `Generación parcial completada (${generationCompletionRatio}%). Puedes continuar o reintentar.`
             : 'Genera todas las secciones con base en instrucciones y fuentes.',
         status:
           isWritingGeneratingAll
             ? ('active' as const)
-            : filledSections > 0
+            : generationCompletionRatio >= 100
               ? ('done' as const)
               : ('pending' as const),
-        progress: filledSections > 0 && !isWritingGeneratingAll ? 100 : writingGenerationProgress,
+        progress: isWritingGeneratingAll
+          ? writingGenerationProgress
+          : Math.max(writingGenerationProgress, generationCompletionRatio),
       },
       {
         key: 'review',
         title: 'Ver o editar producto',
         detail: `${filledSections}/${totalSections} secciones disponibles para revisión y ajuste.`,
-        status: filledSections > 0 ? ('done' as const) : ('pending' as const),
+        status:
+          filledSections === totalSections && totalSections > 0
+            ? ('done' as const)
+            : filledSections > 0
+              ? ('active' as const)
+              : ('pending' as const),
       },
     ];
 
@@ -6101,6 +6235,12 @@ export function CourseWorkspacePage({
                     <p className="field-help">
                       La IA generará el producto por secciones, usando fuentes cargadas, recursos
                       de biblioteca y el prompt estructural.
+                      {' '}
+                      {isWritingGeneratingAll
+                        ? `Progreso actual: ${Math.max(1, Math.min(99, Math.round(writingGenerationProgress)))}%.`
+                        : writingGenerationProgress > 0
+                          ? `Último avance: ${Math.max(0, Math.min(100, Math.round(writingGenerationProgress)))}%.`
+                          : ''}
                     </p>
                     <div className="writing-progress">
                       <div className="writing-progress__bar" style={{ width: `${Math.max(0, Math.min(100, writingGenerationProgress))}%` }} />

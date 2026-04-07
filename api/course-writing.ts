@@ -70,6 +70,8 @@ const writingSectionTemplatesByFormat: Record<string, string[]> = {
 
 const DEFAULT_EXTRACTION_TIMEOUT_MS = 55000;
 const DEFAULT_SYNC_EXTRACTION_MAX_BYTES = 24 * 1024 * 1024;
+const DEFAULT_WRITING_AI_TIMEOUT_MS = 50000;
+const DEFAULT_WRITING_AI_CONTEXT_CHARS = 14000;
 
 function resolveExtractionTimeoutMs() {
   const configured = Number(process.env.WRITING_EXTRACTION_TIMEOUT_MS ?? DEFAULT_EXTRACTION_TIMEOUT_MS);
@@ -85,6 +87,22 @@ function resolveSyncExtractionMaxBytes() {
     return DEFAULT_SYNC_EXTRACTION_MAX_BYTES;
   }
   return Math.max(2 * 1024 * 1024, Math.min(40 * 1024 * 1024, Math.trunc(configured)));
+}
+
+function resolveWritingAiTimeoutMs() {
+  const configured = Number(process.env.WRITING_AI_TIMEOUT_MS ?? DEFAULT_WRITING_AI_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_WRITING_AI_TIMEOUT_MS;
+  }
+  return Math.max(10000, Math.min(90000, Math.trunc(configured)));
+}
+
+function resolveWritingAiContextChars() {
+  const configured = Number(process.env.WRITING_AI_CONTEXT_CHARS ?? DEFAULT_WRITING_AI_CONTEXT_CHARS);
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_WRITING_AI_CONTEXT_CHARS;
+  }
+  return Math.max(4000, Math.min(28000, Math.trunc(configured)));
 }
 
 class ExtractionTimeoutError extends Error {
@@ -477,6 +495,74 @@ function stringifyLibraryResource(resource: Awaited<ReturnType<typeof findLibrar
     .join('\n');
 }
 
+function compactPromptText(value: string, maxChars: number) {
+  const normalized = stripHtml(value)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxChars).trim()}\n\n[Contexto resumido automáticamente para acelerar la generación]`;
+}
+
+function takePromptChunks(items: string[], maxChars: number) {
+  const output: string[] = [];
+  let used = 0;
+
+  for (const item of items) {
+    const trimmed = item.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    if (used >= maxChars) {
+      break;
+    }
+
+    const remaining = maxChars - used;
+    const chunk = compactPromptText(trimmed, remaining);
+    if (!chunk) {
+      continue;
+    }
+
+    output.push(chunk);
+    used += chunk.length + 2;
+  }
+
+  return output;
+}
+
+function isRetryableAiFailure(error: unknown) {
+  if (error instanceof ExtractionTimeoutError) {
+    return true;
+  }
+
+  const status =
+    typeof (error as { status?: unknown })?.status === 'number'
+      ? Number((error as { status?: number }).status)
+      : null;
+
+  if (status !== null && [408, 409, 425, 429, 500, 502, 503, 504].includes(status)) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    return /rate limit|timeout|timed out|temporarily|overloaded|ECONNRESET|socket/i.test(
+      error.message,
+    );
+  }
+
+  return false;
+}
+
 export default async function handler(request: Request) {
   if (request.method !== 'POST') {
     return errorResponse(405, 'Método no permitido');
@@ -651,7 +737,10 @@ export default async function handler(request: Request) {
     const libraryResourceIds = payload.libraryResourceIds ?? currentWritingData.libraryResourceIds;
     const aiPrompt = payload.aiPrompt?.trim() || currentWritingData.aiPrompt || '';
 
-    const supportTexts = await Promise.all(
+    const aiContextChars = resolveWritingAiContextChars();
+    const aiTimeoutMs = resolveWritingAiTimeoutMs();
+
+    const supportTextsRaw = await Promise.all(
       supportAssets.map(async (asset) => {
         try {
           const text = await readR2AssetText(asset);
@@ -661,56 +750,112 @@ export default async function handler(request: Request) {
         }
       }),
     );
+    const supportTexts = takePromptChunks(
+      supportTextsRaw,
+      Math.max(3200, Math.floor(aiContextChars * 0.45)),
+    );
 
-    const libraryTexts = (
+    const libraryTextsRaw = (
       await Promise.all(libraryResourceIds.map((resourceId) => findLibraryResourceById(resourceId)))
     )
       .map((resource) => stringifyLibraryResource(resource))
       .filter(Boolean);
+    const libraryTexts = takePromptChunks(
+      libraryTextsRaw,
+      Math.max(2200, Math.floor(aiContextChars * 0.3)),
+    );
 
     const existingSection =
       currentWritingData.sections.find((section) => section.id === sectionId) ??
       buildStructuredSections(product).find((section) => section.id === sectionId);
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Eres un asistente de escritura académica. Redactas una sección del producto respetando estrictamente las especificaciones técnicas dadas. No inventes estructura fuera de lo solicitado. Devuelve texto limpio en español, listo para edición posterior.',
-        },
-        {
-          role: 'user',
-          content: [
-            `Curso: ${course.title}`,
-            `Producto: ${product.title}`,
-            `Sección del producto: ${product.section ?? 'Introducción'}`,
-            `Formato: ${product.format}`,
-            '',
-            'DETALLE ESTRUCTURADO DEL PRODUCTO:',
-            product.body.trim(),
-            '',
-            aiPrompt ? `PROMPT ADICIONAL DEL EXPERTO:\n${aiPrompt}\n` : '',
-            `SECCIÓN A REDACTAR: ${sectionTitle}`,
-            'INSTRUCCIONES DE ESTA PARTE:',
-            sectionInstructions,
-            '',
-            existingSection?.content
-              ? `BORRADOR PREVIO DE ESTA PARTE:\n${existingSection.content}`
-              : 'No hay borrador previo para esta parte.',
-            '',
-            supportTexts.length > 0
-              ? `DOCUMENTOS BASE:\n${supportTexts.join('\n\n---\n\n')}`
-              : 'No se adjuntaron documentos base.',
-            '',
-            libraryTexts.length > 0
-              ? `RECURSOS DE BIBLIOTECA:\n${libraryTexts.join('\n\n---\n\n')}`
-              : 'No se seleccionaron recursos de biblioteca.',
-          ].join('\n'),
-        },
-      ],
-    });
+    const promptSections = [
+      `Curso: ${course.title}`,
+      `Producto: ${product.title}`,
+      `Sección del producto: ${product.section ?? 'Introducción'}`,
+      `Formato: ${product.format}`,
+      '',
+      'DETALLE ESTRUCTURADO DEL PRODUCTO:',
+      compactPromptText(product.body.trim(), Math.max(1800, Math.floor(aiContextChars * 0.18))),
+      '',
+      aiPrompt
+        ? `PROMPT ADICIONAL DEL EXPERTO:\n${compactPromptText(aiPrompt, Math.max(1200, Math.floor(aiContextChars * 0.12)))}\n`
+        : '',
+      `SECCIÓN A REDACTAR: ${sectionTitle}`,
+      'INSTRUCCIONES DE ESTA PARTE:',
+      compactPromptText(sectionInstructions, Math.max(1200, Math.floor(aiContextChars * 0.12))),
+      '',
+      existingSection?.content
+        ? `BORRADOR PREVIO DE ESTA PARTE:\n${compactPromptText(existingSection.content, Math.max(900, Math.floor(aiContextChars * 0.1)))}`
+        : 'No hay borrador previo para esta parte.',
+      '',
+      supportTexts.length > 0
+        ? `DOCUMENTOS BASE:\n${supportTexts.join('\n\n---\n\n')}`
+        : 'No se adjuntaron documentos base.',
+      '',
+      libraryTexts.length > 0
+        ? `RECURSOS DE BIBLIOTECA:\n${libraryTexts.join('\n\n---\n\n')}`
+        : 'No se seleccionaron recursos de biblioteca.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const runCompletion = (model: string) =>
+      withTimeout(
+        openai.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Eres un asistente de escritura académica. Redactas una sección del producto respetando estrictamente las especificaciones técnicas dadas. No inventes estructura fuera de lo solicitado. Devuelve texto limpio en español, listo para edición posterior.',
+            },
+            {
+              role: 'user',
+              content: promptSections,
+            },
+          ],
+          temperature: 0.4,
+        }),
+        aiTimeoutMs,
+        'La generación de esta sección excedió el tiempo máximo.',
+      );
+
+    const primaryModel = process.env.WRITING_AI_MODEL?.trim() || 'gpt-4o-mini';
+    const fallbackModel = primaryModel === 'gpt-4o-mini' ? 'gpt-4o' : 'gpt-4o-mini';
+    let completion: Awaited<ReturnType<typeof openai.chat.completions.create>>;
+
+    try {
+      completion = await runCompletion(primaryModel);
+    } catch (error) {
+      if (!isRetryableAiFailure(error)) {
+        return errorResponse(
+          502,
+          error instanceof Error
+            ? `No fue posible generar esta sección: ${error.message}`
+            : 'No fue posible generar esta sección.',
+        );
+      }
+
+      try {
+        completion = await runCompletion(fallbackModel);
+      } catch (fallbackError) {
+        const status =
+          typeof (fallbackError as { status?: unknown })?.status === 'number'
+            ? Number((fallbackError as { status?: number }).status)
+            : null;
+        const normalizedStatus =
+          status !== null && [408, 409, 425, 429, 500, 502, 503, 504].includes(status)
+            ? status
+            : 504;
+        return errorResponse(
+          normalizedStatus,
+          fallbackError instanceof Error
+            ? `No fue posible generar esta sección: ${fallbackError.message}`
+            : 'No fue posible generar esta sección en este momento.',
+        );
+      }
+    }
 
     const generatedText = completion.choices[0]?.message?.content?.trim() ?? '';
 
