@@ -10,6 +10,7 @@ import {
 import {
   ChevronRight,
   CircleUserRound,
+  ChartNoAxesCombined,
   Command,
   FolderKanban,
   LayoutDashboard,
@@ -56,6 +57,7 @@ const commandKindLabel: Record<CommandItem['kind'], string> = {
 
 const primaryNavigation = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/analytics', label: 'Analítica', icon: ChartNoAxesCombined },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
   { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
@@ -154,6 +156,10 @@ export function AppShell({
 
     if (location.pathname === '/courses') {
       return [{ label: 'Mis cursos', path: '/courses' }];
+    }
+
+    if (location.pathname === '/analytics') {
+      return [{ label: 'Analítica', path: '/analytics' }];
     }
 
     if (courseMatch && activeCourse) {
@@ -309,6 +315,13 @@ export function AppShell({
       };
     }
 
+    if (location.pathname === '/analytics') {
+      return {
+        kicker: 'Inteligencia operativa',
+        title: 'Analítica',
+      };
+    }
+
     if (location.pathname === '/library') {
       return {
         kicker: 'Recursos y producción',
@@ -393,6 +406,14 @@ export function AppShell({
         path: '/courses',
         kind: 'view',
         keywords: 'cursos expediente portafolio mis cursos',
+      },
+      {
+        id: 'view-analytics',
+        title: 'Analítica',
+        meta: 'Indicadores y desempeño',
+        path: '/analytics',
+        kind: 'view',
+        keywords: 'analitica analytics indicadores calidad eficiencia tiempos portafolio',
       },
       {
         id: 'view-library',

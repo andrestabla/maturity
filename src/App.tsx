@@ -12,6 +12,9 @@ import type { Role } from './types.js';
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage.js').then((module) => ({ default: module.DashboardPage })),
 );
+const AnalyticsPage = lazy(() =>
+  import('./pages/AnalyticsPage.js').then((module) => ({ default: module.AnalyticsPage })),
+);
 const CoursesPage = lazy(() =>
   import('./pages/CoursesPage.js').then((module) => ({ default: module.CoursesPage })),
 );
@@ -239,6 +242,17 @@ export default function App() {
                 appData={appData}
                 isLoading={isLoading}
                 refreshAppData={refreshAppData}
+              />
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <AnalyticsPage
+                role={activeRole}
+                viewer={session.user}
+                appData={appData}
+                isLoading={isLoading}
               />
             }
           />

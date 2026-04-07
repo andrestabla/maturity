@@ -99,6 +99,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Control total sobre dashboard, cursos, biblioteca y configuración.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta y administra widgets, reglas e indicadores globales.' },
+      { name: 'Analítica', permissions: 'Control total sobre KPI operativos, calidad, tiempos y comportamiento del portafolio.' },
       { name: 'Mis cursos', permissions: 'Consulta, crea, edita, aprueba, devuelve, cierra y administra.' },
       { name: 'Biblioteca', permissions: 'Control total sobre recursos, metadatos y gobierno documental.' },
     ],
@@ -109,6 +110,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Planeación, seguimiento, asignaciones, alertas y cierre.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta cursos, alertas y cartera de trabajo.' },
+      { name: 'Analítica', permissions: 'Consulta desempeño del portafolio, cumplimiento y cargas por rol.' },
       { name: 'Mis cursos', permissions: 'Crea, edita, puede cerrar y opera puntos de control definidos.' },
       { name: 'Biblioteca', permissions: 'Consulta y carga recursos de apoyo cuando lo requiere el flujo.' },
     ],
@@ -119,6 +121,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Autoría, consistencia de resultados y justificación de recursos.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta su cartera de tareas y cursos asociados.' },
+      { name: 'Analítica', permissions: 'Consulta indicadores de productividad, tiempos y retrabajo en su alcance.' },
       { name: 'Mis cursos', permissions: 'Edita componentes de autoría y curación dentro de su alcance.' },
       { name: 'Biblioteca', permissions: 'Consulta, crea y edita recursos curados o propios.' },
     ],
@@ -129,6 +132,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Arquitectura, revisión, observaciones y aprobación pedagógica.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta cartera y alertas por revisión pedagógica.' },
+      { name: 'Analítica', permissions: 'Consulta calidad instruccional, devoluciones y eficiencia por etapa.' },
       { name: 'Mis cursos', permissions: 'Edita, aprueba o devuelve entregables según la etapa pedagógica.' },
       { name: 'Biblioteca', permissions: 'Consulta, crea y edita recursos; aprueba si el flujo lo define.' },
     ],
@@ -139,6 +143,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Piezas, estados de producción, retroalimentación y versiones.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta recursos y trabajo asignado.' },
+      { name: 'Analítica', permissions: 'Consulta tiempos multimedia, carga de trabajo y cuellos de botella.' },
       { name: 'Mis cursos', permissions: 'Edita recursos propios; puede devolver piezas en flujos internos.' },
       { name: 'Biblioteca', permissions: 'Consulta, crea y edita recursos multimedia.' },
     ],
@@ -149,6 +154,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Montaje, navegación, etiquetas, enlaces y funcionamiento.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta cursos listos para implementación o con bloqueos técnicos.' },
+      { name: 'Analítica', permissions: 'Consulta desempeño técnico, tiempos LMS y alertas de implementación.' },
       { name: 'Mis cursos', permissions: 'Consulta y edita la capa de implementación técnica.' },
       { name: 'Biblioteca', permissions: 'Consulta recursos aprobados y los integra al LMS.' },
     ],
@@ -159,6 +165,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Checklist final, hallazgos, cierre y liberación.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta cursos en revisión final y hallazgos abiertos.' },
+      { name: 'Analítica', permissions: 'Consulta tasas de devolución, retrabajo y señales de calidad final.' },
       { name: 'Mis cursos', permissions: 'Edita registros de revisión y puede aprobar o devolver.' },
       { name: 'Biblioteca', permissions: 'Consulta evidencias y recursos para validar integridad.' },
     ],
@@ -169,6 +176,7 @@ export const defaultRoleProfiles: RoleProfile[] = [
     focus: 'Visibilidad, control formal y validación institucional.',
     modules: [
       { name: 'Dashboard', permissions: 'Consulta indicadores, cartera final y alertas relevantes.' },
+      { name: 'Analítica', permissions: 'Consulta indicadores globales de control y cumplimiento del sistema.' },
       { name: 'Mis cursos', permissions: 'Consulta; puede aprobar o devolver si existe punto formal de auditoría.' },
       { name: 'Biblioteca', permissions: 'Consulta evidencias y materiales asociados al curso.' },
     ],
