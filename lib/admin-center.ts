@@ -29,7 +29,6 @@ import { probeR2Connectivity } from './r2.js';
 import {
   getInstitutionSettingsRecord,
   getUserDirectory,
-  prepareDatabase,
   syncInstitutionSettingsRecord,
 } from './store.js';
 
@@ -72,6 +71,9 @@ interface IntegrationTestResult {
   detail: string;
   lastError: string | null;
 }
+
+let adminCenterSchemaPromise: Promise<void> | null = null;
+let adminCenterDefaultsPromise: Promise<void> | null = null;
 
 function parseJson<T>(value: JsonValue): T {
   if (typeof value === 'string') {
@@ -1435,169 +1437,186 @@ async function verifyVercelRuntime(config: Record<string, string>): Promise<Inte
 }
 
 async function ensureAdminCenterSchema() {
-  await prepareDatabase();
-  const sql = getSql();
-  await sql`SELECT pg_advisory_lock(3612026)`;
+  if (!adminCenterSchemaPromise) {
+    adminCenterSchemaPromise = (async () => {
+      const sql = getSql();
+      await sql`SELECT pg_advisory_lock(3612026)`;
 
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS maturity_admin_settings (
-        key TEXT PRIMARY KEY,
-        value JSONB NOT NULL,
-        updated_at TEXT NOT NULL,
-        updated_by TEXT
-      )
-    `;
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS maturity_admin_settings (
+            key TEXT PRIMARY KEY,
+            value JSONB NOT NULL,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT
+          )
+        `;
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS maturity_admin_integrations (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        description TEXT NOT NULL,
-        enabled BOOLEAN NOT NULL DEFAULT false,
-        status TEXT NOT NULL DEFAULT 'Pendiente',
-        scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
-        config JSONB NOT NULL DEFAULT '{}'::jsonb,
-        notes TEXT NOT NULL DEFAULT '',
-        fallback_to TEXT NOT NULL DEFAULT '',
-        last_test_at TEXT,
-        last_error TEXT,
-        updated_at TEXT NOT NULL
-      )
-    `;
+        await sql`
+          CREATE TABLE IF NOT EXISTS maturity_admin_integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            description TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT false,
+            status TEXT NOT NULL DEFAULT 'Pendiente',
+            scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+            config JSONB NOT NULL DEFAULT '{}'::jsonb,
+            notes TEXT NOT NULL DEFAULT '',
+            fallback_to TEXT NOT NULL DEFAULT '',
+            last_test_at TEXT,
+            last_error TEXT,
+            updated_at TEXT NOT NULL
+          )
+        `;
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS maturity_admin_logs (
-        id TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        category TEXT NOT NULL,
-        module TEXT NOT NULL,
-        service TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        event TEXT NOT NULL,
-        result TEXT NOT NULL,
-        detail TEXT NOT NULL,
-        user_id TEXT,
-        user_name TEXT
-      )
-    `;
+        await sql`
+          CREATE TABLE IF NOT EXISTS maturity_admin_logs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            category TEXT NOT NULL,
+            module TEXT NOT NULL,
+            service TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            event TEXT NOT NULL,
+            result TEXT NOT NULL,
+            detail TEXT NOT NULL,
+            user_id TEXT,
+            user_name TEXT
+          )
+        `;
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS maturity_admin_audit (
-        id TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        classification TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        action TEXT NOT NULL,
-        actor_id TEXT,
-        actor_name TEXT NOT NULL,
-        detail TEXT NOT NULL,
-        before_value TEXT,
-        after_value TEXT
-      )
-    `;
-  } finally {
-    await sql`SELECT pg_advisory_unlock(3612026)`;
+        await sql`
+          CREATE TABLE IF NOT EXISTS maturity_admin_audit (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            classification TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            actor_id TEXT,
+            actor_name TEXT NOT NULL,
+            detail TEXT NOT NULL,
+            before_value TEXT,
+            after_value TEXT
+          )
+        `;
+      } finally {
+        await sql`SELECT pg_advisory_unlock(3612026)`;
+      }
+    })().catch((error) => {
+      adminCenterSchemaPromise = null;
+      throw error;
+    });
   }
+
+  return adminCenterSchemaPromise;
 }
 
 async function seedAdminCenterDefaults() {
-  await ensureAdminCenterSchema();
-  const sql = getSql();
-  const timestamp = new Date().toISOString();
-  const baseInstitution = buildDefaultInstitutionSettings();
-  const institution = {
-    displayName: baseInstitution.displayName,
-    supportEmail: baseInstitution.supportEmail,
-    defaultDomain: baseInstitution.defaultDomain,
-    defaultUserState: baseInstitution.defaultUserState,
-    allowAutoProvisioning: baseInstitution.allowAutoProvisioning,
-  };
+  if (!adminCenterDefaultsPromise) {
+    adminCenterDefaultsPromise = (async () => {
+      await ensureAdminCenterSchema();
+      const sql = getSql();
+      const timestamp = new Date().toISOString();
+      const baseInstitution = buildDefaultInstitutionSettings();
+      const institution = {
+        displayName: baseInstitution.displayName,
+        supportEmail: baseInstitution.supportEmail,
+        defaultDomain: baseInstitution.defaultDomain,
+        defaultUserState: baseInstitution.defaultUserState,
+        allowAutoProvisioning: baseInstitution.allowAutoProvisioning,
+      };
 
-  await sql`
-    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
-    VALUES (
-      ${'institution'},
-      ${JSON.stringify(institution)}::jsonb,
-      ${timestamp},
-      ${'system'}
-    )
-    ON CONFLICT (key) DO NOTHING
-  `;
+      await sql`
+        INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+        VALUES (
+          ${'institution'},
+          ${JSON.stringify(institution)}::jsonb,
+          ${timestamp},
+          ${'system'}
+        )
+        ON CONFLICT (key) DO NOTHING
+      `;
 
-  await sql`
-    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
-    VALUES (
-      ${'branding'},
-      ${JSON.stringify(defaultBranding)}::jsonb,
-      ${timestamp},
-      ${'system'}
-    )
-    ON CONFLICT (key) DO NOTHING
-  `;
+      await sql`
+        INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+        VALUES (
+          ${'branding'},
+          ${JSON.stringify(defaultBranding)}::jsonb,
+          ${timestamp},
+          ${'system'}
+        )
+        ON CONFLICT (key) DO NOTHING
+      `;
 
-  await sql`
-    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
-    VALUES (
-      ${'experience'},
-      ${JSON.stringify(defaultExperienceSettings)}::jsonb,
-      ${timestamp},
-      ${'system'}
-    )
-    ON CONFLICT (key) DO NOTHING
-  `;
+      await sql`
+        INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+        VALUES (
+          ${'experience'},
+          ${JSON.stringify(defaultExperienceSettings)}::jsonb,
+          ${timestamp},
+          ${'system'}
+        )
+        ON CONFLICT (key) DO NOTHING
+      `;
 
-  await sql`
-    INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
-    VALUES (
-      ${'workflow'},
-      ${JSON.stringify(defaultWorkflowSettings)}::jsonb,
-      ${timestamp},
-      ${'system'}
-    )
-    ON CONFLICT (key) DO NOTHING
-  `;
+      await sql`
+        INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+        VALUES (
+          ${'workflow'},
+          ${JSON.stringify(defaultWorkflowSettings)}::jsonb,
+          ${timestamp},
+          ${'system'}
+        )
+        ON CONFLICT (key) DO NOTHING
+      `;
 
-  for (const integration of defaultIntegrationPresets) {
-    await sql`
-      INSERT INTO maturity_admin_integrations (
-        id,
-        name,
-        category,
-        provider,
-        description,
-        enabled,
-        status,
-        scopes,
-        config,
-        notes,
-        fallback_to,
-        last_test_at,
-        last_error,
-        updated_at
-      )
-      VALUES (
-        ${integration.id},
-        ${integration.name},
-        ${integration.category},
-        ${integration.provider},
-        ${integration.description},
-        ${integration.enabled},
-        ${integration.status},
-        ${JSON.stringify(integration.scopes)}::jsonb,
-        ${JSON.stringify(integration.config)}::jsonb,
-        ${integration.notes},
-        ${integration.fallbackTo},
-        ${integration.lastTestAt},
-        ${integration.lastError},
-        ${timestamp}
-      )
-      ON CONFLICT (id) DO NOTHING
-    `;
+      for (const integration of defaultIntegrationPresets) {
+        await sql`
+          INSERT INTO maturity_admin_integrations (
+            id,
+            name,
+            category,
+            provider,
+            description,
+            enabled,
+            status,
+            scopes,
+            config,
+            notes,
+            fallback_to,
+            last_test_at,
+            last_error,
+            updated_at
+          )
+          VALUES (
+            ${integration.id},
+            ${integration.name},
+            ${integration.category},
+            ${integration.provider},
+            ${integration.description},
+            ${integration.enabled},
+            ${integration.status},
+            ${JSON.stringify(integration.scopes)}::jsonb,
+            ${JSON.stringify(integration.config)}::jsonb,
+            ${integration.notes},
+            ${integration.fallbackTo},
+            ${integration.lastTestAt},
+            ${integration.lastError},
+            ${timestamp}
+          )
+          ON CONFLICT (id) DO NOTHING
+        `;
+      }
+    })().catch((error) => {
+      adminCenterDefaultsPromise = null;
+      throw error;
+    });
   }
+
+  return adminCenterDefaultsPromise;
 }
 
 async function readSetting<T>(key: string, fallbackValue: T): Promise<T> {

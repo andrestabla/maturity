@@ -42,8 +42,25 @@ export interface OrchestratorResult {
   fetchedAt?: string;
 }
 
-// Timeout per individual provider (ms)
-const PROVIDER_TIMEOUT_MS = 5000;
+const DEFAULT_PROVIDERS_BY_GROUP: Record<LibraryGroup, LibraryProvider[]> = {
+  Investigacion: ['openalex'],
+  Didacticos: ['phet'],
+  YouTube: ['youtube'],
+  Institucional: [],
+  Otros: ['openalex'],
+};
+
+const PROVIDER_TIMEOUT_MS_BY_PROVIDER: Partial<Record<LibraryProvider, number>> = {
+  openalex: 2200,
+  arxiv: 2200,
+  phet: 1800,
+  youtube: 2800,
+  'semantic-scholar': 2400,
+  scielo: 2400,
+  redalyc: 2400,
+  core: 2000,
+  'oer-commons': 2000,
+};
 
 type AdapterFn = (params: SearchParams, signal?: AbortSignal) => Promise<LibrarySearchResult[]>;
 
@@ -61,14 +78,20 @@ const PROVIDER_REGISTRY: Record<string, { adapter: AdapterFn; groups: LibraryGro
 };
 
 function getProvidersForGroup(group: LibraryGroup, filterProviders?: LibraryProvider[]): LibraryProvider[] {
-  const all = (Object.entries(PROVIDER_REGISTRY) as [LibraryProvider, { groups: LibraryGroup[] }][])
+  const groupProviders = (Object.entries(PROVIDER_REGISTRY) as [LibraryProvider, { groups: LibraryGroup[] }][])
     .filter(([, cfg]) => cfg.groups.includes(group))
     .map(([provider]) => provider);
 
   if (filterProviders && filterProviders.length > 0) {
-    return all.filter((p) => filterProviders.includes(p));
+    return groupProviders.filter((provider) => filterProviders.includes(provider));
   }
-  return all;
+
+  return (DEFAULT_PROVIDERS_BY_GROUP[group] ?? [])
+    .filter((provider) => groupProviders.includes(provider));
+}
+
+function getProviderTimeoutMs(provider: LibraryProvider) {
+  return PROVIDER_TIMEOUT_MS_BY_PROVIDER[provider] ?? 2200;
 }
 
 /**
@@ -80,7 +103,8 @@ async function runProvider(
 ): Promise<{ provider: LibraryProvider; results: LibrarySearchResult[]; error?: string; durationMs: number }> {
   const start = Date.now();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const timeoutMs = getProviderTimeoutMs(provider);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const cfg = PROVIDER_REGISTRY[provider];
@@ -91,7 +115,7 @@ async function runProvider(
     const error =
       err instanceof Error
         ? err.name === 'AbortError'
-          ? `Timeout (>${PROVIDER_TIMEOUT_MS}ms)`
+          ? `Timeout (>${timeoutMs}ms)`
           : err.message
         : 'Error desconocido';
     return { provider, results: [], error, durationMs: Date.now() - start };
@@ -109,6 +133,10 @@ export async function federatedSearch(
   params: SearchParams,
 ): Promise<OrchestratorResult> {
   const providerIntegrations = params.providerIntegrations ?? (await getLibraryProviderIntegrationStates());
+  const resolvedParams: SearchParams = {
+    ...params,
+    providerIntegrations,
+  };
   const requestedProviders = getProvidersForGroup(group, params.providers);
   const providerStates: ProviderResult[] = [];
   const providers = requestedProviders.filter((provider) => {
@@ -142,7 +170,7 @@ export async function federatedSearch(
   }
 
   // Dispatch all providers concurrently
-  const settled = await Promise.allSettled(providers.map((p) => runProvider(p, params)));
+  const settled = await Promise.allSettled(providers.map((p) => runProvider(p, resolvedParams)));
 
   const allRaw: LibrarySearchResult[] = [];
 
@@ -202,8 +230,14 @@ function canonicalDedupeKey(r: LibrarySearchResult): string {
     if (normalized) return `doi:${normalized}`;
   }
 
-  // 2. arXiv ID in canonicalKey
-  if (r.canonicalKey.startsWith('arxiv:')) return r.canonicalKey;
+  // 2. Stable provider-specific canonical keys
+  if (
+    r.canonicalKey.startsWith('arxiv:')
+    || r.canonicalKey.startsWith('youtube:')
+    || r.canonicalKey.startsWith('seed:')
+  ) {
+    return r.canonicalKey;
+  }
 
   // 3. Canonical URL normalized
   const url = r.canonicalUrl || '';

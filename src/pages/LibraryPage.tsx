@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -158,6 +158,8 @@ const DEFAULT_FILTERS: SearchFilters = {
   resourceTypes: [],
   minScore: 0,
 };
+
+const SEARCH_REQUEST_TIMEOUT_MS = 6500;
 
 const LANDING_RECOMMENDATIONS = [
   createSeedResult({
@@ -523,6 +525,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
   const [hasExecutedSearch, setHasExecutedSearch] = useState(false);
+  const activeSearchControllerRef = useRef<AbortController | null>(null);
+  const activeSearchRequestIdRef = useRef(0);
 
   const visibleCourses = getVisibleCourses(appData, role, viewer);
   const courseOptions = visibleCourses.map((course) => ({
@@ -611,6 +615,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     const searchGroup = inferGroupForSearch(nextGroup, nextFilters);
     const scenarioResults = resolveScenarioResults(trimmedQuery);
     const providerFilters = buildProviderFiltersFromVisualSources(nextFilters.sources);
+    const requestId = activeSearchRequestIdRef.current + 1;
+    activeSearchRequestIdRef.current = requestId;
+
+    activeSearchControllerRef.current?.abort();
+    const controller = new AbortController();
+    activeSearchControllerRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), SEARCH_REQUEST_TIMEOUT_MS);
 
     setIsSearching(true);
     setSelectedIds([]);
@@ -629,7 +640,9 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       if (nextFilters.openAccess) params.set('open_access', 'true');
       if (providerFilters.length > 0) params.set('providers', providerFilters.join(','));
 
-      const response = await fetch(`/api/library/search?${params.toString()}`);
+      const response = await fetch(`/api/library/search?${params.toString()}`, {
+        signal: controller.signal,
+      });
 
       if (!response.ok) {
         let errorMessage = 'No se pudo completar la búsqueda federada.';
@@ -650,6 +663,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         providerStates: ProviderState[];
       };
 
+      if (requestId !== activeSearchRequestIdRef.current) {
+        return;
+      }
+
       const mergedResults = mergeResults(scenarioResults, payload.results ?? []);
       setResults(mergedResults);
       setSearchMeta({
@@ -659,6 +676,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         total: mergedResults.length,
       });
     } catch (error) {
+      if (requestId !== activeSearchRequestIdRef.current) {
+        return;
+      }
+
       if (scenarioResults.length > 0) {
         setResults(scenarioResults);
         setSearchMeta({
@@ -666,16 +687,25 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           providerStates: [],
         });
       } else {
+        const message = error instanceof Error && error.name === 'AbortError'
+          ? 'La búsqueda tardó demasiado. Mostramos solo integraciones rápidas y puedes volver a intentar.'
+          : error instanceof Error
+            ? error.message
+            : 'No fue posible consultar la biblioteca.';
         setResults([]);
         setSearchMeta({});
         await showAlert({
           title: 'Error de búsqueda',
-          message: error instanceof Error ? error.message : 'No fue posible consultar la biblioteca.',
+          message,
           tone: 'error',
         });
       }
     } finally {
-      setIsSearching(false);
+      window.clearTimeout(timeout);
+      if (requestId === activeSearchRequestIdRef.current) {
+        activeSearchControllerRef.current = null;
+        setIsSearching(false);
+      }
     }
   }, [showAlert]);
 
