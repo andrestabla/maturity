@@ -20,7 +20,6 @@ import {
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
 import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
-import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
   AuthUser,
@@ -510,12 +509,12 @@ function inferGroupForSearch(group: LibraryGroup, filters: SearchFilters): Libra
 }
 
 export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPageProps) {
-  const { showAlert } = useSystemDialog();
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Investigacion');
   const [results, setResults] = useState<LibrarySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchWarning, setSearchWarning] = useState<string | null>(null);
   const [searchMeta, setSearchMeta] = useState<SearchMeta>({});
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
@@ -628,6 +627,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     setVisibleLimit(9);
     setHasExecutedSearch(true);
     setSubmittedQuery(trimmedQuery);
+    setSearchWarning(null);
 
     try {
       const params = new URLSearchParams({
@@ -680,26 +680,24 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         return;
       }
 
-      if (scenarioResults.length > 0) {
-        setResults(scenarioResults);
-        setSearchMeta({
-          total: scenarioResults.length,
-          providerStates: [],
-        });
-      } else {
-        const message = error instanceof Error && error.name === 'AbortError'
-          ? 'La búsqueda tardó demasiado. Mostramos solo integraciones rápidas y puedes volver a intentar.'
-          : error instanceof Error
-            ? error.message
-            : 'No fue posible consultar la biblioteca.';
-        setResults([]);
-        setSearchMeta({});
-        await showAlert({
-          title: 'Error de búsqueda',
-          message,
-          tone: 'error',
-        });
-      }
+      const timeoutError = error instanceof Error && error.name === 'AbortError';
+      const fallbackResults = scenarioResults.length > 0 ? scenarioResults : results;
+      const fallbackMeta = fallbackResults.length > 0
+        ? {
+            total: fallbackResults.length,
+            providerStates: searchMeta.providerStates ?? [],
+            cached: searchMeta.cached,
+            fetchedAt: searchMeta.fetchedAt,
+          }
+        : {};
+
+      setResults(fallbackResults);
+      setSearchMeta(fallbackMeta);
+      setSearchWarning(
+        timeoutError
+          ? 'La consulta tardó más de lo esperado. Mostramos resultados disponibles para mantener el flujo.'
+          : 'Algunos adaptadores no respondieron. Mostramos resultados disponibles.',
+      );
     } finally {
       window.clearTimeout(timeout);
       if (requestId === activeSearchRequestIdRef.current) {
@@ -707,7 +705,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         setIsSearching(false);
       }
     }
-  }, [showAlert]);
+  }, [results, searchMeta]);
 
   async function handleAddToCourse(asset: LibrarySearchResult, courseSlug: string, targetUnit?: string) {
     const response = await fetch('/api/library/course-links', {
@@ -1083,7 +1081,11 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           <section className="library-results-empty">
             <Search size={42} />
             <h2>Sin resultados en este refinamiento</h2>
-            <p>Ajusta el texto de búsqueda o relaja uno de los filtros avanzados para ampliar el grid.</p>
+            <p>
+              {searchWarning
+                ? `${searchWarning} Ajusta el texto o relaja filtros para ampliar el grid.`
+                : 'Ajusta el texto de búsqueda o relaja uno de los filtros avanzados para ampliar el grid.'}
+            </p>
           </section>
         ) : (
           <section className="library-results-section">
@@ -1130,6 +1132,16 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                     <small>{providerState.error ? providerState.error : `${providerState.count} resultados`}</small>
                   </span>
                 ))}
+              </div>
+            ) : null}
+
+            {searchWarning ? (
+              <div className="library-provider-strip">
+                <span className="library-provider-strip__item is-error">
+                  <AlertCircle size={12} />
+                  <strong>Rendimiento</strong>
+                  <small>{searchWarning}</small>
+                </span>
               </div>
             ) : null}
 
