@@ -66,8 +66,8 @@ const writingSectionTemplatesByFormat: Record<string, string[]> = {
   guia: ['Título', 'Introducción', 'Desarrollo', 'Cierre', 'Bibliografía'],
 };
 
-const DEFAULT_EXTRACTION_TIMEOUT_MS = 20000;
-const DEFAULT_SYNC_EXTRACTION_MAX_BYTES = 12 * 1024 * 1024;
+const DEFAULT_EXTRACTION_TIMEOUT_MS = 55000;
+const DEFAULT_SYNC_EXTRACTION_MAX_BYTES = 24 * 1024 * 1024;
 
 function resolveExtractionTimeoutMs() {
   const configured = Number(process.env.WRITING_EXTRACTION_TIMEOUT_MS ?? DEFAULT_EXTRACTION_TIMEOUT_MS);
@@ -324,8 +324,34 @@ function hydrateWritingSectionsFromText(
 
   const hasSpecificBuckets = buffers.some((buffer, index) => index > 0 && buffer.join('').trim());
   if (!hasSpecificBuckets) {
-    nextSections[0].content = normalizePlainTextToHtml(cleanText);
-    nextSections[0].updatedAt = new Date().toISOString();
+    const paragraphs = cleanText
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    if (paragraphs.length <= 1 || nextSections.length <= 1) {
+      nextSections[0].content = normalizePlainTextToHtml(cleanText);
+      nextSections[0].updatedAt = new Date().toISOString();
+      return nextSections;
+    }
+
+    const chunks = nextSections.map(() => [] as string[]);
+    paragraphs.forEach((paragraph, index) => {
+      const bucket = Math.min(
+        nextSections.length - 1,
+        Math.floor((index / Math.max(paragraphs.length, 1)) * nextSections.length),
+      );
+      chunks[bucket].push(paragraph);
+    });
+
+    nextSections.forEach((section, index) => {
+      const chunkText = chunks[index].join('\n\n').trim();
+      if (chunkText) {
+        section.content = normalizePlainTextToHtml(chunkText);
+        section.updatedAt = new Date().toISOString();
+      }
+    });
+
     return nextSections;
   }
 
@@ -487,7 +513,7 @@ export default async function handler(request: Request) {
         return errorResponse(400, error.message);
       }
 
-      if (error instanceof ExtractionTimeoutError || error instanceof Error) {
+      if (error instanceof ExtractionTimeoutError) {
         return jsonResponse({
           product: stagedProduct,
           extractedText: '',
@@ -497,7 +523,12 @@ export default async function handler(request: Request) {
         });
       }
 
-      throw error;
+      return errorResponse(
+        502,
+        error instanceof Error
+          ? `No fue posible procesar el archivo: ${error.message}`
+          : 'No fue posible procesar el archivo cargado.',
+      );
     }
 
     if (!extractedText.trim()) {

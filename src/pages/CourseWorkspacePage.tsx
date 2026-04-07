@@ -132,7 +132,7 @@ const writingWorkspaceRoutes: WritingWorkspaceRoute[] = ['upload', 'ai', 'manual
 
 const WRITING_LAUNCH_STORAGE_KEY = 'maturity-writing-launch-v1';
 const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
-const WRITING_EXTRACTION_REQUEST_TIMEOUT_MS = 25000;
+const WRITING_EXTRACTION_REQUEST_TIMEOUT_MS = 70000;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
 
 interface WritingLaunchSnapshot {
@@ -4790,6 +4790,7 @@ export function CourseWorkspacePage({
     setWritingProcessingProgress(0);
     let controller: AbortController | null = null;
     let timeoutId: number | null = null;
+    let processingTicker: number | null = null;
     let uploadedAsset: ProductWritingAsset | null = null;
     let completed = false;
 
@@ -4805,6 +4806,20 @@ export function CourseWorkspacePage({
         submittedAsset: uploadedAsset ?? current.submittedAsset,
       }));
       setWritingProcessingProgress(18);
+      processingTicker = window.setInterval(() => {
+        setWritingProcessingProgress((current) => {
+          if (current >= 92) {
+            return current;
+          }
+          if (current < 45) {
+            return Math.min(92, current + 7);
+          }
+          if (current < 72) {
+            return Math.min(92, current + 4);
+          }
+          return Math.min(92, current + 2);
+        });
+      }, 800);
       controller = new AbortController();
       timeoutId = window.setTimeout(() => controller?.abort(), WRITING_EXTRACTION_REQUEST_TIMEOUT_MS);
 
@@ -4864,6 +4879,9 @@ export function CourseWorkspacePage({
     } finally {
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
+      }
+      if (processingTicker !== null) {
+        window.clearInterval(processingTicker);
       }
       setIsWritingExtracting(false);
       if (!completed) {
@@ -5045,8 +5063,11 @@ export function CourseWorkspacePage({
             <strong>{step.title}</strong>
             <p>{step.detail}</p>
             {typeof step.progress === 'number' ? (
-              <div className="writing-progress">
-                <div className="writing-progress__bar" style={{ width: `${Math.max(0, Math.min(100, step.progress))}%` }} />
+              <div className="writing-progress-wrap">
+                <div className="writing-progress">
+                  <div className="writing-progress__bar" style={{ width: `${Math.max(0, Math.min(100, step.progress))}%` }} />
+                </div>
+                <span className="writing-progress__value">{Math.max(0, Math.min(100, Math.round(step.progress)))}%</span>
               </div>
             ) : null}
           </article>
@@ -5156,7 +5177,9 @@ export function CourseWorkspacePage({
         detail:
           writingDraft.extractedText || filledSections > 0
             ? 'El documento ya fue digitalizado y convertido a texto editable.'
-            : 'El sistema extrae texto procesable para el editor online.',
+            : isWritingExtracting
+              ? `Extrayendo contenido y organizando secciones (${Math.max(1, Math.min(99, writingProcessingProgress))}%).`
+              : 'El sistema extrae texto procesable para el editor online.',
         status:
           writingDraft.extractedText || filledSections > 0
             ? ('done' as const)

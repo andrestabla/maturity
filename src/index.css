@@ -10336,11 +10336,25 @@ body::after {
   overflow: hidden;
 }
 
+.writing-progress-wrap {
+  display: grid;
+  gap: 8px;
+}
+
 .writing-progress__bar {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-strong) 86%, white));
   transition: width 180ms ease;
+}
+
+.writing-progress__value {
+  justify-self: end;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .writing-step-stage {
