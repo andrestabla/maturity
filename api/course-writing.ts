@@ -30,6 +30,7 @@ interface WritingPayload {
   productId?: string;
   writingData?: ProductWritingData;
   asset?: ProductWritingAsset;
+  assetContentBase64?: string;
   libraryResourceIds?: string[];
   sectionId?: string;
   sectionTitle?: string;
@@ -503,11 +504,25 @@ export default async function handler(request: Request) {
 
     let extractedText = '';
     try {
-      extractedText = await withTimeout(
-        readR2AssetText(payload.asset),
-        resolveExtractionTimeoutMs(),
-        'La digitalización tardó demasiado para esta carga.',
-      );
+      const inlineBase64 = payload.assetContentBase64?.trim();
+      if (inlineBase64) {
+        const inlineBuffer = Buffer.from(inlineBase64, 'base64');
+        extractedText = await withTimeout(
+          extractTextFromBuffer(
+            inlineBuffer,
+            payload.asset.name,
+            payload.asset.contentType,
+          ),
+          resolveExtractionTimeoutMs(),
+          'La digitalización tardó demasiado para esta carga.',
+        );
+      } else {
+        extractedText = await withTimeout(
+          readR2AssetText(payload.asset),
+          resolveExtractionTimeoutMs(),
+          'La digitalización tardó demasiado para esta carga.',
+        );
+      }
     } catch (error) {
       if (error instanceof Error && /Formato no soportado/i.test(error.message)) {
         return errorResponse(400, error.message);

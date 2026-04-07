@@ -133,6 +133,8 @@ const writingWorkspaceRoutes: WritingWorkspaceRoute[] = ['upload', 'ai', 'manual
 const WRITING_LAUNCH_STORAGE_KEY = 'maturity-writing-launch-v1';
 const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
 const WRITING_EXTRACTION_REQUEST_TIMEOUT_MS = 70000;
+const WRITING_SAVE_REQUEST_TIMEOUT_MS = 20000;
+const WRITING_INLINE_EXTRACTION_MAX_BYTES = 2 * 1024 * 1024;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
 
 interface WritingLaunchSnapshot {
@@ -382,6 +384,19 @@ function stripHtmlToText(value: string) {
   const root = doc.body.firstElementChild;
 
   return root?.textContent?.replace(/\u00a0/g, ' ').replace(/\s+\n/g, '\n').trim() ?? '';
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
 }
 
 function sanitizeRichHtml(value: string) {
@@ -4727,11 +4742,14 @@ export function CourseWorkspacePage({
 
     setWritingError(null);
     setIsWritingSaving(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), WRITING_SAVE_REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch('/api/course-writing', {
         method: 'POST',
         credentials: 'same-origin',
+        signal: controller.signal,
         headers: {
           'content-type': 'application/json',
         },
@@ -4765,10 +4783,17 @@ export function CourseWorkspacePage({
         tone: 'success',
       });
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setWritingError(
+          'El guardado tardó demasiado. Verifica tu conexión e inténtalo de nuevo.',
+        );
+        return;
+      }
       setWritingError(
         error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.',
       );
     } finally {
+      window.clearTimeout(timeoutId);
       setIsWritingSaving(false);
     }
   }
@@ -4792,6 +4817,7 @@ export function CourseWorkspacePage({
     let timeoutId: number | null = null;
     let processingTicker: number | null = null;
     let uploadedAsset: ProductWritingAsset | null = null;
+    let inlineExtractionBase64: string | undefined;
     let completed = false;
 
     try {
@@ -4805,6 +4831,12 @@ export function CourseWorkspacePage({
         mode: 'upload',
         submittedAsset: uploadedAsset ?? current.submittedAsset,
       }));
+
+      if (file.size <= WRITING_INLINE_EXTRACTION_MAX_BYTES) {
+        const fileBuffer = await file.arrayBuffer();
+        inlineExtractionBase64 = arrayBufferToBase64(fileBuffer);
+      }
+
       setWritingProcessingProgress(18);
       processingTicker = window.setInterval(() => {
         setWritingProcessingProgress((current) => {
@@ -4835,6 +4867,7 @@ export function CourseWorkspacePage({
           courseSlug: currentCourse.slug,
           productId: selectedWritingProduct.id,
           asset: uploadedAsset,
+          assetContentBase64: inlineExtractionBase64,
         }),
       });
       setWritingProcessingProgress(72);
