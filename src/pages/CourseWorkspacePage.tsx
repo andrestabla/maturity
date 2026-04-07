@@ -1536,6 +1536,158 @@ function createWritingDraftTextFromSections(sections: ProductWritingSection[]) {
     .join('');
 }
 
+function rebalanceWritingTitleAndIntroSections(
+  sections: ProductWritingSection[],
+  now: string,
+) {
+  const titleIndex = sections.findIndex((section) => /t[ií]tulo/i.test(section.title));
+  const introIndex = sections.findIndex((section) =>
+    /(introducci[oó]n|inicio|apertura)/i.test(section.title),
+  );
+
+  if (titleIndex < 0 || introIndex < 0 || titleIndex === introIndex) {
+    return sections;
+  }
+
+  const titlePlain = stripHtmlToText(sections[titleIndex].content)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+  const introPlain = stripHtmlToText(sections[introIndex].content).trim();
+
+  if (!titlePlain) {
+    return sections;
+  }
+
+  const introMarker = /\b(?:introducci[oó]n|inicio|apertura)\s*:/i;
+  const markerMatch = introMarker.exec(titlePlain);
+
+  if (markerMatch && (introPlain.length === 0 || introPlain.length < 24)) {
+    const titlePart = titlePlain.slice(0, markerMatch.index).trim();
+    const introPart = titlePlain
+      .slice(markerMatch.index)
+      .replace(introMarker, '')
+      .trim();
+
+    if (introPart) {
+      sections[titleIndex].content = titlePart
+        ? normalizePlainTextToHtml(titlePart)
+        : '';
+      sections[titleIndex].updatedAt = titlePart ? now : sections[titleIndex].updatedAt;
+      sections[introIndex].content = normalizePlainTextToHtml(introPart);
+      sections[introIndex].updatedAt = now;
+      return sections;
+    }
+  }
+
+  if (!introPlain) {
+    const paragraphParts = titlePlain
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    if (paragraphParts.length > 1) {
+      const titlePart = paragraphParts[0];
+      const introPart = paragraphParts.slice(1).join('\n\n').trim();
+      if (introPart) {
+        sections[titleIndex].content = normalizePlainTextToHtml(titlePart);
+        sections[titleIndex].updatedAt = now;
+        sections[introIndex].content = normalizePlainTextToHtml(introPart);
+        sections[introIndex].updatedAt = now;
+      }
+    }
+  }
+
+  return sections;
+}
+
+function hydrateWritingSectionsFromText(
+  baseSections: ProductWritingSection[],
+  sourceText: string,
+): ProductWritingSection[] {
+  const cleanText = sourceText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+
+  if (!cleanText) {
+    return baseSections;
+  }
+
+  const nextSections = baseSections.map((section) => ({ ...section, content: '' }));
+  const now = new Date().toISOString();
+
+  if (nextSections.length === 1) {
+    nextSections[0].content = normalizePlainTextToHtml(cleanText);
+    nextSections[0].updatedAt = now;
+    return nextSections;
+  }
+
+  const normalizedLines = cleanText.split('\n');
+  let currentSectionIndex = 0;
+  const sectionMatchers = nextSections.map((section) => {
+    const variants = [
+      section.title,
+      section.title.replace(/\s+o\s+/gi, ' '),
+      section.title.replace(/\s*\/\s*/g, ' '),
+    ];
+    return new RegExp(
+      `^(?:\\d+[.)\\s-]+)?(?:${variants.map((variant) => escapeRegex(variant)).join('|')})(?::)?$`,
+      'i',
+    );
+  });
+
+  const buffers = nextSections.map(() => [] as string[]);
+  normalizedLines.forEach((line) => {
+    const trimmed = line.trim();
+    const matchedIndex = sectionMatchers.findIndex((pattern) => pattern.test(trimmed));
+    if (matchedIndex >= 0) {
+      currentSectionIndex = matchedIndex;
+      return;
+    }
+
+    buffers[currentSectionIndex].push(line);
+  });
+
+  const hasSpecificBuckets = buffers.some((buffer, index) => index > 0 && buffer.join('').trim());
+  if (!hasSpecificBuckets) {
+    const paragraphs = cleanText
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    if (paragraphs.length <= 1 || nextSections.length <= 1) {
+      nextSections[0].content = normalizePlainTextToHtml(cleanText);
+      nextSections[0].updatedAt = now;
+      return rebalanceWritingTitleAndIntroSections(nextSections, now);
+    }
+
+    const chunks = nextSections.map(() => [] as string[]);
+    paragraphs.forEach((paragraph, index) => {
+      const bucket = Math.min(
+        nextSections.length - 1,
+        Math.floor((index / Math.max(paragraphs.length, 1)) * nextSections.length),
+      );
+      chunks[bucket].push(paragraph);
+    });
+
+    nextSections.forEach((section, index) => {
+      const chunkText = chunks[index].join('\n\n').trim();
+      if (chunkText) {
+        section.content = normalizePlainTextToHtml(chunkText);
+        section.updatedAt = now;
+      }
+    });
+
+    return rebalanceWritingTitleAndIntroSections(nextSections, now);
+  }
+
+  const hydrated = nextSections.map((section, index) => ({
+    ...section,
+    content: normalizePlainTextToHtml(buffers[index].join('\n').trim()),
+    updatedAt: buffers[index].join('').trim() ? now : section.updatedAt,
+  }));
+
+  return rebalanceWritingTitleAndIntroSections(hydrated, now);
+}
+
 function countFilledWritingSections(sections: ProductWritingSection[]) {
   return sections.filter((section) => stripHtmlToText(section.content).trim()).length;
 }
@@ -4860,7 +5012,7 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
-      await showAlert({
+      void showAlert({
         title: 'Producto guardado',
         message: 'La escritura del producto quedó actualizada en el expediente del curso.',
         tone: 'success',
@@ -4936,6 +5088,70 @@ export function CourseWorkspacePage({
         // Si la extracción local falla, seguimos con fallback server-side.
       }
 
+      if (extractedTextOverride?.trim()) {
+        const extractedText = extractedTextOverride.trim();
+        const baseSections =
+          writingDraft.sections.length > 0
+            ? writingDraft.sections
+            : buildWritingSectionsFromProduct(selectedWritingProduct);
+        const hydratedSections = hydrateWritingSectionsFromText(baseSections, extractedText);
+        const writingData: ProductWritingData = {
+          ...writingDraft,
+          mode: 'upload',
+          submittedAsset: uploadedAsset,
+          extractedText,
+          draftText: createWritingDraftTextFromSections(hydratedSections),
+          sections: hydratedSections,
+          lastSavedAt: new Date().toISOString(),
+        };
+
+        controller = new AbortController();
+        timeoutId = window.setTimeout(() => controller?.abort(), WRITING_SAVE_REQUEST_TIMEOUT_MS);
+        setWritingProcessingProgress((current) => Math.max(current, 96));
+
+        const response = await fetch('/api/course-writing', {
+          method: 'POST',
+          credentials: 'same-origin',
+          signal: controller.signal,
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'save',
+            courseSlug: currentCourse.slug,
+            productId: selectedWritingProduct.id,
+            writingData,
+          }),
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string; product?: CourseProduct }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'No fue posible guardar la digitalización del documento.');
+        }
+
+        const normalized = normalizeWritingDraft(payload?.product ?? {
+          ...selectedWritingProduct,
+          writingData,
+        });
+        setWritingDraft(normalized);
+        const completedSections = countFilledWritingSections(normalized.sections);
+        setWritingProcessingProgress(100);
+        completed = true;
+        refreshAppData();
+        void showAlert({
+          title: 'Documento procesado',
+          message:
+            completedSections > 0
+              ? `Digitalización completa. ${completedSections}/${normalized.sections.length} secciones quedaron con contenido editable.`
+              : 'Digitalización completa. Revisa y ajusta el contenido por secciones.',
+          tone: 'success',
+        });
+        return;
+      }
+
       if (file.size <= WRITING_INLINE_EXTRACTION_MAX_BYTES) {
         const fileBuffer = await file.arrayBuffer();
         inlineExtractionBase64 = arrayBufferToBase64(fileBuffer);
@@ -4990,7 +5206,7 @@ export function CourseWorkspacePage({
         setWritingDraft(normalized);
         if (!payload?.warning) {
           const completedSections = countFilledWritingSections(normalized.sections);
-          await showAlert({
+          void showAlert({
             title: 'Documento procesado',
             message:
               completedSections > 0
@@ -5106,7 +5322,7 @@ export function CourseWorkspacePage({
       setWritingProcessingProgress(0);
       refreshAppData();
 
-      await showAlert({
+      void showAlert({
         title: 'Proceso reiniciado',
         message: 'Ya puedes cargar un nuevo documento para digitalizar.',
         tone: 'success',
