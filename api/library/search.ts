@@ -6,7 +6,7 @@ import { federatedSearch } from '../../lib/library/orchestrator.js';
 import type { SearchParams } from '../../lib/library/orchestrator.js';
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
 /**

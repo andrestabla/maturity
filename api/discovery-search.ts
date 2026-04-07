@@ -1,4 +1,9 @@
-import handler, { config } from './library-search.js';
+import librarySearchHandler from './library-search.js';
 
-export { config };
-export default handler;
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: Request) {
+  return librarySearchHandler(request);
+}

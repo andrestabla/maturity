@@ -4,7 +4,7 @@ import { readCourseContextForAI } from '../../lib/store.js';
 import OpenAI from 'openai';
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
 /**

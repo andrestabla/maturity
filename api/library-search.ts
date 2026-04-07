@@ -4,7 +4,7 @@ import { getSessionUser } from '../lib/session.js';
 import type { AuthUser, LibraryGroup, LibraryProvider, LibrarySearchResult } from '../src/types.js';
 
 export const config = {
-  runtime: 'nodejs',
+  runtime: 'edge',
 };
 
 const OPENALEX_BASE = 'https://api.openalex.org';
@@ -481,6 +481,10 @@ async function searchYouTubeFast(params: SearchParams): Promise<LibrarySearchRes
 
 export default async function handler(request: Request) {
   try {
+    if (request.method !== 'GET') {
+      return errorResponse(405, 'Método no permitido');
+    }
+
     const user = await getSessionUser(request);
     if (!user) return errorResponse(401, 'No autorizado');
 

@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
 import { getSql } from '../../lib/db.js';
 
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 /**
  * /api/library/saved-searches
