@@ -109,7 +109,9 @@ export function AppShell({
   const visibleCourses = useMemo(() => getVisibleCourses(appData, role, user), [appData, role, user]);
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
-  const courseSectionMatch = matchPath('/courses/:slug/:section', location.pathname);
+  const courseSectionMatch =
+    matchPath('/courses/:slug/:section/:workspaceRoute', location.pathname) ??
+    matchPath('/courses/:slug/:section', location.pathname);
   const courseMatch = courseSectionMatch ?? matchPath('/courses/:slug', location.pathname);
   const userDetailMatch = matchPath('/admin/users/:userId', location.pathname);
   const institutionStructureEditMatch = matchPath(

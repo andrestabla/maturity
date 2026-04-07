@@ -56,7 +56,6 @@ import type {
   LibraryResource,
   ProductWritingAsset,
   ProductWritingData,
-  ProductWritingMode,
   ProductWritingSection,
   ProductPhasePlan,
   ProductPlanningPhase,
@@ -113,6 +112,8 @@ type CourseSection =
   | 'entrega'
   | 'history';
 
+type WritingWorkspaceRoute = 'upload' | 'ai' | 'manual';
+
 const validCourseSections: CourseSection[] = [
   'summary',
   'microcurriculo',
@@ -126,6 +127,8 @@ const validCourseSections: CourseSection[] = [
   'entrega',
   'history',
 ];
+
+const writingWorkspaceRoutes: WritingWorkspaceRoute[] = ['upload', 'ai', 'manual'];
 
 const WRITING_LAUNCH_STORAGE_KEY = 'maturity-writing-launch-v1';
 const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
@@ -675,8 +678,20 @@ function isCourseSection(value: string | undefined): value is CourseSection {
   return Boolean(value && validCourseSections.includes(value as CourseSection));
 }
 
+function isWritingWorkspaceRoute(value: string | undefined): value is WritingWorkspaceRoute {
+  return Boolean(value && writingWorkspaceRoutes.includes(value as WritingWorkspaceRoute));
+}
+
 function buildCourseSectionPath(slug: string, section: CourseSection) {
   return section === 'summary' ? `/courses/${slug}` : `/courses/${slug}/${section}`;
+}
+
+function buildWritingWorkspacePath(
+  slug: string,
+  route?: WritingWorkspaceRoute | null,
+) {
+  const base = `/courses/${slug}/escritura`;
+  return route ? `${base}/${route}` : base;
 }
 
 function badgeClass(status: string) {
@@ -1539,11 +1554,19 @@ export function CourseWorkspacePage({
   refreshAppData,
   mutateAppData,
 }: CourseWorkspacePageProps) {
-  const { slug = '', section: sectionParam } = useParams<{ slug?: string; section?: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { slug = '', section: sectionParam, workspaceRoute } = useParams<{
+    slug?: string;
+    section?: string;
+    workspaceRoute?: string;
+  }>();
+  const [searchParams] = useSearchParams();
   const { showAlert, showConfirm } = useSystemDialog();
   const navigate = useNavigate();
   const activeSection: CourseSection = isCourseSection(sectionParam) ? sectionParam : 'summary';
+  const activeWritingRoute =
+    activeSection === 'escritura' && isWritingWorkspaceRoute(workspaceRoute)
+      ? workspaceRoute
+      : null;
   const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
   const persistedCourse = getCourseBySlug(appData, slug);
   const [writingLaunchSnapshot, setWritingLaunchSnapshot] = useState<WritingLaunchSnapshot | null>(() =>
@@ -1767,7 +1790,8 @@ export function CourseWorkspacePage({
     }),
   );
   const [writingDraft, setWritingDraft] = useState<ProductWritingData | null>(null);
-  const [selectedWritingMode, setSelectedWritingMode] = useState<ProductWritingMode | null>(null);
+  const [activeWritingSectionTab, setActiveWritingSectionTab] = useState<string | null>(null);
+  const activeWritingProductIdRef = useRef<string | null>(null);
   const [newTeamMemberForm, setNewTeamMemberForm] = useState<TeamMemberMutationInput>(() =>
     makeTeamMemberForm(),
   );
@@ -2134,23 +2158,69 @@ export function CourseWorkspacePage({
 
   useEffect(() => {
     if (selectedWritingProduct) {
-      setWritingDraft(normalizeWritingDraft(selectedWritingProduct));
-      setSelectedWritingMode(null);
+      if (activeWritingProductIdRef.current !== selectedWritingProduct.id) {
+        setWritingDraft(normalizeWritingDraft(selectedWritingProduct));
+        setActiveWritingSectionTab(null);
+      }
+      activeWritingProductIdRef.current = selectedWritingProduct.id;
       setWritingError(null);
-      setIsWritingInstructionsPanelOpen(false);
       return;
     }
 
+    activeWritingProductIdRef.current = null;
     setWritingDraft(null);
-    setSelectedWritingMode(null);
+    setActiveWritingSectionTab(null);
     setIsWritingInstructionsPanelOpen(false);
 
     if (activeSection === 'escritura' && writingProductQueryId && !isLoading) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('product');
-      setSearchParams(nextParams, { replace: true });
+      const serialized = nextParams.toString();
+      const nextPath = buildWritingWorkspacePath(slug, null);
+      navigate(serialized ? `${nextPath}?${serialized}` : nextPath, { replace: true });
     }
-  }, [activeSection, isLoading, searchParams, selectedWritingProduct, setSearchParams, writingProductQueryId]);
+  }, [
+    activeSection,
+    isLoading,
+    navigate,
+    searchParams,
+    selectedWritingProduct,
+    slug,
+    writingProductQueryId,
+  ]);
+
+  useEffect(() => {
+    if (!writingDraft) {
+      setActiveWritingSectionTab(null);
+      return;
+    }
+
+    const hasActive = writingDraft.sections.some((section) => section.id === activeWritingSectionTab);
+    if (!hasActive) {
+      setActiveWritingSectionTab(writingDraft.sections[0]?.id ?? null);
+    }
+  }, [activeWritingSectionTab, writingDraft]);
+
+  useEffect(() => {
+    if (activeSection !== 'escritura' || !writingProductQueryId) {
+      return;
+    }
+
+    if (workspaceRoute && !isWritingWorkspaceRoute(workspaceRoute)) {
+      const serialized = searchParams.toString();
+      const nextPath = buildWritingWorkspacePath(slug, null);
+      navigate(serialized ? `${nextPath}?${serialized}` : nextPath, { replace: true });
+    }
+  }, [activeSection, navigate, searchParams, slug, workspaceRoute, writingProductQueryId]);
+
+  useEffect(() => {
+    if (!selectedWritingProduct || !activeWritingRoute || activeWritingRoute === writingDraft?.mode) {
+      return;
+    }
+
+    setWritingDraft((current) => (current ? { ...current, mode: activeWritingRoute } : current));
+  }, [activeWritingRoute, selectedWritingProduct, writingDraft?.mode]);
+
   const taskProductOptions = currentCourse.products
     .slice()
     .sort((left, right) => left.title.localeCompare(right.title));
@@ -4461,9 +4531,26 @@ export function CourseWorkspacePage({
   function closeWritingEditor() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('product');
-    setSearchParams(nextParams, { replace: true });
+    const serialized = nextParams.toString();
+    const nextPath = buildWritingWorkspacePath(currentCourse.slug, null);
+    navigate(serialized ? `${nextPath}?${serialized}` : nextPath, { replace: true });
     setWritingError(null);
     setIsWritingInstructionsPanelOpen(false);
+    setActiveWritingSectionTab(null);
+  }
+
+  function navigateWritingModeRoute(mode: WritingWorkspaceRoute | null) {
+    const nextPath = buildWritingWorkspacePath(currentCourse.slug, mode);
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (writingProductQueryId) {
+      nextParams.set('product', writingProductQueryId);
+    } else {
+      nextParams.delete('product');
+    }
+
+    const serialized = nextParams.toString();
+    navigate(serialized ? `${nextPath}?${serialized}` : nextPath, { replace: true });
   }
 
   function stashWritingLaunchSnapshot(product: CourseProduct) {
@@ -4881,7 +4968,7 @@ export function CourseWorkspacePage({
       writingDraft.sections,
     );
     const aiPromptValue = writingDraft.aiPrompt?.trim() || suggestedWritingPrompt;
-    const activeWritingMode = selectedWritingMode;
+    const activeWritingMode = activeWritingRoute;
 
     const renderStepBadge = (status: 'done' | 'active' | 'pending') => {
       if (status === 'done') {
@@ -4924,55 +5011,84 @@ export function CourseWorkspacePage({
     const renderSectionEditors = (options?: {
       modeLabel?: string;
       allowGenerate?: boolean;
-    }) => (
-      <div className="writing-structured-workspace">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Documento online</span>
-            <h4>Estructura editable del producto</h4>
+    }) => {
+      const activeSection =
+        writingDraft.sections.find((section) => section.id === activeWritingSectionTab) ??
+        writingDraft.sections[0];
+
+      if (!activeSection) {
+        return null;
+      }
+
+      return (
+        <div className="writing-structured-workspace">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Documento online</span>
+              <h4>Estructura editable del producto</h4>
+            </div>
+            <span className="badge badge--outline">
+              {filledSections}/{totalSections} secciones con contenido
+            </span>
           </div>
-          <span className="badge badge--outline">
-            {filledSections}/{totalSections} secciones con contenido
-          </span>
-        </div>
-        <p className="field-help">
-          {options?.modeLabel
-            ? `Trabaja este producto desde la opción "${options.modeLabel}" siguiendo cada sección explícita.`
-            : 'Edita el producto por secciones explícitas según su estructura de trabajo.'}
-        </p>
-        <div className="writing-structured-grid">
-          {writingDraft.sections.map((section) => (
-            <article key={section.id} className="writing-structured-card">
-              <div className="writing-structured-card__head">
-                <div>
-                  <span className="eyebrow">Sección</span>
-                  <h4>{section.title}</h4>
-                </div>
-                {options?.allowGenerate && canEditSelectedWritingProduct ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={writingGeneratingSectionId === section.id || isWritingGeneratingAll}
-                    onClick={() => void handleGenerateWritingSection(section)}
-                  >
-                    <Sparkles size={16} />
-                    <span>
-                      {writingGeneratingSectionId === section.id ? 'Generando…' : 'Generar sección'}
-                    </span>
-                  </button>
-                ) : null}
+          <p className="field-help">
+            {options?.modeLabel
+              ? `Trabaja este producto desde la opción "${options.modeLabel}" siguiendo cada sección explícita.`
+              : 'Edita el producto por secciones explícitas según su estructura de trabajo.'}
+          </p>
+
+          <div className="writing-section-tabs" role="tablist" aria-label="Secciones del producto">
+            {writingDraft.sections.map((section, index) => {
+              const isActive = section.id === activeSection.id;
+              const isFilled = stripHtmlToText(section.content).trim().length > 0;
+
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`writing-section-tab ${isActive ? 'is-active' : ''}`}
+                  onClick={() => setActiveWritingSectionTab(section.id)}
+                >
+                  <span className="writing-section-tab__index">Sección {index + 1}</span>
+                  <strong>{section.title}</strong>
+                  <small>{isFilled ? 'Con contenido' : 'Pendiente'}</small>
+                </button>
+              );
+            })}
+          </div>
+
+          <article className="writing-structured-card writing-structured-card--active-tab">
+            <div className="writing-structured-card__head">
+              <div>
+                <span className="eyebrow">Sección activa</span>
+                <h4>{activeSection.title}</h4>
               </div>
-              <RichTextEditor
-                value={section.content}
-                onChange={(value) => updateWritingSection(section.id, 'content', value)}
-                placeholder={`Desarrolla aquí la sección "${section.title}".`}
-                minHeight={220}
-              />
-            </article>
-          ))}
+              {options?.allowGenerate && canEditSelectedWritingProduct ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={writingGeneratingSectionId === activeSection.id || isWritingGeneratingAll}
+                  onClick={() => void handleGenerateWritingSection(activeSection)}
+                >
+                  <Sparkles size={16} />
+                  <span>
+                    {writingGeneratingSectionId === activeSection.id ? 'Generando…' : 'Generar sección'}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+            <RichTextEditor
+              value={activeSection.content}
+              onChange={(value) => updateWritingSection(activeSection.id, 'content', value)}
+              placeholder={`Desarrolla aquí la sección "${activeSection.title}".`}
+              minHeight={280}
+            />
+          </article>
         </div>
-      </div>
-    );
+      );
+    };
 
     const uploadSteps = [
       {
@@ -5192,7 +5308,7 @@ export function CourseWorkspacePage({
                     className={`writing-mode-card writing-mode-card--${mode.id}`}
                     disabled={!canEditSelectedWritingProduct}
                     onClick={() => {
-                      setSelectedWritingMode(mode.id);
+                      navigateWritingModeRoute(mode.id);
                       updateWritingDraft((current) => ({
                         ...current,
                         mode: mode.id,
@@ -5223,7 +5339,7 @@ export function CourseWorkspacePage({
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => setSelectedWritingMode(null)}
+                    onClick={() => navigateWritingModeRoute(null)}
                   >
                     <span>Cambiar opción</span>
                   </button>
@@ -5628,7 +5744,10 @@ export function CourseWorkspacePage({
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
                 const actionLabel = getWritingActionLabel(product);
-                const editorHref = `/courses/${currentCourse.slug}/escritura?product=${encodeURIComponent(product.id)}`;
+                const initialRoute = isWritingWorkspaceRoute(product.writingData.mode)
+                  ? product.writingData.mode
+                  : null;
+                const editorHref = `${buildWritingWorkspacePath(currentCourse.slug, initialRoute)}?product=${encodeURIComponent(product.id)}`;
 
                 return (
                   <a
