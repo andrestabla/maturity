@@ -5744,10 +5744,7 @@ export function CourseWorkspacePage({
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
                 const actionLabel = getWritingActionLabel(product);
-                const initialRoute = isWritingWorkspaceRoute(product.writingData.mode)
-                  ? product.writingData.mode
-                  : null;
-                const editorHref = `${buildWritingWorkspacePath(currentCourse.slug, initialRoute)}?product=${encodeURIComponent(product.id)}`;
+                const editorHref = `${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(product.id)}`;
 
                 return (
                   <a
