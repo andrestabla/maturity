@@ -1,12 +1,5 @@
 import type { AuthUser, Role } from '../src/types.js';
 import { createSessionToken, hashSessionToken, verifyPassword } from './security.js';
-import {
-  createSessionRecord,
-  deleteSessionByTokenHash,
-  findSessionByTokenHash as findSessionByTokenHashWithBootstrap,
-  findUserByEmail,
-  touchUserLastAccess,
-} from './store.js';
 import { getSql } from './db.js';
 
 const SESSION_COOKIE = 'maturity_session';
@@ -49,6 +42,16 @@ interface FastMembershipRow {
   program: string;
   scope: string;
   primary: boolean;
+}
+
+let authStoreApiPromise: Promise<typeof import('./store.js')> | null = null;
+
+function loadAuthStoreApi() {
+  if (!authStoreApiPromise) {
+    authStoreApiPromise = import('./store.js');
+  }
+
+  return authStoreApiPromise;
 }
 
 function parseCookies(headerValue: string | null) {
@@ -205,6 +208,7 @@ export function clearSessionCookie() {
 }
 
 export async function authenticateUser(email: string, password: string) {
+  const { findUserByEmail } = await loadAuthStoreApi();
   const user = await findUserByEmail(email.trim().toLowerCase());
 
   if (!user) {
@@ -221,6 +225,7 @@ export async function authenticateUser(email: string, password: string) {
 }
 
 export async function createSession(userId: string) {
+  const { createSessionRecord, touchUserLastAccess } = await loadAuthStoreApi();
   const token = createSessionToken();
   const tokenHash = await hashSessionToken(token);
   const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -250,6 +255,7 @@ export async function getSessionUser(request: SessionRequestLike) {
   }
 
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    const { deleteSessionByTokenHash } = await loadAuthStoreApi();
     await deleteSessionByTokenHash(tokenHash);
     return null;
   }
@@ -326,11 +332,13 @@ async function findSessionByTokenHashFast(tokenHash: string) {
       memberships: membershipRows,
     };
   } catch {
-    return findSessionByTokenHashWithBootstrap(tokenHash);
+    const { findSessionByTokenHash } = await loadAuthStoreApi();
+    return findSessionByTokenHash(tokenHash);
   }
 }
 
 export async function destroySession(request: SessionRequestLike) {
+  const { deleteSessionByTokenHash } = await loadAuthStoreApi();
   const cookies = parseCookies(readHeader(request, 'cookie'));
   const token = cookies[SESSION_COOKIE];
 
