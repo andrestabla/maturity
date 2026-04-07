@@ -30,6 +30,7 @@ interface WritingPayload {
   productId?: string;
   writingData?: ProductWritingData;
   asset?: ProductWritingAsset;
+  extractedTextOverride?: string;
   assetContentBase64?: string;
   libraryResourceIds?: string[];
   sectionId?: string;
@@ -504,8 +505,12 @@ export default async function handler(request: Request) {
 
     let extractedText = '';
     try {
+      const extractedOverride = payload.extractedTextOverride?.trim();
       const inlineBase64 = payload.assetContentBase64?.trim();
-      if (inlineBase64) {
+
+      if (extractedOverride) {
+        extractedText = extractedOverride;
+      } else if (inlineBase64) {
         const inlineBuffer = Buffer.from(inlineBase64, 'base64');
         extractedText = await withTimeout(
           extractTextFromBuffer(

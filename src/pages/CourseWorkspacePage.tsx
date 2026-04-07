@@ -135,6 +135,7 @@ const WRITING_LAUNCH_MAX_AGE = 1000 * 60 * 20;
 const WRITING_EXTRACTION_REQUEST_TIMEOUT_MS = 70000;
 const WRITING_SAVE_REQUEST_TIMEOUT_MS = 20000;
 const WRITING_INLINE_EXTRACTION_MAX_BYTES = 2 * 1024 * 1024;
+const WRITING_CLIENT_EXTRACTION_TIMEOUT_MS = 120000;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
 
 interface WritingLaunchSnapshot {
@@ -397,6 +398,87 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   }
 
   return btoa(binary);
+}
+
+class ClientExtractionTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClientExtractionTimeoutError';
+  }
+}
+
+function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new ClientExtractionTimeoutError(message));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function normalizeUploadExtractedText(value: string) {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\u0000/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function extractUploadedFileTextInBrowser(
+  file: File,
+  onProgress?: (progress: number) => void,
+) {
+  const extension = file.name.split('.').pop()?.trim().toLowerCase() ?? '';
+  const buffer = await file.arrayBuffer();
+
+  if (extension === 'docx') {
+    const mammoth = await import('mammoth');
+    const parsed = await mammoth.extractRawText({ arrayBuffer: buffer });
+    onProgress?.(90);
+    return normalizeUploadExtractedText(parsed.value ?? '');
+  }
+
+  if (extension === 'pdf') {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const loadingTask = (pdfjs as any).getDocument({
+      data: buffer,
+      disableWorker: true,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    });
+    const document = await loadingTask.promise;
+    const maxPages = Math.min(document.numPages || 0, 16);
+    const chunks: string[] = [];
+
+    if (!maxPages) {
+      return '';
+    }
+
+    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex += 1) {
+      const page = await document.getPage(pageIndex);
+      const textContent = await page.getTextContent();
+      const lines = (textContent.items ?? [])
+        .map((item: any) => (typeof item?.str === 'string' ? item.str : ''))
+        .join(' ');
+      if (lines.trim()) {
+        chunks.push(lines.trim());
+      }
+      onProgress?.(Math.round((pageIndex / maxPages) * 90));
+    }
+
+    return normalizeUploadExtractedText(chunks.join('\n\n'));
+  }
+
+  return '';
 }
 
 function sanitizeRichHtml(value: string) {
@@ -4818,6 +4900,7 @@ export function CourseWorkspacePage({
     let processingTicker: number | null = null;
     let uploadedAsset: ProductWritingAsset | null = null;
     let inlineExtractionBase64: string | undefined;
+    let extractedTextOverride: string | undefined;
     let completed = false;
 
     try {
@@ -4832,12 +4915,32 @@ export function CourseWorkspacePage({
         submittedAsset: uploadedAsset ?? current.submittedAsset,
       }));
 
+      setWritingProcessingProgress(22);
+      try {
+        const clientExtractedText = await withClientTimeout(
+          extractUploadedFileTextInBrowser(file, (progress) => {
+            setWritingProcessingProgress((current) =>
+              Math.max(current, Math.min(90, Math.max(22, progress))),
+            );
+          }),
+          WRITING_CLIENT_EXTRACTION_TIMEOUT_MS,
+          'La extracción local del documento tardó demasiado.',
+        );
+
+        if (clientExtractedText.trim()) {
+          extractedTextOverride = clientExtractedText;
+          setWritingProcessingProgress((current) => Math.max(current, 90));
+        }
+      } catch {
+        // Si la extracción local falla, seguimos con fallback server-side.
+      }
+
       if (file.size <= WRITING_INLINE_EXTRACTION_MAX_BYTES) {
         const fileBuffer = await file.arrayBuffer();
         inlineExtractionBase64 = arrayBufferToBase64(fileBuffer);
       }
 
-      setWritingProcessingProgress(18);
+      setWritingProcessingProgress((current) => Math.max(current, 18));
       processingTicker = window.setInterval(() => {
         setWritingProcessingProgress((current) => {
           if (current >= 92) {
@@ -4867,6 +4970,7 @@ export function CourseWorkspacePage({
           courseSlug: currentCourse.slug,
           productId: selectedWritingProduct.id,
           asset: uploadedAsset,
+          extractedTextOverride,
           assetContentBase64: inlineExtractionBase64,
         }),
       });
