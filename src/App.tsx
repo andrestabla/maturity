@@ -316,6 +316,20 @@ export default function App() {
             }
           />
           <Route
+            path="/courses/:slug/:section/producto/:productId"
+            element={
+              <CourseWorkspacePage
+                role={activeRole}
+                userRole={session.user.role}
+                viewer={session.user}
+                appData={appData}
+                isLoading={isLoading}
+                refreshAppData={refreshAppData}
+                mutateAppData={mutateAppData}
+              />
+            }
+          />
+          <Route
             path="/courses/:slug/:section/:workspaceRoute"
             element={
               <CourseWorkspacePage

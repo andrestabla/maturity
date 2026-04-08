@@ -51,6 +51,7 @@ import type {
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
+  CourseProductStatus,
   CourseProductStage,
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
@@ -700,6 +701,7 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder: string;
   minHeight?: number;
+  disabled?: boolean;
 }
 
 function RichTextEditor({
@@ -707,6 +709,7 @@ function RichTextEditor({
   onChange,
   placeholder,
   minHeight = 220,
+  disabled = false,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
@@ -726,11 +729,15 @@ function RichTextEditor({
   }, [isFocused, value]);
 
   const syncValue = () => {
+    if (disabled) {
+      return;
+    }
+
     onChange(sanitizeRichHtml(editorRef.current?.innerHTML ?? ''));
   };
 
   const applyCommand = (command: string, commandValue?: string) => {
-    if (typeof document === 'undefined') {
+    if (typeof document === 'undefined' || disabled) {
       return;
     }
 
@@ -740,32 +747,32 @@ function RichTextEditor({
   };
 
   return (
-    <div className="rich-editor">
+    <div className={`rich-editor${disabled ? ' rich-editor--disabled' : ''}`}>
       <div className="rich-editor__toolbar" role="toolbar" aria-label="Formato del texto">
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<p>')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('formatBlock', '<p>')}>
           <span>Párrafo</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<h3>')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('formatBlock', '<h3>')}>
           <Heading3 size={15} />
           <span>Título</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('bold')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('bold')}>
           <Bold size={15} />
           <span>Negrita</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('italic')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('italic')}>
           <Italic size={15} />
           <span>Cursiva</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('underline')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('underline')}>
           <Underline size={15} />
           <span>Subrayado</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertUnorderedList')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('insertUnorderedList')}>
           <List size={15} />
           <span>Lista</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertOrderedList')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('insertOrderedList')}>
           <ListOrdered size={15} />
           <span>Numerada</span>
         </button>
@@ -774,18 +781,31 @@ function RichTextEditor({
         <div
           ref={editorRef}
           className="rich-editor__content"
-          contentEditable
+          contentEditable={!disabled}
           suppressContentEditableWarning
+          aria-disabled={disabled}
           role="textbox"
           aria-multiline="true"
           data-placeholder={placeholder}
           style={{ minHeight }}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            if (!disabled) {
+              setIsFocused(true);
+            }
+          }}
           onBlur={() => {
+            if (disabled) {
+              return;
+            }
+
             setIsFocused(false);
             syncValue();
           }}
-          onInput={syncValue}
+          onInput={() => {
+            if (!disabled) {
+              syncValue();
+            }
+          }}
         />
       </div>
     </div>
@@ -810,6 +830,11 @@ function buildWritingWorkspacePath(
 ) {
   const base = `/courses/${slug}/escritura`;
   return route ? `${base}/${route}` : base;
+}
+
+function buildValidationWorkspacePath(slug: string, productId?: string | null) {
+  const base = `/courses/${slug}/validacion`;
+  return productId ? `${base}/producto/${productId}` : base;
 }
 
 function badgeClass(status: string) {
@@ -1827,10 +1852,11 @@ export function CourseWorkspacePage({
   refreshAppData,
   mutateAppData,
 }: CourseWorkspacePageProps) {
-  const { slug = '', section: sectionParam, workspaceRoute } = useParams<{
+  const { slug = '', section: sectionParam, workspaceRoute, productId } = useParams<{
     slug?: string;
     section?: string;
     workspaceRoute?: string;
+    productId?: string;
   }>();
   const [searchParams] = useSearchParams();
   const { showAlert, showConfirm } = useSystemDialog();
@@ -1840,6 +1866,8 @@ export function CourseWorkspacePage({
     activeSection === 'escritura' && isWritingWorkspaceRoute(workspaceRoute)
       ? workspaceRoute
       : null;
+  const validationProductId =
+    activeSection === 'validacion' ? (productId?.trim() ?? '') : '';
   const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
   const persistedCourse = getCourseBySlug(appData, slug);
   const [writingLaunchSnapshot, setWritingLaunchSnapshot] = useState<WritingLaunchSnapshot | null>(() =>
@@ -2412,6 +2440,18 @@ export function CourseWorkspacePage({
   );
   const isWritingProductWorkspaceRoute =
     activeSection === 'escritura' && Boolean(writingProductQueryId);
+  const selectedValidationProduct =
+    validationProductId && activeSection === 'validacion'
+      ? currentCourse.products.find(
+          (product) => product.id === validationProductId && product.stage === 'validacion',
+        ) ?? null
+      : null;
+  const canEditSelectedValidationProduct = Boolean(
+    selectedValidationProduct &&
+      canEditCourseProduct(userRole, selectedValidationProduct.owner, selectedValidationProduct.stage),
+  );
+  const isValidationProductWorkspaceRoute =
+    activeSection === 'validacion' && Boolean(validationProductId);
   const architecturePreviewProduct = architecturePreviewProductId
     ? architectureProducts.find((product) => product.id === architecturePreviewProductId) ?? null
     : null;
@@ -2758,11 +2798,37 @@ export function CourseWorkspacePage({
                 eyebrow: 'Validación instruccional',
                 title: 'Zona dedicada de validación',
                 description:
-                  'Revisión pedagógica y de estilo para asegurar la calidad instruccional del contenido.',
+                  'Bandeja editorial para revisar productos, validar criterios y dejar comentarios por fragmento.',
                 stats: [
-                  { label: 'Observaciones', value: String(pendingObservationsCount) },
-                  { label: 'Correcciones', value: String(deliverablesOpenCount) },
-                  { label: 'Checkpoints', value: 'Revisado' },
+                  {
+                    label: 'Productos',
+                    value: String(currentCourse.products.filter((product) => product.stage === 'validacion').length),
+                  },
+                  {
+                    label: 'Checklists',
+                    value: `${currentCourse.products
+                      .filter((product) => product.stage === 'validacion')
+                      .reduce(
+                        (sum, product) => sum + getValidationMetrics(product).completed,
+                        0,
+                      )}/${currentCourse.products
+                      .filter((product) => product.stage === 'validacion')
+                      .reduce(
+                        (sum, product) => sum + getValidationMetrics(product).total,
+                        0,
+                      )}`,
+                  },
+                  {
+                    label: 'Comentarios',
+                    value: String(
+                      currentCourse.products
+                        .filter((product) => product.stage === 'validacion')
+                        .reduce(
+                          (sum, product) => sum + getValidationMetrics(product).openComments,
+                          0,
+                        ),
+                    ),
+                  },
                 ],
               }
           : activeSection === 'multimedia'
@@ -3053,6 +3119,20 @@ export function CourseWorkspacePage({
 
   function getValidationData(product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>) {
     return product.validationData ?? buildDefaultValidationData(product.stage);
+  }
+
+  function getValidationMetrics(product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>) {
+    const validationData = getValidationData(product);
+    const completed = validationData.checklist.filter((item) => item.status === 'Cumple').length;
+    const total = validationData.checklist.length;
+    const openComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return {
+      completed,
+      total,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+      openComments,
+    };
   }
 
   function updateValidationCommentDraft(
@@ -3440,6 +3520,372 @@ export function CourseWorkspacePage({
           </div>
         </div>
       </div>
+    );
+  }
+
+  function renderValidationStageBoard() {
+    const validationProducts = currentCourse.products
+      .filter((product) => product.stage === 'validacion')
+      .slice()
+      .sort((left, right) => {
+        if (left.status === right.status) {
+          return left.title.localeCompare(right.title, 'es');
+        }
+
+        const statusPriority: Record<CourseProductStatus, number> = {
+          Borrador: 0,
+          'En revisión': 1,
+          Aprobado: 2,
+        };
+
+        return statusPriority[right.status] - statusPriority[left.status];
+      });
+    const readyToReviewCount = validationProducts.filter((product) => product.status !== 'Borrador').length;
+    const approvedCount = validationProducts.filter((product) => product.status === 'Aprobado').length;
+    const checklistCompleted = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).completed,
+      0,
+    );
+    const checklistTotal = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).total,
+      0,
+    );
+    const openComments = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).openComments,
+      0,
+    );
+
+    return (
+      <section className="page-stack validation-board">
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Validación instruccional</span>
+              <h3>Bandeja de productos listos para revisar</h3>
+            </div>
+            <div className="action-row">
+              <span className="badge badge--outline">{readyToReviewCount} listos para revisar</span>
+              <span className="badge badge--sage">{approvedCount} aprobados</span>
+            </div>
+          </div>
+          <p className="section-lead">
+            Abre cada producto para validar criterios, comentar fragmentos concretos y ajustar la
+            versión editorial sin salir del expediente del curso.
+          </p>
+
+          <div className="module-grid module-grid--summary validation-board__summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{validationProducts.length}</strong>
+                <span>productos</span>
+              </div>
+              <p>Productos disponibles para la revisión instruccional por curso.</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{checklistTotal > 0 ? Math.round((checklistCompleted / checklistTotal) * 100) : 0}%</strong>
+                <span>cobertura</span>
+              </div>
+              <p>Avance acumulado de los criterios marcados como cumplidos.</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{openComments}</strong>
+                <span>comentarios abiertos</span>
+              </div>
+              <p>Observaciones ancladas a fragmentos específicos del contenido.</p>
+            </div>
+          </div>
+        </article>
+
+        <article className="surface section-card">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Productos</span>
+              <h3>Selecciona un producto para abrir su checklist</h3>
+            </div>
+          </div>
+
+          {validationProducts.length === 0 ? (
+            <div className="empty-state">
+              <strong>No hay productos registrados para validación</strong>
+              <p>Cuando existan productos en esta etapa aparecerán aquí listos para revisar.</p>
+            </div>
+          ) : (
+            <div className="validation-board__grid">
+              {validationProducts.map((product) => {
+                const metrics = getValidationMetrics(product);
+
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className="validation-product-card"
+                    onClick={() => goToValidationProduct(product.id)}
+                  >
+                    <div className="validation-product-card__copy">
+                      <div className="validation-product-card__head">
+                        <span className="badge badge--outline">{product.format}</span>
+                        <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                      </div>
+                      <h4>{product.title}</h4>
+                      <p>{stripHtmlToText(product.summary) || 'Sin descripción registrada.'}</p>
+
+                      <div className="validation-product-card__meta">
+                        <span>{product.owner}</span>
+                        <span>{product.version}</span>
+                        <span>{metrics.openComments} comentarios</span>
+                      </div>
+                    </div>
+
+                    <div className="validation-product-card__ring">
+                      <ProgressRing
+                        value={metrics.progress}
+                        label="Checklist"
+                        detail={`${metrics.completed}/${metrics.total} criterios`}
+                      />
+                    </div>
+
+                    <div className="validation-product-card__cta">
+                      <span>Revisar producto</span>
+                      <MoveRight size={16} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </article>
+      </section>
+    );
+  }
+
+  function renderValidationProductWorkspace() {
+    if (!validationProductId || !selectedValidationProduct) {
+      if (activeSection === 'validacion' && validationProductId && isLoading) {
+        return (
+          <section className="page-stack">
+            <article className="surface section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Validación instruccional</span>
+                  <h3>Preparando producto</h3>
+                </div>
+              </div>
+              <p className="section-lead">
+                Estamos cargando el expediente del producto solicitado para abrir su checklist y su
+                espacio de revisión.
+              </p>
+            </article>
+          </section>
+        );
+      }
+
+      return (
+        <section className="page-stack">
+          <article className="surface empty-state">
+            <strong>No fue posible abrir este producto</strong>
+            <p>
+              El producto solicitado ya no existe, no pertenece a este curso o no está disponible
+              para validación.
+            </p>
+            <button type="button" className="cta-button" onClick={closeValidationProductWorkspace}>
+              <span>Volver a la bandeja</span>
+              <MoveRight size={16} />
+            </button>
+          </article>
+        </section>
+      );
+    }
+
+    const draft = productDrafts[selectedValidationProduct.id];
+    const metrics = getValidationMetrics(draft ?? selectedValidationProduct);
+    const validationStageFormats = productFormatsForStage('validacion');
+    const currentValidationProductId = selectedValidationProduct.id;
+
+    if (!draft) {
+      return (
+        <section className="page-stack">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Validación instruccional</span>
+                <h3>Preparando edición</h3>
+              </div>
+            </div>
+            <p className="section-lead">
+              Estamos sincronizando el editor con la versión actual del producto.
+            </p>
+          </article>
+        </section>
+      );
+    }
+
+    return (
+      <section className="page-stack validation-product-shell">
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Validación instruccional</span>
+              <h3>{draft.title}</h3>
+            </div>
+            <div className="action-row">
+              <Link to={buildValidationWorkspacePath(currentCourse.slug, null)} className="ghost-button">
+                <span>Volver a la bandeja</span>
+              </Link>
+              <button
+                type="button"
+                className="cta-button"
+                disabled={!canEditSelectedValidationProduct || isProductSaving === currentValidationProductId}
+                onClick={() => void handleProductSave(currentValidationProductId)}
+              >
+                <Save size={16} />
+                <span>{isProductSaving === currentValidationProductId ? 'Guardando…' : 'Guardar cambios'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="validation-product-head__meta">
+            <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
+            <span className="badge badge--outline">{draft.format}</span>
+            <span className="badge badge--outline">{draft.version}</span>
+            <span>{metrics.completed}/{metrics.total} criterios</span>
+            <span>{metrics.openComments} comentarios abiertos</span>
+          </div>
+
+          <div className="form-grid">
+            <label className="field field--full">
+              <span>Título</span>
+              <div className="field__control">
+                <input
+                  value={draft.title}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) => updateProductDraft(currentValidationProductId, 'title', event.target.value)}
+                />
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Formato</span>
+              <div className="field__control">
+                <select
+                  value={draft.format}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) =>
+                    updateProductDraft(
+                      currentValidationProductId,
+                      'format',
+                      event.target.value as CourseProductMutationInput['format'],
+                    )
+                  }
+                >
+                  {validationStageFormats.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Estado</span>
+              <div className="field__control">
+                <select
+                  value={draft.status}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) =>
+                    updateProductDraft(
+                      currentValidationProductId,
+                      'status',
+                      event.target.value as CourseProductMutationInput['status'],
+                    )
+                  }
+                >
+                  {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Responsable</span>
+              <div className="field__control">
+                <select
+                  value={draft.owner}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) =>
+                    updateProductDraft(currentValidationProductId, 'owner', event.target.value as Role)
+                  }
+                >
+                  {appData.roles.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+
+            <label className="field">
+              <span>Versión</span>
+              <div className="field__control">
+                <input
+                  value={draft.version}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) => updateProductDraft(currentValidationProductId, 'version', event.target.value)}
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Etiquetas</span>
+              <div className="field__control">
+                <input
+                  value={joinTags(draft.tags)}
+                  disabled={!canEditSelectedValidationProduct}
+                  onChange={(event) =>
+                    updateProductDraft(currentValidationProductId, 'tags', splitTags(event.target.value))
+                  }
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Descripción</span>
+              <RichTextEditor
+                value={draft.summary}
+                onChange={(value) => updateProductDraft(currentValidationProductId, 'summary', value)}
+                placeholder="Describe qué evalúa este producto y cuál es su alcance pedagógico."
+                minHeight={180}
+                disabled={!canEditSelectedValidationProduct}
+              />
+            </label>
+
+            <label className="field field--full">
+              <span>Instrucciones</span>
+              <RichTextEditor
+                value={draft.body}
+                onChange={(value) => updateProductDraft(currentValidationProductId, 'body', value)}
+                placeholder="Define aquí la estructura, checklist y criterios que deben verificarse."
+                minHeight={260}
+                disabled={!canEditSelectedValidationProduct}
+              />
+            </label>
+          </div>
+        </article>
+
+        {renderValidationWorkbench(
+          currentValidationProductId,
+          draft,
+          draft.summary,
+          draft.body,
+          canEditSelectedValidationProduct,
+        )}
+      </section>
     );
   }
 
@@ -5221,6 +5667,15 @@ export function CourseWorkspacePage({
     setWritingError(null);
     setIsWritingInstructionsPanelOpen(false);
     setActiveWritingSectionTab(null);
+  }
+
+  function closeValidationProductWorkspace() {
+    const nextPath = buildValidationWorkspacePath(currentCourse.slug, null);
+    navigate(nextPath, { replace: true });
+  }
+
+  function goToValidationProduct(productId: string) {
+    navigate(buildValidationWorkspacePath(currentCourse.slug, productId));
   }
 
   function navigateWritingModeRoute(mode: WritingWorkspaceRoute | null) {
@@ -9186,6 +9641,14 @@ export function CourseWorkspacePage({
     );
   }
 
+  if (isValidationProductWorkspaceRoute) {
+    return (
+      <div className="page-stack workspace-page workspace-page--focus workspace-page--validation-product">
+        {renderValidationProductWorkspace()}
+      </div>
+    );
+  }
+
   return (
     <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
 
@@ -9493,22 +9956,7 @@ export function CourseWorkspacePage({
         renderWritingWorkspace()
       ) : null}
 
-      {activeSection === 'validacion' ? (
-        <section className="workspace-grid">
-          {renderStageNoteEditor(
-            'validacion',
-            'Validación instruccional',
-            'Ajustes y observaciones pedagógicas',
-            'Esta bitácora captura la revisión experta sobre la pertinencia y calidad instruccional.',
-          )}
-          {renderProductStudio(
-            'validacion',
-            'Producto QA',
-            'Rúbricas y criterio de aprobación',
-            'La validación final ya no depende solo de observaciones: aquí también se construyen y versionan las rúbricas de calidad.',
-          )}
-        </section>
-      ) : null}
+      {activeSection === 'validacion' ? renderValidationStageBoard() : null}
 
       {activeSection === 'multimedia' ? (
         <section className="workspace-grid">

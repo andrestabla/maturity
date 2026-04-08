@@ -2122,6 +2122,133 @@ html.modal-active .app-shell {
   min-height: 120px;
 }
 
+.validation-board,
+.validation-product-shell {
+  display: grid;
+  gap: 22px;
+}
+
+.validation-board__summary {
+  margin-top: 18px;
+}
+
+.validation-board__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.validation-product-card {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  padding: 18px;
+  border-radius: 26px;
+  border: 1px solid rgba(112, 133, 158, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.94));
+  box-shadow: 0 20px 42px rgba(17, 29, 38, 0.06);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.validation-product-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(82, 182, 223, 0.48);
+  box-shadow: 0 26px 56px rgba(17, 29, 38, 0.1);
+}
+
+.validation-product-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.validation-product-card__copy {
+  display: grid;
+  gap: 12px;
+}
+
+.validation-product-card__head,
+.validation-product-head__meta,
+.validation-product-card__meta,
+.validation-product-card__cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.validation-product-card__head {
+  justify-content: space-between;
+}
+
+.validation-product-card h4 {
+  margin: 0;
+  font-size: 1.18rem;
+  line-height: 1.15;
+}
+
+.validation-product-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.validation-product-card__meta {
+  color: rgba(19, 33, 38, 0.68);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.validation-product-card__ring {
+  padding: 4px 0 0;
+}
+
+.validation-product-card__ring .progress-ring {
+  padding: 0;
+}
+
+.validation-product-card__ring .progress-ring svg {
+  width: 118px;
+  height: 118px;
+}
+
+.validation-product-card__ring .progress-ring__copy strong {
+  font-size: 1.55rem;
+}
+
+.validation-product-card__ring .progress-ring__copy p {
+  max-width: 180px;
+}
+
+.validation-product-card__cta {
+  justify-content: space-between;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.validation-product-head__meta {
+  margin-top: 14px;
+  color: rgba(19, 33, 38, 0.68);
+  font-weight: 600;
+}
+
+.rich-editor--disabled .rich-editor__toolbar {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.rich-editor__content[aria-disabled='true'] {
+  cursor: not-allowed;
+  background: rgba(244, 248, 252, 0.72);
+}
+
 .user-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2160,7 +2287,8 @@ html.modal-active .app-shell {
 @media (max-width: 1080px) {
   .auth-panel,
   .task-editor,
-  .validation-workbench__layout {
+  .validation-workbench__layout,
+  .validation-board__grid {
     grid-template-columns: 1fr;
   }
 }
