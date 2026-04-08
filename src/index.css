@@ -2158,6 +2158,26 @@ html.modal-active .app-shell {
     border-color 180ms ease;
 }
 
+.validation-product-card.is-success {
+  border-color: color-mix(in srgb, var(--sage) 42%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sage-soft) 66%, white 34%), rgba(255, 255, 255, 0.96));
+}
+
+.validation-product-card.is-warning {
+  border-color: color-mix(in srgb, var(--gold) 42%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold-soft) 66%, white 34%), rgba(255, 255, 255, 0.96));
+}
+
+.validation-product-card.is-danger {
+  border-color: color-mix(in srgb, var(--coral) 42%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--coral-soft) 64%, white 36%), rgba(255, 255, 255, 0.96));
+}
+
+.validation-product-card.is-neutral {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 82%, white 18%), rgba(255, 255, 255, 0.96));
+}
+
 .validation-product-card:hover {
   transform: translateY(-2px);
   border-color: rgba(82, 182, 223, 0.48);
@@ -10602,6 +10622,26 @@ body::after {
   text-align: left;
   text-decoration: none;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.writing-queue__item.is-success {
+  border-color: color-mix(in srgb, var(--sage) 38%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sage-soft) 60%, white 40%), rgba(255, 255, 255, 0.97));
+}
+
+.writing-queue__item.is-warning {
+  border-color: color-mix(in srgb, var(--gold) 38%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold-soft) 60%, white 40%), rgba(255, 255, 255, 0.97));
+}
+
+.writing-queue__item.is-danger {
+  border-color: color-mix(in srgb, var(--coral) 38%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--coral-soft) 58%, white 42%), rgba(255, 255, 255, 0.97));
+}
+
+.writing-queue__item.is-neutral {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 82%, white 18%), rgba(255, 255, 255, 0.97));
 }
 
 .writing-queue__item:hover,

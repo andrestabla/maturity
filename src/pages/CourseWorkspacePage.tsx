@@ -1168,6 +1168,103 @@ function productStatusBadgeClass(status: CourseProduct['status']) {
   }
 }
 
+type WorkflowTone = 'success' | 'warning' | 'danger' | 'neutral';
+
+function workflowToneClass(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'is-success';
+    case 'warning':
+      return 'is-warning';
+    case 'danger':
+      return 'is-danger';
+    default:
+      return 'is-neutral';
+  }
+}
+
+function workflowToneLabel(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'Finalizado';
+    case 'warning':
+      return 'En proceso';
+    case 'danger':
+      return 'Atrasado';
+    default:
+      return 'Sin riesgo';
+  }
+}
+
+function workflowToneBadgeClass(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'badge badge--sage';
+    case 'warning':
+      return 'badge badge--gold';
+    case 'danger':
+      return 'badge badge--coral';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+function getProductDueDate(product: { phasePlan?: ProductPhasePlan[] }) {
+  return parsePlanningDate(
+    (product.phasePlan ?? []).find((phase) => phase.phase === 'escritura')?.endDate,
+  );
+}
+
+function getWritingWorkflowTone(product: CourseProduct): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+  const hasProgress = hasWritingProgress(product);
+  const isFinalized = product.stage === 'validacion' || product.status === 'Aprobado';
+
+  if (isFinalized) {
+    return 'success';
+  }
+
+  if (hasProgress || product.status === 'En revisión') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
+function getValidationWorkflowTone(
+  product: { status: CourseProduct['status']; phasePlan?: ProductPhasePlan[] },
+): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+
+  if (product.status === 'Aprobado') {
+    return 'success';
+  }
+
+  if (product.status === 'En revisión') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
 function productFormatsForStage(
   stage: CourseProductStage,
 ): CourseProductMutationInput['format'][] {
@@ -1833,6 +1930,10 @@ function hasWritingProgress(product: CourseProduct) {
 }
 
 function getWritingActionLabel(product: CourseProduct) {
+  if (product.stage === 'validacion') {
+    return 'Ver validación';
+  }
+
   if (product.status === 'Aprobado' || product.status === 'En revisión') {
     return 'Revisar';
   }
@@ -1915,6 +2016,7 @@ export function CourseWorkspacePage({
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
   const [isProductSaving, setIsProductSaving] = useState<string | null>(null);
+  const [isValidationReturnSaving, setIsValidationReturnSaving] = useState<string | null>(null);
   const [isPlanningSaving, setIsPlanningSaving] = useState(false);
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [stageNoteDrafts, setStageNoteDrafts] = useState<
@@ -2394,22 +2496,24 @@ export function CourseWorkspacePage({
             (resource) => resource.courseSlug === currentCourse.slug,
           )
         : [];
-  const writingWorkQueue = architectureProducts
+  const writingWorkQueue = currentCourse.products
     .filter((product) => {
+      const writingPhase = getWritingPhase(product);
+
       if (canManageWritingWorkspace) {
-        return true;
+        return Boolean(writingPhase || product.stage === 'validacion');
       }
 
       if (role !== 'Experto') {
         return false;
       }
 
-      return getWritingPhase(product)?.assigneeId === viewer.id;
+      return Boolean(writingPhase?.assigneeId === viewer.id || product.stage === 'validacion');
     })
     .slice()
     .sort((left, right) => {
-      const leftEnd = parsePlanningDate(getWritingPhase(left)?.endDate);
-      const rightEnd = parsePlanningDate(getWritingPhase(right)?.endDate);
+      const leftEnd = getProductDueDate(left);
+      const rightEnd = getProductDueDate(right);
 
       if (leftEnd && rightEnd) {
         return leftEnd.getTime() - rightEnd.getTime();
@@ -3616,18 +3720,20 @@ export function CourseWorkspacePage({
             <div className="validation-board__grid">
               {validationProducts.map((product) => {
                 const metrics = getValidationMetrics(product);
+                const tone = getValidationWorkflowTone(product);
 
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className="validation-product-card"
+                    className={`validation-product-card ${workflowToneClass(tone)}`}
                     onClick={() => goToValidationProduct(product.id)}
                   >
                     <div className="validation-product-card__copy">
                       <div className="validation-product-card__head">
                         <span className="badge badge--outline">{product.format}</span>
                         <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                        <span className={workflowToneBadgeClass(tone)}>{workflowToneLabel(tone)}</span>
                       </div>
                       <h4>{product.title}</h4>
                       <p>{stripHtmlToText(product.summary) || 'Sin descripción registrada.'}</p>
@@ -3703,6 +3809,7 @@ export function CourseWorkspacePage({
     const metrics = getValidationMetrics(draft ?? selectedValidationProduct);
     const validationStageFormats = productFormatsForStage('validacion');
     const currentValidationProductId = selectedValidationProduct.id;
+    const validationTone = getValidationWorkflowTone(draft ?? selectedValidationProduct);
 
     if (!draft) {
       return (
@@ -3736,6 +3843,23 @@ export function CourseWorkspacePage({
               </Link>
               <button
                 type="button"
+                className="ghost-button"
+                disabled={
+                  !canEditSelectedValidationProduct ||
+                  isProductSaving === currentValidationProductId ||
+                  isValidationReturnSaving === currentValidationProductId
+                }
+                onClick={() => void handleReturnValidationProductToWriting()}
+              >
+                <RefreshCcw size={16} />
+                <span>
+                  {isValidationReturnSaving === currentValidationProductId
+                    ? 'Devolviendo…'
+                    : 'Devolver a escritura'}
+                </span>
+              </button>
+              <button
+                type="button"
                 className="cta-button"
                 disabled={!canEditSelectedValidationProduct || isProductSaving === currentValidationProductId}
                 onClick={() => void handleProductSave(currentValidationProductId)}
@@ -3750,6 +3874,9 @@ export function CourseWorkspacePage({
             <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
             <span className="badge badge--outline">{draft.format}</span>
             <span className="badge badge--outline">{draft.version}</span>
+            <span className={workflowToneBadgeClass(validationTone)}>
+              {workflowToneLabel(validationTone)}
+            </span>
             <span>{metrics.completed}/{metrics.total} criterios</span>
             <span>{metrics.openComments} comentarios abiertos</span>
           </div>
@@ -4727,10 +4854,21 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       setIsEditingCourse(false);
+      void showAlert({
+        title: 'Curso guardado',
+        message: 'Los cambios del curso quedaron actualizados correctamente.',
+        tone: 'success',
+      });
     } catch (error) {
       // Rollback
       mutateAppData(originalAppData);
-      setCourseError(error instanceof Error ? error.message : 'No fue posible actualizar el curso.');
+      const message = error instanceof Error ? error.message : 'No fue posible actualizar el curso.';
+      setCourseError(message);
+      void showAlert({
+        title: 'Error al guardar curso',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsCourseSaving(false);
     }
@@ -4777,12 +4915,22 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Ficha operativa guardada',
+        message: 'La información base del curso quedó sincronizada.',
+        tone: 'success',
+      });
     } catch (error) {
       // Rollback
       mutateAppData(originalAppData);
-      setMetadataError(
-        error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.';
+      setMetadataError(message);
+      void showAlert({
+        title: 'Error al guardar ficha',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsMetadataSaving(false);
     }
@@ -4846,8 +4994,19 @@ export function CourseWorkspacePage({
       refreshAppData();
       setNewTaskForm(makeTaskForm(currentCourse.slug, currentCourse.stageId));
       closeModal();
+      void showAlert({
+        title: 'Tarea creada',
+        message: 'La tarea quedó disponible en el tablero del curso.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'No fue posible crear la tarea.');
+      const message = error instanceof Error ? error.message : 'No fue posible crear la tarea.';
+      setTaskError(message);
+      void showAlert({
+        title: 'Error al crear tarea',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTaskSaving(false);
     }
@@ -4877,11 +5036,22 @@ export function CourseWorkspacePage({
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setTaskError(payload.error ?? 'No fue posible guardar la tarea.');
+      const message = payload.error ?? 'No fue posible guardar la tarea.';
+      setTaskError(message);
+      void showAlert({
+        title: 'Error al guardar tarea',
+        message,
+        tone: 'error',
+      });
       return;
     }
 
     refreshAppData();
+    void showAlert({
+      title: 'Tarea guardada',
+      message: 'Los cambios de la tarea quedaron actualizados correctamente.',
+      tone: 'success',
+    });
   }
 
   async function handleTaskDelete(taskId: string) {
@@ -4961,10 +5131,19 @@ export function CourseWorkspacePage({
       refreshAppData();
       setNewTeamMemberForm(makeTeamMemberForm());
       setIsTeamComposerOpen(false);
+      void showAlert({
+        title: 'Responsable agregado',
+        message: 'El integrante quedó disponible en el equipo del curso.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTeamError(
-        error instanceof Error ? error.message : 'No fue posible agregar el responsable.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible agregar el responsable.';
+      setTeamError(message);
+      void showAlert({
+        title: 'Error al agregar responsable',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTeamSaving(null);
     }
@@ -5001,10 +5180,19 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Responsable guardado',
+        message: 'Los cambios del responsable quedaron actualizados correctamente.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTeamError(
-        error instanceof Error ? error.message : 'No fue posible guardar el responsable.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible guardar el responsable.';
+      setTeamError(message);
+      void showAlert({
+        title: 'Error al guardar responsable',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTeamSaving(null);
     }
@@ -5408,6 +5596,13 @@ export function CourseWorkspacePage({
        setEditingArchitectureProductId(null);
        setArchitectureEditorMode('create');
        refreshAppData();
+       void showAlert({
+         title: editingArchitectureProductId ? 'Producto actualizado' : 'Producto creado',
+         message: editingArchitectureProductId
+           ? 'El producto quedó actualizado en la arquitectura del curso.'
+           : 'El nuevo producto quedó disponible en la arquitectura del curso.',
+         tone: 'success',
+       });
      } catch (error) {
        const message =
          error instanceof Error
@@ -5416,6 +5611,11 @@ export function CourseWorkspacePage({
              ? 'Error al actualizar producto'
              : 'Error al crear producto';
        setProductError(message);
+       void showAlert({
+         title: editingArchitectureProductId ? 'Error al actualizar' : 'Error al crear',
+         message,
+         tone: 'error',
+       });
      } finally {
        setIsProductSaving(null);
      }
@@ -5432,40 +5632,116 @@ export function CourseWorkspacePage({
     setIsProductSaving(productId);
 
     try {
-      const response = await fetch('/api/course-products', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: productId,
-          ...draft,
-          summary: sanitizeRichHtml(draft.summary),
-          body: sanitizeRichHtml(draft.body),
-          tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
-        }),
+      const updatedProduct = await patchCourseProductOnServer(productId, {
+        ...draft,
+        summary: sanitizeRichHtml(draft.summary),
+        body: sanitizeRichHtml(draft.body),
+        tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
       });
 
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible guardar el producto.');
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
       }
 
-      refreshAppData();
       void showAlert({
         title: 'Producto guardado',
         message: 'Los cambios se guardaron correctamente y quedaron disponibles en el expediente del curso.',
         tone: 'success',
       });
     } catch (error) {
-      setProductError(
-        error instanceof Error ? error.message : 'No fue posible guardar el producto.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible guardar el producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsProductSaving(null);
+    }
+  }
+
+  async function handleReturnValidationProductToWriting() {
+    if (!selectedValidationProduct || !canEditSelectedValidationProduct) {
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Devolver a escritura',
+      message:
+        'El producto volverá a la bandeja de Escritura para ajustes y quedará nuevamente editable por el experto.',
+      tone: 'warning',
+      confirmLabel: 'Devolver a escritura',
+      cancelLabel: 'Mantener en validación',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProductError(null);
+    setIsValidationReturnSaving(selectedValidationProduct.id);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        selectedValidationProduct.id,
+        {
+          stage: 'arquitectura',
+          owner: 'Experto',
+          status: 'En revisión',
+        },
+        {
+          fallbackError: 'No fue posible devolver el producto a escritura.',
+        },
+      );
+
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      goToWritingProduct(selectedValidationProduct.id, true);
+
+      void showAlert({
+        title: 'Producto devuelto a escritura',
+        message: 'El experto ya puede retomar el producto desde la bandeja de Escritura.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible devolver el producto a escritura.';
+      void showAlert({
+        title: 'Error al devolver',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setIsValidationReturnSaving(null);
     }
   }
 
@@ -5650,10 +5926,20 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       closePlanningProductModal();
+      void showAlert({
+        title: 'Planeación guardada',
+        message: 'Las fechas y responsables del producto quedaron actualizados.',
+        tone: 'success',
+      });
     } catch (error) {
-      setPlanningError(
-        error instanceof Error ? error.message : 'No fue posible guardar la planeación del producto.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la planeación del producto.';
+      setPlanningError(message);
+      void showAlert({
+        title: 'Error al guardar planeación',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsPlanningSaving(false);
     }
@@ -5677,6 +5963,12 @@ export function CourseWorkspacePage({
 
   function goToValidationProduct(productId: string) {
     navigate(buildValidationWorkspacePath(currentCourse.slug, productId));
+  }
+
+  function goToWritingProduct(productId: string, replace = false) {
+    navigate(`${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(productId)}`, {
+      replace,
+    });
   }
 
   function navigateWritingModeRoute(mode: WritingWorkspaceRoute | null) {
@@ -5918,17 +6210,14 @@ export function CourseWorkspacePage({
     }
   }
 
-  async function patchWritingProductOnServer(
+  async function patchCourseProductOnServer(
+    productId: string,
     patch: Partial<CourseProductMutationInput>,
     options?: {
       timeoutMs?: number;
       fallbackError?: string;
     },
   ): Promise<CourseProduct | null> {
-    if (!selectedWritingProduct) {
-      throw new Error('Producto de escritura no seleccionado.');
-    }
-
     const controller = new AbortController();
     const timeoutId = window.setTimeout(
       () => controller.abort(),
@@ -5945,7 +6234,7 @@ export function CourseWorkspacePage({
         },
         body: JSON.stringify({
           courseSlug: currentCourse.slug,
-          id: selectedWritingProduct.id,
+          id: productId,
           ...patch,
         }),
       });
@@ -5964,6 +6253,20 @@ export function CourseWorkspacePage({
     } finally {
       window.clearTimeout(timeoutId);
     }
+  }
+
+  async function patchWritingProductOnServer(
+    patch: Partial<CourseProductMutationInput>,
+    options?: {
+      timeoutMs?: number;
+      fallbackError?: string;
+    },
+  ): Promise<CourseProduct | null> {
+    if (!selectedWritingProduct) {
+      throw new Error('Producto de escritura no seleccionado.');
+    }
+
+    return patchCourseProductOnServer(selectedWritingProduct.id, patch, options);
   }
 
   async function handleGenerateWritingProduct() {
@@ -6104,9 +6407,22 @@ export function CourseWorkspacePage({
 
       if (savedProduct) {
         setWritingDraft(normalizeWritingDraft(savedProduct));
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === savedProduct.id ? savedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
       }
 
-      refreshAppData();
       void showAlert({
         title: 'Producto guardado',
         message: 'La escritura del producto quedó actualizada en el expediente del curso.',
@@ -6207,7 +6523,6 @@ export function CourseWorkspacePage({
       navigate(buildValidationWorkspacePath(currentCourse.slug, selectedWritingProduct.id), {
         replace: true,
       });
-      refreshAppData();
       void showAlert({
         title: 'Producto finalizado',
         message:
@@ -7514,7 +7829,11 @@ export function CourseWorkspacePage({
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
                 const actionLabel = getWritingActionLabel(product);
-                const editorHref = `${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(product.id)}`;
+                const tone = getWritingWorkflowTone(product);
+                const editorHref =
+                  product.stage === 'validacion'
+                    ? buildValidationWorkspacePath(currentCourse.slug, product.id)
+                    : `${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(product.id)}`;
 
                 return (
                   <a
@@ -7522,7 +7841,7 @@ export function CourseWorkspacePage({
                     href={editorHref}
                     target="_blank"
                     rel="noreferrer"
-                    className="writing-queue__item"
+                    className={`writing-queue__item ${workflowToneClass(tone)}`}
                     onClick={() => stashWritingLaunchSnapshot(product)}
                   >
                     <div className="writing-queue__head">
@@ -7533,6 +7852,7 @@ export function CourseWorkspacePage({
                       <div className="writing-queue__meta">
                         <span className="badge badge--outline">{product.format}</span>
                         <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                        <span className={workflowToneBadgeClass(tone)}>{workflowToneLabel(tone)}</span>
                       </div>
                     </div>
 
@@ -7610,10 +7930,20 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Bitácora guardada',
+        message: 'Los ajustes de la etapa quedaron actualizados.',
+        tone: 'success',
+      });
     } catch (error) {
-      setStageNoteError(
-        error instanceof Error ? error.message : 'No fue posible guardar la bitácora de etapa.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la bitácora de etapa.';
+      setStageNoteError(message);
+      void showAlert({
+        title: 'Error al guardar bitácora',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsStageNoteSaving(null);
     }
