@@ -3,6 +3,7 @@ import type {
   ProductValidationChecklistItem,
   ProductValidationData,
   ProductValidationChecklistStatus,
+  ProductWritingSection,
 } from '../types.js';
 
 const validationChecklistTemplates: Record<CourseProductStage, string[]> = {
@@ -96,6 +97,25 @@ export function buildDefaultValidationData(
     comments: [],
     lastReviewedAt: undefined,
   };
+}
+
+export function buildValidationChecklistFromWritingSections(
+  sections: ProductWritingSection[],
+): ProductValidationChecklistItem[] {
+  const sourceSections = sections.length > 0 ? sections : validationChecklistTemplates.validacion.map((label, index) => ({
+    id: `validation-check-${index + 1}`,
+    title: `Criterio ${index + 1}`,
+    instructions: label,
+    content: '',
+  }));
+
+  return sourceSections.map((section, index) => ({
+    id: `validation-check-${index + 1}`,
+    label: section.instructions.trim() || section.title.trim() || `Criterio ${index + 1}`,
+    status: 'Parcial',
+    notes: '',
+    updatedAt: new Date().toISOString(),
+  }));
 }
 
 export function normalizeValidationChecklistStatus(
