@@ -2033,6 +2033,95 @@ html.modal-active .app-shell {
   justify-items: stretch;
 }
 
+.validation-workbench {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.validation-workbench__layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.88fr) minmax(320px, 1.12fr);
+  gap: 16px;
+}
+
+.validation-workbench__column {
+  display: grid;
+  gap: 16px;
+}
+
+.validation-workbench__block {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.validation-checklist-item {
+  display: grid;
+  gap: 12px;
+}
+
+.validation-checklist-item__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 12px;
+  align-items: center;
+}
+
+.validation-preview {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px dashed color-mix(in srgb, var(--ocean) 28%, var(--line) 72%);
+  background: linear-gradient(180deg, rgba(250, 253, 255, 0.96), rgba(244, 249, 255, 0.9));
+}
+
+.validation-preview__pane {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(19, 33, 38, 0.06);
+}
+
+.validation-comment-composer {
+  display: grid;
+  gap: 12px;
+}
+
+.validation-comment-item__fragment {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.validation-comment-item__fragment strong {
+  word-break: break-word;
+}
+
+.validation-workbench .field__control .modern-textarea {
+  border: 0;
+  background: transparent;
+  min-height: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.field__control--inline {
+  min-height: 42px;
+  padding-inline: 12px;
+}
+
+.validation-notes {
+  min-height: 120px;
+}
+
 .user-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2070,7 +2159,8 @@ html.modal-active .app-shell {
 
 @media (max-width: 1080px) {
   .auth-panel,
-  .task-editor {
+  .task-editor,
+  .validation-workbench__layout {
     grid-template-columns: 1fr;
   }
 }

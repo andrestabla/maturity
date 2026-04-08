@@ -52,6 +52,9 @@ import type {
   ProductWritingAsset,
   ProductWritingData,
   ProductWritingSection,
+  ProductValidationChecklistItem,
+  ProductValidationComment,
+  ProductValidationData,
   Role,
   RoleProfile,
   StageCheckpoint,
@@ -69,6 +72,10 @@ import type {
   UserProfileUpdateInput,
   UserUpdateInput,
 } from '../src/types.js';
+import {
+  buildDefaultValidationData,
+  normalizeValidationChecklistStatus,
+} from '../src/data/productValidationDefaults.js';
 import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
@@ -120,6 +127,7 @@ interface CourseProductRow {
   section: string | null;
   phasePlan: JsonValue;
   writingData: JsonValue;
+  validationData: JsonValue;
   createdAt: string;
   updatedAt: string;
 }
@@ -864,6 +872,7 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('microcurriculo'),
       updatedAt: course.updatedAt,
     },
     {
@@ -884,6 +893,7 @@ function buildDefaultCourseProducts(
       version: 'v1.1',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('arquitectura'),
       updatedAt: course.updatedAt,
     },
     {
@@ -904,6 +914,7 @@ function buildDefaultCourseProducts(
       version: 'v0.9',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('escritura'),
       updatedAt: course.updatedAt,
     },
     {
@@ -924,6 +935,7 @@ function buildDefaultCourseProducts(
       version: 'v0.8',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('validacion'),
       updatedAt: course.updatedAt,
     },
     {
@@ -941,6 +953,7 @@ function buildDefaultCourseProducts(
       version: 'v0.6',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('multimedia'),
       updatedAt: course.updatedAt,
     },
     {
@@ -956,6 +969,7 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('lms'),
       updatedAt: course.updatedAt,
     },
     {
@@ -973,6 +987,7 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('qa'),
       updatedAt: course.updatedAt,
     },
   ];
@@ -1366,6 +1381,58 @@ function normalizeProductWritingData(writingData?: ProductWritingData): ProductW
     sections: normalizeProductWritingSections(writingData?.sections),
     lastSavedAt: writingData?.lastSavedAt?.trim() || undefined,
     lastGeneratedAt: writingData?.lastGeneratedAt?.trim() || undefined,
+  };
+}
+
+function normalizeProductValidationChecklist(
+  checklist?: ProductValidationChecklistItem[],
+  stage: CourseProductStage = 'validacion',
+): ProductValidationChecklistItem[] {
+  const fallbackChecklist = buildDefaultValidationData(stage).checklist;
+  const source = checklist && checklist.length > 0 ? checklist : fallbackChecklist;
+
+  return source
+    .filter((item): item is ProductValidationChecklistItem => Boolean(item?.label?.trim()))
+    .map((item, index) => ({
+      id: item.id?.trim() || `validation-check-${index + 1}`,
+      label: item.label.trim(),
+      status: normalizeValidationChecklistStatus(item.status),
+      notes: item.notes?.trim() || '',
+      updatedAt: item.updatedAt?.trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeProductValidationComments(
+  comments?: ProductValidationComment[],
+): ProductValidationComment[] {
+  return (comments ?? [])
+    .filter((comment): comment is ProductValidationComment =>
+      Boolean(comment?.fragment?.trim() && comment?.comment?.trim()),
+    )
+    .map((comment) => ({
+      id: comment.id?.trim() || crypto.randomUUID(),
+      fragment: comment.fragment.trim(),
+      comment: comment.comment.trim(),
+      author: comment.author,
+      status: comment.status === 'Resuelto' ? 'Resuelto' : 'Abierto',
+      createdAt: comment.createdAt?.trim() || new Date().toISOString(),
+      updatedAt: comment.updatedAt?.trim() || new Date().toISOString(),
+      resolvedAt: comment.resolvedAt?.trim() || undefined,
+    }));
+}
+
+function normalizeProductValidationData(
+  validationData?: ProductValidationData,
+  stage: CourseProductStage = 'validacion',
+): ProductValidationData {
+  const fallback = buildDefaultValidationData(stage);
+  const source = validationData ?? fallback;
+
+  return {
+    reviewerNotes: source.reviewerNotes?.trim() ?? '',
+    checklist: normalizeProductValidationChecklist(source.checklist, stage),
+    comments: normalizeProductValidationComments(source.comments),
+    lastReviewedAt: source.lastReviewedAt?.trim() || undefined,
   };
 }
 
@@ -1839,6 +1906,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     section: input.section?.trim() || undefined,
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
     writingData: normalizeProductWritingData(input.writingData),
+    validationData: normalizeProductValidationData(input.validationData, input.stage),
     updatedAt: getTodayLabel(),
   };
 }
@@ -3190,6 +3258,7 @@ async function backfillCourseProductsTable() {
           section,
           phase_plan,
           writing_data,
+          validation_data,
           created_at,
           updated_at
         )
@@ -3208,6 +3277,7 @@ async function backfillCourseProductsTable() {
           ${product.section ?? null},
           ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
           ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
+          ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
           ${product.updatedAt},
           ${product.updatedAt}
         )
@@ -3226,6 +3296,7 @@ async function backfillCourseProductsTable() {
           section = EXCLUDED.section,
           phase_plan = EXCLUDED.phase_plan,
           writing_data = EXCLUDED.writing_data,
+          validation_data = EXCLUDED.validation_data,
           updated_at = EXCLUDED.updated_at
       `;
     }
@@ -3249,6 +3320,7 @@ async function syncCourseProductsJsonSnapshot(courseSlug: string) {
       section,
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
+      validation_data AS "validationData",
       updated_at AS "updatedAt"
     FROM maturity_course_products
     WHERE course_slug = ${courseSlug}
@@ -3354,6 +3426,7 @@ async function syncCourseProductsTable(course: Course) {
         section,
         phase_plan,
         writing_data,
+        validation_data,
         created_at,
         updated_at
       )
@@ -3372,6 +3445,7 @@ async function syncCourseProductsTable(course: Course) {
         ${product.section ?? null},
         ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
         ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
+        ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
         ${product.updatedAt},
         ${product.updatedAt}
       )
@@ -3390,6 +3464,7 @@ async function syncCourseProductsTable(course: Course) {
         section = EXCLUDED.section,
         phase_plan = EXCLUDED.phase_plan,
         writing_data = EXCLUDED.writing_data,
+        validation_data = EXCLUDED.validation_data,
         updated_at = EXCLUDED.updated_at
     `;
   }
@@ -3417,6 +3492,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
       section,
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
+      validation_data AS "validationData",
       created_at AS "createdAt",
       updated_at AS "updatedAt"
     FROM maturity_course_products
@@ -3437,7 +3513,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 24; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 25; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3823,6 +3899,7 @@ async function ensureSchema() {
         section TEXT,
         phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb,
         writing_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        validation_data JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -3836,6 +3913,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_course_products
       ADD COLUMN IF NOT EXISTS writing_data JSONB NOT NULL DEFAULT '{}'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_course_products
+      ADD COLUMN IF NOT EXISTS validation_data JSONB NOT NULL DEFAULT '{}'::jsonb
     `;
 
     await sql`
@@ -4506,6 +4588,19 @@ async function ensureSchema() {
       `;
     }
 
+    // Migration 25: Product validation workspace
+    if (currentVersion < 25) {
+      await sql`
+        ALTER TABLE maturity_course_products
+        ADD COLUMN IF NOT EXISTS validation_data JSONB NOT NULL DEFAULT '{}'::jsonb
+      `;
+
+      await sql`
+        UPDATE maturity_course_products
+        SET validation_data = COALESCE(validation_data, '{}'::jsonb)
+      `;
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -4630,6 +4725,10 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     section: row.section ?? undefined,
     phasePlan: normalizeProductPhasePlan(parseJson<ProductPhasePlan[]>(row.phasePlan ?? [])),
     writingData: normalizeProductWritingData(parseJson<ProductWritingData>(row.writingData ?? {})),
+    validationData: normalizeProductValidationData(
+      parseJson<ProductValidationData>(row.validationData ?? {}),
+      row.stage,
+    ),
     updatedAt: row.updatedAt,
   };
 }
@@ -6702,6 +6801,10 @@ export async function updateCourseProductRecord(
         input.writingData !== undefined
           ? normalizeProductWritingData(input.writingData)
           : product.writingData,
+      validationData:
+        input.validationData !== undefined
+          ? normalizeProductValidationData(input.validationData, nextStage)
+          : product.validationData,
       updatedAt: getTodayLabel(),
     };
 

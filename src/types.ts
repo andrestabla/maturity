@@ -240,6 +240,7 @@ export interface CourseProduct {
   section?: string;
   phasePlan: ProductPhasePlan[];
   writingData: ProductWritingData;
+  validationData: ProductValidationData;
   updatedAt: string;
 }
 
@@ -281,6 +282,35 @@ export interface ProductWritingData {
   sections: ProductWritingSection[];
   lastSavedAt?: string;
   lastGeneratedAt?: string;
+}
+
+export type ProductValidationChecklistStatus = 'Cumple' | 'Parcial' | 'No cumple' | 'No aplica';
+export type ProductValidationCommentStatus = 'Abierto' | 'Resuelto';
+
+export interface ProductValidationChecklistItem {
+  id: string;
+  label: string;
+  status: ProductValidationChecklistStatus;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export interface ProductValidationComment {
+  id: string;
+  fragment: string;
+  comment: string;
+  author: Role;
+  status: ProductValidationCommentStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+export interface ProductValidationData {
+  reviewerNotes: string;
+  checklist: ProductValidationChecklistItem[];
+  comments: ProductValidationComment[];
+  lastReviewedAt?: string;
 }
 
 export interface AssistantCard {
@@ -866,6 +896,7 @@ export interface CourseProductMutationInput {
   section?: string;
   phasePlan?: ProductPhasePlan[];
   writingData?: ProductWritingData;
+  validationData?: ProductValidationData;
 }
 
 export interface DeliverableMutationInput {

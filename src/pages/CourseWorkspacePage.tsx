@@ -33,6 +33,8 @@ import {
   ListOrdered,
   Underline,
   Heading3,
+  MessageSquareText,
+  ClipboardList,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -60,12 +62,18 @@ import type {
   ProductPhasePlan,
   ProductPlanningPhase,
   Role,
+  ProductValidationData,
+  ProductValidationChecklistItem,
   StageCheckpointStatus,
   Task,
   TaskMutationInput,
   TeamMember,
   TeamMemberMutationInput,
 } from '../types.js';
+import {
+  buildDefaultValidationData,
+  normalizeValidationChecklistStatus,
+} from '../data/productValidationDefaults.js';
 import { formatDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
@@ -808,6 +816,7 @@ function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
     case 'Resuelta':
+    case 'Resuelto':
       return 'badge badge--sage';
     case 'En revisión':
     case 'En ajuste':
@@ -1074,6 +1083,7 @@ function makeCourseProductForm(
     version: 'v0.1',
     section,
     phasePlan: normalizeProductPhasePlanDraft([]),
+    validationData: buildDefaultValidationData(stage),
   };
 }
 
@@ -1093,6 +1103,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
         version: product.version,
         section: product.section,
         phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
+        validationData: product.validationData ?? buildDefaultValidationData(product.stage),
       },
     ]),
   ) as Record<string, CourseProductMutationInput>;
@@ -1868,6 +1879,9 @@ export function CourseWorkspacePage({
   const [productError, setProductError] = useState<string | null>(null);
   const [planningError, setPlanningError] = useState<string | null>(null);
   const [stageNoteError, setStageNoteError] = useState<string | null>(null);
+  const [validationCommentDrafts, setValidationCommentDrafts] = useState<
+    Record<string, { fragment: string; comment: string }>
+  >({});
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
@@ -1906,6 +1920,7 @@ export function CourseWorkspacePage({
   const [architectureProgress, setArchitectureProgress] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
+  const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [writingError, setWritingError] = useState<string | null>(null);
   const [isWritingSaving, setIsWritingSaving] = useState(false);
   const [isWritingExtracting, setIsWritingExtracting] = useState(false);
@@ -2205,6 +2220,7 @@ export function CourseWorkspacePage({
       setTaskDrafts({});
       setTeamDrafts({});
       setProductDrafts({});
+      setValidationCommentDrafts({});
       setProductComposerStage(null);
       closeModal();
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
@@ -2216,6 +2232,7 @@ export function CourseWorkspacePage({
     setTaskDrafts(makeTaskDrafts(relatedTasks));
     setTeamDrafts(makeTeamMemberDrafts(course.team));
     setProductDrafts(makeCourseProductDrafts(course.products));
+    setValidationCommentDrafts({});
     setProductComposerStage(null);
     closeModal();
     setStageNoteDrafts(makeStageNoteDrafts(course));
@@ -2842,7 +2859,7 @@ export function CourseWorkspacePage({
       case 'escritura':
         return 'Construir por módulos';
       case 'validacion':
-        return 'Cargar inventario';
+        return 'Cargar checklist base';
       case 'multimedia':
         return 'Cargar storyboard';
       case 'qa':
@@ -2861,7 +2878,7 @@ export function CourseWorkspacePage({
       case 'escritura':
         return 'Agrupa la autoría del curso: actividades, instrucciones, recursos y materiales de trabajo.';
       case 'validacion':
-        return 'Consolida el inventario curado y su pertinencia pedagógica por módulo.';
+        return 'Consolida la revisión instruccional, la checklist de calidad y los comentarios a fragmentos.';
       case 'multimedia':
         return 'Organiza piezas propias como HTML, audio, lecturas e infografías listas para producción.';
       case 'qa':
@@ -2938,12 +2955,19 @@ export function CourseWorkspacePage({
           .map(
             (module, index) =>
               [
-                `# Unidad ${index + 1}: ${module.title}`,
+                `# Producto ${index + 1}: ${module.title}`,
                 `Propósito pedagógico: ${module.learningGoal}`,
-                `Recursos curados estimados: ${module.curatedResources}`,
-                '- Fuente 1:',
-                '- Tipo de recurso:',
-                '- Justificación didáctica:',
+                '',
+                '# Checklist de validación',
+                '- Propósito y alcance claros',
+                '- Estructura pedagógica completa',
+                '- Instrucciones accionables',
+                '- Coherencia formal y lingüística',
+                '',
+                '# Comentarios por fragmento',
+                '- Fragmento observado:',
+                '- Ajuste esperado:',
+                '- Estado de revisión:',
               ].join('\n'),
           )
           .join('\n\n');
@@ -3025,6 +3049,398 @@ export function CourseWorkspacePage({
         body: buildProductTemplate(draft.stage, draft.format),
       },
     }));
+  }
+
+  function getValidationData(product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>) {
+    return product.validationData ?? buildDefaultValidationData(product.stage);
+  }
+
+  function updateValidationCommentDraft(
+    productId: string,
+    patch: Partial<{ fragment: string; comment: string }>,
+  ) {
+    setValidationCommentDrafts((current) => ({
+      ...current,
+      [productId]: {
+        fragment: current[productId]?.fragment ?? '',
+        comment: current[productId]?.comment ?? '',
+        ...patch,
+      },
+    }));
+  }
+
+  function updateValidationProductDraft(
+    productId: string,
+    updater: (validationData: ProductValidationData) => ProductValidationData,
+  ) {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+
+      if (!draft) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [productId]: {
+          ...draft,
+          validationData: updater(getValidationData(draft)),
+        },
+      };
+    });
+  }
+
+  function updateValidationChecklistItem(
+    productId: string,
+    itemId: string,
+    patch: Partial<ProductValidationChecklistItem>,
+  ) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      checklist: validationData.checklist.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              ...patch,
+              status: patch.status ? normalizeValidationChecklistStatus(patch.status) : item.status,
+              updatedAt: now,
+            }
+          : item,
+      ),
+      lastReviewedAt: now,
+    }));
+  }
+
+  function updateValidationReviewerNotes(productId: string, notes: string) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      reviewerNotes: notes,
+      lastReviewedAt: now,
+    }));
+  }
+
+  function captureValidationFragment(productId: string) {
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+    const fragmentRoot = validationFragmentRefs.current[productId];
+
+    if (!selection || selection.rangeCount === 0 || !fragmentRoot) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const ancestor = range.commonAncestorContainer;
+    const ancestorElement =
+      ancestor instanceof Element ? ancestor : ancestor.parentElement ?? null;
+
+    if (!ancestorElement || !fragmentRoot.contains(ancestorElement)) {
+      return;
+    }
+
+    const fragment = selection.toString().replace(/\s+/g, ' ').trim();
+
+    if (!fragment) {
+      return;
+    }
+
+    updateValidationCommentDraft(productId, { fragment });
+  }
+
+  function addValidationComment(productId: string) {
+    const draft = productDrafts[productId];
+    const composer = validationCommentDrafts[productId];
+
+    if (!draft || !composer?.fragment.trim() || !composer?.comment.trim()) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      comments: [
+        {
+          id: crypto.randomUUID(),
+          fragment: composer.fragment.trim(),
+          comment: composer.comment.trim(),
+          author: userRole,
+          status: 'Abierto',
+          createdAt: now,
+          updatedAt: now,
+        },
+        ...validationData.comments,
+      ],
+      lastReviewedAt: now,
+    }));
+
+    updateValidationCommentDraft(productId, { fragment: '', comment: '' });
+  }
+
+  function toggleValidationCommentStatus(productId: string, commentId: string) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      comments: validationData.comments.map((comment) =>
+        comment.id === commentId
+          ? {
+              ...comment,
+              status: comment.status === 'Abierto' ? 'Resuelto' : 'Abierto',
+              updatedAt: now,
+              resolvedAt: comment.status === 'Abierto' ? now : undefined,
+            }
+          : comment,
+      ),
+      lastReviewedAt: now,
+    }));
+  }
+
+  function renderValidationWorkbench(
+    productId: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>,
+    summaryHtml: string,
+    bodyHtml: string,
+    isEditable: boolean,
+  ) {
+    const validationData = getValidationData(product);
+    const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
+    const checklistOptions: ProductValidationChecklistItem['status'][] = [
+      'Cumple',
+      'Parcial',
+      'No cumple',
+      'No aplica',
+    ];
+    const checklistCompleted = validationData.checklist.filter(
+      (item) => item.status === 'Cumple',
+    ).length;
+    const checklistTotal = validationData.checklist.length;
+    const pendingComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return (
+      <div className="surface-muted validation-workbench">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Checklist de validación</span>
+            <h3>Revisión por fragmentos y criterios de calidad</h3>
+          </div>
+          <div className="action-row">
+            <span className="badge badge--sage">
+              {checklistCompleted}/{checklistTotal} cumplidos
+            </span>
+            <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
+          </div>
+        </div>
+
+        <div className="validation-workbench__layout">
+          <div className="validation-workbench__column">
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Checklist</span>
+                  <h3>Criterios de aprobación</h3>
+                </div>
+                <ClipboardList size={18} />
+              </div>
+
+              <div className="list-stack">
+                {validationData.checklist.map((item) => (
+                  <div key={item.id} className="list-item validation-checklist-item">
+                    <div className="validation-checklist-item__content">
+                      <strong>{item.label}</strong>
+                      <div className="field__control field__control--inline">
+                        <select
+                          value={item.status}
+                          disabled={!isEditable}
+                          onChange={(event) =>
+                            updateValidationChecklistItem(
+                              productId,
+                              item.id,
+                              { status: event.target.value as ProductValidationChecklistItem['status'] },
+                            )
+                          }
+                        >
+                          {checklistOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea validation-checklist-item__notes"
+                        value={item.notes ?? ''}
+                        disabled={!isEditable}
+                        onChange={(event) =>
+                          updateValidationChecklistItem(productId, item.id, {
+                            notes: event.target.value,
+                          })
+                        }
+                        placeholder="Observación breve sobre este criterio"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Notas del revisor</span>
+                  <h3>Resumen de observaciones</h3>
+                </div>
+                <MessageSquareText size={18} />
+              </div>
+
+              <textarea
+                className="modern-textarea validation-notes"
+                value={validationData.reviewerNotes}
+                disabled={!isEditable}
+                onChange={(event) => updateValidationReviewerNotes(productId, event.target.value)}
+                placeholder="Sintetiza aquí el criterio global de revisión..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <div className="validation-workbench__column validation-workbench__column--wide">
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Vista de revisión</span>
+                  <h3>Selecciona un fragmento del producto para comentarlo</h3>
+                </div>
+                {isEditable ? (
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--compact"
+                    onClick={() => captureValidationFragment(productId)}
+                  >
+                    <span>Usar selección</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <div
+                ref={(node) => {
+                  validationFragmentRefs.current[productId] = node;
+                }}
+                className="validation-preview"
+                onMouseUp={() => captureValidationFragment(productId)}
+              >
+                <div className="validation-preview__pane">
+                  <span className="eyebrow">Resumen</span>
+                  {renderRichTextContent(
+                    summaryHtml,
+                    'Sin resumen disponible.',
+                    'rich-html--compact',
+                  )}
+                </div>
+                <div className="validation-preview__pane">
+                  <span className="eyebrow">Contenido</span>
+                  {renderRichTextContent(bodyHtml, 'Sin contenido disponible.', 'rich-html--panel')}
+                </div>
+              </div>
+            </div>
+
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Comentarios</span>
+                  <h3>Fragmentos específicos para resolver</h3>
+                </div>
+                <span className="badge badge--outline">{validationData.comments.length} notas</span>
+              </div>
+
+              {isEditable ? (
+                <div className="validation-comment-composer">
+                  <label className="field field--full">
+                    <span>Fragmento seleccionado</span>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea"
+                        value={fragmentDraft.fragment}
+                        onChange={(event) =>
+                          updateValidationCommentDraft(productId, { fragment: event.target.value })
+                        }
+                        placeholder="Selecciona un fragmento en la vista de revisión o escríbelo manualmente"
+                        rows={3}
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Comentario para el experto</span>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea"
+                        value={fragmentDraft.comment}
+                        onChange={(event) =>
+                          updateValidationCommentDraft(productId, { comment: event.target.value })
+                        }
+                        placeholder="Describe con precisión qué debe ajustar el experto"
+                        rows={4}
+                      />
+                    </div>
+                  </label>
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="cta-button"
+                      disabled={!fragmentDraft.fragment.trim() || !fragmentDraft.comment.trim()}
+                      onClick={() => addValidationComment(productId)}
+                    >
+                      <span>Agregar comentario</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="list-stack">
+                {validationData.comments.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>Sin comentarios todavía</strong>
+                    <p>Selecciona un fragmento para dejar observaciones puntuales sobre el producto.</p>
+                  </div>
+                ) : (
+                  validationData.comments.map((comment) => (
+                    <div key={comment.id} className="list-item validation-comment-item">
+                      <div>
+                        <div className="validation-comment-item__fragment">
+                          <span className={badgeClass(comment.status)}>{comment.status}</span>
+                          <strong>{comment.fragment}</strong>
+                        </div>
+                        <p>{comment.comment}</p>
+                        <div className="list-item__meta">
+                          <span>{comment.author}</span>
+                          <span>{formatDate(comment.updatedAt || comment.createdAt)}</span>
+                        </div>
+                      </div>
+                      {isEditable ? (
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--compact"
+                          onClick={() => toggleValidationCommentStatus(productId, comment.id)}
+                        >
+                          {comment.status === 'Abierto' ? 'Resolver' : 'Reabrir'}
+                        </button>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   function renderProductSupportPanel(
@@ -4592,6 +5008,11 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Producto guardado',
+        message: 'Los cambios se guardaron correctamente y quedaron disponibles en el expediente del curso.',
+        tone: 'success',
+      });
     } catch (error) {
       setProductError(
         error instanceof Error ? error.message : 'No fue posible guardar el producto.',
@@ -7058,6 +7479,21 @@ export function CourseWorkspacePage({
     const isOverlayOpen = activeModal === overlayId;
     const isComposerOpen = isOverlayOpen && productComposerStage === productStage;
     const stageApprovedCount = stageProducts.filter((product) => product.status === 'Aprobado').length;
+    const validationChecklistCompleted = stageProducts.reduce(
+      (sum, product) =>
+        sum +
+        (getValidationData(product).checklist.filter((item) => item.status === 'Cumple').length),
+      0,
+    );
+    const validationChecklistTotal = stageProducts.reduce(
+      (sum, product) => sum + getValidationData(product).checklist.length,
+      0,
+    );
+    const validationOpenComments = stageProducts.reduce(
+      (sum, product) =>
+        sum + getValidationData(product).comments.filter((comment) => comment.status === 'Abierto').length,
+      0,
+    );
 
     return (
       <>
@@ -7106,6 +7542,25 @@ export function CourseWorkspacePage({
               </div>
               <p>La validación queda registrada por versión, responsable y estado del contenido.</p>
             </div>
+
+            {productStage === 'validacion' ? (
+              <>
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{validationChecklistCompleted}/{validationChecklistTotal}</strong>
+                    <span>criterios</span>
+                  </div>
+                  <p>Checklist de validación instruccional por producto.</p>
+                </div>
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{validationOpenComments}</strong>
+                    <span>comentarios</span>
+                  </div>
+                  <p>Observaciones ancladas a fragmentos concretos del producto.</p>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="list-stack">
@@ -7476,6 +7931,16 @@ export function CourseWorkspacePage({
                                 </div>
                               </div>
                             </div>
+
+                            {product.stage === 'validacion' ? (
+                              renderValidationWorkbench(
+                                product.id,
+                                product,
+                                product.summary,
+                                product.body,
+                                false,
+                              )
+                            ) : null}
                           </div>
 
                           <div className="task-editor__sidebar">
@@ -7723,6 +8188,16 @@ export function CourseWorkspacePage({
                                   />
                                 </label>
                               </div>
+
+                              {product.stage === 'validacion' ? (
+                                renderValidationWorkbench(
+                                  product.id,
+                                  draft,
+                                  draft.summary,
+                                  draft.body,
+                                  true,
+                                )
+                              ) : null}
                             </>
                           )}
                         </div>
