@@ -195,7 +195,7 @@ export function DashboardPage({
 
       refreshAppData();
     } catch (error) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible resolver la alerta',
         message: error instanceof Error ? error.message : 'No fue posible resolver la alerta.',
         tone: 'error',

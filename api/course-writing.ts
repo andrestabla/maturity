@@ -70,8 +70,11 @@ const writingSectionTemplatesByFormat: Record<string, string[]> = {
 
 const DEFAULT_EXTRACTION_TIMEOUT_MS = 55000;
 const DEFAULT_SYNC_EXTRACTION_MAX_BYTES = 24 * 1024 * 1024;
-const DEFAULT_WRITING_AI_TIMEOUT_MS = 50000;
-const DEFAULT_WRITING_AI_CONTEXT_CHARS = 14000;
+const DEFAULT_WRITING_AI_TIMEOUT_MS = 18000;
+const DEFAULT_WRITING_AI_CONTEXT_CHARS = 9000;
+const DEFAULT_WRITING_AI_ASSET_READ_TIMEOUT_MS = 8000;
+const DEFAULT_WRITING_AI_MAX_SUPPORT_ASSETS = 3;
+const DEFAULT_WRITING_AI_MAX_LIBRARY_RESOURCES = 8;
 
 function resolveExtractionTimeoutMs() {
   const configured = Number(process.env.WRITING_EXTRACTION_TIMEOUT_MS ?? DEFAULT_EXTRACTION_TIMEOUT_MS);
@@ -103,6 +106,36 @@ function resolveWritingAiContextChars() {
     return DEFAULT_WRITING_AI_CONTEXT_CHARS;
   }
   return Math.max(4000, Math.min(28000, Math.trunc(configured)));
+}
+
+function resolveWritingAiAssetReadTimeoutMs() {
+  const configured = Number(
+    process.env.WRITING_AI_ASSET_READ_TIMEOUT_MS ?? DEFAULT_WRITING_AI_ASSET_READ_TIMEOUT_MS,
+  );
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_WRITING_AI_ASSET_READ_TIMEOUT_MS;
+  }
+  return Math.max(3000, Math.min(15000, Math.trunc(configured)));
+}
+
+function resolveWritingAiMaxSupportAssets() {
+  const configured = Number(
+    process.env.WRITING_AI_MAX_SUPPORT_ASSETS ?? DEFAULT_WRITING_AI_MAX_SUPPORT_ASSETS,
+  );
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_WRITING_AI_MAX_SUPPORT_ASSETS;
+  }
+  return Math.max(0, Math.min(6, Math.trunc(configured)));
+}
+
+function resolveWritingAiMaxLibraryResources() {
+  const configured = Number(
+    process.env.WRITING_AI_MAX_LIBRARY_RESOURCES ?? DEFAULT_WRITING_AI_MAX_LIBRARY_RESOURCES,
+  );
+  if (!Number.isFinite(configured)) {
+    return DEFAULT_WRITING_AI_MAX_LIBRARY_RESOURCES;
+  }
+  return Math.max(0, Math.min(12, Math.trunc(configured)));
 }
 
 class ExtractionTimeoutError extends Error {
@@ -739,11 +772,21 @@ export default async function handler(request: Request) {
 
     const aiContextChars = resolveWritingAiContextChars();
     const aiTimeoutMs = resolveWritingAiTimeoutMs();
+    const assetReadTimeoutMs = resolveWritingAiAssetReadTimeoutMs();
+    const supportAssetsForPrompt = supportAssets.slice(0, resolveWritingAiMaxSupportAssets());
+    const libraryResourceIdsForPrompt = libraryResourceIds.slice(
+      0,
+      resolveWritingAiMaxLibraryResources(),
+    );
 
     const supportTextsRaw = await Promise.all(
-      supportAssets.map(async (asset) => {
+      supportAssetsForPrompt.map(async (asset) => {
         try {
-          const text = await readR2AssetText(asset);
+          const text = await withTimeout(
+            readR2AssetText(asset),
+            assetReadTimeoutMs,
+            `La lectura de "${asset.name}" tardó demasiado para esta generación.`,
+          );
           return `Archivo base: ${asset.name}\n${text}`;
         } catch {
           return `Archivo base: ${asset.name}\nNo fue posible extraer el texto.`;
@@ -756,7 +799,9 @@ export default async function handler(request: Request) {
     );
 
     const libraryTextsRaw = (
-      await Promise.all(libraryResourceIds.map((resourceId) => findLibraryResourceById(resourceId)))
+      await Promise.all(
+        libraryResourceIdsForPrompt.map((resourceId) => findLibraryResourceById(resourceId)),
+      )
     )
       .map((resource) => stringifyLibraryResource(resource))
       .filter(Boolean);
@@ -816,6 +861,7 @@ export default async function handler(request: Request) {
             },
           ],
           temperature: 0.4,
+          max_tokens: 1200,
         }),
         aiTimeoutMs,
         'La generación de esta sección excedió el tiempo máximo.',

@@ -309,14 +309,14 @@ export function UserProfilePage({
       refreshAppData();
       await refreshSession();
       setIsProfileEditorOpen(false);
-      await showAlert({
+      void showAlert({
         title: 'Perfil actualizado',
         message: 'Tus datos básicos quedaron actualizados correctamente.',
         tone: 'success',
         confirmLabel: 'Continuar',
       });
     } catch (error) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible actualizar tu perfil',
         message: error instanceof Error ? error.message : 'No fue posible actualizar tu perfil.',
         tone: 'error',
@@ -359,14 +359,14 @@ export function UserProfilePage({
       }
 
       setIsAdminAccessEditorOpen(false);
-      await showAlert({
+      void showAlert({
         title: 'Usuario actualizado',
         message: 'La ficha del usuario quedó actualizada correctamente.',
         tone: 'success',
         confirmLabel: 'Continuar',
       });
     } catch (error) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible actualizar el usuario',
         message: error instanceof Error ? error.message : 'No fue posible actualizar el usuario.',
         tone: 'error',
@@ -408,7 +408,7 @@ export function UserProfilePage({
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible eliminar el usuario',
         message: payload.error ?? 'No fue posible eliminar el usuario.',
         tone: 'error',
@@ -418,7 +418,7 @@ export function UserProfilePage({
     }
 
     refreshAppData();
-    await showAlert({
+    void showAlert({
       title: 'Usuario eliminado',
       message: 'El usuario fue retirado correctamente del directorio.',
       tone: 'success',
@@ -449,14 +449,14 @@ export function UserProfilePage({
 
       setPasswordForm(buildPasswordForm());
       setIsPasswordEditorOpen(false);
-      await showAlert({
+      void showAlert({
         title: 'Contraseña actualizada',
         message: 'Tu contraseña quedó actualizada correctamente.',
         tone: 'success',
         confirmLabel: 'Continuar',
       });
     } catch (error) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible actualizar la contraseña',
         message:
           error instanceof Error ? error.message : 'No fue posible actualizar la contraseña.',

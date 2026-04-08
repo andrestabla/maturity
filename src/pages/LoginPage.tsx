@@ -27,7 +27,7 @@ export function LoginPage({
         password,
       });
     } catch (loginError) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible iniciar sesión',
         message:
         loginError instanceof Error

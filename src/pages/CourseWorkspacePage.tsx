@@ -137,11 +137,11 @@ const WRITING_SAVE_REQUEST_TIMEOUT_MS = 20000;
 const WRITING_INLINE_EXTRACTION_MAX_BYTES = 2 * 1024 * 1024;
 const WRITING_CLIENT_EXTRACTION_TIMEOUT_MS = 120000;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
-const WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS = 90000;
-const WRITING_AI_GENERATION_MAX_ATTEMPTS = 4;
-const WRITING_AI_GENERATION_COOLDOWN_MS = 900;
+const WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS = 45000;
+const WRITING_AI_GENERATION_MAX_ATTEMPTS = 2;
+const WRITING_AI_GENERATION_COOLDOWN_MS = 500;
 const WRITING_AI_RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
-const WRITING_AI_RETRY_DELAYS_MS = [1200, 2400, 3600, 4800] as const;
+const WRITING_AI_RETRY_DELAYS_MS = [900, 1600] as const;
 
 interface WritingLaunchSnapshot {
   courseSlug: string;
@@ -4450,7 +4450,7 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
-      await showAlert({
+      void showAlert({
         tone: 'success',
         title: 'Arquitectura actualizada',
         message:
@@ -4460,7 +4460,7 @@ export function CourseWorkspacePage({
       });
     } catch (error) {
        const message = error instanceof Error ? error.message : 'Falla crítica en el Arquitecto IA.';
-       await showAlert({ tone: 'error', title: 'Error de Arquitectura', message });
+       void showAlert({ tone: 'error', title: 'Error de Arquitectura', message });
     } finally {
       setIsGeneratingArchitecture(false);
       setArchitectureStep('');
@@ -4652,7 +4652,7 @@ export function CourseWorkspacePage({
     );
 
     if (architectureProducts.length === 0) {
-      await showAlert({
+      void showAlert({
         title: 'Arquitectura vacía',
         message: 'No hay productos de arquitectura para eliminar.',
         tone: 'warning',
@@ -4698,7 +4698,7 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
-      await showAlert({
+      void showAlert({
         title: 'Arquitectura limpiada',
         message: `Se eliminaron ${architectureProducts.length} productos de la arquitectura del curso.`,
         tone: 'success',
@@ -4989,6 +4989,58 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function saveWritingDraftToServer(
+    writingData: ProductWritingData,
+    options?: {
+      timeoutMs?: number;
+      fallbackError?: string;
+    },
+  ) {
+    if (!selectedWritingProduct) {
+      throw new Error('Producto de escritura no seleccionado.');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      options?.timeoutMs ?? WRITING_SAVE_REQUEST_TIMEOUT_MS,
+    );
+
+    try {
+      const response = await fetch('/api/course-writing', {
+        method: 'POST',
+        credentials: 'same-origin',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'save',
+          courseSlug: currentCourse.slug,
+          productId: selectedWritingProduct.id,
+          writingData: {
+            ...writingData,
+            lastSavedAt: new Date().toISOString(),
+          },
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? options?.fallbackError ?? 'No fue posible guardar el producto en escritura.',
+        );
+      }
+
+      return payload?.product ? normalizeWritingDraft(payload.product) : null;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
   async function handleGenerateWritingProduct() {
     if (!selectedWritingProduct || !writingDraft || writingDraft.sections.length === 0) {
       return;
@@ -4999,34 +5051,47 @@ export function CourseWorkspacePage({
     setWritingGenerationProgress(0);
 
     try {
-      const total = writingDraft.sections.length;
+      const pendingSections = writingDraft.sections.filter(
+        (section) => stripHtmlToText(section.content).trim().length === 0,
+      );
+      const sectionsToGenerate =
+        pendingSections.length > 0 ? pendingSections : writingDraft.sections;
+      const total = sectionsToGenerate.length;
+      const progressBase =
+        writingDraft.sections.length > 0
+          ? Math.round(((writingDraft.sections.length - total) / writingDraft.sections.length) * 100)
+          : 0;
       const failedSections: string[] = [];
+      setWritingGenerationProgress(progressBase);
 
       for (let index = 0; index < total; index += 1) {
-        const section = writingDraft.sections[index];
+        const section = sectionsToGenerate[index];
         setWritingGeneratingSectionId(section.id);
-        const stepStart = Math.round((index / total) * 100);
-        const stepTarget = Math.round(((index + 1) / total) * 100);
+        const stepStart = progressBase + Math.round((index / total) * (100 - progressBase));
+        const stepTarget = progressBase + Math.round(((index + 1) / total) * (100 - progressBase));
         setWritingGenerationProgress((current) => Math.max(current, stepStart));
 
         let stepTicker: number | null = window.setInterval(() => {
           setWritingGenerationProgress((current) => {
-            if (current >= stepTarget - 3) {
+            if (current >= stepTarget - 1) {
               return current;
             }
-            return Math.min(stepTarget - 3, current + 1);
+            return Math.min(stepTarget - 1, current + 1);
           });
-        }, 350);
+        }, 250);
 
         let sectionCompleted = false;
         let sectionErrorMessage = '';
 
         for (let attempt = 1; attempt <= WRITING_AI_GENERATION_MAX_ATTEMPTS; attempt += 1) {
-          const shouldUseLiteContext = attempt >= 3;
+          const shouldUseLiteContext = attempt >= 2;
           try {
             const payload = await requestWritingSectionGeneration(section, {
               supportAssets: shouldUseLiteContext ? [] : writingDraft.supportAssets,
               libraryResourceIds: shouldUseLiteContext ? [] : writingDraft.libraryResourceIds,
+              timeoutMs: Math.round(
+                WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS * (shouldUseLiteContext ? 0.8 : 1),
+              ),
             });
 
             if (payload?.product) {
@@ -5078,7 +5143,7 @@ export function CourseWorkspacePage({
       refreshAppData();
       void showAlert({
         title: 'Producto generado',
-        message: `La IA completó ${total}/${total} secciones del producto.`,
+        message: `La IA completó ${total}/${total} secciones pendientes del producto.`,
         tone: 'success',
       });
     } catch (error) {
@@ -5098,38 +5163,14 @@ export function CourseWorkspacePage({
 
     setWritingError(null);
     setIsWritingSaving(true);
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), WRITING_SAVE_REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch('/api/course-writing', {
-        method: 'POST',
-        credentials: 'same-origin',
-        signal: controller.signal,
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'save',
-          courseSlug: currentCourse.slug,
-          productId: selectedWritingProduct.id,
-          writingData: {
-            ...writingDraft,
-            lastSavedAt: new Date().toISOString(),
-          },
-        }),
+      const savedDraft = await saveWritingDraftToServer(writingDraft, {
+        fallbackError: 'No fue posible guardar el producto en escritura.',
       });
 
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'No fue posible guardar el producto en escritura.');
-      }
-
-      if (payload?.product) {
-        setWritingDraft(normalizeWritingDraft(payload.product));
+      if (savedDraft) {
+        setWritingDraft(savedDraft);
       }
 
       refreshAppData();
@@ -5149,7 +5190,6 @@ export function CourseWorkspacePage({
         error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.',
       );
     } finally {
-      window.clearTimeout(timeoutId);
       setIsWritingSaving(false);
     }
   }
@@ -5418,37 +5458,22 @@ export function CourseWorkspacePage({
         updatedAt: undefined,
       }));
 
-      const response = await fetch('/api/course-writing', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
+      const savedDraft = await saveWritingDraftToServer(
+        {
+          ...writingDraft,
+          submittedAsset: null,
+          extractedText: '',
+          draftText: '',
+          sections: clearedSections,
         },
-        body: JSON.stringify({
-          action: 'save',
-          courseSlug: currentCourse.slug,
-          productId: selectedWritingProduct.id,
-          writingData: {
-            ...writingDraft,
-            submittedAsset: null,
-            extractedText: '',
-            draftText: '',
-            sections: clearedSections,
-            lastSavedAt: new Date().toISOString(),
-          },
-        }),
-      });
+        {
+          fallbackError: 'No fue posible reiniciar el proceso de carga.',
+          timeoutMs: WRITING_SAVE_REQUEST_TIMEOUT_MS,
+        },
+      );
 
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'No fue posible reiniciar el proceso de carga.');
-      }
-
-      if (payload?.product) {
-        setWritingDraft(normalizeWritingDraft(payload.product));
+      if (savedDraft) {
+        setWritingDraft(savedDraft);
       }
 
       setWritingUploadProgress(0);
@@ -5461,6 +5486,10 @@ export function CourseWorkspacePage({
         tone: 'success',
       });
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setWritingError('El reinicio tardó demasiado. Intenta nuevamente en unos segundos.');
+        return;
+      }
       setWritingError(
         error instanceof Error ? error.message : 'No fue posible reiniciar el proceso de carga.',
       );
@@ -5504,35 +5533,20 @@ export function CourseWorkspacePage({
       }
 
       const nextSupportAssets = [...writingDraft.supportAssets, ...uploadedAssets];
-
-      const response = await fetch('/api/course-writing', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
+      const savedDraft = await saveWritingDraftToServer(
+        {
+          ...writingDraft,
+          mode: 'ai',
+          supportAssets: nextSupportAssets,
         },
-        body: JSON.stringify({
-          action: 'save',
-          courseSlug: currentCourse.slug,
-          productId: selectedWritingProduct.id,
-          writingData: {
-            ...writingDraft,
-            mode: 'ai',
-            supportAssets: nextSupportAssets,
-          },
-        }),
-      });
+        {
+          fallbackError: 'No fue posible guardar los documentos de apoyo.',
+          timeoutMs: WRITING_SAVE_REQUEST_TIMEOUT_MS,
+        },
+      );
 
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'No fue posible guardar los documentos de apoyo.');
-      }
-
-      if (payload?.product) {
-        setWritingDraft(normalizeWritingDraft(payload.product));
+      if (savedDraft) {
+        setWritingDraft(savedDraft);
       }
       setWritingKnowledgeProgress(100);
 
@@ -5556,16 +5570,20 @@ export function CourseWorkspacePage({
 
     try {
       let payload: { error?: string; product?: CourseProduct } | null = null;
-      for (let attempt = 1; attempt <= 3; attempt += 1) {
+      for (let attempt = 1; attempt <= WRITING_AI_GENERATION_MAX_ATTEMPTS; attempt += 1) {
         try {
           payload = await requestWritingSectionGeneration(section, {
-            supportAssets: attempt >= 3 ? [] : writingDraft.supportAssets,
-            libraryResourceIds: attempt >= 3 ? [] : writingDraft.libraryResourceIds,
+            supportAssets: attempt >= 2 ? [] : writingDraft.supportAssets,
+            libraryResourceIds: attempt >= 2 ? [] : writingDraft.libraryResourceIds,
+            timeoutMs: Math.round(
+              WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS * (attempt >= 2 ? 0.8 : 1),
+            ),
           });
           break;
         } catch (rawError) {
           const error = rawError as Error & { retryable?: boolean };
-          const canRetry = error.retryable !== false && attempt < 3;
+          const canRetry =
+            error.retryable !== false && attempt < WRITING_AI_GENERATION_MAX_ATTEMPTS;
           if (!canRetry) {
             throw error;
           }

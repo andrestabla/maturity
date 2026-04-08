@@ -1422,7 +1422,7 @@ export function TeamPage({
 
       setBrandingDraft((current) => applyUpload(current));
 
-      await showAlert({
+      void showAlert({
         tone: 'success',
         title: slot === 'logo' ? 'Logo cargado' : 'Favicon cargado',
         message: 'El archivo ya quedó almacenado en Cloudflare R2 y vinculado al branding.',
@@ -1431,7 +1431,7 @@ export function TeamPage({
       const message =
         error instanceof Error ? error.message : 'No fue posible cargar el archivo en Cloudflare R2.';
       setSettingsError(message);
-      await showAlert({
+      void showAlert({
         tone: 'error',
         title: 'No fue posible cargar el archivo',
         message,
@@ -1527,7 +1527,7 @@ export function TeamPage({
 
               const didPersist = await persistExtractedGuidelines(extracted);
 
-              await showAlert({
+              void showAlert({
                 tone: 'success',
                 title: 'Lineamientos extraídos',
                 message: didPersist
@@ -1564,7 +1564,7 @@ export function TeamPage({
 
                 const didPersist = await persistExtractedGuidelines(extracted);
 
-                await showAlert({
+                void showAlert({
                   tone: 'success',
                   title: 'Lineamientos extraídos',
                   message: didPersist
@@ -1584,7 +1584,7 @@ export function TeamPage({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falla crítica en la extracción IA.';
       setSettingsError(message);
-      await showAlert({ tone: 'error', title: 'Error de extracción', message });
+      void showAlert({ tone: 'error', title: 'Error de extracción', message });
     } finally {
       setIsExtractingGuidelines(false);
       setExtractionStep('');

@@ -704,7 +704,7 @@ export function CoursesPage({
         setCreatedCourse(payload.course);
       }
     } catch (error) {
-      await showAlert({
+      void showAlert({
         title: 'No fue posible crear el curso',
         message: error instanceof Error ? error.message : 'No fue posible crear el curso.',
         tone: 'error',
