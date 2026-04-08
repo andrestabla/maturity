@@ -1959,6 +1959,7 @@ export function CourseWorkspacePage({
   const [writingKnowledgeProgress, setWritingKnowledgeProgress] = useState(0);
   const [writingGenerationProgress, setWritingGenerationProgress] = useState(0);
   const [isWritingGeneratingAll, setIsWritingGeneratingAll] = useState(false);
+  const [isWritingFinalizing, setIsWritingFinalizing] = useState(false);
   const [isWritingInstructionsPanelOpen, setIsWritingInstructionsPanelOpen] = useState(false);
   const [planningSectionFilter, setPlanningSectionFilter] = useState('Todas');
   const [planningProductFilter, setPlanningProductFilter] = useState('');
@@ -6070,6 +6071,109 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function handleFinalizeWritingProduct() {
+    if (!selectedWritingProduct || !writingDraft || !canEditSelectedWritingProduct) {
+      return;
+    }
+
+    const filledSections = countFilledWritingSections(writingDraft.sections);
+    const totalSections = writingDraft.sections.length;
+    const pendingSections = Math.max(0, totalSections - filledSections);
+    const confirmed = await showConfirm({
+      title: 'Finalizar producto',
+      message:
+        pendingSections > 0
+          ? `Todavía faltan ${pendingSections} secciones por completar. Si finalizas ahora, el producto pasará a Validación instruccional para revisión del diseñador instruccional.`
+          : 'El producto está listo para pasar a Validación instruccional. Se guardará y se abrirá su checklist de revisión.',
+      tone: pendingSections > 0 ? 'warning' : 'success',
+      confirmLabel: 'Finalizar producto',
+      cancelLabel: 'Seguir editando',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingFinalizing(true);
+
+    try {
+      const savedDraft = await saveWritingDraftToServer(writingDraft, {
+        fallbackError: 'No fue posible finalizar el producto.',
+      });
+      const finalDraft = savedDraft ?? writingDraft;
+      const finalBody =
+        createWritingDraftTextFromSections(finalDraft.sections).trim() ||
+        finalDraft.draftText.trim();
+
+      const response = await fetch('/api/course-products', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: selectedWritingProduct.id,
+          stage: 'validacion',
+          owner: 'Diseñador instruccional',
+          status: 'En revisión',
+          summary: selectedWritingProduct.summary,
+          body: finalBody,
+          writingData: finalDraft,
+          validationData: buildDefaultValidationData('validacion'),
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible enviar el producto a validación.');
+      }
+
+      if (payload?.product) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === payload.product?.id ? payload.product! : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      navigate(buildValidationWorkspacePath(currentCourse.slug, selectedWritingProduct.id), {
+        replace: true,
+      });
+      refreshAppData();
+      void showAlert({
+        title: 'Producto finalizado',
+        message:
+          'El producto quedó enviado a Validación instruccional para checklist, comentarios y revisión editorial.',
+        tone: 'success',
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setWritingError('La finalización tardó demasiado. Inténtalo de nuevo.');
+        return;
+      }
+
+      setWritingError(
+        error instanceof Error ? error.message : 'No fue posible enviar el producto a validación.',
+      );
+    } finally {
+      setIsWritingFinalizing(false);
+    }
+  }
+
   async function handleWritingSubmissionUpload(file: File) {
     if (!selectedWritingProduct || !writingDraft) {
       return;
@@ -6493,6 +6597,8 @@ export function CourseWorkspacePage({
 
     const filledSections = countFilledWritingSections(writingDraft.sections);
     const totalSections = writingDraft.sections.length;
+    const pendingSections = Math.max(0, totalSections - filledSections);
+    const isWritingReadyForValidation = totalSections > 0 && pendingSections === 0;
     const totalKnowledgeSources =
       writingDraft.supportAssets.length + writingDraft.libraryResourceIds.length;
     const suggestedWritingPrompt = buildSuggestedWritingPrompt(
@@ -6818,6 +6924,11 @@ export function CourseWorkspacePage({
               <span className="badge badge--outline">{selectedWritingProduct.format}</span>
               <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
                 {selectedWritingProduct.status}
+              </span>
+              <span className={isWritingReadyForValidation ? 'badge badge--sage' : 'badge badge--gold'}>
+                {isWritingReadyForValidation
+                  ? 'Listo para validar'
+                  : `${pendingSections} secciones pendientes`}
               </span>
             </div>
             {renderRichTextContent(
@@ -7182,15 +7293,26 @@ export function CourseWorkspacePage({
               Volver a la bandeja
             </button>
             {canEditSelectedWritingProduct ? (
-              <button
-                type="button"
-                className="cta-button"
-                disabled={isWritingSaving}
-                onClick={() => void handleWritingSave()}
-              >
-                <Save size={16} />
-                <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isWritingSaving || isWritingFinalizing}
+                  onClick={() => void handleWritingSave()}
+                >
+                  <Save size={16} />
+                  <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={isWritingSaving || isWritingFinalizing}
+                  onClick={() => void handleFinalizeWritingProduct()}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{isWritingFinalizing ? 'Finalizando…' : 'Finalizar producto'}</span>
+                </button>
+              </>
             ) : null}
           </div>
         </article>
