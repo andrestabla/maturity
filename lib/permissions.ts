@@ -98,6 +98,27 @@ export function canManageAlerts(role: Role, ownerRole: Role) {
   return role === 'Administrador' || role === 'Coordinador' || role === ownerRole;
 }
 
+export function canCreateHelpDeskTicket(_role: Role) {
+  return true;
+}
+
+export function canManageHelpDeskTickets(role: Role) {
+  return role === 'Administrador' || role === 'Coordinador';
+}
+
+export function canOperateHelpDeskTicket(
+  role: Role,
+  userId: string,
+  requesterId: string,
+  assigneeId?: string | null,
+) {
+  return (
+    canManageHelpDeskTickets(role) ||
+    userId === requesterId ||
+    (Boolean(assigneeId) && assigneeId === userId)
+  );
+}
+
 export function canCreateDeliverables(role: Role) {
   return role === 'Administrador' || role === 'Coordinador';
 }

@@ -39,6 +39,7 @@ function normalizeAppDataSnapshot(value: unknown): AppData | null {
 
   return {
     ...value,
+    helpdeskTickets: Array.isArray(value.helpdeskTickets) ? value.helpdeskTickets : [],
     libraryAssets: Array.isArray(value.libraryAssets) ? value.libraryAssets : [],
     libraryCourseLinks: Array.isArray(value.libraryCourseLinks) ? value.libraryCourseLinks : [],
   };

@@ -24,6 +24,18 @@ export type DeliverableStatus =
 
 export type ObservationStatus = 'Pendiente' | 'En ajuste' | 'Resuelta';
 export type Priority = 'Alta' | 'Media' | 'Baja';
+export type HelpDeskTicketStatus =
+  | 'Abierto'
+  | 'En análisis'
+  | 'En progreso'
+  | 'Resuelto'
+  | 'Cerrado';
+export type HelpDeskTicketCategory =
+  | 'Soporte técnico'
+  | 'Funcionalidad del sistema'
+  | 'Flujo de trabajo'
+  | 'Acceso y permisos'
+  | 'Metodología y entregables';
 export type Tone = 'coral' | 'sage' | 'ocean' | 'gold' | 'ink';
 export type StageCheckpointStatus = 'done' | 'active' | 'pending' | 'blocked';
 export type RiskLevel = 'Bajo' | 'Medio' | 'Alto';
@@ -335,6 +347,25 @@ export interface Alert {
   detail: string;
 }
 
+export interface HelpDeskTicket {
+  id: string;
+  title: string;
+  description: string;
+  category: HelpDeskTicketCategory;
+  status: HelpDeskTicketStatus;
+  priority: Priority;
+  courseSlug?: string;
+  stageId?: CourseProductStage;
+  requesterId: string;
+  requesterName: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  resolutionSummary?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+}
+
 export interface LibraryResource {
   id: string;
   title: string;
@@ -489,6 +520,7 @@ export interface AppData {
   courses: Course[];
   tasks: Task[];
   alerts: Alert[];
+  helpdeskTickets: HelpDeskTicket[];
   libraryResources: LibraryResource[];
   libraryAssets: LibraryAsset[];
   libraryCourseLinks: LibraryCourseLink[];
@@ -742,6 +774,31 @@ export interface AlertMutationInput {
   tone: Tone;
   owner: Role;
   detail: string;
+}
+
+export interface HelpDeskTicketMutationInput {
+  title: string;
+  description: string;
+  category: HelpDeskTicketCategory;
+  priority: Priority;
+  courseSlug?: string;
+  stageId?: CourseProductStage;
+  assigneeId?: string;
+  assigneeName?: string;
+}
+
+export interface HelpDeskTicketUpdateInput {
+  id: string;
+  title?: string;
+  description?: string;
+  category?: HelpDeskTicketCategory;
+  status?: HelpDeskTicketStatus;
+  priority?: Priority;
+  courseSlug?: string;
+  stageId?: CourseProductStage;
+  assigneeId?: string;
+  assigneeName?: string;
+  resolutionSummary?: string;
 }
 
 export interface CourseMetadataMutationInput {

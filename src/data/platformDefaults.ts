@@ -257,6 +257,7 @@ export function createEmptyAppData(): AppData {
     courses: [],
     tasks: [],
     alerts: [],
+    helpdeskTickets: [],
     libraryResources: [],
     libraryAssets: [],
     libraryCourseLinks: [],

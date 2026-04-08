@@ -13251,3 +13251,252 @@ body::after {
     transform: none;
   }
 }
+
+.helpdesk-page {
+  gap: 1rem;
+}
+
+.helpdesk-hero {
+  padding: 1.4rem;
+  border: 1px solid rgba(60, 104, 141, 0.12);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 0% 10%, rgba(38, 181, 214, 0.2), transparent 42%),
+    radial-gradient(circle at 100% 0%, rgba(157, 211, 106, 0.18), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(243, 250, 255, 0.94));
+}
+
+.helpdesk-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.helpdesk-kpi {
+  border-radius: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line-soft);
+  display: grid;
+  gap: 0.35rem;
+  color: var(--ink-2);
+}
+
+.helpdesk-kpi svg {
+  color: var(--accent);
+}
+
+.helpdesk-kpi span {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.helpdesk-kpi strong {
+  font-size: 1.3rem;
+  font-family: var(--font-display);
+}
+
+.helpdesk-kpi small {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.helpdesk-kpi--ocean {
+  background: linear-gradient(150deg, rgba(223, 246, 255, 0.85), rgba(248, 253, 255, 0.9));
+}
+
+.helpdesk-kpi--sage {
+  background: linear-gradient(150deg, rgba(227, 249, 234, 0.85), rgba(249, 255, 250, 0.9));
+}
+
+.helpdesk-kpi--gold {
+  background: linear-gradient(150deg, rgba(255, 242, 210, 0.85), rgba(255, 252, 241, 0.9));
+}
+
+.helpdesk-kpi--coral {
+  background: linear-gradient(150deg, rgba(255, 228, 223, 0.85), rgba(255, 247, 246, 0.9));
+}
+
+.helpdesk-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 1rem;
+}
+
+.helpdesk-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.helpdesk-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.helpdesk-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.helpdesk-knowledge-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.helpdesk-knowledge-card {
+  border: 1px solid rgba(46, 91, 126, 0.14);
+  border-radius: 0.95rem;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+  background: rgba(248, 252, 255, 0.9);
+}
+
+.helpdesk-knowledge-card__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.helpdesk-knowledge-card strong {
+  font-size: 0.98rem;
+  color: var(--ink-2);
+}
+
+.helpdesk-knowledge-card p {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.86rem;
+}
+
+.helpdesk-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.helpdesk-column {
+  display: grid;
+  gap: 0.8rem;
+  align-content: start;
+  min-height: 360px;
+}
+
+.helpdesk-column__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.helpdesk-column__head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.helpdesk-ticket-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.helpdesk-ticket-card {
+  border: 1px solid rgba(44, 90, 124, 0.16);
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.helpdesk-ticket-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.helpdesk-ticket-card__head h5 {
+  margin: 0.2rem 0 0;
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.helpdesk-ticket-card__meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.helpdesk-ticket-card__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.helpdesk-ticket-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.badge.is-open {
+  border-color: rgba(233, 103, 100, 0.4);
+  color: #d85f5c;
+}
+
+.badge.is-triage {
+  border-color: rgba(224, 166, 71, 0.5);
+  color: #bd8b36;
+}
+
+.badge.is-progress {
+  border-color: rgba(60, 141, 214, 0.48);
+  color: #3979ba;
+}
+
+.badge.is-resolved {
+  border-color: rgba(100, 168, 95, 0.48);
+  color: #4d9250;
+}
+
+.badge.is-closed {
+  border-color: rgba(118, 131, 146, 0.45);
+  color: #6a7280;
+}
+
+@media (max-width: 1480px) {
+  .helpdesk-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .helpdesk-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1120px) {
+  .helpdesk-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .helpdesk-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .helpdesk-form__grid,
+  .helpdesk-ticket-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .helpdesk-board,
+  .helpdesk-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}

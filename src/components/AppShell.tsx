@@ -14,6 +14,7 @@ import {
   Command,
   FolderKanban,
   LayoutDashboard,
+  LifeBuoy,
   LibraryBig,
   LogOut,
   Search,
@@ -60,6 +61,7 @@ const primaryNavigation = [
   { to: '/analytics', label: 'Analítica', icon: ChartNoAxesCombined },
   { to: '/courses', label: 'Cursos', icon: FolderKanban },
   { to: '/library', label: 'Biblioteca', icon: LibraryBig },
+  { to: '/helpdesk', label: 'Mesa de ayuda', icon: LifeBuoy },
   { to: '/admin', label: 'Gobierno', icon: ShieldCheck },
 ];
 
@@ -185,6 +187,10 @@ export function AppShell({
 
     if (location.pathname === '/library') {
       return [{ label: 'Biblioteca', path: '/library' }];
+    }
+
+    if (location.pathname === '/helpdesk') {
+      return [{ label: 'Mesa de ayuda', path: '/helpdesk' }];
     }
 
     if (location.pathname === '/profile') {
@@ -329,6 +335,13 @@ export function AppShell({
       };
     }
 
+    if (location.pathname === '/helpdesk') {
+      return {
+        kicker: 'Soporte operativo',
+        title: 'Mesa de ayuda',
+      };
+    }
+
     if (location.pathname === '/profile') {
       return {
         kicker: 'Preferencias y cuenta',
@@ -422,6 +435,14 @@ export function AppShell({
         path: '/library',
         kind: 'view',
         keywords: 'biblioteca recursos curacion resource',
+      },
+      {
+        id: 'view-helpdesk',
+        title: 'Mesa de ayuda',
+        meta: 'Soporte técnico, funcional y metodológico',
+        path: '/helpdesk',
+        kind: 'view',
+        keywords: 'mesa ayuda soporte incidencias ticket permisos dudas flujo',
       },
       {
         id: 'view-profile',

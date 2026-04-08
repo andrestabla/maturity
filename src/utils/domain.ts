@@ -62,6 +62,27 @@ export function getVisibleAlerts(appData: AppData, role: Role, viewer?: AuthUser
   );
 }
 
+export function getVisibleHelpDeskTickets(appData: AppData, role: Role, viewer?: AuthUser) {
+  if (role === 'Administrador' || role === 'Auditor' || role === 'Coordinador') {
+    return appData.helpdeskTickets;
+  }
+
+  const visibleCourseSet = new Set(getVisibleCourses(appData, role, viewer).map((course) => course.slug));
+  const viewerId = viewer?.id ?? '';
+
+  return appData.helpdeskTickets.filter((ticket) => {
+    if (!ticket.courseSlug) {
+      return ticket.requesterId === viewerId || ticket.assigneeId === viewerId;
+    }
+
+    return (
+      ticket.requesterId === viewerId ||
+      ticket.assigneeId === viewerId ||
+      visibleCourseSet.has(ticket.courseSlug)
+    );
+  });
+}
+
 export function getVisibleResources(appData: AppData, role: Role, viewer?: AuthUser) {
   const courseSet = new Set(getVisibleCourses(appData, role, viewer).map((course) => course.slug));
   return appData.libraryResources.filter((resource) => courseSet.has(resource.courseSlug));

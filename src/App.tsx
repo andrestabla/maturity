@@ -15,6 +15,9 @@ const DashboardPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('./pages/AnalyticsPage.js').then((module) => ({ default: module.AnalyticsPage })),
 );
+const HelpDeskPage = lazy(() =>
+  import('./pages/HelpDeskPage.js').then((module) => ({ default: module.HelpDeskPage })),
+);
 const CoursesPage = lazy(() =>
   import('./pages/CoursesPage.js').then((module) => ({ default: module.CoursesPage })),
 );
@@ -253,6 +256,18 @@ export default function App() {
                 viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
+              />
+            }
+          />
+          <Route
+            path="/helpdesk"
+            element={
+              <HelpDeskPage
+                role={activeRole}
+                viewer={session.user}
+                appData={appData}
+                isLoading={isLoading}
+                refreshAppData={refreshAppData}
               />
             }
           />

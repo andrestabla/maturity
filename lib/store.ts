@@ -13,6 +13,10 @@ import type {
   AppData,
   AuthUser,
   Course,
+  HelpDeskTicket,
+  HelpDeskTicketMutationInput,
+  HelpDeskTicketStatus,
+  HelpDeskTicketUpdateInput,
   CourseAuditEntry,
   CourseMetadata,
   CourseMetadataMutationInput,
@@ -42,6 +46,7 @@ import type {
   Observation,
   ObservationMutationInput,
   PasswordChangeInput,
+  Priority,
   ProductPhasePlan,
   ProductPlanningPhase,
   ProductWritingAsset,
@@ -195,6 +200,25 @@ interface TaskRow {
   priority: Task['priority'];
   status: Task['status'];
   summary: string;
+}
+
+interface HelpDeskTicketRow {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: string;
+  priority: Priority;
+  courseSlug: string | null;
+  stageId: string | null;
+  requesterId: string;
+  requesterName: string;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  resolutionSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
 }
 
 interface UserRow {
@@ -1127,6 +1151,89 @@ function makeTaskRecord(input: TaskMutationInput): Task {
     priority: input.priority,
     status: input.status,
     summary: input.summary,
+  };
+}
+
+const helpDeskTicketStatuses: HelpDeskTicketStatus[] = [
+  'Abierto',
+  'En análisis',
+  'En progreso',
+  'Resuelto',
+  'Cerrado',
+];
+
+const helpDeskTicketCategories: HelpDeskTicket['category'][] = [
+  'Soporte técnico',
+  'Funcionalidad del sistema',
+  'Flujo de trabajo',
+  'Acceso y permisos',
+  'Metodología y entregables',
+];
+
+function normalizeHelpDeskTicketStatus(value?: string | null): HelpDeskTicketStatus {
+  if (!value) {
+    return 'Abierto';
+  }
+
+  return helpDeskTicketStatuses.includes(value as HelpDeskTicketStatus)
+    ? (value as HelpDeskTicketStatus)
+    : 'Abierto';
+}
+
+function normalizeHelpDeskTicketCategory(value?: string | null): HelpDeskTicket['category'] {
+  if (!value) {
+    return 'Soporte técnico';
+  }
+
+  return helpDeskTicketCategories.includes(value as HelpDeskTicket['category'])
+    ? (value as HelpDeskTicket['category'])
+    : 'Soporte técnico';
+}
+
+function serializeHelpDeskTicketRow(row: HelpDeskTicketRow): HelpDeskTicket {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    category: normalizeHelpDeskTicketCategory(row.category),
+    status: normalizeHelpDeskTicketStatus(row.status),
+    priority: row.priority,
+    courseSlug: row.courseSlug ?? undefined,
+    stageId: (row.stageId as HelpDeskTicket['stageId']) ?? undefined,
+    requesterId: row.requesterId,
+    requesterName: row.requesterName,
+    assigneeId: row.assigneeId ?? undefined,
+    assigneeName: row.assigneeName ?? undefined,
+    resolutionSummary: row.resolutionSummary ?? undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastActivityAt: row.lastActivityAt,
+  };
+}
+
+function makeHelpDeskTicketRecord(
+  input: HelpDeskTicketMutationInput,
+  requester: Pick<AuthUser, 'id' | 'name'>,
+): HelpDeskTicket {
+  const now = new Date().toISOString();
+
+  return {
+    id: crypto.randomUUID(),
+    title: input.title.trim(),
+    description: input.description.trim(),
+    category: normalizeHelpDeskTicketCategory(input.category),
+    status: 'Abierto',
+    priority: input.priority,
+    courseSlug: input.courseSlug?.trim() || undefined,
+    stageId: (input.stageId?.trim() as HelpDeskTicket['stageId']) || undefined,
+    requesterId: requester.id,
+    requesterName: requester.name,
+    assigneeId: input.assigneeId?.trim() || undefined,
+    assigneeName: input.assigneeName?.trim() || undefined,
+    resolutionSummary: undefined,
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
   };
 }
 
@@ -3330,7 +3437,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 23; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 24; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3449,6 +3556,27 @@ async function ensureSchema() {
         tone TEXT NOT NULL,
         owner TEXT NOT NULL,
         detail TEXT NOT NULL
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_helpdesk_tickets (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT NOT NULL,
+        status TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        course_slug TEXT,
+        stage_id TEXT,
+        requester_id TEXT NOT NULL,
+        requester_name TEXT NOT NULL,
+        assignee_id TEXT,
+        assignee_name TEXT,
+        resolution_summary TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_activity_at TEXT NOT NULL
       )
     `;
 
@@ -4344,6 +4472,40 @@ async function ensureSchema() {
       await migrateLegacyResourcesToAssets();
     }
 
+    // Migration 24: Mesa de ayuda (tickets de soporte y continuidad operativa)
+    if (currentVersion < 24) {
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_helpdesk_tickets (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          category TEXT NOT NULL,
+          status TEXT NOT NULL,
+          priority TEXT NOT NULL,
+          course_slug TEXT,
+          stage_id TEXT,
+          requester_id TEXT NOT NULL,
+          requester_name TEXT NOT NULL,
+          assignee_id TEXT,
+          assignee_name TEXT,
+          resolution_summary TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          last_activity_at TEXT NOT NULL
+        )
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_helpdesk_status_updated_at
+        ON maturity_helpdesk_tickets(status, updated_at DESC)
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_helpdesk_course_slug
+        ON maturity_helpdesk_tickets(course_slug)
+      `;
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -4716,6 +4878,66 @@ async function persistAlert(alert: Alert) {
   `;
 }
 
+async function persistHelpDeskTicket(ticket: HelpDeskTicket) {
+  const sql = getSql();
+
+  await sql`
+    INSERT INTO maturity_helpdesk_tickets (
+      id,
+      title,
+      description,
+      category,
+      status,
+      priority,
+      course_slug,
+      stage_id,
+      requester_id,
+      requester_name,
+      assignee_id,
+      assignee_name,
+      resolution_summary,
+      created_at,
+      updated_at,
+      last_activity_at
+    )
+    VALUES (
+      ${ticket.id},
+      ${ticket.title},
+      ${ticket.description},
+      ${ticket.category},
+      ${ticket.status},
+      ${ticket.priority},
+      ${ticket.courseSlug ?? null},
+      ${ticket.stageId ?? null},
+      ${ticket.requesterId},
+      ${ticket.requesterName},
+      ${ticket.assigneeId ?? null},
+      ${ticket.assigneeName ?? null},
+      ${ticket.resolutionSummary ?? null},
+      ${ticket.createdAt},
+      ${ticket.updatedAt},
+      ${ticket.lastActivityAt}
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      category = EXCLUDED.category,
+      status = EXCLUDED.status,
+      priority = EXCLUDED.priority,
+      course_slug = EXCLUDED.course_slug,
+      stage_id = EXCLUDED.stage_id,
+      requester_id = EXCLUDED.requester_id,
+      requester_name = EXCLUDED.requester_name,
+      assignee_id = EXCLUDED.assignee_id,
+      assignee_name = EXCLUDED.assignee_name,
+      resolution_summary = EXCLUDED.resolution_summary,
+      created_at = EXCLUDED.created_at,
+      updated_at = EXCLUDED.updated_at,
+      last_activity_at = EXCLUDED.last_activity_at
+  `;
+}
+
 async function persistLibraryResource(resource: LibraryResource) {
   const sql = getSql();
 
@@ -5003,6 +5225,33 @@ async function readAlerts() {
     FROM maturity_alerts
     ORDER BY title ASC
   `) as AppData['alerts'];
+}
+
+async function readHelpDeskTickets() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      description,
+      category,
+      status,
+      priority,
+      course_slug AS "courseSlug",
+      stage_id AS "stageId",
+      requester_id AS "requesterId",
+      requester_name AS "requesterName",
+      assignee_id AS "assigneeId",
+      assignee_name AS "assigneeName",
+      resolution_summary AS "resolutionSummary",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_activity_at AS "lastActivityAt"
+    FROM maturity_helpdesk_tickets
+    ORDER BY updated_at DESC, created_at DESC
+  `) as HelpDeskTicketRow[];
+
+  return rows.map(serializeHelpDeskTicketRow);
 }
 
 async function readLibraryResources() {
@@ -5533,6 +5782,7 @@ export async function loadAppData(): Promise<AppData> {
     courses,
     tasks,
     alerts,
+    helpdeskTickets,
     libraryResources,
     libraryAssets,
     libraryCourseLinks,
@@ -5544,6 +5794,7 @@ export async function loadAppData(): Promise<AppData> {
     readCourses(),
     readTasks(),
     readAlerts(),
+    readHelpDeskTickets(),
     readLibraryResources(),
     readLibraryAssets(),
     readLibraryCourseLinks(),
@@ -5557,6 +5808,7 @@ export async function loadAppData(): Promise<AppData> {
     courses,
     tasks,
     alerts,
+    helpdeskTickets,
     libraryResources,
     libraryAssets,
     libraryCourseLinks,
@@ -5599,6 +5851,103 @@ export async function createAlertRecord(input: AlertMutationInput) {
   const alert = makeAlertRecord(input);
   await persistAlert(alert);
   return alert;
+}
+
+export async function findHelpDeskTicketById(id: string) {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      id,
+      title,
+      description,
+      category,
+      status,
+      priority,
+      course_slug AS "courseSlug",
+      stage_id AS "stageId",
+      requester_id AS "requesterId",
+      requester_name AS "requesterName",
+      assignee_id AS "assigneeId",
+      assignee_name AS "assigneeName",
+      resolution_summary AS "resolutionSummary",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt",
+      last_activity_at AS "lastActivityAt"
+    FROM maturity_helpdesk_tickets
+    WHERE id = ${id}
+    LIMIT 1
+  `) as HelpDeskTicketRow[];
+
+  return rows[0] ? serializeHelpDeskTicketRow(rows[0]) : null;
+}
+
+export async function createHelpDeskTicketRecord(
+  input: HelpDeskTicketMutationInput,
+  requester: Pick<AuthUser, 'id' | 'name'>,
+) {
+  await ensureInitialized();
+  const ticket = makeHelpDeskTicketRecord(input, requester);
+  await persistHelpDeskTicket(ticket);
+  return ticket;
+}
+
+export async function listHelpDeskTicketsRecord() {
+  await ensureInitialized();
+  return readHelpDeskTickets();
+}
+
+export async function updateHelpDeskTicketRecord(id: string, input: Partial<HelpDeskTicketUpdateInput>) {
+  await ensureInitialized();
+  const current = await findHelpDeskTicketById(id);
+
+  if (!current) {
+    return null;
+  }
+
+  const next: HelpDeskTicket = {
+    ...current,
+    title:
+      Object.prototype.hasOwnProperty.call(input, 'title') && typeof input.title === 'string'
+        ? input.title.trim() || current.title
+        : current.title,
+    description:
+      Object.prototype.hasOwnProperty.call(input, 'description') && typeof input.description === 'string'
+        ? input.description.trim() || current.description
+        : current.description,
+    category:
+      Object.prototype.hasOwnProperty.call(input, 'category') && typeof input.category === 'string'
+        ? normalizeHelpDeskTicketCategory(input.category)
+        : current.category,
+    status:
+      Object.prototype.hasOwnProperty.call(input, 'status') && typeof input.status === 'string'
+        ? normalizeHelpDeskTicketStatus(input.status)
+        : current.status,
+    priority:
+      Object.prototype.hasOwnProperty.call(input, 'priority') && typeof input.priority === 'string'
+        ? input.priority
+        : current.priority,
+    courseSlug: Object.prototype.hasOwnProperty.call(input, 'courseSlug')
+      ? input.courseSlug?.trim() || undefined
+      : current.courseSlug,
+    stageId: Object.prototype.hasOwnProperty.call(input, 'stageId')
+      ? (input.stageId?.trim() as HelpDeskTicket['stageId']) || undefined
+      : current.stageId,
+    assigneeId: Object.prototype.hasOwnProperty.call(input, 'assigneeId')
+      ? input.assigneeId?.trim() || undefined
+      : current.assigneeId,
+    assigneeName: Object.prototype.hasOwnProperty.call(input, 'assigneeName')
+      ? input.assigneeName?.trim() || undefined
+      : current.assigneeName,
+    resolutionSummary: Object.prototype.hasOwnProperty.call(input, 'resolutionSummary')
+      ? input.resolutionSummary?.trim() || undefined
+      : current.resolutionSummary,
+    updatedAt: new Date().toISOString(),
+    lastActivityAt: new Date().toISOString(),
+  };
+
+  await persistHelpDeskTicket(next);
+  return next;
 }
 
 export async function deleteAlertRecord(id: string) {
@@ -6456,6 +6805,11 @@ export async function deleteCourseRecord(slug: string) {
 
   await sql`
     DELETE FROM maturity_alerts
+    WHERE course_slug = ${slug}
+  `;
+
+  await sql`
+    DELETE FROM maturity_helpdesk_tickets
     WHERE course_slug = ${slug}
   `;
 
