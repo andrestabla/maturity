@@ -5872,7 +5872,7 @@ export function CourseWorkspacePage({
       timeoutMs?: number;
       fallbackError?: string;
     },
-  ) {
+  ): Promise<ProductWritingData | null> {
     if (!selectedWritingProduct) {
       throw new Error('Producto de escritura no seleccionado.');
     }
@@ -5913,6 +5913,54 @@ export function CourseWorkspacePage({
       }
 
       return payload?.product ? normalizeWritingDraft(payload.product) : null;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  async function patchWritingProductOnServer(
+    patch: Partial<CourseProductMutationInput>,
+    options?: {
+      timeoutMs?: number;
+      fallbackError?: string;
+    },
+  ): Promise<CourseProduct | null> {
+    if (!selectedWritingProduct) {
+      throw new Error('Producto de escritura no seleccionado.');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      options?.timeoutMs ?? WRITING_SAVE_REQUEST_TIMEOUT_MS,
+    );
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: selectedWritingProduct.id,
+          ...patch,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? options?.fallbackError ?? 'No fue posible actualizar el producto.',
+        );
+      }
+
+      return payload?.product ?? null;
     } finally {
       window.clearTimeout(timeoutId);
     }
@@ -6042,12 +6090,20 @@ export function CourseWorkspacePage({
     setIsWritingSaving(true);
 
     try {
-      const savedDraft = await saveWritingDraftToServer(writingDraft, {
-        fallbackError: 'No fue posible guardar el producto en escritura.',
-      });
+      const savedProduct = await patchWritingProductOnServer(
+        {
+          writingData: {
+            ...writingDraft,
+            lastSavedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar el producto en escritura.',
+        },
+      );
 
-      if (savedDraft) {
-        setWritingDraft(savedDraft);
+      if (savedProduct) {
+        setWritingDraft(normalizeWritingDraft(savedProduct));
       }
 
       refreshAppData();
@@ -6061,11 +6117,21 @@ export function CourseWorkspacePage({
         setWritingError(
           'El guardado tardó demasiado. Verifica tu conexión e inténtalo de nuevo.',
         );
+        void showAlert({
+          title: 'Error al guardar',
+          message: 'El guardado tardó demasiado. Verifica tu conexión e inténtalo de nuevo.',
+          tone: 'error',
+        });
         return;
       }
-      setWritingError(
-        error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.';
+      setWritingError(message);
+      void showAlert({
+        title: 'Error al guardar',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsWritingSaving(false);
     }
@@ -6098,23 +6164,16 @@ export function CourseWorkspacePage({
     setIsWritingFinalizing(true);
 
     try {
-      const savedDraft = await saveWritingDraftToServer(writingDraft, {
-        fallbackError: 'No fue posible finalizar el producto.',
-      });
-      const finalDraft = savedDraft ?? writingDraft;
+      const finalDraft = {
+        ...writingDraft,
+        lastSavedAt: new Date().toISOString(),
+      };
       const finalBody =
         createWritingDraftTextFromSections(finalDraft.sections).trim() ||
         finalDraft.draftText.trim();
 
-      const response = await fetch('/api/course-products', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: selectedWritingProduct.id,
+      const updatedProduct = await patchWritingProductOnServer(
+        {
           stage: 'validacion',
           owner: 'Diseñador instruccional',
           status: 'En revisión',
@@ -6122,18 +6181,13 @@ export function CourseWorkspacePage({
           body: finalBody,
           writingData: finalDraft,
           validationData: buildDefaultValidationData('validacion'),
-        }),
-      });
+        },
+        {
+          fallbackError: 'No fue posible enviar el producto a validación.',
+        },
+      );
 
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string; product?: CourseProduct }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? 'No fue posible enviar el producto a validación.');
-      }
-
-      if (payload?.product) {
+      if (updatedProduct) {
         mutateAppData((current) => ({
           ...current,
           courses: current.courses.map((course) =>
@@ -6142,7 +6196,7 @@ export function CourseWorkspacePage({
               : {
                   ...course,
                   products: course.products.map((product) =>
-                    product.id === payload.product?.id ? payload.product! : product,
+                    product.id === updatedProduct.id ? updatedProduct : product,
                   ),
                   updatedAt: new Date().toISOString().slice(0, 10),
                 },
@@ -6163,12 +6217,22 @@ export function CourseWorkspacePage({
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         setWritingError('La finalización tardó demasiado. Inténtalo de nuevo.');
+        void showAlert({
+          title: 'Error al finalizar',
+          message: 'La finalización tardó demasiado. Inténtalo de nuevo.',
+          tone: 'error',
+        });
         return;
       }
 
-      setWritingError(
-        error instanceof Error ? error.message : 'No fue posible enviar el producto a validación.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible enviar el producto a validación.';
+      setWritingError(message);
+      void showAlert({
+        title: 'Error al finalizar',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsWritingFinalizing(false);
     }
