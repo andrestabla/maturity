@@ -6,14 +6,20 @@ import {
   CircleCheckBig,
   Clock3,
   FileCheck2,
+  FileText,
+  Globe,
+  PlayCircle,
   LayoutGrid,
   LibraryBig,
+  Menu,
   MessagesSquare,
   MonitorSmartphone,
   ShieldCheck,
   Sparkles,
   Workflow,
+  X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import type { BrandingSettings } from '../types.js';
@@ -88,16 +94,19 @@ const libraryCards = [
     title: 'Artículo científico',
     source: 'OpenAlex + SciELO',
     tag: 'Curado',
+    icon: FileText,
   },
   {
     title: 'Recurso abierto',
     source: 'CORE + OER',
     tag: 'Listo para integrar',
+    icon: Globe,
   },
   {
     title: 'Video académico',
     source: 'YouTube educativo',
     tag: 'Relacionado con módulo 2',
+    icon: PlayCircle,
   },
 ];
 
@@ -153,6 +162,7 @@ function getTimelineRevealProps(reduceMotion: boolean, index: number) {
 }
 
 export function LandingPage({ branding }: LandingPageProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const reduceMotion = Boolean(useReducedMotion());
   const platformLabel = branding.platformName.endsWith('360')
     ? branding.platformName
@@ -174,23 +184,31 @@ export function LandingPage({ branding }: LandingPageProps) {
     <main className="m360-home">
       <div className="m360-home__noise" aria-hidden />
 
-      <header className="m360-nav">
+      <header className={`m360-nav ${isMenuOpen ? 'm360-nav--open' : ''}`}>
         <Link to="/" className="m360-brand" aria-label={branding.platformName}>
           {renderBrandMark()}
           <span className="m360-brand__copy">
             <strong>{platformLabel}</strong>
-            <span>Diseño y producción educativa con IA</span>
+            <span>Diseño y producción de experiencias</span>
           </span>
         </Link>
 
-        <nav className="m360-nav__links" aria-label="Secciones principales">
-          <a href="#flujo">Flujo</a>
-          <a href="#biblioteca">Biblioteca</a>
-          <a href="#analitica">Analítica</a>
-          <a href="#contacto">Contacto</a>
+        <button 
+          className="m360-nav__toggle" 
+          aria-label="Abrir menú" 
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+        >
+          {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+
+        <nav className={`m360-nav__links ${isMenuOpen ? 'is-open' : ''}`} aria-label="Secciones principales">
+          <a href="#flujo" onClick={() => setIsMenuOpen(false)}>Flujo</a>
+          <a href="#biblioteca" onClick={() => setIsMenuOpen(false)}>Biblioteca</a>
+          <a href="#analitica" onClick={() => setIsMenuOpen(false)}>Analítica</a>
+          <a href="#contacto" onClick={() => setIsMenuOpen(false)}>Contacto</a>
         </nav>
 
-        <div className="m360-nav__actions">
+        <div className={`m360-nav__actions ${isMenuOpen ? 'is-open' : ''}`}>
           <Link to="/login" className="m360-button m360-button--ghost">
             Ingresar
           </Link>
@@ -210,7 +228,7 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-hero__copy" {...getRevealProps(reduceMotion)}>
             <span className="m360-kicker">
               <Sparkles size={16} />
-              Operación educativa orquestada de punta a punta
+              Gestión de la operación de punta a punta
             </span>
 
             <h1>
@@ -258,7 +276,7 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-hero__visual" {...getRevealProps(reduceMotion, 0.08)}>
             <div className="m360-ui-shot m360-ui-shot--hero">
               <div className="m360-ui-shot__topbar">
-                <span className="m360-ui-shot__chip">Interfaz de plataforma</span>
+                <span className="m360-ui-shot__chip">Maturity360</span>
                 <span className="m360-ui-shot__status">
                   <CircleCheckBig size={16} />
                   Producción sincronizada
@@ -268,7 +286,7 @@ export function LandingPage({ branding }: LandingPageProps) {
               <div className="m360-ui-shot__workspace">
                 <aside className="m360-ui-shot__sidebar">
                   <div className="m360-ui-shot__brand-mini">{branding.shortMark}</div>
-                  <span className="is-active">Dashboard</span>
+                  <span className="is-active" style={{ background: 'transparent', color: '#18b7d2', paddingLeft: 0 }}>Dashboard</span>
                   <span>Cursos</span>
                   <span>Biblioteca</span>
                   <span>Analítica</span>
@@ -419,10 +437,13 @@ export function LandingPage({ branding }: LandingPageProps) {
 
               <div className="m360-library-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 {libraryCards.map((card) => (
-                  <article key={card.title} className="m360-library-card" style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                    <span style={{ display: 'inline-block', fontSize: '10px', background: '#e2e8f0', padding: '4px 8px', borderRadius: '4px', marginBottom: '12px', fontWeight: 'bold' }}>{card.tag}</span>
-                    <strong style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>{card.title}</strong>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{card.source}</p>
+                  <article key={card.title} className="m360-library-card" style={{ background: '#f8fafc', padding: '20px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                       <span style={{ display: 'inline-block', fontSize: '10px', background: '#e2e8f0', color: '#475569', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{card.tag}</span>
+                       <card.icon size={20} color="#64748b" />
+                    </div>
+                    <strong style={{ display: 'block', fontSize: '15px', color: '#0f172a', marginBottom: '6px' }}>{card.title}</strong>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>{card.source}</p>
                   </article>
                 ))}
               </div>
@@ -515,29 +536,29 @@ export function LandingPage({ branding }: LandingPageProps) {
         </div>
       </section>
 
-      <section className="m360-cta" id="contacto">
-        <div className="m360-section__inner m360-cta__inner">
-          <motion.div className="m360-cta__copy" {...getRevealProps(reduceMotion)}>
-            <span className="m360-kicker">
+      <section className="m360-cta" id="contacto" style={{ 
+          position: 'relative', 
+          backgroundImage: 'url(https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80)', 
+          backgroundSize: 'cover', 
+          backgroundPosition: 'center', 
+          padding: '120px 0',
+          color: 'white'
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.85)' }} aria-hidden />
+        <div className="m360-section__inner m360-cta__inner" style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr', textAlign: 'center', justifyItems: 'center', gap: '32px' }}>
+          <motion.div className="m360-cta__copy" {...getRevealProps(reduceMotion)} style={{ maxWidth: '800px' }}>
+            <span className="m360-kicker m360-kicker--light" style={{ margin: '0 auto 24px' }}>
               <Sparkles size={16} />
               Nueva forma de operar
             </span>
-            <h2>Preparemos a tu equipo para una nueva forma de trabajar en tiempos de IA.</h2>
-            <p>
+            <h2 style={{ color: 'white' }}>Preparemos a tu equipo para una nueva forma de trabajar en tiempos de IA.</h2>
+            <p style={{ color: 'rgba(255,255,255,0.85)', margin: '20px auto 0' }}>
               Maturity360 conecta criterio pedagógico, producción y control institucional en una
               sola operación más clara, más rápida y más gobernable.
             </p>
           </motion.div>
 
-          <motion.div className="m360-cta__visual" {...getRevealProps(reduceMotion)}>
-            <img 
-              src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=800&q=80" 
-              alt="Equipo de trabajo colaborativo" 
-              style={{ width: '100%', height: 'auto', borderRadius: '24px', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}
-            />
-          </motion.div>
-
-          <motion.div className="m360-cta__actions" {...getRevealProps(reduceMotion, 0.08)} style={{ marginTop: '32px' }}>
+          <motion.div className="m360-cta__actions" {...getRevealProps(reduceMotion, 0.08)}>
             <a
               href={whatsappUrl}
               target="_blank"
