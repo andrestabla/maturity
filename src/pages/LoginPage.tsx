@@ -121,7 +121,7 @@ export function LoginPage({
         </form>
 
         <p className="access-screen__footnote">
-          {branding.institutionName} · Diseñado para escritorio y preparado para experiencia tipo app móvil.
+          {branding.institutionName} · Solución digital diseñada por Algoritmo T.
         </p>
       </section>
     </main>
