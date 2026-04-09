@@ -124,7 +124,8 @@ type CourseSection =
   | 'lms'
   | 'qa'
   | 'entrega'
-  | 'history';
+  | 'history'
+  | 'biblioteca';
 
 type WritingWorkspaceRoute = 'upload' | 'ai' | 'manual';
 
@@ -140,6 +141,7 @@ const validCourseSections: CourseSection[] = [
   'qa',
   'entrega',
   'history',
+  'biblioteca',
 ];
 
 const writingWorkspaceRoutes: WritingWorkspaceRoute[] = ['upload', 'ai', 'manual'];
@@ -5675,6 +5677,70 @@ export function CourseWorkspacePage({
       '# Rúbrica de validación',
       ...criteria.map((criterion: { status: QaCriterionStatus; score: number; label: string }) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
     ].join('\n');
+  }
+
+  function renderBiblioteca() {
+    const assets = appData.libraryResources.filter(r => r.courseSlug === currentCourse.slug);
+    
+    return (
+      <div className="library-course-view animate-in fade-in duration-500">
+        <header className="section-heading mb-8">
+          <div>
+            <span className="eyebrow">Recursos vinculados</span>
+            <h3>Biblioteca del curso</h3>
+            <p className="text-sm text-muted">A continuación se listan los recursos académicos y didácticos que has traído desde la biblioteca inteligente para este curso.</p>
+          </div>
+        </header>
+
+        {assets.length === 0 ? (
+          <div className="surface section-card flex flex-col items-center justify-center p-20 text-center border-dashed border-2">
+            <BookOpen size={48} className="text-slate-300 mb-4" />
+            <h4 className="text-lg font-medium">No hay recursos vinculados aún</h4>
+            <p className="text-sm text-muted max-w-sm mx-auto mt-2">
+              Explora la biblioteca general y utiliza la opción "Vincular a mi Curso actual" para traer material relevante aquí.
+            </p>
+            <Link to="/library" className="cta-button mt-6">
+              Ir a la biblioteca
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {assets.map((resource) => (
+              <div key={resource.id} className="surface section-card p-5 hover:shadow-lg transition-shadow border border-slate-100 flex flex-col h-full bg-white">
+                <div className="flex items-start justify-between mb-4">
+                  <span className={`badge ${resource.kind === 'Curado' ? 'badge--sage' : 'badge--ocean'}`}>
+                    {resource.kind}
+                  </span>
+                  <div className="flex gap-1">
+                    {resource.tags.slice(0, 2).map(tag => (
+                      <span key={tag} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full uppercase font-bold">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                
+                <h4 className="text-base font-bold leading-tight mb-2 flex-grow">{resource.title}</h4>
+                <p className="text-xs text-muted mb-4 line-clamp-2">{resource.summary}</p>
+                
+                <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Fuente</span>
+                    <span className="text-xs font-semibold">{resource.source}</span>
+                  </div>
+                  {resource.unit && (
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Módulo</span>
+                      <span className="text-xs">{resource.unit}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   function renderStructuredProductEditor(
@@ -11885,6 +11951,7 @@ export function CourseWorkspacePage({
           {[
             ['summary', 'Workflow'],
             ['microcurriculo', 'Microcurrículo'],
+            ['biblioteca', 'Biblioteca del curso'],
             ['arquitectura', 'Arquitectura'],
             ['planeacion', 'Planeación'],
             ['escritura', 'Escritura'],
@@ -12036,6 +12103,24 @@ export function CourseWorkspacePage({
                'Reflexiones sobre la coherencia del microcurrículo y hallazgos en la extracción de datos.'
              )}
           </aside>
+        </section>
+      ) : null}
+
+      {activeSection === 'biblioteca' ? (
+        <section className="summary-workspace-grid">
+           <div className="surface section-card">
+             {renderBiblioteca()}
+           </div>
+           <aside className="summary-sidebar">
+              <div className="surface section-card section-card--compact">
+                <div className="section-heading">
+                  <h3>Curación Inteligente</h3>
+                </div>
+                <p className="text-sm text-muted">
+                  Aquí centralizamos los recursos que has seleccionado de la biblioteca federada. Estos activos están listos para ser usados en la etapa de arquitectura y escritura.
+                </p>
+              </div>
+           </aside>
         </section>
       ) : null}
 

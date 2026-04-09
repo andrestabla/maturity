@@ -161,6 +161,21 @@ export function LibraryPreviewModal({
             </section>
 
             <section className="library-quickview-section">
+              <div className="library-quickview-section__eyebrow">Cita (Formato APA 7)</div>
+              <div className="library-quickview-apa" style={{ fontSize: '0.86rem', color: '#475569', lineHeight: '1.5', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                {(() => {
+                  const authors = asset.authors.length > 0 ? asset.authors.join(', ') : 'Curaduría editorial';
+                  const year = asset.publishedAt ? asset.publishedAt.slice(0, 4) : 's.f.';
+                  return (
+                    <span>
+                      {authors} ({year}). <i>{asset.title}</i>. {source.label}.
+                    </span>
+                  );
+                })()}
+              </div>
+            </section>
+
+            <section className="library-quickview-section">
               <div className="library-quickview-section__eyebrow">Compatibilidad de madurez</div>
               <ul className="library-quickview-signals">
                 {maturityBreakdown.map((detail) => (

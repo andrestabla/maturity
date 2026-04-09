@@ -539,7 +539,27 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const activeGroupCfg = GROUPS.find((group) => group.id === activeGroup) ?? GROUPS[0];
   const hasActiveFilters = filtersAreActive(filters);
   const isLanding = !hasExecutedSearch && submittedQuery === '';
-  const baseAssets = isLanding ? LANDING_RECOMMENDATIONS : results;
+  const [recommendedResults, setRecommendedResults] = useState<LibrarySearchResult[]>([]);
+
+  useEffect(() => {
+    if (activeCourse && recommendedResults.length === 0) {
+      const q = activeCourse.keywords && activeCourse.keywords.length > 0 
+        ? activeCourse.keywords.join(' ') 
+        : activeCourse.title;
+      fetch(`/api/library-search?q=${encodeURIComponent(q)}&group=Investigacion`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.results) {
+            setRecommendedResults(data.results);
+          }
+        })
+        .catch(() => {
+          // Fallback to defaults silently if it fails
+        });
+    }
+  }, [activeCourse, recommendedResults.length]);
+
+  const baseAssets = isLanding ? (recommendedResults.length > 0 ? recommendedResults : LANDING_RECOMMENDATIONS) : results;
   const isMasked = showFilters || Boolean(previewAsset);
 
   const filteredAssets = useMemo(() => (
@@ -811,11 +831,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             <LibraryBig size={15} />
             Biblioteca Inteligente
           </span>
-          <span className="library-search-stage__context">{stageContext}</span>
         </div>
 
         <div className="library-search-stage__heading">
-          <h1>Barra de Búsqueda Semántica</h1>
+          <h1>Búsqueda de recursos educativos</h1>
           <p>
             Descubre recursos con alto ajuste pedagógico para la etapa actual del curso,
             combina filtros avanzados y previsualiza sin salir del grid.
@@ -829,7 +848,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="¿Qué concepto necesitas dominar hoy?"
+              placeholder="¿Qué temática te interesa hoy?"
               aria-label="Buscar en biblioteca"
             />
           </div>
@@ -1050,7 +1069,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               <div>
                 <span className="library-results-section__eyebrow">Descubrimiento Inicial</span>
                 <h2>Recomendados para tu etapa actual</h2>
-                <p>{stageContext}</p>
               </div>
               <div className="library-results-section__summary">
                 Smart Grid curado con prioridad en madurez, relevancia y facilidad de integración.
