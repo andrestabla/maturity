@@ -14188,9 +14188,9 @@ body::after {
 .m360-cta__copy h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(3rem, 5.6vw, 6.1rem);
-  line-height: 0.92;
-  letter-spacing: -0.055em;
+  font-size: clamp(2.4rem, 5.6vw, 6.1rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
   color: #0f172a;
   text-wrap: balance;
 }
@@ -14676,6 +14676,63 @@ body::after {
   border-color: rgba(148, 163, 184, 0.18);
 }
 
+.m360-ui-shot--light {
+  padding: 24px;
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+
+.m360-ui-shot__searchbar--light {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.m360-ui-shot__searchbar--light span {
+  color: #475569;
+}
+
+.m360-ui-shot__searchbar--light strong {
+  color: #0f172a;
+}
+
+.m360-library-card--light {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.m360-library-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.m360-library-card--light .m360-library-card__header span {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.m360-ui-shot__drawer--light {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border-color: #bae6fd;
+}
+
+.m360-ui-shot__drawer--light small {
+  color: #0369a1;
+}
+
+.m360-ui-shot__drawer--light strong {
+  color: #0f172a;
+}
+
+.m360-ui-shot__drawer-icon {
+  color: #0369a1;
+}
+
 .m360-ui-shot__searchbar,
 .m360-ui-shot__drawer {
   display: flex;
@@ -15099,6 +15156,21 @@ body::after {
 
   .m360-ui-shot__sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .m360-library-grid,
+  .m360-hero__signals {
+    grid-template-columns: 1fr;
+  }
+
+  .m360-hero h1,
+  .m360-flow__intro h2,
+  .m360-library__copy h2,
+  .m360-analytics__copy h2,
+  .m360-cta__copy h2 {
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+    word-break: break-word;
+    hyphens: auto;
   }
 
   .m360-timeline__item {

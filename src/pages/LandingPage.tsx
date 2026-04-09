@@ -429,31 +429,31 @@ export function LandingPage({ branding }: LandingPageProps) {
           </motion.div>
 
           <motion.div className="m360-library__visual" {...getRevealProps(reduceMotion, 0.08)}>
-            <div className="m360-ui-shot m360-ui-shot--light m360-ui-shot--library" style={{ background: '#ffffff', color: '#0f172a', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(0,0,0,0.15)' }}>
-              <div className="m360-ui-shot__searchbar" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '8px' }}>
+            <div className="m360-ui-shot m360-ui-shot--light m360-ui-shot--library">
+              <div className="m360-ui-shot__searchbar m360-ui-shot__searchbar--light">
                 <span>Buscar evidencia, artículos y recursos</span>
-                <strong style={{ color: '#0f172a' }}>+ 14 fuentes conectadas</strong>
+                <strong>+ 14 fuentes conectadas</strong>
               </div>
 
-              <div className="m360-library-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+              <div className="m360-library-grid">
                 {libraryCards.map((card) => (
-                  <article key={card.title} className="m360-library-card" style={{ background: '#f8fafc', padding: '20px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                       <span style={{ display: 'inline-block', fontSize: '10px', background: '#e2e8f0', color: '#475569', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{card.tag}</span>
-                       <card.icon size={20} color="#64748b" />
+                  <article key={card.title} className="m360-library-card m360-library-card--light">
+                    <div className="m360-library-card__header">
+                       <span>{card.tag}</span>
+                       <card.icon size={20} className="m360-library-card__icon" />
                     </div>
-                    <strong style={{ display: 'block', fontSize: '15px', color: '#0f172a', marginBottom: '6px' }}>{card.title}</strong>
-                    <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>{card.source}</p>
+                    <strong>{card.title}</strong>
+                    <p>{card.source}</p>
                   </article>
                 ))}
               </div>
 
-              <div className="m360-ui-shot__drawer" style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)', border: '1px solid #bae6fd', padding: '16px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="m360-ui-shot__drawer m360-ui-shot__drawer--light">
                 <div>
-                  <small style={{ display: 'block', fontSize: '10px', fontWeight: 'bold', color: '#0369a1', marginBottom: '4px' }}>Sugerencia IA</small>
-                  <strong style={{ fontSize: '13px', color: '#0f172a' }}>Recursos alineados con la actividad de aprendizaje del módulo 2.</strong>
+                  <small>Sugerencia IA</small>
+                  <strong>Recursos alineados con la actividad de aprendizaje del módulo 2.</strong>
                 </div>
-                <FileCheck2 size={18} color="#0369a1" />
+                <FileCheck2 size={18} className="m360-ui-shot__drawer-icon" />
               </div>
             </div>
           </motion.div>
