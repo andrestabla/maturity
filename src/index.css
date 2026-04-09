@@ -14083,11 +14083,7 @@ body::after {
 }
 
 .m360-nav__links {
-  padding: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 999px;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.05);
+  /* Menu without container */
 }
 
 .m360-nav__links a {

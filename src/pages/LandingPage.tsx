@@ -350,7 +350,7 @@ export function LandingPage({ branding }: LandingPageProps) {
               <Clock3 size={16} />
               Timeline operativo
             </span>
-            <h2>Un recorrido vertical que ordena el proyecto, el equipo y la calidad.</h2>
+            <h2>Un recorrido que ordena el proyecto, el equipo y la calidad.</h2>
             <p>
               Cada etapa aparece como una decisión concreta del proceso. La plataforma no solo
               acelera tareas: también conserva el hilo lógico, el control institucional y la
@@ -411,28 +411,28 @@ export function LandingPage({ branding }: LandingPageProps) {
           </motion.div>
 
           <motion.div className="m360-library__visual" {...getRevealProps(reduceMotion, 0.08)}>
-            <div className="m360-ui-shot m360-ui-shot--dark">
-              <div className="m360-ui-shot__searchbar">
+            <div className="m360-ui-shot m360-ui-shot--light m360-ui-shot--library" style={{ background: '#ffffff', color: '#0f172a', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px rgba(0,0,0,0.15)' }}>
+              <div className="m360-ui-shot__searchbar" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '8px' }}>
                 <span>Buscar evidencia, artículos y recursos</span>
-                <strong>+ 14 fuentes conectadas</strong>
+                <strong style={{ color: '#0f172a' }}>+ 14 fuentes conectadas</strong>
               </div>
 
-              <div className="m360-library-grid">
+              <div className="m360-library-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 {libraryCards.map((card) => (
-                  <article key={card.title} className="m360-library-card">
-                    <span>{card.tag}</span>
-                    <strong>{card.title}</strong>
-                    <p>{card.source}</p>
+                  <article key={card.title} className="m360-library-card" style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <span style={{ display: 'inline-block', fontSize: '10px', background: '#e2e8f0', padding: '4px 8px', borderRadius: '4px', marginBottom: '12px', fontWeight: 'bold' }}>{card.tag}</span>
+                    <strong style={{ display: 'block', fontSize: '14px', marginBottom: '4px' }}>{card.title}</strong>
+                    <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{card.source}</p>
                   </article>
                 ))}
               </div>
 
-              <div className="m360-ui-shot__drawer">
+              <div className="m360-ui-shot__drawer" style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)', border: '1px solid #bae6fd', padding: '16px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <small>Sugerencia IA</small>
-                  <strong>Recursos alineados con la actividad de aprendizaje del módulo 2.</strong>
+                  <small style={{ display: 'block', fontSize: '10px', fontWeight: 'bold', color: '#0369a1', marginBottom: '4px' }}>Sugerencia IA</small>
+                  <strong style={{ fontSize: '13px', color: '#0f172a' }}>Recursos alineados con la actividad de aprendizaje del módulo 2.</strong>
                 </div>
-                <FileCheck2 size={18} />
+                <FileCheck2 size={18} color="#0369a1" />
               </div>
             </div>
           </motion.div>
@@ -491,7 +491,7 @@ export function LandingPage({ branding }: LandingPageProps) {
               <ChartNoAxesCombined size={16} />
               Analítica accionable
             </span>
-            <h2>Visibilidad operativa para detectar alertas antes de que se conviertan en atraso.</h2>
+            <h2>Visibilidad operativa para detectar alertas antes de que se conviertan en cuello de botella.</h2>
             <p>
               Visualiza en tiempo real el progreso de producción por curso, identificando alertas
               tempranas y comparte los tableros con los stakeholders del proyecto.
@@ -529,14 +529,22 @@ export function LandingPage({ branding }: LandingPageProps) {
             </p>
           </motion.div>
 
-          <motion.div className="m360-cta__actions" {...getRevealProps(reduceMotion, 0.08)}>
+          <motion.div className="m360-cta__visual" {...getRevealProps(reduceMotion)}>
+            <img 
+              src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=800&q=80" 
+              alt="Equipo de trabajo colaborativo" 
+              style={{ width: '100%', height: 'auto', borderRadius: '24px', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}
+            />
+          </motion.div>
+
+          <motion.div className="m360-cta__actions" {...getRevealProps(reduceMotion, 0.08)} style={{ marginTop: '32px' }}>
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noreferrer"
               className="m360-button m360-button--primary"
             >
-              <span>Solicitar una demo</span>
+              <span>Hablemos</span>
               <ArrowRight size={18} />
             </a>
           </motion.div>
