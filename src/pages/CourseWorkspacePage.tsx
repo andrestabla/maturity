@@ -1935,9 +1935,136 @@ function buildWritingSectionsFromProduct(product: CourseProduct): ProductWriting
     return normalizeWritingSections(existingSections);
   }
 
-  const instructionHtml = product.body?.trim() || product.summary?.trim() || '';
+  const instructionHtml =
+    getCanonicalProductInstructionsHtml(product) || product.summary?.trim() || '';
   const inferredTitles = inferWritingSectionTitlesFromText(instructionHtml, product.format);
   return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
+}
+
+function getTextHeuristicSnapshot(value: string) {
+  const html = sanitizeRichHtml(value ?? '').trim();
+  const plain = stripHtmlToText(html).replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (!html && !plain) {
+    return { html: '', plain: '' };
+  }
+
+  return { html, plain };
+}
+
+function looksLikeInstructionHtml(value?: string | null) {
+  const { html, plain } = getTextHeuristicSnapshot(value ?? '');
+  if (!html && !plain) {
+    return false;
+  }
+
+  const instructionPattern =
+    /(aspecto|especificaci[oó]n|funci[oó]n|prop[oó]sito comunicativo|duraci[oó]n m[aá]xima|criterios? de calidad|instrucci[oó]n|indicaci[oó]n|asegura|desarrolla|define|incluye|redacta|ub[ií]calo)/i;
+
+  return instructionPattern.test(plain) || instructionPattern.test(html);
+}
+
+function looksLikeContentHtml(value?: string | null) {
+  const { html, plain } = getTextHeuristicSnapshot(value ?? '');
+  if (!html && !plain) {
+    return false;
+  }
+
+  const contentPattern = /(inicio|desarrollo|cierre|introducci[oó]n|conclusi[oó]n)/i;
+  const instructionPattern =
+    /(aspecto|especificaci[oó]n|funci[oó]n|prop[oó]sito comunicativo|duraci[oó]n m[aá]xima|criterios? de calidad|instrucci[oó]n|indicaci[oó]n|asegura|desarrolla|define|incluye|redacta|ub[ií]calo)/i;
+
+  return (contentPattern.test(plain) || contentPattern.test(html)) && !instructionPattern.test(plain);
+}
+
+function getCanonicalProductInstructionsHtml(
+  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+) {
+  const bodyHtml = sanitizeRichHtml(product.body ?? '').trim();
+
+  if (bodyHtml && looksLikeInstructionHtml(bodyHtml)) {
+    return bodyHtml;
+  }
+
+  const title = sanitizeRichHtml(product.title ?? '').trim() || 'este producto';
+  const section = sanitizeRichHtml(product.section ?? '').trim() || 'la sección asignada';
+  const summary = stripHtmlToText(product.summary ?? '').trim();
+  const format = sanitizeRichHtml(product.format ?? '').trim();
+
+  return sanitizeRichHtml(
+    [
+      `<section>`,
+      `<h3>${escapeHtml(title)}</h3>`,
+      `<p>Desarrolla este producto tomando como base la descripción: ${escapeHtml(
+        summary || 'Alinea el contenido con el propósito pedagógico del curso.',
+      )}</p>`,
+      `<p>Ubícalo en ${escapeHtml(section)} y asegúrate de que aporte coherencia pedagógica a esta parte del curso.</p>`,
+      `<p>Entrega una pieza en formato ${escapeHtml(
+        format || 'definido',
+      )} con estructura clara, componentes obligatorios y criterios pedagógicos explícitos.</p>`,
+      `</section>`,
+    ].join(''),
+  );
+}
+
+function getFixedProductInstructionsHtml(
+  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+) {
+  return getCanonicalProductInstructionsHtml(product);
+}
+
+function parseWritingSectionsFromDraftText(draftText: string) {
+  const sourceHtml = sanitizeRichHtml(draftText).trim();
+
+  if (!sourceHtml || typeof DOMParser === 'undefined') {
+    return [] as ProductWritingSection[];
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(`<div>${sourceHtml}</div>`, 'text/html');
+  const sectionNodes = Array.from(document.querySelectorAll('section[data-section]'));
+
+  return sectionNodes
+    .map((node, index) => {
+      const title = node.getAttribute('data-section')?.trim() || node.querySelector('h3')?.textContent?.trim() || `Sección ${index + 1}`;
+      const clone = node.cloneNode(true) as HTMLElement;
+      const heading = clone.querySelector('h3');
+      if (heading) {
+        heading.remove();
+      }
+
+      return {
+        id: slugifyWritingSectionTitle(title) || `section-${index + 1}`,
+        title,
+        instructions: '',
+        content: clone.innerHTML.trim(),
+        updatedAt: undefined,
+      } satisfies ProductWritingSection;
+    })
+    .filter((section) => section.content.trim().length > 0 || section.title.trim().length > 0);
+}
+
+function getWritingContentHtmlForProduct(
+  product: Pick<CourseProductMutationInput, 'body' | 'writingData' | 'format' | 'summary'>,
+) {
+  const sections = getWritingSectionsForProduct(product);
+  const sectionContentHtml = createWritingDraftTextFromSections(sections);
+
+  if (sectionContentHtml.trim()) {
+    return sectionContentHtml;
+  }
+
+  const bodyHtml = sanitizeRichHtml(product.body ?? '').trim();
+  if (bodyHtml && looksLikeContentHtml(bodyHtml)) {
+    return bodyHtml;
+  }
+
+  const draftTextHtml = sanitizeRichHtml(product.writingData?.draftText ?? '').trim();
+  if (draftTextHtml) {
+    return draftTextHtml;
+  }
+
+  return '';
 }
 
 function getWritingSectionsForProduct(
@@ -1946,7 +2073,35 @@ function getWritingSectionsForProduct(
   const sections = product.writingData?.sections ?? [];
 
   if (sections.length > 0) {
-    return normalizeWritingSections(sections);
+    const normalizedSections = normalizeWritingSections(sections);
+    const hasVisibleContent = normalizedSections.some(
+      (section) => section.content.trim().length > 0,
+    );
+
+    if (hasVisibleContent) {
+      return normalizedSections;
+    }
+
+    const hydratedSections = parseWritingSectionsFromDraftText(product.writingData?.draftText ?? '');
+    if (hydratedSections.length > 0) {
+      return normalizedSections.map((section, index) => ({
+        ...section,
+        content: hydratedSections[index]?.content ?? section.content,
+        updatedAt: hydratedSections[index]?.updatedAt ?? section.updatedAt,
+      }));
+    }
+
+    return normalizedSections;
+  }
+
+  const hydratedSections = parseWritingSectionsFromDraftText(product.writingData?.draftText ?? '');
+  if (hydratedSections.length > 0) {
+    const templateSections = buildWritingSectionsFromProduct(product as CourseProduct);
+    return templateSections.map((section, index) => ({
+      ...section,
+      content: hydratedSections[index]?.content ?? section.content,
+      updatedAt: hydratedSections[index]?.updatedAt ?? section.updatedAt,
+    }));
   }
 
   return buildWritingSectionsFromProduct(product as CourseProduct);
@@ -1960,21 +2115,6 @@ function normalizeWritingSections(sections: ProductWritingSection[]): ProductWri
     content: section.content?.trim() ?? '',
     updatedAt: section.updatedAt?.trim() || undefined,
   }));
-}
-
-function createWritingInstructionsTextFromSections(sections: ProductWritingSection[]) {
-  return sections
-    .map((section) => {
-      const cleanInstructions = sanitizeRichHtml(section.instructions || '').trim();
-
-      if (!cleanInstructions) {
-        return '';
-      }
-
-      return `<section data-section="${escapeHtml(section.title)}"><h3>${escapeHtml(section.title)}</h3>${cleanInstructions}</section>`;
-    })
-    .filter(Boolean)
-    .join('');
 }
 
 function syncWritingSectionsFromInstructions(
@@ -3602,7 +3742,6 @@ export function CourseWorkspacePage({
   ) {
     const validationData = getValidationData(product);
     const writingSections = getWritingSectionsForProduct(product);
-    const writingInstructions = createWritingInstructionsTextFromSections(writingSections);
 
     return {
       courseTitle: currentCourse.title,
@@ -3617,7 +3756,7 @@ export function CourseWorkspacePage({
       productSection: product.section ?? '',
       productTags: product.tags ?? [],
       summaryText: stripHtmlToText(product.summary),
-      bodyText: stripHtmlToText(writingInstructions || product.body),
+      bodyText: stripHtmlToText(getFixedProductInstructionsHtml(product)),
       writingSections,
       validationChecklist: getValidationChecklist(product),
       validationComments: validationData.comments,
@@ -3891,7 +4030,9 @@ export function CourseWorkspacePage({
           : null
         : selectedValidationProduct
           ? {
-              ...(productDrafts[selectedValidationProduct.id] ?? selectedValidationProduct),
+              ...selectedValidationProduct,
+              ...(productDrafts[selectedValidationProduct.id] ?? {}),
+              writingData: selectedValidationProduct.writingData,
               stage: 'validacion' as const,
             }
           : null;
@@ -3937,8 +4078,7 @@ export function CourseWorkspacePage({
     const validationData = getValidationData(product);
     const checklistItems = getValidationChecklist(product);
     const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
-    const writingSections = getWritingSectionsForProduct(product);
-    const contentHtml = createWritingDraftTextFromSections(writingSections);
+    const contentHtml = getWritingContentHtmlForProduct(product);
     const checklistOptions: ProductValidationChecklistItem['status'][] = [
       'Cumple',
       'Parcial',
@@ -4561,11 +4701,19 @@ export function CourseWorkspacePage({
     }
 
     const draft = productDrafts[selectedValidationProduct.id];
-    const metrics = getValidationMetrics(draft ?? selectedValidationProduct);
+    const activeValidationProduct = {
+      ...selectedValidationProduct,
+      ...(draft ?? {}),
+      writingData: selectedValidationProduct.writingData,
+      validationData:
+        draft?.validationData ??
+        selectedValidationProduct.validationData ??
+        buildDefaultValidationData('validacion'),
+    };
+    const metrics = getValidationMetrics(activeValidationProduct);
     const validationStageFormats = productFormatsForStage('validacion');
     const currentValidationProductId = selectedValidationProduct.id;
-    const validationTone = getValidationWorkflowTone(draft ?? selectedValidationProduct);
-    const activeValidationProduct = draft ?? selectedValidationProduct;
+    const validationTone = getValidationWorkflowTone(activeValidationProduct);
 
     if (!draft) {
       return (
@@ -4678,7 +4826,7 @@ export function CourseWorkspacePage({
                 <div className="validation-preview__pane">
                   <span className="eyebrow">Contenido</span>
                   {renderRichTextContent(
-                    createWritingDraftTextFromSections(getWritingSectionsForProduct(draft)),
+                    getWritingContentHtmlForProduct(selectedValidationProduct),
                     'Sin contenido registrado.',
                     'rich-html--panel',
                   )}
@@ -4760,7 +4908,7 @@ export function CourseWorkspacePage({
               <article className="surface-muted validation-detail-modal__block">
                 <span className="eyebrow">Instrucciones</span>
                 {renderInstructionContent(
-                  createWritingInstructionsTextFromSections(getWritingSectionsForProduct(draft)),
+                  activeValidationProduct.body,
                   'Sin instrucciones registradas.',
                   'rich-html--panel',
                 )}
@@ -6497,7 +6645,7 @@ export function CourseWorkspacePage({
       stage: product.stage,
       owner: product.owner,
       status: product.status,
-      body: product.body,
+      body: getFixedProductInstructionsHtml(product),
       tags: product.tags,
       version: product.version,
       section: product.section ?? 'Introducción',
@@ -6632,6 +6780,7 @@ export function CourseWorkspacePage({
 
   async function handleProductSave(productId: string): Promise<boolean> {
     const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
 
     if (!draft) {
       return false;
@@ -6642,16 +6791,18 @@ export function CourseWorkspacePage({
 
     try {
       const currentWritingData: ProductWritingData = {
-        mode: draft.writingData?.mode ?? 'manual',
-        submittedAsset: draft.writingData?.submittedAsset ?? null,
-        supportAssets: draft.writingData?.supportAssets ?? [],
-        libraryResourceIds: draft.writingData?.libraryResourceIds ?? [],
-        aiPrompt: draft.writingData?.aiPrompt ?? '',
-        extractedText: draft.writingData?.extractedText ?? '',
-        draftText: draft.writingData?.draftText ?? '',
-        sections: draft.writingData?.sections ?? [],
-        lastSavedAt: draft.writingData?.lastSavedAt,
-        lastGeneratedAt: draft.writingData?.lastGeneratedAt,
+        mode: persistedProduct?.writingData?.mode ?? draft.writingData?.mode ?? 'manual',
+        submittedAsset: persistedProduct?.writingData?.submittedAsset ?? draft.writingData?.submittedAsset ?? null,
+        supportAssets: persistedProduct?.writingData?.supportAssets ?? draft.writingData?.supportAssets ?? [],
+        libraryResourceIds:
+          persistedProduct?.writingData?.libraryResourceIds ?? draft.writingData?.libraryResourceIds ?? [],
+        aiPrompt: persistedProduct?.writingData?.aiPrompt ?? draft.writingData?.aiPrompt ?? '',
+        extractedText: persistedProduct?.writingData?.extractedText ?? draft.writingData?.extractedText ?? '',
+        draftText: persistedProduct?.writingData?.draftText ?? draft.writingData?.draftText ?? '',
+        sections: persistedProduct ? getWritingSectionsForProduct(persistedProduct) : draft.writingData?.sections ?? [],
+        lastSavedAt: persistedProduct?.writingData?.lastSavedAt ?? draft.writingData?.lastSavedAt,
+        lastGeneratedAt:
+          persistedProduct?.writingData?.lastGeneratedAt ?? draft.writingData?.lastGeneratedAt,
       };
       const syncedWritingSections = syncWritingSectionsFromInstructions(
         currentWritingData.sections,
@@ -8777,7 +8928,7 @@ export function CourseWorkspacePage({
                 </div>
               </div>
               {renderInstructionContent(
-                createWritingInstructionsTextFromSections(getWritingSectionsForProduct(selectedWritingProduct)),
+                getFixedProductInstructionsHtml(selectedWritingProduct),
                 'Sin instrucciones del producto.',
                 'rich-html--panel rich-html--instruction'
               )}
@@ -9960,9 +10111,7 @@ export function CourseWorkspacePage({
                                 <div>
                                   <strong>Instrucciones</strong>
                                   {renderInstructionContent(
-                                    createWritingInstructionsTextFromSections(
-                                      getWritingSectionsForProduct(product),
-                                    ),
+                                    getFixedProductInstructionsHtml(product),
                                     'Sin instrucciones registradas.',
                                     'rich-html--panel',
                                   )}
@@ -10561,9 +10710,7 @@ export function CourseWorkspacePage({
                   <div>
                     <strong>Instrucciones</strong>
                     {renderInstructionContent(
-                      createWritingInstructionsTextFromSections(
-                        getWritingSectionsForProduct(architecturePreviewProduct),
-                      ),
+                      getFixedProductInstructionsHtml(architecturePreviewProduct),
                       'Este producto todavía no tiene instrucciones registradas.',
                       'rich-html--panel',
                     )}
