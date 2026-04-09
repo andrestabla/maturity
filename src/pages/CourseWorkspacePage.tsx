@@ -2305,6 +2305,7 @@ export function CourseWorkspacePage({
   const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isValidationDetailModalOpen, setIsValidationDetailModalOpen] = useState(false);
   const [isValidationEditModalOpen, setIsValidationEditModalOpen] = useState(false);
+  const [validationContentSectionTab, setValidationContentSectionTab] = useState<string | null>(null);
   const [isProductExporting, setIsProductExporting] = useState<string | null>(null);
   const [writingError, setWritingError] = useState<string | null>(null);
   const [isWritingSaving, setIsWritingSaving] = useState(false);
@@ -3499,34 +3500,6 @@ export function CourseWorkspacePage({
     return validationData;
   }
 
-  function updateValidationCriteriaDraft(productId: string, criteriaText: string) {
-    const draft = productDrafts[productId];
-
-    if (!draft) {
-      return;
-    }
-
-    const criteria = normalizeCriteriaList(splitCriteriaLines(criteriaText), draft.stage);
-    const nextChecklist = buildValidationChecklistFromCriteria(criteria).map((item, index) => {
-      const current = draft.validationData?.checklist?.[index];
-
-      return {
-        ...item,
-        id: current?.id ?? item.id,
-        status: current?.status ?? item.status,
-        notes: current?.notes ?? item.notes,
-        updatedAt: current?.updatedAt ?? item.updatedAt,
-      };
-    });
-
-    updateValidationProductDraft(productId, (validationData) => ({
-      ...validationData,
-      criteria,
-      checklist: nextChecklist,
-      lastReviewedAt: new Date().toISOString(),
-    }));
-  }
-
   function updateValidationCommentDraft(
     productId: string,
     patch: Partial<{ fragment: string; comment: string }>,
@@ -3558,6 +3531,56 @@ export function CourseWorkspacePage({
           ...draft,
           validationData: updater(getValidationData(draft)),
         },
+      };
+    });
+  }
+
+  function updateValidationContentSection(
+    productId: string,
+    sectionId: string,
+    key: keyof ProductWritingSection,
+    value: string,
+  ) {
+    const now = new Date().toISOString();
+
+    setProductDrafts((current) => {
+      const draft = current[productId];
+
+      if (!draft) {
+        return current;
+      }
+
+      const currentSections = normalizeWritingSections(
+        draft.writingData?.sections?.length ? draft.writingData.sections : getWritingSectionsForProduct(draft),
+      );
+      const nextSections = currentSections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              [key]: value,
+              updatedAt: now,
+            }
+          : section,
+      );
+      const nextDraft: CourseProductMutationInput = {
+        ...draft,
+        writingData: {
+          mode: draft.writingData?.mode ?? 'manual',
+          submittedAsset: draft.writingData?.submittedAsset ?? null,
+          supportAssets: draft.writingData?.supportAssets ?? [],
+          libraryResourceIds: draft.writingData?.libraryResourceIds ?? [],
+          aiPrompt: draft.writingData?.aiPrompt ?? '',
+          extractedText: draft.writingData?.extractedText ?? '',
+          sections: nextSections,
+          draftText: createWritingDraftTextFromSections(nextSections),
+          lastSavedAt: draft.writingData?.lastSavedAt,
+          lastGeneratedAt: draft.writingData?.lastGeneratedAt,
+        },
+      };
+
+      return {
+        ...current,
+        [productId]: nextDraft,
       };
     });
   }
@@ -4703,15 +4726,12 @@ export function CourseWorkspacePage({
     const draft = productDrafts[selectedValidationProduct.id];
     const activeValidationProduct = {
       ...selectedValidationProduct,
-      ...(draft ?? {}),
-      writingData: selectedValidationProduct.writingData,
+      writingData: draft?.writingData ?? selectedValidationProduct.writingData,
       validationData:
-        draft?.validationData ??
-        selectedValidationProduct.validationData ??
-        buildDefaultValidationData('validacion'),
+        draft?.validationData ?? selectedValidationProduct.validationData ?? buildDefaultValidationData('validacion'),
     };
+    const validationWritingSections = getWritingSectionsForProduct(activeValidationProduct);
     const metrics = getValidationMetrics(activeValidationProduct);
-    const validationStageFormats = productFormatsForStage('validacion');
     const currentValidationProductId = selectedValidationProduct.id;
     const validationTone = getValidationWorkflowTone(activeValidationProduct);
 
@@ -4741,7 +4761,7 @@ export function CourseWorkspacePage({
               <div className="section-heading section-heading--compact">
                 <div>
                   <span className="eyebrow">Validación instruccional</span>
-                  <h3>{draft.title}</h3>
+                  <h3>{selectedValidationProduct.title}</h3>
                 </div>
               </div>
               <p className="section-lead">
@@ -4784,7 +4804,10 @@ export function CourseWorkspacePage({
                 type="button"
                 className="cta-button"
                 disabled={!canEditSelectedValidationProduct}
-                onClick={() => setIsValidationEditModalOpen(true)}
+                onClick={() => {
+                  setValidationContentSectionTab(validationWritingSections[0]?.id ?? null);
+                  setIsValidationEditModalOpen(true);
+                }}
               >
                 <PencilLine size={16} />
                 <span>Editar</span>
@@ -4800,9 +4823,11 @@ export function CourseWorkspacePage({
                   <h3>Vista exclusiva del contenido</h3>
                 </div>
                 <div className="action-row">
-                  <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
-                  <span className="badge badge--outline">{draft.format}</span>
-                  <span className="badge badge--outline">{draft.version}</span>
+                  <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                    {selectedValidationProduct.status}
+                  </span>
+                  <span className="badge badge--outline">{selectedValidationProduct.format}</span>
+                  <span className="badge badge--outline">{selectedValidationProduct.version}</span>
                 </div>
               </div>
 
@@ -4826,7 +4851,7 @@ export function CourseWorkspacePage({
                 <div className="validation-preview__pane">
                   <span className="eyebrow">Contenido</span>
                   {renderRichTextContent(
-                    getWritingContentHtmlForProduct(selectedValidationProduct),
+                    getWritingContentHtmlForProduct(activeValidationProduct),
                     'Sin contenido registrado.',
                     'rich-html--panel',
                   )}
@@ -4867,7 +4892,7 @@ export function CourseWorkspacePage({
 
         {isValidationDetailModalOpen ? (
           <ModalFrame
-            title={`Detalle · ${draft.title}`}
+            title={`Detalle · ${selectedValidationProduct.title}`}
             description="Información de producto y alcance editorial para revisión rápida."
             width="xl"
             variant="drawer"
@@ -4875,9 +4900,11 @@ export function CourseWorkspacePage({
           >
             <div className="page-stack validation-detail-modal">
               <div className="validation-detail-modal__summary">
-                <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
-                <span className="badge badge--outline">{draft.format}</span>
-                <span className="badge badge--outline">{draft.version}</span>
+                <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                  {selectedValidationProduct.status}
+                </span>
+                <span className="badge badge--outline">{selectedValidationProduct.format}</span>
+                <span className="badge badge--outline">{selectedValidationProduct.version}</span>
                 <span className={workflowToneBadgeClass(validationTone)}>
                   {workflowToneLabel(validationTone)}
                 </span>
@@ -4893,7 +4920,7 @@ export function CourseWorkspacePage({
                 </div>
                 <div className="module-card">
                   <div className="module-card__top">
-                    <strong>{draft.owner}</strong>
+                    <strong>{selectedValidationProduct.owner}</strong>
                     <span>responsable</span>
                   </div>
                   <p>Asignado para la validación instruccional del curso.</p>
@@ -4902,7 +4929,11 @@ export function CourseWorkspacePage({
 
               <article className="surface-muted validation-detail-modal__block">
                 <span className="eyebrow">Descripción</span>
-                {renderRichTextContent(draft.summary, 'Sin descripción registrada.', 'rich-html--compact')}
+                {renderRichTextContent(
+                  selectedValidationProduct.summary,
+                  'Sin descripción registrada.',
+                  'rich-html--compact',
+                )}
               </article>
 
               <article className="surface-muted validation-detail-modal__block">
@@ -4919,8 +4950,8 @@ export function CourseWorkspacePage({
 
         {isValidationEditModalOpen ? (
           <ModalFrame
-            title={`Editar producto · ${draft.title}`}
-            description="Ajusta la información editorial del producto y guarda los cambios sin salir del flujo."
+            title={`Editar contenido · ${selectedValidationProduct.title}`}
+            description="Ajusta el contenido del producto por secciones. Las instrucciones permanecen fijas."
             width="xl"
             variant="drawer"
             onClose={() => setIsValidationEditModalOpen(false)}
@@ -4938,167 +4969,101 @@ export function CourseWorkspacePage({
                   className="cta-button"
                   disabled={!canEditSelectedValidationProduct || isProductSaving === currentValidationProductId}
                   onClick={async () => {
-                    const saved = await handleProductSave(currentValidationProductId);
+                    const saved = await handleValidationContentSave(currentValidationProductId);
                     if (saved) {
                       setIsValidationEditModalOpen(false);
                     }
                   }}
                 >
                   <Save size={16} />
-                  <span>{isProductSaving === currentValidationProductId ? 'Guardando…' : 'Guardar cambios'}</span>
+                  <span>
+                    {isProductSaving === currentValidationProductId ? 'Guardando…' : 'Guardar contenido'}
+                  </span>
                 </button>
               </div>
             }
           >
             <div className="page-stack validation-edit-modal">
               <div className="validation-edit-modal__head">
-                <span className="badge badge--outline">{draft.stage}</span>
-                <span className={productStatusBadgeClass(draft.status)}>{draft.status}</span>
-                <span className="badge badge--outline">{draft.format}</span>
+                <span className="badge badge--outline">{selectedValidationProduct.stage}</span>
+                <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                  {selectedValidationProduct.status}
+                </span>
+                <span className="badge badge--outline">{selectedValidationProduct.format}</span>
               </div>
 
-              <div className="form-grid">
-                <label className="field field--full">
-                  <span>Título</span>
-                  <div className="field__control">
-                    <input
-                      value={draft.title}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(currentValidationProductId, 'title', event.target.value)
-                      }
-                    />
+              <div className="validation-content-editor">
+                <div className="section-heading section-heading--compact">
+                  <div>
+                    <span className="eyebrow">Contenido del producto</span>
+                    <h4>Edita el contenido por secciones</h4>
                   </div>
-                </label>
+                  <span className="badge badge--outline">
+                    {validationWritingSections.filter((section) => section.content.trim()).length}/
+                    {validationWritingSections.length} secciones con contenido
+                  </span>
+                </div>
 
-                <label className="field">
-                  <span>Formato</span>
-                  <div className="field__control">
-                    <select
-                      value={draft.format}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(
-                          currentValidationProductId,
-                          'format',
-                          event.target.value as CourseProductMutationInput['format'],
-                        )
-                      }
-                    >
-                      {validationStageFormats.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
+                <div className="writing-section-tabs" role="tablist" aria-label="Secciones del contenido">
+                  {validationWritingSections.map((section, index) => {
+                    const isActive = section.id === (validationContentSectionTab ?? validationWritingSections[0]?.id);
+                    const isFilled = stripHtmlToText(section.content).trim().length > 0;
 
-                <label className="field">
-                  <span>Estado</span>
-                  <div className="field__control">
-                    <select
-                      value={draft.status}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(
-                          currentValidationProductId,
-                          'status',
-                          event.target.value as CourseProductMutationInput['status'],
-                        )
-                      }
-                    >
-                      {['Borrador', 'En revisión', 'Aprobado'].map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`writing-section-tab ${isActive ? 'is-active' : ''}`}
+                        onClick={() => setValidationContentSectionTab(section.id)}
+                      >
+                        <span className="writing-section-tab__index">Sección {index + 1}</span>
+                        <strong>{section.title}</strong>
+                        <small>{isFilled ? 'Con contenido' : 'Pendiente'}</small>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                <label className="field">
-                  <span>Responsable</span>
-                  <div className="field__control">
-                    <select
-                      value={draft.owner}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(currentValidationProductId, 'owner', event.target.value as Role)
-                      }
-                    >
-                      {appData.roles.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
+                {(() => {
+                  const activeSection =
+                    validationWritingSections.find((section) => section.id === validationContentSectionTab) ??
+                    validationWritingSections[0];
 
-                <label className="field">
-                  <span>Versión</span>
-                  <div className="field__control">
-                    <input
-                      value={draft.version}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(currentValidationProductId, 'version', event.target.value)
-                      }
-                    />
-                  </div>
-                </label>
+                  if (!activeSection) {
+                    return (
+                      <div className="surface-muted validation-detail-modal__block">
+                        <p>Este producto aún no tiene secciones listas para editar.</p>
+                      </div>
+                    );
+                  }
 
-                <label className="field field--full">
-                  <span>Etiquetas</span>
-                  <div className="field__control">
-                    <input
-                      value={joinTags(draft.tags)}
-                      disabled={!canEditSelectedValidationProduct}
-                      onChange={(event) =>
-                        updateProductDraft(currentValidationProductId, 'tags', splitTags(event.target.value))
-                      }
-                    />
-                  </div>
-                </label>
-
-                <label className="field field--full">
-                  <span>Descripción</span>
-                  <RichTextEditor
-                    value={draft.summary}
-                    onChange={(value) => updateProductDraft(currentValidationProductId, 'summary', value)}
-                    placeholder="Describe qué evalúa este producto y cuál es su alcance pedagógico."
-                    minHeight={180}
-                    disabled={!canEditSelectedValidationProduct}
-                  />
-                </label>
-
-                <label className="field field--full">
-                  <span>Instrucciones</span>
-                  <RichTextEditor
-                    value={draft.body}
-                    onChange={(value) => updateProductDraft(currentValidationProductId, 'body', value)}
-                    placeholder="Define aquí la estructura, checklist y criterios que deben verificarse."
-                    minHeight={260}
-                    disabled={!canEditSelectedValidationProduct}
-                  />
-                </label>
-
-                <label className="field field--full">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <span>Criterios de calidad</span>
-                  </div>
-                  <textarea
-                    className="modern-textarea"
-                    rows={7}
-                    value={joinLines(getValidationData(draft).criteria)}
-                    disabled={!canEditSelectedValidationProduct}
-                    onChange={(event) =>
-                      updateValidationCriteriaDraft(currentValidationProductId, event.target.value)
-                    }
-                    placeholder="Define un criterio por línea para sincronizar el checklist de validación."
-                  />
-                </label>
+                  return (
+                    <article className="writing-structured-card writing-structured-card--active-tab">
+                      <div className="writing-structured-card__head">
+                        <div>
+                          <span className="eyebrow">Sección activa</span>
+                          <h4>{activeSection.title}</h4>
+                        </div>
+                      </div>
+                      <RichTextEditor
+                        value={activeSection.content}
+                        onChange={(value) =>
+                          updateValidationContentSection(
+                            currentValidationProductId,
+                            activeSection.id,
+                            'content',
+                            value,
+                          )
+                        }
+                        placeholder={`Desarrolla aquí la sección "${activeSection.title}".`}
+                        minHeight={280}
+                        disabled={!canEditSelectedValidationProduct}
+                      />
+                    </article>
+                  );
+                })()}
               </div>
             </div>
           </ModalFrame>
@@ -6859,6 +6824,86 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function handleValidationContentSave(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+
+    if (!draft) {
+      return false;
+    }
+
+    const nextWritingData = draft.writingData ?? persistedProduct?.writingData;
+
+    if (!nextWritingData) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          writingData: {
+            ...nextWritingData,
+            lastSavedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar el contenido del producto.',
+        },
+      );
+
+      if (updatedProduct) {
+        setProductDrafts((current) =>
+          current[productId]
+            ? {
+                ...current,
+                [productId]: {
+                  ...current[productId],
+                  writingData: normalizeWritingDraft(updatedProduct),
+                } as CourseProductMutationInput,
+              }
+            : current,
+        );
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      void showAlert({
+        title: 'Contenido guardado',
+        message: 'El contenido quedó actualizado para la validación instruccional.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar el contenido del producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar contenido',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
   async function handleReturnValidationProductToWriting() {
     if (!selectedValidationProduct || !canEditSelectedValidationProduct) {
       return;
@@ -7146,6 +7191,7 @@ export function CourseWorkspacePage({
   function closeValidationProductWorkspace() {
     setIsValidationDetailModalOpen(false);
     setIsValidationEditModalOpen(false);
+    setValidationContentSectionTab(null);
     const nextPath = buildValidationWorkspacePath(currentCourse.slug, null);
     navigate(nextPath, { replace: true });
   }
@@ -7153,6 +7199,7 @@ export function CourseWorkspacePage({
   function goToValidationProduct(productId: string) {
     setIsValidationDetailModalOpen(false);
     setIsValidationEditModalOpen(false);
+    setValidationContentSectionTab(null);
     navigate(buildValidationWorkspacePath(currentCourse.slug, productId));
   }
 
