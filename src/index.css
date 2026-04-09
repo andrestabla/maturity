@@ -14704,6 +14704,14 @@ body::after {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
+.m360-library-card--light strong {
+  color: #0f172a;
+}
+
+.m360-library-card--light p {
+  color: #475569;
+}
+
 .m360-library-card__header {
   display: flex;
   align-items: center;
@@ -14967,6 +14975,24 @@ body::after {
 
 .m360-analytics__notes span {
   color: #475569;
+}
+
+/* Light UI Mockup Text Overrides */
+.m360-ui-shot--light .m360-ui-shot__searchbar span,
+.m360-ui-shot--light .m360-library-card p,
+.m360-ui-shot--light .m360-library-card__header span,
+.m360-ui-shot--light .m360-library-card__icon {
+  color: #475569;
+}
+
+.m360-ui-shot--light .m360-ui-shot__drawer small {
+  color: #0369a1;
+}
+
+.m360-ui-shot--light .m360-ui-shot__searchbar strong,
+.m360-ui-shot--light .m360-library-card strong,
+.m360-ui-shot--light .m360-ui-shot__drawer strong {
+  color: #0f172a;
 }
 
 .m360-cta {
