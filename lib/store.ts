@@ -74,6 +74,8 @@ import type {
 } from '../src/types.js';
 import {
   buildDefaultValidationData,
+  buildDefaultValidationCriteria,
+  buildValidationChecklistFromCriteria,
   normalizeValidationChecklistStatus,
 } from '../src/data/productValidationDefaults.js';
 import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
@@ -1421,16 +1423,32 @@ function normalizeProductValidationComments(
     }));
 }
 
+function normalizeValidationCriteria(criteria?: string[] | null) {
+  return (criteria ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeProductValidationData(
   validationData?: ProductValidationData,
   stage: CourseProductStage = 'validacion',
 ): ProductValidationData {
   const fallback = buildDefaultValidationData(stage);
   const source = validationData ?? fallback;
+  const normalizedChecklist = normalizeProductValidationChecklist(source.checklist, stage);
+  const normalizedCriteria = normalizeValidationCriteria(
+    source.criteria?.length ? source.criteria : normalizedChecklist.map((item) => item.label),
+  );
+  const criteria = normalizedCriteria.length > 0 ? normalizedCriteria : buildDefaultValidationCriteria(stage);
+  const checklist =
+    normalizedChecklist.length > 0
+      ? normalizedChecklist
+      : buildValidationChecklistFromCriteria(criteria);
 
   return {
     reviewerNotes: source.reviewerNotes?.trim() ?? '',
-    checklist: normalizeProductValidationChecklist(source.checklist, stage),
+    criteria,
+    checklist,
     comments: normalizeProductValidationComments(source.comments),
     lastReviewedAt: source.lastReviewedAt?.trim() || undefined,
   };
@@ -1862,6 +1880,20 @@ function splitLegacyArchitectureText({
   };
 }
 
+function normalizeArchitectureEditableText(value?: string | null) {
+  const normalized = normalizeLongTextBlock(value);
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (hasHtmlLikeMarkup(normalized)) {
+    return normalized;
+  }
+
+  return normalizeArchitectureInstructionHtml(normalized);
+}
+
 function normalizeCourseProductTextFields(
   input: {
     stage: CourseProductStage;
@@ -1871,8 +1903,16 @@ function normalizeCourseProductTextFields(
     summary?: string | null;
     body?: string | null;
   },
+  options?: { preserveExplicitRichText?: boolean },
 ) {
   if (input.stage === 'arquitectura') {
+    if (options?.preserveExplicitRichText) {
+      return {
+        summary: normalizeArchitectureEditableText(input.summary),
+        body: normalizeArchitectureEditableText(input.body),
+      };
+    }
+
     return splitLegacyArchitectureText(input);
   }
 
@@ -1890,6 +1930,8 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     section: input.section,
     summary: input.summary,
     body: input.body,
+  }, {
+    preserveExplicitRichText: true,
   });
 
   return {
@@ -6781,6 +6823,8 @@ export async function updateCourseProductRecord(
       section: nextSection,
       summary: input.summary ?? product.summary,
       body: input.body ?? product.body,
+    }, {
+      preserveExplicitRichText: true,
     });
 
     updatedProduct = {

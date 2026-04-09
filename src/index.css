@@ -10225,6 +10225,28 @@ body::after {
   cursor: pointer;
 }
 
+.architecture-card.is-success {
+  border-color: color-mix(in srgb, var(--sage) 42%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--sage-soft) 58%, white 42%), var(--panel-strong));
+}
+
+.architecture-card.is-warning {
+  border-color: color-mix(in srgb, var(--gold) 42%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--gold-soft) 58%, white 42%), var(--panel-strong));
+}
+
+.architecture-card.is-danger {
+  border-color: color-mix(in srgb, var(--coral) 42%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--coral-soft) 58%, white 42%), var(--panel-strong));
+}
+
+.architecture-card.is-neutral {
+  border-color: color-mix(in srgb, var(--line) 70%, var(--accent) 30%);
+}
+
 .architecture-card__inner {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -10307,6 +10329,30 @@ body::after {
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.architecture-card__criteria,
+.architecture-card__stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, white 30%);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.architecture-card__criteria-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.architecture-card__criteria-count {
+  font-weight: 800;
+  color: var(--secondary);
 }
 
 .rich-copy {

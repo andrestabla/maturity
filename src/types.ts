@@ -307,6 +307,7 @@ export interface ProductValidationComment {
 }
 
 export interface ProductValidationData {
+  criteria: string[];
   reviewerNotes: string;
   checklist: ProductValidationChecklistItem[];
   comments: ProductValidationComment[];

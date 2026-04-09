@@ -72,6 +72,14 @@ const validationChecklistTemplates: Record<CourseProductStage, string[]> = {
   ],
 };
 
+export function buildDefaultValidationCriteria(stage: CourseProductStage = 'validacion') {
+  return (validationChecklistTemplates[stage] ?? validationChecklistTemplates.validacion).slice();
+}
+
+function normalizeValidationCriteria(criteria: string[]) {
+  return criteria.map((item) => item.trim()).filter(Boolean);
+}
+
 function makeChecklistItem(label: string, index: number): ProductValidationChecklistItem {
   return {
     id: `validation-check-${index + 1}`,
@@ -85,37 +93,49 @@ function makeChecklistItem(label: string, index: number): ProductValidationCheck
 export function buildDefaultValidationChecklist(
   stage: CourseProductStage = 'validacion',
 ): ProductValidationChecklistItem[] {
-  return (validationChecklistTemplates[stage] ?? validationChecklistTemplates.validacion).map(makeChecklistItem);
+  return buildDefaultValidationCriteria(stage).map(makeChecklistItem);
 }
 
 export function buildDefaultValidationData(
   stage: CourseProductStage = 'validacion',
 ): ProductValidationData {
+  const criteria = normalizeValidationCriteria(buildDefaultValidationCriteria(stage));
+
   return {
+    criteria,
     reviewerNotes: '',
-    checklist: buildDefaultValidationChecklist(stage),
+    checklist: criteria.map(makeChecklistItem),
     comments: [],
     lastReviewedAt: undefined,
   };
 }
 
-export function buildValidationChecklistFromWritingSections(
-  sections: ProductWritingSection[],
+export function buildValidationChecklistFromCriteria(
+  criteria: string[],
 ): ProductValidationChecklistItem[] {
-  const sourceSections = sections.length > 0 ? sections : validationChecklistTemplates.validacion.map((label, index) => ({
-    id: `validation-check-${index + 1}`,
-    title: `Criterio ${index + 1}`,
-    instructions: label,
-    content: '',
-  }));
+  const normalizedCriteria = normalizeValidationCriteria(criteria);
+  const sourceCriteria =
+    normalizedCriteria.length > 0
+      ? normalizedCriteria
+      : buildDefaultValidationCriteria('validacion');
 
-  return sourceSections.map((section, index) => ({
+  return sourceCriteria.map((label, index) => ({
     id: `validation-check-${index + 1}`,
-    label: section.instructions.trim() || section.title.trim() || `Criterio ${index + 1}`,
+    label,
     status: 'Parcial',
     notes: '',
     updatedAt: new Date().toISOString(),
   }));
+}
+
+export function buildValidationChecklistFromWritingSections(
+  sections: ProductWritingSection[],
+): ProductValidationChecklistItem[] {
+  const criteria = sections.length > 0
+    ? sections.map((section) => section.instructions.trim() || section.title.trim()).filter(Boolean)
+    : buildDefaultValidationCriteria('validacion');
+
+  return buildValidationChecklistFromCriteria(criteria);
 }
 
 export function normalizeValidationChecklistStatus(

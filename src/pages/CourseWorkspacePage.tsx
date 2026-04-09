@@ -74,6 +74,8 @@ import type {
 } from '../types.js';
 import {
   buildDefaultValidationData,
+  buildDefaultValidationCriteria,
+  buildValidationChecklistFromCriteria,
   buildValidationChecklistFromWritingSections,
   normalizeValidationChecklistStatus,
 } from '../data/productValidationDefaults.js';
@@ -1267,6 +1269,43 @@ function getValidationWorkflowTone(
   return 'neutral';
 }
 
+function getProductLifecycleTone(
+  product: Pick<CourseProduct, 'status' | 'stage' | 'phasePlan'>,
+): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+
+  if (product.status === 'Aprobado') {
+    return 'success';
+  }
+
+  if (product.status === 'En revisión' || product.stage !== 'arquitectura') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
+function splitCriteriaLines(value?: string | null) {
+  return (value ?? '')
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeCriteriaList(criteria: string[] | undefined, fallbackStage: CourseProductStage = 'validacion') {
+  const cleaned = (criteria ?? []).map((item) => item.trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned : buildDefaultValidationCriteria(fallbackStage);
+}
+
 function productFormatsForStage(
   stage: CourseProductStage,
 ): CourseProductMutationInput['format'][] {
@@ -2221,6 +2260,7 @@ export function CourseWorkspacePage({
   const [productDrafts, setProductDrafts] = useState<Record<string, CourseProductMutationInput>>(() =>
     makeCourseProductDrafts(course?.products ?? []),
   );
+  const [criteriaGeneratorProductId, setCriteriaGeneratorProductId] = useState<string | null>(null);
   const [planningPhaseDraft, setPlanningPhaseDraft] = useState<ProductPhasePlan[]>(() =>
     normalizeProductPhasePlanDraft([]),
   );
@@ -2491,7 +2531,7 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
-  const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
+  const architectureProducts = currentCourse.products;
   const canManageWritingWorkspace = userRole === 'Administrador' || userRole === 'Coordinador';
   const courseLibraryResources =
     appData.libraryResources.length > 0
@@ -3231,6 +3271,34 @@ export function CourseWorkspacePage({
     return product.validationData ?? buildDefaultValidationData(product.stage);
   }
 
+  function updateValidationCriteriaDraft(productId: string, criteriaText: string) {
+    const draft = productDrafts[productId];
+
+    if (!draft) {
+      return;
+    }
+
+    const criteria = normalizeCriteriaList(splitCriteriaLines(criteriaText), draft.stage);
+    const nextChecklist = buildValidationChecklistFromCriteria(criteria).map((item, index) => {
+      const current = draft.validationData?.checklist?.[index];
+
+      return {
+        ...item,
+        id: current?.id ?? item.id,
+        status: current?.status ?? item.status,
+        notes: current?.notes ?? item.notes,
+        updatedAt: current?.updatedAt ?? item.updatedAt,
+      };
+    });
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      criteria,
+      checklist: nextChecklist,
+      lastReviewedAt: new Date().toISOString(),
+    }));
+  }
+
   function updateValidationCommentDraft(
     productId: string,
     patch: Partial<{ fragment: string; comment: string }>,
@@ -3378,15 +3446,12 @@ export function CourseWorkspacePage({
     product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
   ) {
     const validationData = getValidationData(product);
-    const writingSections = product.writingData?.sections ?? [];
+    const sourceChecklist =
+      validationData.criteria.length > 0
+        ? buildValidationChecklistFromCriteria(validationData.criteria)
+        : buildValidationChecklistFromWritingSections(product.writingData?.sections ?? []);
 
-    if (writingSections.length === 0) {
-      return validationData.checklist;
-    }
-
-    const checklistFromSections = buildValidationChecklistFromWritingSections(writingSections);
-
-    const alignedChecklist = checklistFromSections.map((item, index) => {
+    return sourceChecklist.map((item, index) => {
       const current = validationData.checklist[index];
 
       return {
@@ -3397,11 +3462,6 @@ export function CourseWorkspacePage({
         updatedAt: current?.updatedAt ?? item.updatedAt,
       };
     });
-
-    return [
-      ...alignedChecklist,
-      ...validationData.checklist.slice(checklistFromSections.length),
-    ];
   }
 
   function getValidationMetrics(
@@ -4788,6 +4848,22 @@ export function CourseWorkspacePage({
                     placeholder="Define aquí la estructura, checklist y criterios que deben verificarse."
                     minHeight={260}
                     disabled={!canEditSelectedValidationProduct}
+                  />
+                </label>
+
+                <label className="field field--full">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <span>Criterios de calidad</span>
+                  </div>
+                  <textarea
+                    className="modern-textarea"
+                    rows={7}
+                    value={joinLines(getValidationData(draft).criteria)}
+                    disabled={!canEditSelectedValidationProduct}
+                    onChange={(event) =>
+                      updateValidationCriteriaDraft(currentValidationProductId, event.target.value)
+                    }
+                    placeholder="Define un criterio por línea para sincronizar el checklist de validación."
                   />
                 </label>
               </div>
@@ -6333,7 +6409,7 @@ export function CourseWorkspacePage({
       title: product.title,
       summary: product.summary,
       format: product.format,
-      stage: 'arquitectura',
+      stage: product.stage,
       owner: product.owner,
       status: product.status,
       body: product.body,
@@ -6341,14 +6417,80 @@ export function CourseWorkspacePage({
       version: product.version,
       section: product.section ?? 'Introducción',
       phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
+      validationData: product.validationData ?? buildDefaultValidationData(product.stage),
     });
     setIsAddProductModalOpen(true);
+  }
+
+  async function handleGenerateArchitectureCriteria() {
+    if (!currentCourse || !newProductForm.title) {
+      return;
+    }
+
+    const saveKey = editingArchitectureProductId ?? 'new';
+    setProductError(null);
+    setCriteriaGeneratorProductId(saveKey);
+
+    try {
+      const response = await fetch('/api/generate-quality-criteria', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          title: newProductForm.title,
+          format: newProductForm.format,
+          section: newProductForm.section ?? activeAddSection,
+          summary: newProductForm.summary,
+          body: newProductForm.body,
+          stage: newProductForm.stage,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { criteria?: string[]; error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible generar los criterios de calidad.');
+      }
+
+      const criteria = normalizeCriteriaList(payload?.criteria ?? [], newProductForm.stage);
+      setNewProductForm((current) => ({
+        ...current,
+        validationData: {
+          ...(current.validationData ?? buildDefaultValidationData(current.stage)),
+          criteria,
+          checklist: buildValidationChecklistFromCriteria(criteria),
+        },
+      }));
+
+      void showAlert({
+        title: 'Criterios generados',
+        message: 'La IA propuso criterios de calidad listos para ajustar manualmente si lo necesitas.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible generar los criterios de calidad.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al generar criterios',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setCriteriaGeneratorProductId(null);
+    }
   }
 
   async function handleSubmitArchitectureProduct() {
      if (!currentCourse || !newProductForm.title) return;
 
      const saveKey = editingArchitectureProductId ?? 'new';
+     setProductError(null);
      setIsProductSaving(saveKey);
      try {
        const response = await fetch('/api/course-products', {
@@ -6398,6 +6540,7 @@ export function CourseWorkspacePage({
          tone: 'error',
        });
      } finally {
+       setCriteriaGeneratorProductId(null);
        setIsProductSaving(null);
      }
   }
@@ -7276,6 +7419,11 @@ export function CourseWorkspacePage({
       const finalBody =
         createWritingDraftTextFromSections(finalDraft.sections).trim() ||
         finalDraft.draftText.trim();
+      const validationCriteria = normalizeCriteriaList(
+        productDrafts[selectedWritingProduct.id]?.validationData?.criteria ??
+          selectedWritingProduct.validationData?.criteria,
+        'validacion',
+      );
 
       const updatedProduct = await patchWritingProductOnServer(
         {
@@ -7287,7 +7435,8 @@ export function CourseWorkspacePage({
           writingData: finalDraft,
           validationData: {
             ...buildDefaultValidationData('validacion'),
-            checklist: buildValidationChecklistFromWritingSections(finalDraft.sections),
+            criteria: validationCriteria,
+            checklist: buildValidationChecklistFromCriteria(validationCriteria),
           },
         },
         {
@@ -10030,7 +10179,7 @@ export function CourseWorkspacePage({
   function renderArchitectureVisualizer() {
     if (!currentCourse) return null;
 
-    const products = (currentCourse.products || []).filter((product) => product.stage === 'arquitectura');
+    const products = currentCourse.products ?? [];
     const units = currentCourse.metadata.units || [];
     const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
     const unitTitleHints = units.map((unit) => unit.tituloUnidad ?? '');
@@ -10324,6 +10473,22 @@ export function CourseWorkspacePage({
                     )}
                   </div>
                 </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Criterios de calidad</strong>
+                    {getValidationData(architecturePreviewProduct).criteria.length > 0 ? (
+                      <ul className="rich-copy rich-copy--structured">
+                        {getValidationData(architecturePreviewProduct).criteria.map((criterion, index) => (
+                          <li key={`${architecturePreviewProduct.id}-criterion-${index}`} className="rich-copy__item">
+                            {criterion}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted">Todavía no hay criterios definidos para esta ficha.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </SidePanel>
@@ -10347,6 +10512,7 @@ export function CourseWorkspacePage({
               setIsAddProductModalOpen(false);
               setEditingArchitectureProductId(null);
               setArchitectureEditorMode('create');
+              setCriteriaGeneratorProductId(null);
             }}
             footer={
               <div className="flex justify-end gap-3 w-full">
@@ -10356,6 +10522,7 @@ export function CourseWorkspacePage({
                     setIsAddProductModalOpen(false);
                     setEditingArchitectureProductId(null);
                     setArchitectureEditorMode('create');
+                    setCriteriaGeneratorProductId(null);
                   }}
                   disabled={isProductSaving === (editingArchitectureProductId ?? 'new')}
                 >
@@ -10470,6 +10637,43 @@ export function CourseWorkspacePage({
                 />
               </div>
 
+              <div className="form-group">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <label className="form-label">Criterios de calidad</label>
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    disabled={criteriaGeneratorProductId === (editingArchitectureProductId ?? 'new')}
+                    onClick={() => void handleGenerateArchitectureCriteria()}
+                  >
+                    <Sparkles size={14} />
+                    <span>
+                      {criteriaGeneratorProductId === (editingArchitectureProductId ?? 'new')
+                        ? 'Generando…'
+                        : 'Generar criterios IA'}
+                    </span>
+                  </button>
+                </div>
+                <textarea
+                  className="modern-textarea"
+                  rows={7}
+                  value={joinLines(newProductForm.validationData?.criteria ?? [])}
+                  onChange={(event) =>
+                    setNewProductForm((current) => ({
+                      ...current,
+                      validationData: {
+                        ...(current.validationData ?? buildDefaultValidationData(current.stage)),
+                        criteria: normalizeCriteriaList(splitCriteriaLines(event.target.value), current.stage),
+                        checklist: buildValidationChecklistFromCriteria(
+                          normalizeCriteriaList(splitCriteriaLines(event.target.value), current.stage),
+                        ),
+                      },
+                    }))
+                  }
+                  placeholder="Ingresa un criterio por línea. Estos criterios alimentarán el checklist de Validación instruccional."
+                />
+              </div>
+
               {productError && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex items-center gap-3">
                   <AlertCircle size={18} />
@@ -10533,14 +10737,14 @@ export function CourseWorkspacePage({
   }
 
   function renderArchitectureProductCard(product: CourseProduct) {
-    const isDone = product.status === 'Aprobado';
-    const isActive = product.status === 'Borrador' || product.status === 'En revisión';
+    const lifecycleTone = getProductLifecycleTone(product);
     const canEdit = canEditCourseProduct(userRole, product.owner, product.stage);
+    const validationCriteria = getValidationData(product).criteria;
     
     return (
       <div
         key={product.id}
-        className={`architecture-card group animate-in fade-in transition-all duration-300 ${isDone ? 'opacity-70' : ''}`}
+        className={`architecture-card group animate-in fade-in transition-all duration-300 ${workflowToneClass(lifecycleTone)}`}
         onClick={() => setArchitecturePreviewProductId(product.id)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -10560,22 +10764,35 @@ export function CourseWorkspacePage({
               <strong className="architecture-card__title">
                 {product.title}
               </strong>
-              {isDone && <CheckCircle2 size={12} className="text-sage" />}
+              {lifecycleTone === 'success' ? <CheckCircle2 size={12} className="text-sage" /> : null}
             </div>
             <div className="architecture-card__meta">
               <span className="architecture-card__format">
                 {product.format}
               </span>
               <div className="h-1 w-1 rounded-full bg-line" />
-              <span className={`architecture-card__status ${isActive ? 'is-active' : 'is-muted'}`}>
+              <span className={`architecture-card__status ${lifecycleTone === 'warning' ? 'is-active' : 'is-muted'}`}>
                 {product.status}
               </span>
+              <span className={workflowToneBadgeClass(lifecycleTone)}>{workflowToneLabel(lifecycleTone)}</span>
             </div>
             {product.summary && (
               <p className="architecture-card__summary">
                 {stripHtmlToText(product.summary)}
               </p>
             )}
+            {validationCriteria.length > 0 ? (
+              <div className="architecture-card__criteria">
+                <span className="architecture-card__criteria-label">Criterios de calidad</span>
+                <span className="architecture-card__criteria-count">{validationCriteria.length}</span>
+              </div>
+            ) : null}
+            {product.stage !== 'arquitectura' ? (
+              <div className="architecture-card__stage">
+                <span>{productStageLabel(product.stage)}</span>
+                <span>{formatDate(product.updatedAt)}</span>
+              </div>
+            ) : null}
           </div>
         </div>
         {(canEdit || canDeleteCourseProducts(userRole)) ? (
