@@ -1424,8 +1424,8 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeSearchText(value: string) {
-  return value
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase()
@@ -2752,7 +2752,7 @@ export function CourseWorkspacePage({
     .filter((item) => item.member);
 
   function countProductsByStage(stageId: CourseProductStage) {
-    return currentCourse.products.filter((product) => product.stage === stageId).length;
+    return (currentCourse.products ?? []).filter((product) => product.stage === stageId).length;
   }
 
   const planeacionStatus =
@@ -2947,21 +2947,23 @@ export function CourseWorkspacePage({
             ? {
                 eyebrow: 'Validación instruccional',
                 title: 'Zona dedicada de validación',
-                description:
+              description:
                   'Bandeja editorial para revisar productos, validar criterios y dejar comentarios por fragmento.',
                 stats: [
                   {
                     label: 'Productos',
-                    value: String(currentCourse.products.filter((product) => product.stage === 'validacion').length),
+                    value: String(
+                      (currentCourse.products ?? []).filter((product) => product.stage === 'validacion').length,
+                    ),
                   },
                   {
                     label: 'Checklists',
-                    value: `${currentCourse.products
+                    value: `${(currentCourse.products ?? [])
                       .filter((product) => product.stage === 'validacion')
                       .reduce(
                         (sum, product) => sum + getValidationMetrics(product).completed,
                         0,
-                      )}/${currentCourse.products
+                      )}/${(currentCourse.products ?? [])
                       .filter((product) => product.stage === 'validacion')
                       .reduce(
                         (sum, product) => sum + getValidationMetrics(product).total,
@@ -2971,7 +2973,7 @@ export function CourseWorkspacePage({
                   {
                     label: 'Comentarios',
                     value: String(
-                      currentCourse.products
+                      (currentCourse.products ?? [])
                         .filter((product) => product.stage === 'validacion')
                         .reduce(
                           (sum, product) => sum + getValidationMetrics(product).openComments,
@@ -3039,9 +3041,12 @@ export function CourseWorkspacePage({
           : null;
   const showFocusedStageHeader =
     !isWorkflowPage && experienceSettings.showFocusedStageHeader && Boolean(focusedStageMeta);
+  const architectureUnitLabels = Array.isArray(currentCourse?.metadata?.units)
+    ? currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`)
+    : [];
   const architectureSectionOptions = [
     'Introducción',
-    ...(currentCourse?.metadata.units.map((_, index) => `Unidad ${index + 1}`) ?? []),
+    ...architectureUnitLabels,
     'Cierre',
   ];
 
@@ -3268,7 +3273,19 @@ export function CourseWorkspacePage({
   }
 
   function getValidationData(product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>) {
-    return product.validationData ?? buildDefaultValidationData(product.stage);
+    const validationData = product.validationData;
+
+    if (
+      !validationData ||
+      typeof validationData !== 'object' ||
+      !Array.isArray(validationData.criteria) ||
+      !Array.isArray(validationData.checklist) ||
+      !Array.isArray(validationData.comments)
+    ) {
+      return buildDefaultValidationData(product.stage);
+    }
+
+    return validationData;
   }
 
   function updateValidationCriteriaDraft(productId: string, criteriaText: string) {
@@ -6719,7 +6736,7 @@ export function CourseWorkspacePage({
   }
 
   async function handleClearArchitecture() {
-    const architectureProducts = currentCourse.products.filter(
+    const architectureProducts = (currentCourse.products ?? []).filter(
       (product) => product.stage === 'arquitectura',
     );
 
@@ -9403,7 +9420,9 @@ export function CourseWorkspacePage({
     title: string,
     description: string,
   ) {
-    const stageProducts = currentCourse.products.filter((product) => product.stage === productStage);
+    const stageProducts = (currentCourse.products ?? []).filter(
+      (product) => product.stage === productStage,
+    );
     const stageFormats = productFormatsForStage(productStage);
     const overlayId = `products:${productStage}`;
     const isOverlayOpen = activeModal === overlayId;
@@ -10180,9 +10199,9 @@ export function CourseWorkspacePage({
     if (!currentCourse) return null;
 
     const products = currentCourse.products ?? [];
-    const units = currentCourse.metadata.units || [];
+    const units = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
     const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
-    const unitTitleHints = units.map((unit) => unit.tituloUnidad ?? '');
+    const unitTitleHints = units.map((unit) => unit?.tituloUnidad ?? '');
     
     const getResolvedSection = (product: CourseProduct) =>
       resolveArchitectureSectionLabel(
@@ -10843,8 +10862,9 @@ export function CourseWorkspacePage({
   }
 
   function renderPlanningWorkspace() {
-    const unitLabels = currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`);
-    const unitTitleHints = currentCourse.metadata.units.map((unit) => unit.tituloUnidad ?? '');
+    const units = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
+    const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
+    const unitTitleHints = units.map((unit) => unit?.tituloUnidad ?? '');
     const sectionOrder = ['Introducción', ...unitLabels, 'Cierre'];
     const planningRows = architectureProducts
       .map((product) => ({

@@ -708,6 +708,34 @@ function buildInitialAuditLog(course: Course): CourseAuditEntry[] {
   ];
 }
 
+function normalizeCourseUnits(units: unknown): CourseMetadata['units'] {
+  if (!Array.isArray(units)) {
+    return [];
+  }
+
+  return units
+    .map((unit, index) => {
+      if (!unit || typeof unit !== 'object') {
+        return null;
+      }
+
+      const candidate = unit as Partial<CourseMetadata['units'][number]>;
+      const tituloUnidad =
+        typeof candidate.tituloUnidad === 'string' && candidate.tituloUnidad.trim()
+          ? candidate.tituloUnidad.trim()
+          : `Unidad ${index + 1}`;
+      const tematicas = Array.isArray(candidate.tematicas)
+        ? candidate.tematicas.map((topic) => (typeof topic === 'string' ? topic.trim() : '')).filter(Boolean)
+        : [];
+
+      return {
+        tituloUnidad,
+        tematicas,
+      };
+    })
+    .filter((unit): unit is CourseMetadata['units'][number] => Boolean(unit));
+}
+
 function buildDefaultCourseStageNotes(
   course: Pick<
     Course,
@@ -996,9 +1024,11 @@ function buildDefaultCourseProducts(
 }
 
 function normalizeCourse(course: Course): Course {
+  const sourceProducts = Array.isArray(course.products) ? course.products : [];
   const normalizedMetadata = {
     ...buildDefaultCourseMetadata(course),
     ...(course.metadata ?? {}),
+    units: normalizeCourseUnits(course.metadata?.units),
     route: buildCourseRoute(course),
   };
   const normalizedStageNotes = Object.entries(buildDefaultCourseStageNotes(course)).reduce(
@@ -1015,23 +1045,25 @@ function normalizeCourse(course: Course): Course {
   );
   const defaultProducts = buildDefaultCourseProducts(course);
   const normalizedProducts =
-    course.products.length > 0
-      ? course.products
+    sourceProducts.length > 0
+      ? sourceProducts
           .slice()
           .map((product) => ({
             ...product,
             phasePlan: normalizeProductPhasePlan(product.phasePlan),
             writingData: normalizeProductWritingData(product.writingData),
+            validationData: normalizeProductValidationData(product.validationData, product.stage),
           }))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       : defaultProducts.map((product) => ({
           ...product,
           phasePlan: normalizeProductPhasePlan(product.phasePlan),
           writingData: normalizeProductWritingData(product.writingData),
+          validationData: normalizeProductValidationData(product.validationData, product.stage),
         }));
 
   const normalizedAuditLog =
-    course.auditLog.length > 0
+    Array.isArray(course.auditLog) && course.auditLog.length > 0
       ? course.auditLog
           .slice()
           .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt))
