@@ -52,6 +52,7 @@ import type {
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
+  CourseProductFormat,
   CourseProductStatus,
   CourseProductStage,
   CourseStageNoteKey,
@@ -1681,7 +1682,7 @@ function inferWritingSectionTitlesFromText(text: string, format: string) {
   return template;
 }
 
-function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: string) {
+function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: string): ProductWritingSection[] {
   const normalizedInstructionHtml = sanitizeRichHtml(instructionHtml);
   const plainInstructionText = stripHtmlToText(normalizedInstructionHtml)
     .replace(/\r\n/g, '\n')
@@ -1928,9 +1929,73 @@ function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
 }
 
 function buildWritingSectionsFromProduct(product: CourseProduct): ProductWritingSection[] {
+  const existingSections = product.writingData?.sections ?? [];
+
+  if (existingSections.length > 0) {
+    return normalizeWritingSections(existingSections);
+  }
+
   const instructionHtml = product.body?.trim() || product.summary?.trim() || '';
   const inferredTitles = inferWritingSectionTitlesFromText(instructionHtml, product.format);
   return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
+}
+
+function getWritingSectionsForProduct(
+  product: Pick<CourseProductMutationInput, 'body' | 'summary' | 'format' | 'writingData'>,
+) {
+  const sections = product.writingData?.sections ?? [];
+
+  if (sections.length > 0) {
+    return normalizeWritingSections(sections);
+  }
+
+  return buildWritingSectionsFromProduct(product as CourseProduct);
+}
+
+function normalizeWritingSections(sections: ProductWritingSection[]): ProductWritingSection[] {
+  return sections.map((section) => ({
+    ...section,
+    title: section.title.trim(),
+    instructions: section.instructions?.trim() ?? '',
+    content: section.content?.trim() ?? '',
+    updatedAt: section.updatedAt?.trim() || undefined,
+  }));
+}
+
+function createWritingInstructionsTextFromSections(sections: ProductWritingSection[]) {
+  return sections
+    .map((section) => {
+      const cleanInstructions = sanitizeRichHtml(section.instructions || '').trim();
+
+      if (!cleanInstructions) {
+        return '';
+      }
+
+      return `<section data-section="${escapeHtml(section.title)}"><h3>${escapeHtml(section.title)}</h3>${cleanInstructions}</section>`;
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function syncWritingSectionsFromInstructions(
+  sections: ProductWritingSection[],
+  instructionHtml: string,
+  format: CourseProductFormat,
+) {
+  const normalizedSections = normalizeWritingSections(sections);
+  const sourceHtml = sanitizeRichHtml(instructionHtml).trim();
+  const sectionTitles =
+    normalizedSections.length > 0
+      ? normalizedSections.map((section) => section.title)
+      : inferWritingSectionTitlesFromText(sourceHtml, format);
+  const rebuiltSections: ProductWritingSection[] = buildWritingSectionsFromTemplate(sectionTitles, sourceHtml);
+
+  return rebuiltSections.map((section, index) => ({
+    ...section,
+    id: normalizedSections[index]?.id ?? section.id,
+    content: normalizedSections[index]?.content ?? '',
+    updatedAt: normalizedSections[index]?.updatedAt ?? section.updatedAt,
+  }));
 }
 
 function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
@@ -1945,7 +2010,13 @@ function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
     draftText: current.draftText ?? '',
     sections:
       current.sections && current.sections.length > 0
-        ? current.sections
+        ? current.sections.map((section) => ({
+            ...section,
+            title: section.title.trim(),
+            instructions: section.instructions?.trim() ?? '',
+            content: section.content?.trim() ?? '',
+            updatedAt: section.updatedAt?.trim() || undefined,
+          }))
         : buildWritingSectionsFromProduct(product),
     lastSavedAt: current.lastSavedAt,
     lastGeneratedAt: current.lastGeneratedAt,
@@ -3530,7 +3601,8 @@ export function CourseWorkspacePage({
     >,
   ) {
     const validationData = getValidationData(product);
-    const writingSections = product.writingData?.sections ?? [];
+    const writingSections = getWritingSectionsForProduct(product);
+    const writingInstructions = createWritingInstructionsTextFromSections(writingSections);
 
     return {
       courseTitle: currentCourse.title,
@@ -3545,7 +3617,7 @@ export function CourseWorkspacePage({
       productSection: product.section ?? '',
       productTags: product.tags ?? [],
       summaryText: stripHtmlToText(product.summary),
-      bodyText: stripHtmlToText(product.body),
+      bodyText: stripHtmlToText(writingInstructions || product.body),
       writingSections,
       validationChecklist: getValidationChecklist(product),
       validationComments: validationData.comments,
@@ -3859,14 +3931,14 @@ export function CourseWorkspacePage({
 
   function renderValidationWorkbench(
     productId: string,
-    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
-    summaryHtml: string,
-    bodyHtml: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData' | 'body' | 'summary' | 'format'>,
     isEditable: boolean,
   ) {
     const validationData = getValidationData(product);
     const checklistItems = getValidationChecklist(product);
     const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
+    const writingSections = getWritingSectionsForProduct(product);
+    const contentHtml = createWritingDraftTextFromSections(writingSections);
     const checklistOptions: ProductValidationChecklistItem['status'][] = [
       'Cumple',
       'Parcial',
@@ -3995,16 +4067,12 @@ export function CourseWorkspacePage({
                 onMouseUp={() => captureValidationFragment(productId)}
               >
                 <div className="validation-preview__pane">
-                  <span className="eyebrow">Resumen</span>
-                  {renderRichTextContent(
-                    summaryHtml,
-                    'Sin resumen disponible.',
-                    'rich-html--compact',
-                  )}
-                </div>
-                <div className="validation-preview__pane">
                   <span className="eyebrow">Contenido</span>
-                  {renderRichTextContent(bodyHtml, 'Sin contenido disponible.', 'rich-html--panel')}
+                  {renderRichTextContent(
+                    contentHtml,
+                    'Sin contenido disponible.',
+                    'rich-html--panel',
+                  )}
                 </div>
               </div>
             </div>
@@ -4608,16 +4676,12 @@ export function CourseWorkspacePage({
                 onMouseUp={() => captureValidationFragment(currentValidationProductId)}
               >
                 <div className="validation-preview__pane">
-                  <span className="eyebrow">Resumen</span>
+                  <span className="eyebrow">Contenido</span>
                   {renderRichTextContent(
-                    draft.summary,
-                    'Sin descripción registrada.',
-                    'rich-html--compact',
+                    createWritingDraftTextFromSections(getWritingSectionsForProduct(draft)),
+                    'Sin contenido registrado.',
+                    'rich-html--panel',
                   )}
-                </div>
-                <div className="validation-preview__pane">
-                  <span className="eyebrow">Contenido e instrucciones</span>
-                  {renderRichTextContent(draft.body, 'Sin instrucciones registradas.', 'rich-html--panel')}
                 </div>
               </div>
 
@@ -4695,7 +4759,11 @@ export function CourseWorkspacePage({
 
               <article className="surface-muted validation-detail-modal__block">
                 <span className="eyebrow">Instrucciones</span>
-                {renderRichTextContent(draft.body, 'Sin instrucciones registradas.', 'rich-html--panel')}
+                {renderInstructionContent(
+                  createWritingInstructionsTextFromSections(getWritingSectionsForProduct(draft)),
+                  'Sin instrucciones registradas.',
+                  'rich-html--panel',
+                )}
               </article>
             </div>
           </ModalFrame>
@@ -6573,10 +6641,33 @@ export function CourseWorkspacePage({
     setIsProductSaving(productId);
 
     try {
+      const currentWritingData: ProductWritingData = {
+        mode: draft.writingData?.mode ?? 'manual',
+        submittedAsset: draft.writingData?.submittedAsset ?? null,
+        supportAssets: draft.writingData?.supportAssets ?? [],
+        libraryResourceIds: draft.writingData?.libraryResourceIds ?? [],
+        aiPrompt: draft.writingData?.aiPrompt ?? '',
+        extractedText: draft.writingData?.extractedText ?? '',
+        draftText: draft.writingData?.draftText ?? '',
+        sections: draft.writingData?.sections ?? [],
+        lastSavedAt: draft.writingData?.lastSavedAt,
+        lastGeneratedAt: draft.writingData?.lastGeneratedAt,
+      };
+      const syncedWritingSections = syncWritingSectionsFromInstructions(
+        currentWritingData.sections,
+        draft.body,
+        draft.format,
+      );
       const updatedProduct = await patchCourseProductOnServer(productId, {
         ...draft,
         summary: sanitizeRichHtml(draft.summary),
         body: sanitizeRichHtml(draft.body),
+        writingData: {
+          ...currentWritingData,
+          sections: syncedWritingSections,
+          draftText: createWritingDraftTextFromSections(syncedWritingSections),
+          lastSavedAt: new Date().toISOString(),
+        },
         tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
       });
 
@@ -7433,9 +7524,6 @@ export function CourseWorkspacePage({
         ...writingDraft,
         lastSavedAt: new Date().toISOString(),
       };
-      const finalBody =
-        createWritingDraftTextFromSections(finalDraft.sections).trim() ||
-        finalDraft.draftText.trim();
       const validationCriteria = normalizeCriteriaList(
         productDrafts[selectedWritingProduct.id]?.validationData?.criteria ??
           selectedWritingProduct.validationData?.criteria,
@@ -7448,7 +7536,6 @@ export function CourseWorkspacePage({
           owner: 'Diseñador instruccional',
           status: 'En revisión',
           summary: selectedWritingProduct.summary,
-          body: finalBody,
           writingData: finalDraft,
           validationData: {
             ...buildDefaultValidationData('validacion'),
@@ -8690,7 +8777,7 @@ export function CourseWorkspacePage({
                 </div>
               </div>
               {renderInstructionContent(
-                selectedWritingProduct.body?.trim() || '',
+                createWritingInstructionsTextFromSections(getWritingSectionsForProduct(selectedWritingProduct)),
                 'Sin instrucciones del producto.',
                 'rich-html--panel rich-html--instruction'
               )}
@@ -9872,8 +9959,10 @@ export function CourseWorkspacePage({
                               <div className="list-item">
                                 <div>
                                   <strong>Instrucciones</strong>
-                                  {renderRichTextContent(
-                                    product.body,
+                                  {renderInstructionContent(
+                                    createWritingInstructionsTextFromSections(
+                                      getWritingSectionsForProduct(product),
+                                    ),
                                     'Sin instrucciones registradas.',
                                     'rich-html--panel',
                                   )}
@@ -9885,8 +9974,6 @@ export function CourseWorkspacePage({
                               renderValidationWorkbench(
                                 product.id,
                                 product,
-                                product.summary,
-                                product.body,
                                 false,
                               )
                             ) : null}
@@ -10142,8 +10229,6 @@ export function CourseWorkspacePage({
                                 renderValidationWorkbench(
                                   product.id,
                                   draft,
-                                  draft.summary,
-                                  draft.body,
                                   true,
                                 )
                               ) : null}
@@ -10468,16 +10553,6 @@ export function CourseWorkspacePage({
               <div className="list-stack">
                 <div className="list-item">
                   <div>
-                    <strong>Descripción</strong>
-                    {renderRichTextContent(
-                      architecturePreviewProduct.summary || '',
-                      'Sin descripción ampliada.',
-                      'rich-html--compact',
-                    )}
-                  </div>
-                </div>
-                <div className="list-item">
-                  <div>
                     <strong>Versión</strong>
                     <p>{architecturePreviewProduct.version}</p>
                   </div>
@@ -10486,7 +10561,9 @@ export function CourseWorkspacePage({
                   <div>
                     <strong>Instrucciones</strong>
                     {renderInstructionContent(
-                      architecturePreviewProduct.body?.trim() || '',
+                      createWritingInstructionsTextFromSections(
+                        getWritingSectionsForProduct(architecturePreviewProduct),
+                      ),
                       'Este producto todavía no tiene instrucciones registradas.',
                       'rich-html--panel',
                     )}
