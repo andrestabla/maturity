@@ -104,6 +104,7 @@ export function buildDefaultValidationData(
   return {
     criteria,
     reviewerNotes: '',
+    readyForProduction: false,
     checklist: criteria.map(makeChecklistItem),
     comments: [],
     lastReviewedAt: undefined,

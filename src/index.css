@@ -2067,7 +2067,7 @@ html.modal-active .app-shell {
 
 .validation-product-shell__split {
   display: grid;
-  grid-template-columns: minmax(0, 1.06fr) minmax(360px, 0.94fr);
+  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
   gap: 18px;
   align-items: start;
 }
@@ -2077,6 +2077,11 @@ html.modal-active .app-shell {
   display: grid;
   gap: 14px;
   align-self: start;
+}
+
+.validation-product-shell__checklist {
+  display: grid;
+  gap: 14px;
 }
 
 .validation-product-shell__downloads {

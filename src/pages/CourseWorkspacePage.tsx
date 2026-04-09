@@ -3497,7 +3497,10 @@ export function CourseWorkspacePage({
       return buildDefaultValidationData(product.stage);
     }
 
-    return validationData;
+    return {
+      ...validationData,
+      readyForProduction: validationData.readyForProduction === true,
+    };
   }
 
   function updateValidationCommentDraft(
@@ -3614,6 +3617,16 @@ export function CourseWorkspacePage({
     updateValidationProductDraft(productId, (validationData) => ({
       ...validationData,
       reviewerNotes: notes,
+      lastReviewedAt: now,
+    }));
+  }
+
+  function updateValidationReadyForProduction(productId: string, ready: boolean) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      readyForProduction: ready,
       lastReviewedAt: now,
     }));
   }
@@ -4334,14 +4347,125 @@ export function CourseWorkspacePage({
     );
   }
 
-  function renderValidationRubricPanel(
+  function renderValidationCommentsPanel(
+    productId: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
+    isEditable: boolean,
+  ) {
+    const validationData = getValidationData(product);
+    const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
+    const pendingComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return (
+      <div className="validation-rubric">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Comentarios</span>
+            <h3>Observaciones por fragmentos</h3>
+          </div>
+          <div className="action-row">
+            <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
+            {isEditable ? (
+              <button
+                type="button"
+                className="ghost-button ghost-button--compact"
+                onClick={() => captureValidationFragment(productId)}
+              >
+                <span>Usar selección</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {isEditable ? (
+          <div className="validation-comment-composer">
+            <label className="field field--full">
+              <span>Fragmento seleccionado</span>
+              <div className="field__control">
+                <textarea
+                  className="modern-textarea"
+                  value={fragmentDraft.fragment}
+                  onChange={(event) =>
+                    updateValidationCommentDraft(productId, { fragment: event.target.value })
+                  }
+                  placeholder="Selecciona un fragmento en el contenido (columna derecha) o escríbelo manualmente"
+                  rows={3}
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Comentario para el experto</span>
+              <div className="field__control">
+                <textarea
+                  className="modern-textarea"
+                  value={fragmentDraft.comment}
+                  onChange={(event) =>
+                    updateValidationCommentDraft(productId, { comment: event.target.value })
+                  }
+                  placeholder="Describe con precisión qué debe ajustar el experto"
+                  rows={4}
+                />
+              </div>
+            </label>
+
+            <div className="action-row">
+              <button
+                type="button"
+                className="cta-button"
+                disabled={!fragmentDraft.fragment.trim() || !fragmentDraft.comment.trim()}
+                onClick={() => addValidationComment(productId)}
+              >
+                <span>Agregar comentario</span>
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="list-stack">
+          {validationData.comments.length === 0 ? (
+            <div className="empty-state">
+              <strong>Sin comentarios todavía</strong>
+              <p>Selecciona un fragmento para dejar observaciones puntuales sobre el producto.</p>
+            </div>
+          ) : (
+            validationData.comments.map((comment) => (
+              <div key={comment.id} className="list-item validation-comment-item">
+                <div>
+                  <div className="validation-comment-item__fragment">
+                    <span className={badgeClass(comment.status)}>{comment.status}</span>
+                    <strong>{comment.fragment}</strong>
+                  </div>
+                  <p>{comment.comment}</p>
+                  <div className="list-item__meta">
+                    <span>{comment.author}</span>
+                    <span>{formatDate(comment.updatedAt || comment.createdAt)}</span>
+                  </div>
+                </div>
+                {isEditable ? (
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--compact"
+                    onClick={() => toggleValidationCommentStatus(productId, comment.id)}
+                  >
+                    {comment.status === 'Abierto' ? 'Resolver' : 'Reabrir'}
+                  </button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderValidationChecklistPanel(
     productId: string,
     product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
     isEditable: boolean,
   ) {
     const validationData = getValidationData(product);
     const checklistItems = getValidationChecklist(product);
-    const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
     const checklistOptions: ProductValidationChecklistItem['status'][] = [
       'Cumple',
       'Parcial',
@@ -4356,28 +4480,18 @@ export function CourseWorkspacePage({
       <div className="validation-rubric">
         <div className="section-heading section-heading--compact">
           <div>
-            <span className="eyebrow">Rúbrica de validación</span>
-            <h3>Criterios, notas y comentarios</h3>
+            <span className="eyebrow">Checklist de validación</span>
+            <h3>Criterios de calidad y decisión de etapa</h3>
           </div>
           <div className="action-row">
             <span className="badge badge--sage">
               {checklistCompleted}/{checklistTotal} cumplidos
             </span>
             <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
-            {isEditable ? (
-              <button
-                type="button"
-                className="ghost-button ghost-button--compact"
-                onClick={() => captureValidationFragment(productId)}
-              >
-                <span>Usar selección</span>
-              </button>
-            ) : null}
           </div>
         </div>
         <p className="section-lead validation-rubric__lead">
-          La checklist sigue las instrucciones del producto. Selecciona fragmentos en el panel de la
-          izquierda para anclar comentarios precisos.
+          La checklist se basa en los criterios de calidad definidos en Arquitectura para este producto.
         </p>
 
         <div className="validation-rubric__stack">
@@ -4437,8 +4551,8 @@ export function CourseWorkspacePage({
           <div className="validation-workbench__block">
             <div className="section-heading section-heading--compact">
               <div>
-                <span className="eyebrow">Notas del revisor</span>
-                <h3>Resumen de observaciones</h3>
+                <span className="eyebrow">Comentarios para el experto</span>
+                <h3>Retroalimentación global</h3>
               </div>
               <MessageSquareText size={18} />
             </div>
@@ -4448,99 +4562,49 @@ export function CourseWorkspacePage({
               value={validationData.reviewerNotes}
               disabled={!isEditable}
               onChange={(event) => updateValidationReviewerNotes(productId, event.target.value)}
-              placeholder="Sintetiza aquí el criterio global de revisión..."
+              placeholder="Resume aquí la retroalimentación general para el experto."
               rows={4}
             />
+
+            <label className="field field--full mt-4">
+              <span>¿El producto está listo para producción?</span>
+              <div className="field__control">
+                <select
+                  value={validationData.readyForProduction ? 'yes' : 'no'}
+                  disabled={!isEditable}
+                  onChange={(event) =>
+                    updateValidationReadyForProduction(productId, event.target.value === 'yes')
+                  }
+                >
+                  <option value="no">Aún no</option>
+                  <option value="yes">Sí</option>
+                </select>
+              </div>
+            </label>
           </div>
 
-          <div className="validation-workbench__block">
-            <div className="section-heading section-heading--compact">
-              <div>
-                <span className="eyebrow">Comentarios</span>
-                <h3>Fragmentos específicos para resolver</h3>
-              </div>
-              <span className="badge badge--outline">{validationData.comments.length} notas</span>
+          {isEditable ? (
+            <div className="action-row">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isProductSaving === productId}
+                onClick={() => void handleSaveValidationReview(productId)}
+              >
+                <Save size={16} />
+                <span>{isProductSaving === productId ? 'Guardando…' : 'Guardar'}</span>
+              </button>
+              <button
+                type="button"
+                className="cta-button"
+                disabled={isProductSaving === productId}
+                onClick={() => void handleValidateValidationProduct(productId)}
+              >
+                <CheckCircle2 size={16} />
+                <span>{isProductSaving === productId ? 'Validando…' : 'Validar producto'}</span>
+              </button>
             </div>
-
-            {isEditable ? (
-              <div className="validation-comment-composer">
-                <label className="field field--full">
-                  <span>Fragmento seleccionado</span>
-                  <div className="field__control">
-                    <textarea
-                      className="modern-textarea"
-                      value={fragmentDraft.fragment}
-                      onChange={(event) =>
-                        updateValidationCommentDraft(productId, { fragment: event.target.value })
-                      }
-                      placeholder="Selecciona un fragmento en la vista del producto o escríbelo manualmente"
-                      rows={3}
-                    />
-                  </div>
-                </label>
-
-                <label className="field field--full">
-                  <span>Comentario para el experto</span>
-                  <div className="field__control">
-                    <textarea
-                      className="modern-textarea"
-                      value={fragmentDraft.comment}
-                      onChange={(event) =>
-                        updateValidationCommentDraft(productId, { comment: event.target.value })
-                      }
-                      placeholder="Describe con precisión qué debe ajustar el experto"
-                      rows={4}
-                    />
-                  </div>
-                </label>
-
-                <div className="action-row">
-                  <button
-                    type="button"
-                    className="cta-button"
-                    disabled={!fragmentDraft.fragment.trim() || !fragmentDraft.comment.trim()}
-                    onClick={() => addValidationComment(productId)}
-                  >
-                    <span>Agregar comentario</span>
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="list-stack">
-              {validationData.comments.length === 0 ? (
-                <div className="empty-state">
-                  <strong>Sin comentarios todavía</strong>
-                  <p>Selecciona un fragmento para dejar observaciones puntuales sobre el producto.</p>
-                </div>
-              ) : (
-                validationData.comments.map((comment) => (
-                  <div key={comment.id} className="list-item validation-comment-item">
-                    <div>
-                      <div className="validation-comment-item__fragment">
-                        <span className={badgeClass(comment.status)}>{comment.status}</span>
-                        <strong>{comment.fragment}</strong>
-                      </div>
-                      <p>{comment.comment}</p>
-                      <div className="list-item__meta">
-                        <span>{comment.author}</span>
-                        <span>{formatDate(comment.updatedAt || comment.createdAt)}</span>
-                      </div>
-                    </div>
-                    {isEditable ? (
-                      <button
-                        type="button"
-                        className="ghost-button ghost-button--compact"
-                        onClick={() => toggleValidationCommentStatus(productId, comment.id)}
-                      >
-                        {comment.status === 'Abierto' ? 'Resolver' : 'Reabrir'}
-                      </button>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
     );
@@ -4816,6 +4880,14 @@ export function CourseWorkspacePage({
           </article>
 
           <div className="validation-product-shell__split">
+            <article className="surface section-card validation-product-shell__rubric">
+              {renderValidationCommentsPanel(
+                currentValidationProductId,
+                activeValidationProduct,
+                canEditSelectedValidationProduct,
+              )}
+            </article>
+
             <article className="surface section-card validation-product-shell__viewer">
               <div className="section-heading section-heading--compact">
                 <div>
@@ -4879,15 +4951,15 @@ export function CourseWorkspacePage({
                 </button>
               </div>
             </article>
-
-            <article className="surface section-card validation-product-shell__rubric">
-              {renderValidationRubricPanel(
-                currentValidationProductId,
-                activeValidationProduct,
-                canEditSelectedValidationProduct,
-              )}
-            </article>
           </div>
+
+          <article className="surface section-card validation-product-shell__checklist">
+            {renderValidationChecklistPanel(
+              currentValidationProductId,
+              activeValidationProduct,
+              canEditSelectedValidationProduct,
+            )}
+          </article>
         </section>
 
         {isValidationDetailModalOpen ? (
@@ -6895,6 +6967,172 @@ export function CourseWorkspacePage({
       setProductError(message);
       void showAlert({
         title: 'Error al guardar contenido',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleSaveValidationReview(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+
+    if (!draft) {
+      return false;
+    }
+
+    const validationData = draft.validationData ?? persistedProduct?.validationData;
+
+    if (!validationData) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          validationData: {
+            ...validationData,
+            lastReviewedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar la validación del producto.',
+        },
+      );
+
+      if (updatedProduct) {
+        setProductDrafts((current) =>
+          current[productId]
+            ? {
+                ...current,
+                [productId]: {
+                  ...current[productId],
+                  validationData: updatedProduct.validationData,
+                },
+              }
+            : current,
+        );
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      void showAlert({
+        title: 'Validación guardada',
+        message: 'La checklist y los comentarios del revisor quedaron guardados.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la validación del producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar validación',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleValidateValidationProduct(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+    const validationData = getValidationData(draft ?? persistedProduct ?? { stage: 'validacion' });
+
+    if (!validationData.readyForProduction) {
+      void showAlert({
+        title: 'Producto aún no listo para producción',
+        message: 'Marca "Sí" en "¿El producto está listo para producción?" para continuar.',
+        tone: 'warning',
+      });
+      return false;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Validar producto',
+      message:
+        'El producto avanzará a Producción multimedia y saldrá de la bandeja de Validación instruccional.',
+      tone: 'success',
+      confirmLabel: 'Validar y avanzar',
+      cancelLabel: 'Seguir revisando',
+    });
+
+    if (!confirmed) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          stage: 'multimedia',
+          owner: 'Diseñador multimedia',
+          status: 'En revisión',
+          validationData: {
+            ...validationData,
+            lastReviewedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible validar el producto para producción.',
+        },
+      );
+
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      navigate(buildCourseSectionPath(currentCourse.slug, 'multimedia'));
+      void showAlert({
+        title: 'Producto validado',
+        message: 'El producto pasó correctamente a Producción multimedia.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible validar el producto para producción.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al validar producto',
         message,
         tone: 'error',
       });

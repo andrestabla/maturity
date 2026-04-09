@@ -1479,6 +1479,7 @@ function normalizeProductValidationData(
 
   return {
     reviewerNotes: source.reviewerNotes?.trim() ?? '',
+    readyForProduction: source.readyForProduction === true,
     criteria,
     checklist,
     comments: normalizeProductValidationComments(source.comments),

@@ -309,6 +309,7 @@ export interface ProductValidationComment {
 export interface ProductValidationData {
   criteria: string[];
   reviewerNotes: string;
+  readyForProduction: boolean;
   checklist: ProductValidationChecklistItem[];
   comments: ProductValidationComment[];
   lastReviewedAt?: string;
