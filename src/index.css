@@ -2067,7 +2067,7 @@ html.modal-active .app-shell {
 
 .validation-product-shell__split {
   display: grid;
-  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
   gap: 18px;
   align-items: start;
 }
@@ -2166,6 +2166,53 @@ html.modal-active .app-shell {
   grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
   gap: 12px;
   align-items: center;
+}
+
+.validation-rubric-table {
+  display: grid;
+  gap: 10px;
+}
+
+.validation-rubric-table__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(140px, 190px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.validation-rubric-table__body {
+  display: grid;
+  gap: 12px;
+}
+
+.validation-rubric-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(140px, 190px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.validation-rubric-table__cell {
+  min-width: 0;
+}
+
+.validation-rubric-table__criterion {
+  padding-top: 8px;
+}
+
+.validation-rubric-table__status .field__control {
+  min-height: 48px;
 }
 
 .validation-preview {
@@ -2412,6 +2459,15 @@ html.modal-active .app-shell {
   .validation-product-shell__split,
   .validation-board__grid {
     grid-template-columns: 1fr;
+  }
+
+  .validation-rubric-table__head,
+  .validation-rubric-table__row {
+    grid-template-columns: 1fr;
+  }
+
+  .validation-rubric-table__criterion {
+    padding-top: 0;
   }
 }
 
