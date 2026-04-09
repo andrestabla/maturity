@@ -33,6 +33,9 @@ import {
   ListOrdered,
   Underline,
   Heading3,
+  MessageSquareText,
+  ClipboardList,
+  Download,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -49,6 +52,8 @@ import type {
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
+  CourseProductFormat,
+  CourseProductStatus,
   CourseProductStage,
   CourseStageNoteKey,
   CourseStageNoteMutationInput,
@@ -60,12 +65,21 @@ import type {
   ProductPhasePlan,
   ProductPlanningPhase,
   Role,
+  ProductValidationData,
+  ProductValidationChecklistItem,
   StageCheckpointStatus,
   Task,
   TaskMutationInput,
   TeamMember,
   TeamMemberMutationInput,
 } from '../types.js';
+import {
+  buildDefaultValidationData,
+  buildDefaultValidationCriteria,
+  buildValidationChecklistFromCriteria,
+  buildValidationChecklistFromWritingSections,
+  normalizeValidationChecklistStatus,
+} from '../data/productValidationDefaults.js';
 import { formatDate } from '../utils/format.js';
 import { getCourseBySlug, getStageMeta } from '../utils/domain.js';
 import {
@@ -692,6 +706,7 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder: string;
   minHeight?: number;
+  disabled?: boolean;
 }
 
 function RichTextEditor({
@@ -699,6 +714,7 @@ function RichTextEditor({
   onChange,
   placeholder,
   minHeight = 220,
+  disabled = false,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [isFocused, setIsFocused] = useState(false);
@@ -718,11 +734,15 @@ function RichTextEditor({
   }, [isFocused, value]);
 
   const syncValue = () => {
+    if (disabled) {
+      return;
+    }
+
     onChange(sanitizeRichHtml(editorRef.current?.innerHTML ?? ''));
   };
 
   const applyCommand = (command: string, commandValue?: string) => {
-    if (typeof document === 'undefined') {
+    if (typeof document === 'undefined' || disabled) {
       return;
     }
 
@@ -732,32 +752,32 @@ function RichTextEditor({
   };
 
   return (
-    <div className="rich-editor">
+    <div className={`rich-editor${disabled ? ' rich-editor--disabled' : ''}`}>
       <div className="rich-editor__toolbar" role="toolbar" aria-label="Formato del texto">
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<p>')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('formatBlock', '<p>')}>
           <span>Párrafo</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('formatBlock', '<h3>')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('formatBlock', '<h3>')}>
           <Heading3 size={15} />
           <span>Título</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('bold')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('bold')}>
           <Bold size={15} />
           <span>Negrita</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('italic')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('italic')}>
           <Italic size={15} />
           <span>Cursiva</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('underline')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('underline')}>
           <Underline size={15} />
           <span>Subrayado</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertUnorderedList')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('insertUnorderedList')}>
           <List size={15} />
           <span>Lista</span>
         </button>
-        <button type="button" className="rich-editor__tool" onClick={() => applyCommand('insertOrderedList')}>
+        <button type="button" className="rich-editor__tool" disabled={disabled} onClick={() => applyCommand('insertOrderedList')}>
           <ListOrdered size={15} />
           <span>Numerada</span>
         </button>
@@ -766,18 +786,31 @@ function RichTextEditor({
         <div
           ref={editorRef}
           className="rich-editor__content"
-          contentEditable
+          contentEditable={!disabled}
           suppressContentEditableWarning
+          aria-disabled={disabled}
           role="textbox"
           aria-multiline="true"
           data-placeholder={placeholder}
           style={{ minHeight }}
-          onFocus={() => setIsFocused(true)}
+          onFocus={() => {
+            if (!disabled) {
+              setIsFocused(true);
+            }
+          }}
           onBlur={() => {
+            if (disabled) {
+              return;
+            }
+
             setIsFocused(false);
             syncValue();
           }}
-          onInput={syncValue}
+          onInput={() => {
+            if (!disabled) {
+              syncValue();
+            }
+          }}
         />
       </div>
     </div>
@@ -804,10 +837,16 @@ function buildWritingWorkspacePath(
   return route ? `${base}/${route}` : base;
 }
 
+function buildValidationWorkspacePath(slug: string, productId?: string | null) {
+  const base = `/courses/${slug}/validacion`;
+  return productId ? `${base}/producto/${productId}` : base;
+}
+
 function badgeClass(status: string) {
   switch (status) {
     case 'Listo':
     case 'Resuelta':
+    case 'Resuelto':
       return 'badge badge--sage';
     case 'En revisión':
     case 'En ajuste':
@@ -1074,6 +1113,7 @@ function makeCourseProductForm(
     version: 'v0.1',
     section,
     phasePlan: normalizeProductPhasePlanDraft([]),
+    validationData: buildDefaultValidationData(stage),
   };
 }
 
@@ -1093,6 +1133,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
         version: product.version,
         section: product.section,
         phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
+        validationData: product.validationData ?? buildDefaultValidationData(product.stage),
       },
     ]),
   ) as Record<string, CourseProductMutationInput>;
@@ -1130,6 +1171,140 @@ function productStatusBadgeClass(status: CourseProduct['status']) {
     default:
       return 'badge badge--outline';
   }
+}
+
+type WorkflowTone = 'success' | 'warning' | 'danger' | 'neutral';
+
+function workflowToneClass(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'is-success';
+    case 'warning':
+      return 'is-warning';
+    case 'danger':
+      return 'is-danger';
+    default:
+      return 'is-neutral';
+  }
+}
+
+function workflowToneLabel(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'Finalizado';
+    case 'warning':
+      return 'En proceso';
+    case 'danger':
+      return 'Atrasado';
+    default:
+      return 'Sin riesgo';
+  }
+}
+
+function workflowToneBadgeClass(tone: WorkflowTone) {
+  switch (tone) {
+    case 'success':
+      return 'badge badge--sage';
+    case 'warning':
+      return 'badge badge--gold';
+    case 'danger':
+      return 'badge badge--coral';
+    default:
+      return 'badge badge--outline';
+  }
+}
+
+function getProductDueDate(product: { phasePlan?: ProductPhasePlan[] }) {
+  return parsePlanningDate(
+    (product.phasePlan ?? []).find((phase) => phase.phase === 'escritura')?.endDate,
+  );
+}
+
+function getWritingWorkflowTone(product: CourseProduct): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+  const hasProgress = hasWritingProgress(product);
+  const isFinalized = product.stage === 'validacion' || product.status === 'Aprobado';
+
+  if (isFinalized) {
+    return 'success';
+  }
+
+  if (hasProgress || product.status === 'En revisión') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
+function getValidationWorkflowTone(
+  product: { status: CourseProduct['status']; phasePlan?: ProductPhasePlan[] },
+): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+
+  if (product.status === 'Aprobado') {
+    return 'success';
+  }
+
+  if (product.status === 'En revisión') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
+function getProductLifecycleTone(
+  product: Pick<CourseProduct, 'status' | 'stage' | 'phasePlan'>,
+): WorkflowTone {
+  const dueDate = getProductDueDate(product);
+
+  if (product.status === 'Aprobado') {
+    return 'success';
+  }
+
+  if (product.status === 'En revisión' || product.stage !== 'arquitectura') {
+    return 'warning';
+  }
+
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return 'danger';
+    }
+  }
+
+  return 'neutral';
+}
+
+function splitCriteriaLines(value?: string | null) {
+  return (value ?? '')
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeCriteriaList(criteria: string[] | undefined, fallbackStage: CourseProductStage = 'validacion') {
+  const cleaned = (criteria ?? []).map((item) => item.trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned : buildDefaultValidationCriteria(fallbackStage);
 }
 
 function productFormatsForStage(
@@ -1250,8 +1425,8 @@ function splitLines(value: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeSearchText(value: string) {
-  return value
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase()
@@ -1507,7 +1682,7 @@ function inferWritingSectionTitlesFromText(text: string, format: string) {
   return template;
 }
 
-function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: string) {
+function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: string): ProductWritingSection[] {
   const normalizedInstructionHtml = sanitizeRichHtml(instructionHtml);
   const plainInstructionText = stripHtmlToText(normalizedInstructionHtml)
     .replace(/\r\n/g, '\n')
@@ -1541,7 +1716,14 @@ function createWritingDraftTextFromSections(sections: ProductWritingSection[]) {
       if (!cleanContent) {
         return '';
       }
-      return `<section data-section="${escapeHtml(section.title)}"><h3>${escapeHtml(section.title)}</h3>${cleanContent}</section>`;
+      const normalizedContent = sanitizeRichHtml(cleanContent).trim();
+      if (!normalizedContent) {
+        return '';
+      }
+
+      return `<section data-section="${escapeHtml(section.title)}"><h3>${escapeHtml(
+        section.title,
+      )}</h3>${normalizedContent}</section>`;
     })
     .filter(Boolean)
     .join('');
@@ -1754,9 +1936,213 @@ function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
 }
 
 function buildWritingSectionsFromProduct(product: CourseProduct): ProductWritingSection[] {
-  const instructionHtml = product.body?.trim() || product.summary?.trim() || '';
+  const existingSections = product.writingData?.sections ?? [];
+
+  if (existingSections.length > 0) {
+    return normalizeWritingSections(existingSections);
+  }
+
+  const instructionHtml =
+    getCanonicalProductInstructionsHtml(product) || product.summary?.trim() || '';
   const inferredTitles = inferWritingSectionTitlesFromText(instructionHtml, product.format);
   return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
+}
+
+function getTextHeuristicSnapshot(value: string) {
+  const html = sanitizeRichHtml(value ?? '').trim();
+  const plain = stripHtmlToText(html).replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (!html && !plain) {
+    return { html: '', plain: '' };
+  }
+
+  return { html, plain };
+}
+
+function looksLikeInstructionHtml(value?: string | null) {
+  const { html, plain } = getTextHeuristicSnapshot(value ?? '');
+  if (!html && !plain) {
+    return false;
+  }
+
+  const instructionPattern =
+    /(aspecto|especificaci[oó]n|funci[oó]n|prop[oó]sito comunicativo|duraci[oó]n m[aá]xima|criterios? de calidad|instrucci[oó]n|indicaci[oó]n|asegura|desarrolla|define|incluye|redacta|ub[ií]calo)/i;
+
+  return instructionPattern.test(plain) || instructionPattern.test(html);
+}
+
+function looksLikeContentHtml(value?: string | null) {
+  const { html, plain } = getTextHeuristicSnapshot(value ?? '');
+  if (!html && !plain) {
+    return false;
+  }
+
+  const contentPattern = /(inicio|desarrollo|cierre|introducci[oó]n|conclusi[oó]n)/i;
+  const instructionPattern =
+    /(aspecto|especificaci[oó]n|funci[oó]n|prop[oó]sito comunicativo|duraci[oó]n m[aá]xima|criterios? de calidad|instrucci[oó]n|indicaci[oó]n|asegura|desarrolla|define|incluye|redacta|ub[ií]calo)/i;
+
+  return (contentPattern.test(plain) || contentPattern.test(html)) && !instructionPattern.test(plain);
+}
+
+function getCanonicalProductInstructionsHtml(
+  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+) {
+  const bodyHtml = sanitizeRichHtml(product.body ?? '').trim();
+
+  if (bodyHtml && looksLikeInstructionHtml(bodyHtml)) {
+    return bodyHtml;
+  }
+
+  const title = sanitizeRichHtml(product.title ?? '').trim() || 'este producto';
+  const section = sanitizeRichHtml(product.section ?? '').trim() || 'la sección asignada';
+  const summary = stripHtmlToText(product.summary ?? '').trim();
+  const format = sanitizeRichHtml(product.format ?? '').trim();
+
+  return sanitizeRichHtml(
+    [
+      `<section>`,
+      `<h3>${escapeHtml(title)}</h3>`,
+      `<p>Desarrolla este producto tomando como base la descripción: ${escapeHtml(
+        summary || 'Alinea el contenido con el propósito pedagógico del curso.',
+      )}</p>`,
+      `<p>Ubícalo en ${escapeHtml(section)} y asegúrate de que aporte coherencia pedagógica a esta parte del curso.</p>`,
+      `<p>Entrega una pieza en formato ${escapeHtml(
+        format || 'definido',
+      )} con estructura clara, componentes obligatorios y criterios pedagógicos explícitos.</p>`,
+      `</section>`,
+    ].join(''),
+  );
+}
+
+function getFixedProductInstructionsHtml(
+  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+) {
+  return getCanonicalProductInstructionsHtml(product);
+}
+
+function parseWritingSectionsFromDraftText(draftText: string) {
+  const sourceHtml = sanitizeRichHtml(draftText).trim();
+
+  if (!sourceHtml || typeof DOMParser === 'undefined') {
+    return [] as ProductWritingSection[];
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(`<div>${sourceHtml}</div>`, 'text/html');
+  const sectionNodes = Array.from(document.querySelectorAll('section[data-section]'));
+
+  return sectionNodes
+    .map((node, index) => {
+      const title = node.getAttribute('data-section')?.trim() || node.querySelector('h3')?.textContent?.trim() || `Sección ${index + 1}`;
+      const clone = node.cloneNode(true) as HTMLElement;
+      const heading = clone.querySelector('h3');
+      if (heading) {
+        heading.remove();
+      }
+
+      return {
+        id: slugifyWritingSectionTitle(title) || `section-${index + 1}`,
+        title,
+        instructions: '',
+        content: clone.innerHTML.trim(),
+        updatedAt: undefined,
+      } satisfies ProductWritingSection;
+    })
+    .filter((section) => section.content.trim().length > 0 || section.title.trim().length > 0);
+}
+
+function getWritingContentHtmlForProduct(
+  product: Pick<CourseProductMutationInput, 'body' | 'writingData' | 'format' | 'summary'>,
+) {
+  const sections = getWritingSectionsForProduct(product);
+  const sectionContentHtml = createWritingDraftTextFromSections(sections);
+
+  if (sectionContentHtml.trim()) {
+    return sectionContentHtml;
+  }
+
+  const bodyHtml = sanitizeRichHtml(product.body ?? '').trim();
+  if (bodyHtml && looksLikeContentHtml(bodyHtml)) {
+    return bodyHtml;
+  }
+
+  const draftTextHtml = sanitizeRichHtml(product.writingData?.draftText ?? '').trim();
+  if (draftTextHtml) {
+    return draftTextHtml;
+  }
+
+  return '';
+}
+
+function getWritingSectionsForProduct(
+  product: Pick<CourseProductMutationInput, 'body' | 'summary' | 'format' | 'writingData'>,
+) {
+  const sections = product.writingData?.sections ?? [];
+
+  if (sections.length > 0) {
+    const normalizedSections = normalizeWritingSections(sections);
+    const hasVisibleContent = normalizedSections.some(
+      (section) => section.content.trim().length > 0,
+    );
+
+    if (hasVisibleContent) {
+      return normalizedSections;
+    }
+
+    const hydratedSections = parseWritingSectionsFromDraftText(product.writingData?.draftText ?? '');
+    if (hydratedSections.length > 0) {
+      return normalizedSections.map((section, index) => ({
+        ...section,
+        content: hydratedSections[index]?.content ?? section.content,
+        updatedAt: hydratedSections[index]?.updatedAt ?? section.updatedAt,
+      }));
+    }
+
+    return normalizedSections;
+  }
+
+  const hydratedSections = parseWritingSectionsFromDraftText(product.writingData?.draftText ?? '');
+  if (hydratedSections.length > 0) {
+    const templateSections = buildWritingSectionsFromProduct(product as CourseProduct);
+    return templateSections.map((section, index) => ({
+      ...section,
+      content: hydratedSections[index]?.content ?? section.content,
+      updatedAt: hydratedSections[index]?.updatedAt ?? section.updatedAt,
+    }));
+  }
+
+  return buildWritingSectionsFromProduct(product as CourseProduct);
+}
+
+function normalizeWritingSections(sections: ProductWritingSection[]): ProductWritingSection[] {
+  return sections.map((section) => ({
+    ...section,
+    title: section.title.trim(),
+    instructions: section.instructions?.trim() ?? '',
+    content: section.content?.trim() ?? '',
+    updatedAt: section.updatedAt?.trim() || undefined,
+  }));
+}
+
+function syncWritingSectionsFromInstructions(
+  sections: ProductWritingSection[],
+  instructionHtml: string,
+  format: CourseProductFormat,
+) {
+  const normalizedSections = normalizeWritingSections(sections);
+  const sourceHtml = sanitizeRichHtml(instructionHtml).trim();
+  const sectionTitles =
+    normalizedSections.length > 0
+      ? normalizedSections.map((section) => section.title)
+      : inferWritingSectionTitlesFromText(sourceHtml, format);
+  const rebuiltSections: ProductWritingSection[] = buildWritingSectionsFromTemplate(sectionTitles, sourceHtml);
+
+  return rebuiltSections.map((section, index) => ({
+    ...section,
+    id: normalizedSections[index]?.id ?? section.id,
+    content: normalizedSections[index]?.content ?? '',
+    updatedAt: normalizedSections[index]?.updatedAt ?? section.updatedAt,
+  }));
 }
 
 function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
@@ -1771,7 +2157,13 @@ function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
     draftText: current.draftText ?? '',
     sections:
       current.sections && current.sections.length > 0
-        ? current.sections
+        ? current.sections.map((section) => ({
+            ...section,
+            title: section.title.trim(),
+            instructions: section.instructions?.trim() ?? '',
+            content: section.content?.trim() ?? '',
+            updatedAt: section.updatedAt?.trim() || undefined,
+          }))
         : buildWritingSectionsFromProduct(product),
     lastSavedAt: current.lastSavedAt,
     lastGeneratedAt: current.lastGeneratedAt,
@@ -1797,6 +2189,10 @@ function hasWritingProgress(product: CourseProduct) {
 }
 
 function getWritingActionLabel(product: CourseProduct) {
+  if (product.stage === 'validacion') {
+    return 'Ver validación';
+  }
+
   if (product.status === 'Aprobado' || product.status === 'En revisión') {
     return 'Revisar';
   }
@@ -1816,10 +2212,11 @@ export function CourseWorkspacePage({
   refreshAppData,
   mutateAppData,
 }: CourseWorkspacePageProps) {
-  const { slug = '', section: sectionParam, workspaceRoute } = useParams<{
+  const { slug = '', section: sectionParam, workspaceRoute, productId } = useParams<{
     slug?: string;
     section?: string;
     workspaceRoute?: string;
+    productId?: string;
   }>();
   const [searchParams] = useSearchParams();
   const { showAlert, showConfirm } = useSystemDialog();
@@ -1829,6 +2226,8 @@ export function CourseWorkspacePage({
     activeSection === 'escritura' && isWritingWorkspaceRoute(workspaceRoute)
       ? workspaceRoute
       : null;
+  const validationProductId =
+    activeSection === 'validacion' ? (productId?.trim() ?? '') : '';
   const writingProductQueryId = searchParams.get('product')?.trim() ?? '';
   const persistedCourse = getCourseBySlug(appData, slug);
   const [writingLaunchSnapshot, setWritingLaunchSnapshot] = useState<WritingLaunchSnapshot | null>(() =>
@@ -1868,11 +2267,15 @@ export function CourseWorkspacePage({
   const [productError, setProductError] = useState<string | null>(null);
   const [planningError, setPlanningError] = useState<string | null>(null);
   const [stageNoteError, setStageNoteError] = useState<string | null>(null);
+  const [validationCommentDrafts, setValidationCommentDrafts] = useState<
+    Record<string, { fragment: string; comment: string }>
+  >({});
   const [isCourseSaving, setIsCourseSaving] = useState(false);
   const [isMetadataSaving, setIsMetadataSaving] = useState(false);
   const [isTaskSaving, setIsTaskSaving] = useState(false);
   const [isTeamSaving, setIsTeamSaving] = useState<string | null>(null);
   const [isProductSaving, setIsProductSaving] = useState<string | null>(null);
+  const [isValidationReturnSaving, setIsValidationReturnSaving] = useState<string | null>(null);
   const [isPlanningSaving, setIsPlanningSaving] = useState(false);
   const [isStageNoteSaving, setIsStageNoteSaving] = useState<CourseStageNoteKey | null>(null);
   const [stageNoteDrafts, setStageNoteDrafts] = useState<
@@ -1906,6 +2309,11 @@ export function CourseWorkspacePage({
   const [architectureProgress, setArchitectureProgress] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
+  const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [isValidationDetailModalOpen, setIsValidationDetailModalOpen] = useState(false);
+  const [isValidationEditModalOpen, setIsValidationEditModalOpen] = useState(false);
+  const [validationContentSectionTab, setValidationContentSectionTab] = useState<string | null>(null);
+  const [isProductExporting, setIsProductExporting] = useState<string | null>(null);
   const [writingError, setWritingError] = useState<string | null>(null);
   const [isWritingSaving, setIsWritingSaving] = useState(false);
   const [isWritingExtracting, setIsWritingExtracting] = useState(false);
@@ -1916,6 +2324,7 @@ export function CourseWorkspacePage({
   const [writingKnowledgeProgress, setWritingKnowledgeProgress] = useState(0);
   const [writingGenerationProgress, setWritingGenerationProgress] = useState(0);
   const [isWritingGeneratingAll, setIsWritingGeneratingAll] = useState(false);
+  const [isWritingFinalizing, setIsWritingFinalizing] = useState(false);
   const [isWritingInstructionsPanelOpen, setIsWritingInstructionsPanelOpen] = useState(false);
   const [planningSectionFilter, setPlanningSectionFilter] = useState('Todas');
   const [planningProductFilter, setPlanningProductFilter] = useState('');
@@ -2070,6 +2479,8 @@ export function CourseWorkspacePage({
   const [productDrafts, setProductDrafts] = useState<Record<string, CourseProductMutationInput>>(() =>
     makeCourseProductDrafts(course?.products ?? []),
   );
+  const hydratedCourseSlugRef = useRef<string | null>(course?.slug ?? null);
+  const [criteriaGeneratorProductId, setCriteriaGeneratorProductId] = useState<string | null>(null);
   const [planningPhaseDraft, setPlanningPhaseDraft] = useState<ProductPhasePlan[]>(() =>
     normalizeProductPhasePlanDraft([]),
   );
@@ -2205,20 +2616,40 @@ export function CourseWorkspacePage({
       setTaskDrafts({});
       setTeamDrafts({});
       setProductDrafts({});
+      setValidationCommentDrafts({});
       setProductComposerStage(null);
       closeModal();
       setStageNoteDrafts(makeStageNoteDrafts(undefined));
+      hydratedCourseSlugRef.current = null;
       return;
     }
+
+    const isCourseSwitch = hydratedCourseSlugRef.current !== course.slug;
+    const serverProductDrafts = makeCourseProductDrafts(course.products);
 
     setCourseForm(syncCourseStructureFields(appData, makeCourseForm(course)));
     setMetadataForm(makeMetadataForm(course));
     setTaskDrafts(makeTaskDrafts(relatedTasks));
     setTeamDrafts(makeTeamMemberDrafts(course.team));
-    setProductDrafts(makeCourseProductDrafts(course.products));
-    setProductComposerStage(null);
-    closeModal();
+    setProductDrafts((current) => {
+      if (isCourseSwitch || Object.keys(current).length === 0) {
+        return serverProductDrafts;
+      }
+
+      const merged: Record<string, CourseProductMutationInput> = {};
+      for (const [productId, serverDraft] of Object.entries(serverProductDrafts)) {
+        merged[productId] = current[productId] ?? serverDraft;
+      }
+
+      return merged;
+    });
+    if (isCourseSwitch) {
+      setValidationCommentDrafts({});
+      setProductComposerStage(null);
+      closeModal();
+    }
     setStageNoteDrafts(makeStageNoteDrafts(course));
+    hydratedCourseSlugRef.current = course.slug;
   }, [
     appData,
     appData.tasks,
@@ -2338,7 +2769,7 @@ export function CourseWorkspacePage({
   }
 
   const currentCourse = course;
-  const architectureProducts = currentCourse.products.filter((product) => product.stage === 'arquitectura');
+  const architectureProducts = currentCourse.products;
   const canManageWritingWorkspace = userRole === 'Administrador' || userRole === 'Coordinador';
   const courseLibraryResources =
     appData.libraryResources.length > 0
@@ -2348,22 +2779,24 @@ export function CourseWorkspacePage({
             (resource) => resource.courseSlug === currentCourse.slug,
           )
         : [];
-  const writingWorkQueue = architectureProducts
+  const writingWorkQueue = currentCourse.products
     .filter((product) => {
+      const writingPhase = getWritingPhase(product);
+
       if (canManageWritingWorkspace) {
-        return true;
+        return Boolean(writingPhase || product.stage === 'validacion');
       }
 
       if (role !== 'Experto') {
         return false;
       }
 
-      return getWritingPhase(product)?.assigneeId === viewer.id;
+      return Boolean(writingPhase?.assigneeId === viewer.id || product.stage === 'validacion');
     })
     .slice()
     .sort((left, right) => {
-      const leftEnd = parsePlanningDate(getWritingPhase(left)?.endDate);
-      const rightEnd = parsePlanningDate(getWritingPhase(right)?.endDate);
+      const leftEnd = getProductDueDate(left);
+      const rightEnd = getProductDueDate(right);
 
       if (leftEnd && rightEnd) {
         return leftEnd.getTime() - rightEnd.getTime();
@@ -2395,6 +2828,18 @@ export function CourseWorkspacePage({
   );
   const isWritingProductWorkspaceRoute =
     activeSection === 'escritura' && Boolean(writingProductQueryId);
+  const selectedValidationProduct =
+    validationProductId && activeSection === 'validacion'
+      ? currentCourse.products.find(
+          (product) => product.id === validationProductId && product.stage === 'validacion',
+        ) ?? null
+      : null;
+  const canEditSelectedValidationProduct = Boolean(
+    selectedValidationProduct &&
+      canEditCourseProduct(userRole, selectedValidationProduct.owner, selectedValidationProduct.stage),
+  );
+  const isValidationProductWorkspaceRoute =
+    activeSection === 'validacion' && Boolean(validationProductId);
   const architecturePreviewProduct = architecturePreviewProductId
     ? architectureProducts.find((product) => product.id === architecturePreviewProductId) ?? null
     : null;
@@ -2545,7 +2990,7 @@ export function CourseWorkspacePage({
     .filter((item) => item.member);
 
   function countProductsByStage(stageId: CourseProductStage) {
-    return currentCourse.products.filter((product) => product.stage === stageId).length;
+    return (currentCourse.products ?? []).filter((product) => product.stage === stageId).length;
   }
 
   const planeacionStatus =
@@ -2740,12 +3185,40 @@ export function CourseWorkspacePage({
             ? {
                 eyebrow: 'Validación instruccional',
                 title: 'Zona dedicada de validación',
-                description:
-                  'Revisión pedagógica y de estilo para asegurar la calidad instruccional del contenido.',
+              description:
+                  'Bandeja editorial para revisar productos, validar criterios y dejar comentarios por fragmento.',
                 stats: [
-                  { label: 'Observaciones', value: String(pendingObservationsCount) },
-                  { label: 'Correcciones', value: String(deliverablesOpenCount) },
-                  { label: 'Checkpoints', value: 'Revisado' },
+                  {
+                    label: 'Productos',
+                    value: String(
+                      (currentCourse.products ?? []).filter((product) => product.stage === 'validacion').length,
+                    ),
+                  },
+                  {
+                    label: 'Checklists',
+                    value: `${(currentCourse.products ?? [])
+                      .filter((product) => product.stage === 'validacion')
+                      .reduce(
+                        (sum, product) => sum + getValidationMetrics(product).completed,
+                        0,
+                      )}/${(currentCourse.products ?? [])
+                      .filter((product) => product.stage === 'validacion')
+                      .reduce(
+                        (sum, product) => sum + getValidationMetrics(product).total,
+                        0,
+                      )}`,
+                  },
+                  {
+                    label: 'Comentarios',
+                    value: String(
+                      (currentCourse.products ?? [])
+                        .filter((product) => product.stage === 'validacion')
+                        .reduce(
+                          (sum, product) => sum + getValidationMetrics(product).openComments,
+                          0,
+                        ),
+                    ),
+                  },
                 ],
               }
           : activeSection === 'multimedia'
@@ -2806,9 +3279,12 @@ export function CourseWorkspacePage({
           : null;
   const showFocusedStageHeader =
     !isWorkflowPage && experienceSettings.showFocusedStageHeader && Boolean(focusedStageMeta);
+  const architectureUnitLabels = Array.isArray(currentCourse?.metadata?.units)
+    ? currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`)
+    : [];
   const architectureSectionOptions = [
     'Introducción',
-    ...(currentCourse?.metadata.units.map((_, index) => `Unidad ${index + 1}`) ?? []),
+    ...architectureUnitLabels,
     'Cierre',
   ];
 
@@ -2842,7 +3318,7 @@ export function CourseWorkspacePage({
       case 'escritura':
         return 'Construir por módulos';
       case 'validacion':
-        return 'Cargar inventario';
+        return 'Cargar checklist base';
       case 'multimedia':
         return 'Cargar storyboard';
       case 'qa':
@@ -2861,7 +3337,7 @@ export function CourseWorkspacePage({
       case 'escritura':
         return 'Agrupa la autoría del curso: actividades, instrucciones, recursos y materiales de trabajo.';
       case 'validacion':
-        return 'Consolida el inventario curado y su pertinencia pedagógica por módulo.';
+        return 'Consolida la revisión instruccional, la checklist de calidad y los comentarios a fragmentos.';
       case 'multimedia':
         return 'Organiza piezas propias como HTML, audio, lecturas e infografías listas para producción.';
       case 'qa':
@@ -2938,12 +3414,19 @@ export function CourseWorkspacePage({
           .map(
             (module, index) =>
               [
-                `# Unidad ${index + 1}: ${module.title}`,
+                `# Producto ${index + 1}: ${module.title}`,
                 `Propósito pedagógico: ${module.learningGoal}`,
-                `Recursos curados estimados: ${module.curatedResources}`,
-                '- Fuente 1:',
-                '- Tipo de recurso:',
-                '- Justificación didáctica:',
+                '',
+                '# Checklist de validación',
+                '- Propósito y alcance claros',
+                '- Estructura pedagógica completa',
+                '- Instrucciones accionables',
+                '- Coherencia formal y lingüística',
+                '',
+                '# Comentarios por fragmento',
+                '- Fragmento observado:',
+                '- Ajuste esperado:',
+                '- Estado de revisión:',
               ].join('\n'),
           )
           .join('\n\n');
@@ -3025,6 +3508,1779 @@ export function CourseWorkspacePage({
         body: buildProductTemplate(draft.stage, draft.format),
       },
     }));
+  }
+
+  function getValidationData(product: Pick<CourseProductMutationInput, 'stage' | 'validationData'>) {
+    const validationData = product.validationData;
+
+    if (
+      !validationData ||
+      typeof validationData !== 'object' ||
+      !Array.isArray(validationData.criteria) ||
+      !Array.isArray(validationData.checklist) ||
+      !Array.isArray(validationData.comments)
+    ) {
+      return buildDefaultValidationData(product.stage);
+    }
+
+    return {
+      ...validationData,
+      readyForProduction: validationData.readyForProduction === true,
+    };
+  }
+
+  function updateValidationCommentDraft(
+    productId: string,
+    patch: Partial<{ fragment: string; comment: string }>,
+  ) {
+    setValidationCommentDrafts((current) => ({
+      ...current,
+      [productId]: {
+        fragment: current[productId]?.fragment ?? '',
+        comment: current[productId]?.comment ?? '',
+        ...patch,
+      },
+    }));
+  }
+
+  function updateValidationProductDraft(
+    productId: string,
+    updater: (validationData: ProductValidationData) => ProductValidationData,
+  ) {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+
+      if (!draft) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [productId]: {
+          ...draft,
+          validationData: updater(getValidationData(draft)),
+        },
+      };
+    });
+  }
+
+  function updateValidationContentSection(
+    productId: string,
+    sectionId: string,
+    key: keyof ProductWritingSection,
+    value: string,
+  ) {
+    const now = new Date().toISOString();
+
+    setProductDrafts((current) => {
+      const draft = current[productId];
+
+      if (!draft) {
+        return current;
+      }
+
+      const currentSections = normalizeWritingSections(
+        draft.writingData?.sections?.length ? draft.writingData.sections : getWritingSectionsForProduct(draft),
+      );
+      const nextSections = currentSections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              [key]: value,
+              updatedAt: now,
+            }
+          : section,
+      );
+      const nextDraft: CourseProductMutationInput = {
+        ...draft,
+        writingData: {
+          mode: draft.writingData?.mode ?? 'manual',
+          submittedAsset: draft.writingData?.submittedAsset ?? null,
+          supportAssets: draft.writingData?.supportAssets ?? [],
+          libraryResourceIds: draft.writingData?.libraryResourceIds ?? [],
+          aiPrompt: draft.writingData?.aiPrompt ?? '',
+          extractedText: draft.writingData?.extractedText ?? '',
+          sections: nextSections,
+          draftText: createWritingDraftTextFromSections(nextSections),
+          lastSavedAt: draft.writingData?.lastSavedAt,
+          lastGeneratedAt: draft.writingData?.lastGeneratedAt,
+        },
+      };
+
+      return {
+        ...current,
+        [productId]: nextDraft,
+      };
+    });
+  }
+
+  function updateValidationChecklistItem(
+    productId: string,
+    itemId: string,
+    patch: Partial<ProductValidationChecklistItem>,
+  ) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      checklist: validationData.checklist.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              ...patch,
+              status: patch.status ? normalizeValidationChecklistStatus(patch.status) : item.status,
+              updatedAt: now,
+            }
+          : item,
+      ),
+      lastReviewedAt: now,
+    }));
+  }
+
+  function updateValidationReviewerNotes(productId: string, notes: string) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      reviewerNotes: notes,
+      lastReviewedAt: now,
+    }));
+  }
+
+  function updateValidationReadyForProduction(productId: string, ready: boolean) {
+    const now = new Date().toISOString();
+
+    updateValidationProductDraft(productId, (validationData) => ({
+      ...validationData,
+      readyForProduction: ready,
+      lastReviewedAt: now,
+    }));
+  }
+
+  function syncUpdatedProductInCourseState(updatedProduct: CourseProduct) {
+    setProductDrafts((current) =>
+      current[updatedProduct.id]
+        ? {
+            ...current,
+            [updatedProduct.id]: {
+              ...current[updatedProduct.id],
+              writingData: normalizeWritingDraft(updatedProduct),
+              validationData: updatedProduct.validationData,
+            } as CourseProductMutationInput,
+          }
+        : current,
+    );
+
+    mutateAppData((current) => ({
+      ...current,
+      courses: current.courses.map((course) =>
+        course.slug !== currentCourse.slug
+          ? course
+          : {
+              ...course,
+              products: course.products.map((product) =>
+                product.id === updatedProduct.id ? updatedProduct : product,
+              ),
+              updatedAt: new Date().toISOString().slice(0, 10),
+            },
+      ),
+    }));
+  }
+
+  async function persistValidationDataSnapshot(
+    productId: string,
+    validationData: ProductValidationData,
+    options?: {
+      fallbackError?: string;
+      silentSuccess?: boolean;
+      successTitle?: string;
+      successMessage?: string;
+    },
+  ) {
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          validationData: {
+            ...validationData,
+            lastReviewedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: options?.fallbackError ?? 'No fue posible guardar la validación del producto.',
+        },
+      );
+
+      if (updatedProduct) {
+        syncUpdatedProductInCourseState(updatedProduct);
+      }
+
+      if (!options?.silentSuccess) {
+        void showAlert({
+          title: options?.successTitle ?? 'Validación guardada',
+          message:
+            options?.successMessage ??
+            'Los cambios de validación quedaron guardados correctamente.',
+          tone: 'success',
+        });
+      }
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : options?.fallbackError ?? 'No fue posible guardar la validación del producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar validación',
+        message,
+        tone: 'error',
+      });
+      return false;
+    }
+  }
+
+  function captureValidationFragment(productId: string) {
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+    const fragmentRoot = validationFragmentRefs.current[productId];
+
+    if (!selection || selection.rangeCount === 0 || !fragmentRoot) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const ancestor = range.commonAncestorContainer;
+    const ancestorElement =
+      ancestor instanceof Element ? ancestor : ancestor.parentElement ?? null;
+
+    if (!ancestorElement || !fragmentRoot.contains(ancestorElement)) {
+      return;
+    }
+
+    const fragment = selection.toString().replace(/\s+/g, ' ').trim();
+
+    if (!fragment) {
+      return;
+    }
+
+    updateValidationCommentDraft(productId, { fragment });
+  }
+
+  async function addValidationComment(productId: string) {
+    const draft = productDrafts[productId];
+    const composer = validationCommentDrafts[productId];
+
+    if (!draft || !composer?.fragment.trim() || !composer?.comment.trim()) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const baseValidationData = getValidationData(draft);
+    const nextValidationData: ProductValidationData = {
+      ...baseValidationData,
+      comments: [
+        {
+          id: crypto.randomUUID(),
+          fragment: composer.fragment.trim(),
+          comment: composer.comment.trim(),
+          author: userRole,
+          status: 'Abierto',
+          createdAt: now,
+          updatedAt: now,
+        },
+        ...baseValidationData.comments,
+      ],
+      lastReviewedAt: now,
+    };
+
+    updateValidationProductDraft(productId, () => nextValidationData);
+
+    updateValidationCommentDraft(productId, { fragment: '', comment: '' });
+
+    await persistValidationDataSnapshot(productId, nextValidationData, {
+      fallbackError: 'No fue posible guardar el comentario de validación.',
+      silentSuccess: true,
+    });
+  }
+
+  async function toggleValidationCommentStatus(productId: string, commentId: string) {
+    const draft = productDrafts[productId];
+    if (!draft) {
+      return;
+    }
+    const now = new Date().toISOString();
+    const baseValidationData = getValidationData(draft);
+    const nextValidationData: ProductValidationData = {
+      ...baseValidationData,
+      comments: baseValidationData.comments.map((comment) =>
+        comment.id === commentId
+          ? {
+              ...comment,
+              status: comment.status === 'Abierto' ? 'Resuelto' : 'Abierto',
+              updatedAt: now,
+              resolvedAt: comment.status === 'Abierto' ? now : undefined,
+            }
+          : comment,
+      ),
+      lastReviewedAt: now,
+    };
+
+    updateValidationProductDraft(productId, () => nextValidationData);
+
+    await persistValidationDataSnapshot(productId, nextValidationData, {
+      fallbackError: 'No fue posible actualizar el estado del comentario.',
+      silentSuccess: true,
+    });
+  }
+
+  function getValidationChecklist(
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
+  ) {
+    const validationData = getValidationData(product);
+    const sourceChecklist =
+      validationData.criteria.length > 0
+        ? buildValidationChecklistFromCriteria(validationData.criteria)
+        : buildValidationChecklistFromWritingSections(product.writingData?.sections ?? []);
+
+    return sourceChecklist.map((item, index) => {
+      const current = validationData.checklist[index];
+
+      return {
+        ...item,
+        id: current?.id ?? item.id,
+        status: current?.status ?? item.status,
+        notes: current?.notes ?? item.notes,
+        updatedAt: current?.updatedAt ?? item.updatedAt,
+      };
+    });
+  }
+
+  function getValidationMetrics(
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
+  ) {
+    const validationData = getValidationData(product);
+    const checklist = getValidationChecklist(product);
+    const completed = checklist.filter((item) => item.status === 'Cumple').length;
+    const total = checklist.length;
+    const openComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return {
+      completed,
+      total,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+      openComments,
+    };
+  }
+
+  function buildProductExportFileName(product: Pick<CourseProductMutationInput, 'title' | 'version'>, format: 'docx' | 'pdf') {
+    const slug = product.title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
+
+    const version = product.version?.trim() ? `-v${product.version.trim().replace(/\s+/g, '-')}` : '';
+    return `maturity360-${slug || 'producto'}${version}.${format}`;
+  }
+
+  function triggerBrowserDownload(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.rel = 'noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function buildProductExportPayload(
+    product: Pick<
+      CourseProductMutationInput,
+      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'writingData' | 'validationData'
+    >,
+  ) {
+    const validationData = getValidationData(product);
+    const writingSections = getWritingSectionsForProduct(product);
+
+    return {
+      courseTitle: currentCourse.title,
+      courseCode: currentCourse.code,
+      program: currentCourse.program,
+      productTitle: product.title,
+      productStage: product.stage,
+      productFormat: product.format,
+      productOwner: product.owner,
+      productStatus: product.status,
+      productVersion: product.version,
+      productSection: product.section ?? '',
+      productTags: product.tags ?? [],
+      summaryText: stripHtmlToText(product.summary),
+      bodyText: stripHtmlToText(getFixedProductInstructionsHtml(product)),
+      writingSections,
+      validationChecklist: getValidationChecklist(product),
+      validationComments: validationData.comments,
+      reviewerNotes: validationData.reviewerNotes ?? '',
+    };
+  }
+
+  async function buildDocxBlobForProduct(
+    product: Pick<
+      CourseProductMutationInput,
+      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'writingData' | 'validationData'
+    >,
+  ) {
+    const [{ Document, Paragraph, Packer, TextRun, HeadingLevel, AlignmentType }] = await Promise.all([
+      import('docx'),
+    ]);
+
+    function textToDocxParagraphs(text: string) {
+      const chunks = text
+        .split(/\n{2,}/g)
+        .map((chunk) => chunk.trim())
+        .filter(Boolean);
+
+      if (chunks.length === 0) {
+        return [new Paragraph({ text: text || ' ' })];
+      }
+
+      return chunks.map((chunk) => new Paragraph({ text: chunk }));
+    }
+
+    const payload = buildProductExportPayload(product);
+    const paragraphs: any[] = [
+      new Paragraph({
+        text: payload.courseTitle,
+        heading: HeadingLevel.TITLE,
+        spacing: { after: 240 },
+        alignment: AlignmentType.CENTER,
+      }),
+      new Paragraph({
+        text: payload.courseCode,
+        alignment: AlignmentType.CENTER,
+      }),
+      new Paragraph({ text: '' }),
+      new Paragraph({
+        text: payload.productTitle,
+        heading: HeadingLevel.HEADING_1,
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Etapa: ', bold: true }),
+          new TextRun(String(payload.productStage)),
+          new TextRun({ text: '   Formato: ', bold: true }),
+          new TextRun(String(payload.productFormat)),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: 'Responsable: ', bold: true }),
+          new TextRun(String(payload.productOwner)),
+          new TextRun({ text: '   Versión: ', bold: true }),
+          new TextRun(String(payload.productVersion)),
+        ],
+      }),
+    ];
+
+    if (payload.productSection) {
+      paragraphs.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Sección: ', bold: true }),
+            new TextRun(payload.productSection),
+          ],
+        }),
+      );
+    }
+
+    if (payload.productTags.length > 0) {
+      paragraphs.push(
+        new Paragraph({
+          children: [new TextRun({ text: 'Etiquetas: ', bold: true }), new TextRun(payload.productTags.join(', '))],
+        }),
+      );
+    }
+
+    paragraphs.push(
+      new Paragraph({ text: '' }),
+      new Paragraph({ text: 'Descripción', heading: HeadingLevel.HEADING_2 }),
+      ...textToDocxParagraphs(payload.summaryText || 'Sin descripción registrada.'),
+      new Paragraph({ text: 'Instrucciones', heading: HeadingLevel.HEADING_2 }),
+      ...textToDocxParagraphs(payload.bodyText || 'Sin instrucciones registradas.'),
+    );
+
+    if (payload.writingSections.length > 0) {
+      paragraphs.push(new Paragraph({ text: 'Secciones del producto', heading: HeadingLevel.HEADING_2 }));
+
+      payload.writingSections.forEach((section, index) => {
+        paragraphs.push(
+          new Paragraph({
+            text: `${index + 1}. ${section.title}`,
+            heading: HeadingLevel.HEADING_3,
+          }),
+          ...textToDocxParagraphs(section.instructions || 'Sin instrucciones.'),
+        );
+
+        const contentText = stripHtmlToText(section.content).trim();
+        if (contentText) {
+          paragraphs.push(new Paragraph({ text: 'Contenido', heading: HeadingLevel.HEADING_4 }), ...textToDocxParagraphs(contentText));
+        }
+      });
+    }
+
+    if (payload.productStage === 'validacion') {
+      paragraphs.push(new Paragraph({ text: 'Checklist de validación', heading: HeadingLevel.HEADING_2 }));
+
+      payload.validationChecklist.forEach((item, index) => {
+        paragraphs.push(
+          new Paragraph({
+            text: `${index + 1}. ${item.label}`,
+            heading: HeadingLevel.HEADING_3,
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'Estado: ', bold: true }),
+              new TextRun(item.status),
+              new TextRun({ text: '   Observación: ', bold: true }),
+              new TextRun(item.notes || 'Sin observaciones.'),
+            ],
+          }),
+        );
+      });
+
+      if (payload.validationComments.length > 0) {
+        paragraphs.push(new Paragraph({ text: 'Comentarios vinculados', heading: HeadingLevel.HEADING_2 }));
+        payload.validationComments.forEach((comment, index) => {
+          paragraphs.push(
+            new Paragraph({
+              text: `${index + 1}. ${comment.fragment}`,
+              heading: HeadingLevel.HEADING_3,
+            }),
+            ...textToDocxParagraphs(comment.comment),
+          );
+        });
+      }
+    }
+
+    const document = new Document({
+      sections: [
+        {
+          properties: {},
+          children: paragraphs,
+        },
+      ],
+    });
+
+    return Packer.toBlob(document);
+  }
+
+  async function buildPdfBlobForProduct(
+    product: Pick<
+      CourseProductMutationInput,
+      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'writingData' | 'validationData'
+    >,
+  ) {
+    const { jsPDF } = await import('jspdf');
+    const payload = buildProductExportPayload(product);
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 42;
+    const maxWidth = pageWidth - margin * 2;
+    let cursorY = margin;
+
+    const ensureSpace = (needed = 24) => {
+      if (cursorY + needed <= pageHeight - margin) {
+        return;
+      }
+
+      pdf.addPage();
+      cursorY = margin;
+    };
+
+    const addLine = (text: string, size = 11, bold = false, gapAfter = 8) => {
+      ensureSpace(size + gapAfter + 8);
+      pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+      pdf.setFontSize(size);
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      pdf.text(lines, margin, cursorY);
+      cursorY += lines.length * (size + 4) + gapAfter;
+    };
+
+    const addParagraph = (text: string, size = 11) => {
+      const blocks = text.split(/\n{2,}/g).map((chunk) => chunk.trim()).filter(Boolean);
+
+      if (blocks.length === 0) {
+        addLine(' ', size);
+        return;
+      }
+
+      blocks.forEach((block) => {
+        const lines = pdf.splitTextToSize(block, maxWidth);
+        ensureSpace(lines.length * (size + 4) + 8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(size);
+        pdf.text(lines, margin, cursorY);
+        cursorY += lines.length * (size + 4) + 8;
+      });
+    };
+
+    addLine(payload.courseTitle, 18, true, 4);
+    addLine(payload.courseCode, 11, false, 16);
+    addLine(payload.productTitle, 16, true, 12);
+    addLine(`Etapa: ${payload.productStage} · Formato: ${payload.productFormat}`, 11, false, 6);
+    addLine(`Responsable: ${payload.productOwner} · Versión: ${payload.productVersion}`, 11, false, 6);
+
+    if (payload.productSection) {
+      addLine(`Sección: ${payload.productSection}`, 11, false, 6);
+    }
+
+    if (payload.productTags.length > 0) {
+      addLine(`Etiquetas: ${payload.productTags.join(', ')}`, 11, false, 10);
+    }
+
+    addLine('Descripción', 13, true, 4);
+    addParagraph(payload.summaryText || 'Sin descripción registrada.');
+
+    addLine('Instrucciones', 13, true, 4);
+    addParagraph(payload.bodyText || 'Sin instrucciones registradas.');
+
+    if (payload.writingSections.length > 0) {
+      addLine('Secciones del producto', 13, true, 4);
+      payload.writingSections.forEach((section, index) => {
+        addLine(`${index + 1}. ${section.title}`, 12, true, 3);
+        addParagraph(section.instructions || 'Sin instrucciones.');
+        const contentText = stripHtmlToText(section.content).trim();
+        if (contentText) {
+          addLine('Contenido', 11, true, 3);
+          addParagraph(contentText);
+        }
+      });
+    }
+
+    if (payload.productStage === 'validacion') {
+      addLine('Checklist de validación', 13, true, 4);
+      payload.validationChecklist.forEach((item, index) => {
+        addLine(`${index + 1}. ${item.label}`, 12, true, 3);
+        addParagraph(`Estado: ${item.status}  |  Observación: ${item.notes || 'Sin observaciones.'}`, 11);
+      });
+
+      if (payload.validationComments.length > 0) {
+        addLine('Comentarios vinculados', 13, true, 4);
+        payload.validationComments.forEach((comment, index) => {
+          addLine(`${index + 1}. ${comment.fragment}`, 12, true, 3);
+          addParagraph(comment.comment || 'Sin comentario.');
+        });
+      }
+    }
+
+    return pdf.output('blob');
+  }
+
+  async function handleExportProduct(format: 'docx' | 'pdf', scope: 'writing' | 'validation') {
+    const product =
+      scope === 'writing'
+        ? selectedWritingProduct
+          ? {
+              ...selectedWritingProduct,
+              writingData: writingDraft ?? selectedWritingProduct.writingData,
+              validationData:
+                selectedWritingProduct.validationData ?? buildDefaultValidationData('validacion'),
+            }
+          : null
+        : selectedValidationProduct
+          ? {
+              ...selectedValidationProduct,
+              ...(productDrafts[selectedValidationProduct.id] ?? {}),
+              writingData: selectedValidationProduct.writingData,
+              stage: 'validacion' as const,
+            }
+          : null;
+
+    if (!product) {
+      return;
+    }
+
+    const exportKey = `${scope}:${format}`;
+    setIsProductExporting(exportKey);
+
+    try {
+      const blob =
+        format === 'docx'
+          ? await buildDocxBlobForProduct(product)
+          : await buildPdfBlobForProduct(product);
+      triggerBrowserDownload(blob, buildProductExportFileName(product, format));
+      void showAlert({
+        title: 'Producto descargado',
+        message:
+          format === 'docx'
+            ? 'Se generó una copia editable en formato DOCX.'
+            : 'Se generó una copia lista para lectura en formato PDF.',
+        tone: 'success',
+      });
+    } catch (error) {
+      void showAlert({
+        title: 'Error al descargar',
+        message:
+          error instanceof Error ? error.message : 'No fue posible generar el archivo del producto.',
+        tone: 'error',
+      });
+    } finally {
+      setIsProductExporting(null);
+    }
+  }
+
+  function renderValidationWorkbench(
+    productId: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData' | 'body' | 'summary' | 'format'>,
+    isEditable: boolean,
+  ) {
+    const validationData = getValidationData(product);
+    const checklistItems = getValidationChecklist(product);
+    const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
+    const contentHtml = getWritingContentHtmlForProduct(product);
+    const checklistOptions: ProductValidationChecklistItem['status'][] = [
+      'Cumple',
+      'Parcial',
+      'No cumple',
+      'No aplica',
+    ];
+    const checklistCompleted = checklistItems.filter(
+      (item) => item.status === 'Cumple',
+    ).length;
+    const checklistTotal = checklistItems.length;
+    const pendingComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return (
+      <div className="surface-muted validation-workbench">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Checklist de validación</span>
+            <h3>Revisión por fragmentos y criterios de calidad</h3>
+          </div>
+          <div className="action-row">
+            <span className="badge badge--sage">
+              {checklistCompleted}/{checklistTotal} cumplidos
+            </span>
+            <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
+          </div>
+        </div>
+
+        <div className="validation-workbench__layout">
+          <div className="validation-workbench__column">
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Checklist</span>
+                  <h3>Criterios de aprobación</h3>
+                </div>
+                <ClipboardList size={18} />
+              </div>
+
+              <div className="list-stack">
+                {checklistItems.map((item) => (
+                  <div key={item.id} className="list-item validation-checklist-item">
+                    <div className="validation-checklist-item__content">
+                      <strong>{item.label}</strong>
+                      <div className="field__control field__control--inline">
+                        <select
+                          value={item.status}
+                          disabled={!isEditable}
+                          onChange={(event) =>
+                            updateValidationChecklistItem(
+                              productId,
+                              item.id,
+                              { status: event.target.value as ProductValidationChecklistItem['status'] },
+                            )
+                          }
+                        >
+                          {checklistOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea validation-checklist-item__notes"
+                        value={item.notes ?? ''}
+                        disabled={!isEditable}
+                        onChange={(event) =>
+                          updateValidationChecklistItem(productId, item.id, {
+                            notes: event.target.value,
+                          })
+                        }
+                        placeholder="Observación breve sobre este criterio"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Notas del revisor</span>
+                  <h3>Resumen de observaciones</h3>
+                </div>
+                <MessageSquareText size={18} />
+              </div>
+
+              <textarea
+                className="modern-textarea validation-notes"
+                value={validationData.reviewerNotes}
+                disabled={!isEditable}
+                onChange={(event) => updateValidationReviewerNotes(productId, event.target.value)}
+                placeholder="Sintetiza aquí el criterio global de revisión..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <div className="validation-workbench__column validation-workbench__column--wide">
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Vista de revisión</span>
+                  <h3>Selecciona un fragmento del producto para comentarlo</h3>
+                </div>
+                {isEditable ? (
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--compact"
+                    onClick={() => captureValidationFragment(productId)}
+                  >
+                    <span>Usar selección</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <div
+                ref={(node) => {
+                  validationFragmentRefs.current[productId] = node;
+                }}
+                className="validation-preview"
+                onMouseUp={() => captureValidationFragment(productId)}
+              >
+                <div className="validation-preview__pane">
+                  <span className="eyebrow">Contenido</span>
+                  {renderRichTextContent(
+                    contentHtml,
+                    'Sin contenido disponible.',
+                    'rich-html--panel',
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="validation-workbench__block">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Comentarios</span>
+                  <h3>Fragmentos específicos para resolver</h3>
+                </div>
+                <span className="badge badge--outline">{validationData.comments.length} notas</span>
+              </div>
+
+              {isEditable ? (
+                <div className="validation-comment-composer">
+                  <label className="field field--full">
+                    <span>Fragmento seleccionado</span>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea"
+                        value={fragmentDraft.fragment}
+                        onChange={(event) =>
+                          updateValidationCommentDraft(productId, { fragment: event.target.value })
+                        }
+                        placeholder="Selecciona un fragmento en la vista de revisión o escríbelo manualmente"
+                        rows={3}
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field field--full">
+                    <span>Comentario para el experto</span>
+                    <div className="field__control">
+                      <textarea
+                        className="modern-textarea"
+                        value={fragmentDraft.comment}
+                        onChange={(event) =>
+                          updateValidationCommentDraft(productId, { comment: event.target.value })
+                        }
+                        placeholder="Describe con precisión qué debe ajustar el experto"
+                        rows={4}
+                      />
+                    </div>
+                  </label>
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="cta-button"
+                      disabled={!fragmentDraft.fragment.trim() || !fragmentDraft.comment.trim()}
+                      onClick={() => addValidationComment(productId)}
+                    >
+                      <span>Agregar comentario</span>
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="list-stack">
+                {validationData.comments.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>Sin comentarios todavía</strong>
+                    <p>Selecciona un fragmento para dejar observaciones puntuales sobre el producto.</p>
+                  </div>
+                ) : (
+                  validationData.comments.map((comment) => (
+                    <div key={comment.id} className="list-item validation-comment-item">
+                      <div>
+                        <div className="validation-comment-item__fragment">
+                          <span className={badgeClass(comment.status)}>{comment.status}</span>
+                          <strong>{comment.fragment}</strong>
+                        </div>
+                        <p>{comment.comment}</p>
+                        <div className="list-item__meta">
+                          <span>{comment.author}</span>
+                          <span>{formatDate(comment.updatedAt || comment.createdAt)}</span>
+                        </div>
+                      </div>
+                      {isEditable ? (
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--compact"
+                          onClick={() => toggleValidationCommentStatus(productId, comment.id)}
+                        >
+                          {comment.status === 'Abierto' ? 'Resolver' : 'Reabrir'}
+                        </button>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderValidationCommentsPanel(
+    productId: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
+    isEditable: boolean,
+  ) {
+    const validationData = getValidationData(product);
+    const fragmentDraft = validationCommentDrafts[productId] ?? { fragment: '', comment: '' };
+    const pendingComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return (
+      <div className="validation-rubric">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Comentarios</span>
+            <h3>Observaciones por fragmentos</h3>
+          </div>
+          <div className="action-row">
+            <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
+            {isEditable ? (
+              <button
+                type="button"
+                className="ghost-button ghost-button--compact"
+                onClick={() => captureValidationFragment(productId)}
+              >
+                <span>Usar selección</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {isEditable ? (
+          <div className="validation-comment-composer">
+            <label className="field field--full">
+              <span>Fragmento seleccionado</span>
+              <div className="field__control">
+                <textarea
+                  className="modern-textarea"
+                  value={fragmentDraft.fragment}
+                  onChange={(event) =>
+                    updateValidationCommentDraft(productId, { fragment: event.target.value })
+                  }
+                  placeholder="Selecciona un fragmento en el contenido (columna izquierda) o escríbelo manualmente"
+                  rows={3}
+                />
+              </div>
+            </label>
+
+            <label className="field field--full">
+              <span>Comentario para el experto</span>
+              <div className="field__control">
+                <textarea
+                  className="modern-textarea"
+                  value={fragmentDraft.comment}
+                  onChange={(event) =>
+                    updateValidationCommentDraft(productId, { comment: event.target.value })
+                  }
+                  placeholder="Describe con precisión qué debe ajustar el experto"
+                  rows={4}
+                />
+              </div>
+            </label>
+
+            <div className="action-row">
+              <button
+                type="button"
+                className="cta-button"
+                disabled={!fragmentDraft.fragment.trim() || !fragmentDraft.comment.trim()}
+                onClick={() => addValidationComment(productId)}
+              >
+                <span>Agregar comentario</span>
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="list-stack">
+          {validationData.comments.length === 0 ? (
+            <div className="empty-state">
+              <strong>Sin comentarios todavía</strong>
+              <p>Selecciona un fragmento para dejar observaciones puntuales sobre el producto.</p>
+            </div>
+          ) : (
+            validationData.comments.map((comment) => (
+              <div key={comment.id} className="list-item validation-comment-item">
+                <div>
+                  <div className="validation-comment-item__fragment">
+                    <span className={badgeClass(comment.status)}>{comment.status}</span>
+                    <strong>{comment.fragment}</strong>
+                  </div>
+                  <p>{comment.comment}</p>
+                  <div className="list-item__meta">
+                    <span>{comment.author}</span>
+                    <span>{formatDate(comment.updatedAt || comment.createdAt)}</span>
+                  </div>
+                </div>
+                {isEditable ? (
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--compact"
+                    onClick={() => toggleValidationCommentStatus(productId, comment.id)}
+                  >
+                    {comment.status === 'Abierto' ? 'Resolver' : 'Reabrir'}
+                  </button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderValidationChecklistPanel(
+    productId: string,
+    product: Pick<CourseProductMutationInput, 'stage' | 'validationData' | 'writingData'>,
+    isEditable: boolean,
+  ) {
+    const validationData = getValidationData(product);
+    const checklistItems = getValidationChecklist(product);
+    const checklistOptions: ProductValidationChecklistItem['status'][] = [
+      'Cumple',
+      'Parcial',
+      'No cumple',
+      'No aplica',
+    ];
+    const checklistCompleted = checklistItems.filter((item) => item.status === 'Cumple').length;
+    const checklistTotal = checklistItems.length;
+    const pendingComments = validationData.comments.filter((item) => item.status === 'Abierto').length;
+
+    return (
+      <div className="validation-rubric">
+        <div className="section-heading section-heading--compact">
+          <div>
+            <span className="eyebrow">Checklist de validación</span>
+            <h3>Criterios de calidad y decisión de etapa</h3>
+          </div>
+          <div className="action-row">
+            <span className="badge badge--sage">
+              {checklistCompleted}/{checklistTotal} cumplidos
+            </span>
+            <span className="badge badge--gold">{pendingComments} comentarios abiertos</span>
+          </div>
+        </div>
+        <p className="section-lead validation-rubric__lead">
+          La checklist se basa en los criterios de calidad definidos en Arquitectura para este producto.
+        </p>
+
+        <div className="validation-rubric__stack">
+          <div className="validation-workbench__block">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">Checklist</span>
+                <h3>Criterios de aprobación</h3>
+              </div>
+              <ClipboardList size={18} />
+            </div>
+
+            <div className="validation-rubric-table" role="table" aria-label="Checklist de validación">
+              <div className="validation-rubric-table__head" role="row">
+                <span role="columnheader">Criterio</span>
+                <span role="columnheader">Estado</span>
+                <span role="columnheader">Observaciones</span>
+              </div>
+
+              <div className="validation-rubric-table__body">
+                {checklistItems.map((item) => (
+                  <div key={item.id} className="validation-rubric-table__row" role="row">
+                    <div className="validation-rubric-table__cell validation-rubric-table__criterion" role="cell">
+                      <strong>{item.label}</strong>
+                    </div>
+                    <div className="validation-rubric-table__cell validation-rubric-table__status" role="cell">
+                      <div className="field__control field__control--inline">
+                        <select
+                          value={item.status}
+                          disabled={!isEditable}
+                          onChange={(event) =>
+                            updateValidationChecklistItem(
+                              productId,
+                              item.id,
+                              { status: event.target.value as ProductValidationChecklistItem['status'] },
+                            )
+                          }
+                        >
+                          {checklistOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="validation-rubric-table__cell" role="cell">
+                      <div className="field__control">
+                        <textarea
+                          className="modern-textarea validation-checklist-item__notes"
+                          value={item.notes ?? ''}
+                          disabled={!isEditable}
+                          onChange={(event) =>
+                            updateValidationChecklistItem(productId, item.id, {
+                              notes: event.target.value,
+                            })
+                          }
+                          placeholder="Observación breve sobre este criterio"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="validation-workbench__block">
+            <div className="section-heading section-heading--compact">
+              <div>
+                <span className="eyebrow">Comentarios para el experto</span>
+                <h3>Retroalimentación global</h3>
+              </div>
+              <MessageSquareText size={18} />
+            </div>
+
+            <textarea
+              className="modern-textarea validation-notes"
+              value={validationData.reviewerNotes}
+              disabled={!isEditable}
+              onChange={(event) => updateValidationReviewerNotes(productId, event.target.value)}
+              placeholder="Resume aquí la retroalimentación general para el experto."
+              rows={4}
+            />
+
+            <label className="field field--full mt-4">
+              <span>¿El producto está listo para producción?</span>
+              <div className="field__control">
+                <select
+                  value={validationData.readyForProduction ? 'yes' : 'no'}
+                  disabled={!isEditable}
+                  onChange={(event) =>
+                    updateValidationReadyForProduction(productId, event.target.value === 'yes')
+                  }
+                >
+                  <option value="no">Aún no</option>
+                  <option value="yes">Sí</option>
+                </select>
+              </div>
+            </label>
+          </div>
+
+          {isEditable ? (
+            <div className="action-row">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isProductSaving === productId}
+                onClick={() => void handleSaveValidationReview(productId)}
+              >
+                <Save size={16} />
+                <span>{isProductSaving === productId ? 'Guardando…' : 'Guardar'}</span>
+              </button>
+              <button
+                type="button"
+                className="cta-button"
+                disabled={isProductSaving === productId}
+                onClick={() => void handleValidateValidationProduct(productId)}
+              >
+                <CheckCircle2 size={16} />
+                <span>{isProductSaving === productId ? 'Validando…' : 'Validar producto'}</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderValidationStageBoard() {
+    const validationProducts = currentCourse.products
+      .filter((product) => product.stage === 'validacion')
+      .slice()
+      .sort((left, right) => {
+        if (left.status === right.status) {
+          return left.title.localeCompare(right.title, 'es');
+        }
+
+        const statusPriority: Record<CourseProductStatus, number> = {
+          Borrador: 0,
+          'En revisión': 1,
+          Aprobado: 2,
+        };
+
+        return statusPriority[right.status] - statusPriority[left.status];
+      });
+    const readyToReviewCount = validationProducts.filter((product) => product.status !== 'Borrador').length;
+    const approvedCount = validationProducts.filter((product) => product.status === 'Aprobado').length;
+    const checklistCompleted = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).completed,
+      0,
+    );
+    const checklistTotal = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).total,
+      0,
+    );
+    const openComments = validationProducts.reduce(
+      (sum, product) => sum + getValidationMetrics(product).openComments,
+      0,
+    );
+
+    return (
+      <section className="page-stack validation-board">
+        <article className="surface section-card">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Validación instruccional</span>
+              <h3>Bandeja de productos listos para revisar</h3>
+            </div>
+            <div className="action-row">
+              <span className="badge badge--outline">{readyToReviewCount} listos para revisar</span>
+              <span className="badge badge--sage">{approvedCount} aprobados</span>
+            </div>
+          </div>
+          <p className="section-lead">
+            Abre cada producto para validar criterios, comentar fragmentos concretos y ajustar la
+            versión editorial sin salir del expediente del curso.
+          </p>
+
+          <div className="module-grid module-grid--summary validation-board__summary">
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{validationProducts.length}</strong>
+                <span>productos</span>
+              </div>
+              <p>Productos disponibles para la revisión instruccional por curso.</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{checklistTotal > 0 ? Math.round((checklistCompleted / checklistTotal) * 100) : 0}%</strong>
+                <span>cobertura</span>
+              </div>
+              <p>Avance acumulado de los criterios marcados como cumplidos.</p>
+            </div>
+            <div className="module-card">
+              <div className="module-card__top">
+                <strong>{openComments}</strong>
+                <span>comentarios abiertos</span>
+              </div>
+              <p>Observaciones ancladas a fragmentos específicos del contenido.</p>
+            </div>
+          </div>
+        </article>
+
+        <article className="surface section-card">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <span className="eyebrow">Productos</span>
+              <h3>Selecciona un producto para abrir su checklist</h3>
+            </div>
+          </div>
+
+          {validationProducts.length === 0 ? (
+            <div className="empty-state">
+              <strong>No hay productos registrados para validación</strong>
+              <p>Cuando existan productos en esta etapa aparecerán aquí listos para revisar.</p>
+            </div>
+          ) : (
+            <div className="validation-board__grid">
+              {validationProducts.map((product) => {
+                const metrics = getValidationMetrics(product);
+                const tone = getValidationWorkflowTone(product);
+
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className={`validation-product-card ${workflowToneClass(tone)}`}
+                    onClick={() => goToValidationProduct(product.id)}
+                  >
+                    <div className="validation-product-card__copy">
+                      <div className="validation-product-card__head">
+                        <span className="badge badge--outline">{product.format}</span>
+                        <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                        <span className={workflowToneBadgeClass(tone)}>{workflowToneLabel(tone)}</span>
+                      </div>
+                      <h4>{product.title}</h4>
+                      <p>{stripHtmlToText(product.summary) || 'Sin descripción registrada.'}</p>
+
+                      <div className="validation-product-card__meta">
+                        <span>{product.owner}</span>
+                        <span>{product.version}</span>
+                        <span>{metrics.openComments} comentarios</span>
+                      </div>
+                    </div>
+
+                    <div className="validation-product-card__ring">
+                      <ProgressRing
+                        value={metrics.progress}
+                        label="Checklist"
+                        detail={`${metrics.completed}/${metrics.total} criterios`}
+                      />
+                    </div>
+
+                    <div className="validation-product-card__cta">
+                      <span>Revisar producto</span>
+                      <MoveRight size={16} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </article>
+      </section>
+    );
+  }
+
+  function renderValidationProductWorkspace() {
+    if (!validationProductId || !selectedValidationProduct) {
+      if (activeSection === 'validacion' && validationProductId && isLoading) {
+        return (
+          <section className="page-stack">
+            <article className="surface section-card">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Validación instruccional</span>
+                  <h3>Preparando producto</h3>
+                </div>
+              </div>
+              <p className="section-lead">
+                Estamos cargando el expediente del producto solicitado para abrir su checklist y su
+                espacio de revisión.
+              </p>
+            </article>
+          </section>
+        );
+      }
+
+      return (
+        <section className="page-stack">
+          <article className="surface empty-state">
+            <strong>No fue posible abrir este producto</strong>
+            <p>
+              El producto solicitado ya no existe, no pertenece a este curso o no está disponible
+              para validación.
+            </p>
+            <button type="button" className="cta-button" onClick={closeValidationProductWorkspace}>
+              <span>Volver a la bandeja</span>
+              <MoveRight size={16} />
+            </button>
+          </article>
+        </section>
+      );
+    }
+
+    const draft = productDrafts[selectedValidationProduct.id];
+    const activeValidationProduct = {
+      ...selectedValidationProduct,
+      writingData: draft?.writingData ?? selectedValidationProduct.writingData,
+      validationData:
+        draft?.validationData ?? selectedValidationProduct.validationData ?? buildDefaultValidationData('validacion'),
+    };
+    const validationWritingSections = getWritingSectionsForProduct(activeValidationProduct);
+    const metrics = getValidationMetrics(activeValidationProduct);
+    const currentValidationProductId = selectedValidationProduct.id;
+    const validationTone = getValidationWorkflowTone(activeValidationProduct);
+
+    if (!draft) {
+      return (
+        <section className="page-stack">
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Validación instruccional</span>
+                <h3>Preparando edición</h3>
+              </div>
+            </div>
+            <p className="section-lead">
+              Estamos sincronizando el editor con la versión actual del producto.
+            </p>
+          </article>
+        </section>
+      );
+    }
+
+    return (
+      <>
+        <section className="page-stack validation-product-shell validation-product-shell--split">
+          <article className="surface section-card validation-product-shell__hero">
+            <div className="validation-product-shell__hero-copy">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Validación instruccional</span>
+                  <h3>{selectedValidationProduct.title}</h3>
+                </div>
+              </div>
+              <p className="section-lead">
+                Espacio de lectura del producto y validación de la rúbrica. La edición y el detalle
+                se abren en paneles dedicados para no mezclar revisión con lectura.
+              </p>
+            </div>
+
+            <div className="validation-product-shell__actions">
+              <Link to={buildValidationWorkspacePath(currentCourse.slug, null)} className="ghost-button">
+                <span>Volver a la bandeja</span>
+              </Link>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={
+                  !canEditSelectedValidationProduct ||
+                  isValidationReturnSaving === currentValidationProductId ||
+                  isProductExporting === 'validation:docx' ||
+                  isProductExporting === 'validation:pdf'
+                }
+                onClick={() => void handleReturnValidationProductToWriting()}
+              >
+                <RefreshCcw size={16} />
+                <span>
+                  {isValidationReturnSaving === currentValidationProductId
+                    ? 'Devolviendo…'
+                    : 'Devolver a escritura'}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setIsValidationDetailModalOpen(true)}
+              >
+                <FileText size={16} />
+                <span>Ver detalle</span>
+              </button>
+              <button
+                type="button"
+                className="cta-button"
+                disabled={!canEditSelectedValidationProduct}
+                onClick={() => {
+                  setValidationContentSectionTab(validationWritingSections[0]?.id ?? null);
+                  setIsValidationEditModalOpen(true);
+                }}
+              >
+                <PencilLine size={16} />
+                <span>Editar</span>
+              </button>
+            </div>
+          </article>
+
+          <div className="validation-product-shell__split">
+            <article className="surface section-card validation-product-shell__viewer">
+              <div className="section-heading section-heading--compact">
+                <div>
+                  <span className="eyebrow">Producto</span>
+                  <h3>Vista exclusiva del contenido</h3>
+                </div>
+                <div className="action-row">
+                  <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                    {selectedValidationProduct.status}
+                  </span>
+                  <span className="badge badge--outline">{selectedValidationProduct.format}</span>
+                  <span className="badge badge--outline">{selectedValidationProduct.version}</span>
+                </div>
+              </div>
+
+              <div className="validation-product-head__meta">
+                <span className={workflowToneBadgeClass(validationTone)}>
+                  {workflowToneLabel(validationTone)}
+                </span>
+                <span>
+                  {metrics.completed}/{metrics.total} criterios
+                </span>
+                <span>{metrics.openComments} comentarios abiertos</span>
+              </div>
+
+              <div
+                ref={(node) => {
+                  validationFragmentRefs.current[currentValidationProductId] = node;
+                }}
+                className="validation-preview validation-preview--viewer"
+                onMouseUp={() => captureValidationFragment(currentValidationProductId)}
+              >
+                <div className="validation-preview__pane">
+                  <span className="eyebrow">Contenido</span>
+                  {renderRichTextContent(
+                    getWritingContentHtmlForProduct(activeValidationProduct),
+                    'Sin contenido registrado.',
+                    'rich-html--panel',
+                  )}
+                </div>
+              </div>
+
+              <div className="validation-product-shell__downloads">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isProductExporting === 'validation:docx' || isProductExporting === 'validation:pdf'}
+                  onClick={() => void handleExportProduct('docx', 'validation')}
+                >
+                  <Download size={16} />
+                  <span>{isProductExporting === 'validation:docx' ? 'Descargando…' : 'DOCX'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isProductExporting === 'validation:docx' || isProductExporting === 'validation:pdf'}
+                  onClick={() => void handleExportProduct('pdf', 'validation')}
+                >
+                  <Download size={16} />
+                  <span>{isProductExporting === 'validation:pdf' ? 'Descargando…' : 'PDF'}</span>
+                </button>
+              </div>
+            </article>
+
+            <article className="surface section-card validation-product-shell__rubric">
+              {renderValidationCommentsPanel(
+                currentValidationProductId,
+                activeValidationProduct,
+                canEditSelectedValidationProduct,
+              )}
+            </article>
+          </div>
+
+          <article className="surface section-card validation-product-shell__checklist">
+            {renderValidationChecklistPanel(
+              currentValidationProductId,
+              activeValidationProduct,
+              canEditSelectedValidationProduct,
+            )}
+          </article>
+        </section>
+
+        {isValidationDetailModalOpen ? (
+          <ModalFrame
+            title={`Detalle · ${selectedValidationProduct.title}`}
+            description="Información de producto y alcance editorial para revisión rápida."
+            width="xl"
+            variant="drawer"
+            onClose={() => setIsValidationDetailModalOpen(false)}
+          >
+            <div className="page-stack validation-detail-modal">
+              <div className="validation-detail-modal__summary">
+                <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                  {selectedValidationProduct.status}
+                </span>
+                <span className="badge badge--outline">{selectedValidationProduct.format}</span>
+                <span className="badge badge--outline">{selectedValidationProduct.version}</span>
+                <span className={workflowToneBadgeClass(validationTone)}>
+                  {workflowToneLabel(validationTone)}
+                </span>
+              </div>
+
+              <div className="module-grid module-grid--summary">
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{metrics.completed}/{metrics.total}</strong>
+                    <span>criterios</span>
+                  </div>
+                  <p>{metrics.openComments} comentarios abiertos vinculados al producto.</p>
+                </div>
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{selectedValidationProduct.owner}</strong>
+                    <span>responsable</span>
+                  </div>
+                  <p>Asignado para la validación instruccional del curso.</p>
+                </div>
+              </div>
+
+              <article className="surface-muted validation-detail-modal__block">
+                <span className="eyebrow">Descripción</span>
+                {renderRichTextContent(
+                  selectedValidationProduct.summary,
+                  'Sin descripción registrada.',
+                  'rich-html--compact',
+                )}
+              </article>
+
+              <article className="surface-muted validation-detail-modal__block">
+                <span className="eyebrow">Instrucciones</span>
+                {renderInstructionContent(
+                  activeValidationProduct.body,
+                  'Sin instrucciones registradas.',
+                  'rich-html--panel',
+                )}
+              </article>
+            </div>
+          </ModalFrame>
+        ) : null}
+
+        {isValidationEditModalOpen ? (
+          <ModalFrame
+            title={`Editar contenido · ${selectedValidationProduct.title}`}
+            description="Ajusta el contenido del producto por secciones. Las instrucciones permanecen fijas."
+            width="xl"
+            variant="drawer"
+            onClose={() => setIsValidationEditModalOpen(false)}
+            footer={
+              <div className="flex justify-end gap-3 w-full">
+                <button
+                  type="button"
+                  className="filter-chip"
+                  onClick={() => setIsValidationEditModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={!canEditSelectedValidationProduct || isProductSaving === currentValidationProductId}
+                  onClick={async () => {
+                    const saved = await handleValidationContentSave(currentValidationProductId);
+                    if (saved) {
+                      setIsValidationEditModalOpen(false);
+                    }
+                  }}
+                >
+                  <Save size={16} />
+                  <span>
+                    {isProductSaving === currentValidationProductId ? 'Guardando…' : 'Guardar contenido'}
+                  </span>
+                </button>
+              </div>
+            }
+          >
+            <div className="page-stack validation-edit-modal">
+              <div className="validation-edit-modal__head">
+                <span className="badge badge--outline">{selectedValidationProduct.stage}</span>
+                <span className={productStatusBadgeClass(selectedValidationProduct.status)}>
+                  {selectedValidationProduct.status}
+                </span>
+                <span className="badge badge--outline">{selectedValidationProduct.format}</span>
+              </div>
+
+              <div className="validation-content-editor">
+                <div className="section-heading section-heading--compact">
+                  <div>
+                    <span className="eyebrow">Contenido del producto</span>
+                    <h4>Edita el contenido por secciones</h4>
+                  </div>
+                  <span className="badge badge--outline">
+                    {validationWritingSections.filter((section) => section.content.trim()).length}/
+                    {validationWritingSections.length} secciones con contenido
+                  </span>
+                </div>
+
+                <div className="writing-section-tabs" role="tablist" aria-label="Secciones del contenido">
+                  {validationWritingSections.map((section, index) => {
+                    const isActive = section.id === (validationContentSectionTab ?? validationWritingSections[0]?.id);
+                    const isFilled = stripHtmlToText(section.content).trim().length > 0;
+
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`writing-section-tab ${isActive ? 'is-active' : ''}`}
+                        onClick={() => setValidationContentSectionTab(section.id)}
+                      >
+                        <span className="writing-section-tab__index">Sección {index + 1}</span>
+                        <strong>{section.title}</strong>
+                        <small>{isFilled ? 'Con contenido' : 'Pendiente'}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(() => {
+                  const activeSection =
+                    validationWritingSections.find((section) => section.id === validationContentSectionTab) ??
+                    validationWritingSections[0];
+
+                  if (!activeSection) {
+                    return (
+                      <div className="surface-muted validation-detail-modal__block">
+                        <p>Este producto aún no tiene secciones listas para editar.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <article className="writing-structured-card writing-structured-card--active-tab">
+                      <div className="writing-structured-card__head">
+                        <div>
+                          <span className="eyebrow">Sección activa</span>
+                          <h4>{activeSection.title}</h4>
+                        </div>
+                      </div>
+                      <RichTextEditor
+                        value={activeSection.content}
+                        onChange={(value) =>
+                          updateValidationContentSection(
+                            currentValidationProductId,
+                            activeSection.id,
+                            'content',
+                            value,
+                          )
+                        }
+                        placeholder={`Desarrolla aquí la sección "${activeSection.title}".`}
+                        minHeight={280}
+                        disabled={!canEditSelectedValidationProduct}
+                      />
+                    </article>
+                  );
+                })()}
+              </div>
+            </div>
+          </ModalFrame>
+        ) : null}
+      </>
+    );
   }
 
   function renderProductSupportPanel(
@@ -3864,10 +6120,21 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       setIsEditingCourse(false);
+      void showAlert({
+        title: 'Curso guardado',
+        message: 'Los cambios del curso quedaron actualizados correctamente.',
+        tone: 'success',
+      });
     } catch (error) {
       // Rollback
       mutateAppData(originalAppData);
-      setCourseError(error instanceof Error ? error.message : 'No fue posible actualizar el curso.');
+      const message = error instanceof Error ? error.message : 'No fue posible actualizar el curso.';
+      setCourseError(message);
+      void showAlert({
+        title: 'Error al guardar curso',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsCourseSaving(false);
     }
@@ -3914,12 +6181,22 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Ficha operativa guardada',
+        message: 'La información base del curso quedó sincronizada.',
+        tone: 'success',
+      });
     } catch (error) {
       // Rollback
       mutateAppData(originalAppData);
-      setMetadataError(
-        error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible actualizar la ficha operativa.';
+      setMetadataError(message);
+      void showAlert({
+        title: 'Error al guardar ficha',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsMetadataSaving(false);
     }
@@ -3983,8 +6260,19 @@ export function CourseWorkspacePage({
       refreshAppData();
       setNewTaskForm(makeTaskForm(currentCourse.slug, currentCourse.stageId));
       closeModal();
+      void showAlert({
+        title: 'Tarea creada',
+        message: 'La tarea quedó disponible en el tablero del curso.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : 'No fue posible crear la tarea.');
+      const message = error instanceof Error ? error.message : 'No fue posible crear la tarea.';
+      setTaskError(message);
+      void showAlert({
+        title: 'Error al crear tarea',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTaskSaving(false);
     }
@@ -4014,11 +6302,22 @@ export function CourseWorkspacePage({
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setTaskError(payload.error ?? 'No fue posible guardar la tarea.');
+      const message = payload.error ?? 'No fue posible guardar la tarea.';
+      setTaskError(message);
+      void showAlert({
+        title: 'Error al guardar tarea',
+        message,
+        tone: 'error',
+      });
       return;
     }
 
     refreshAppData();
+    void showAlert({
+      title: 'Tarea guardada',
+      message: 'Los cambios de la tarea quedaron actualizados correctamente.',
+      tone: 'success',
+    });
   }
 
   async function handleTaskDelete(taskId: string) {
@@ -4098,10 +6397,19 @@ export function CourseWorkspacePage({
       refreshAppData();
       setNewTeamMemberForm(makeTeamMemberForm());
       setIsTeamComposerOpen(false);
+      void showAlert({
+        title: 'Responsable agregado',
+        message: 'El integrante quedó disponible en el equipo del curso.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTeamError(
-        error instanceof Error ? error.message : 'No fue posible agregar el responsable.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible agregar el responsable.';
+      setTeamError(message);
+      void showAlert({
+        title: 'Error al agregar responsable',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTeamSaving(null);
     }
@@ -4138,10 +6446,19 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Responsable guardado',
+        message: 'Los cambios del responsable quedaron actualizados correctamente.',
+        tone: 'success',
+      });
     } catch (error) {
-      setTeamError(
-        error instanceof Error ? error.message : 'No fue posible guardar el responsable.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible guardar el responsable.';
+      setTeamError(message);
+      void showAlert({
+        title: 'Error al guardar responsable',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsTeamSaving(null);
     }
@@ -4501,22 +6818,88 @@ export function CourseWorkspacePage({
       title: product.title,
       summary: product.summary,
       format: product.format,
-      stage: 'arquitectura',
+      stage: product.stage,
       owner: product.owner,
       status: product.status,
-      body: product.body,
+      body: getFixedProductInstructionsHtml(product),
       tags: product.tags,
       version: product.version,
       section: product.section ?? 'Introducción',
       phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
+      validationData: product.validationData ?? buildDefaultValidationData(product.stage),
     });
     setIsAddProductModalOpen(true);
+  }
+
+  async function handleGenerateArchitectureCriteria() {
+    if (!currentCourse || !newProductForm.title) {
+      return;
+    }
+
+    const saveKey = editingArchitectureProductId ?? 'new';
+    setProductError(null);
+    setCriteriaGeneratorProductId(saveKey);
+
+    try {
+      const response = await fetch('/api/generate-quality-criteria', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          title: newProductForm.title,
+          format: newProductForm.format,
+          section: newProductForm.section ?? activeAddSection,
+          summary: newProductForm.summary,
+          body: newProductForm.body,
+          stage: newProductForm.stage,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { criteria?: string[]; error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible generar los criterios de calidad.');
+      }
+
+      const criteria = normalizeCriteriaList(payload?.criteria ?? [], newProductForm.stage);
+      setNewProductForm((current) => ({
+        ...current,
+        validationData: {
+          ...(current.validationData ?? buildDefaultValidationData(current.stage)),
+          criteria,
+          checklist: buildValidationChecklistFromCriteria(criteria),
+        },
+      }));
+
+      void showAlert({
+        title: 'Criterios generados',
+        message: 'La IA propuso criterios de calidad listos para ajustar manualmente si lo necesitas.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible generar los criterios de calidad.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al generar criterios',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setCriteriaGeneratorProductId(null);
+    }
   }
 
   async function handleSubmitArchitectureProduct() {
      if (!currentCourse || !newProductForm.title) return;
 
      const saveKey = editingArchitectureProductId ?? 'new';
+     setProductError(null);
      setIsProductSaving(saveKey);
      try {
        const response = await fetch('/api/course-products', {
@@ -4545,6 +6928,13 @@ export function CourseWorkspacePage({
        setEditingArchitectureProductId(null);
        setArchitectureEditorMode('create');
        refreshAppData();
+       void showAlert({
+         title: editingArchitectureProductId ? 'Producto actualizado' : 'Producto creado',
+         message: editingArchitectureProductId
+           ? 'El producto quedó actualizado en la arquitectura del curso.'
+           : 'El nuevo producto quedó disponible en la arquitectura del curso.',
+         tone: 'success',
+       });
      } catch (error) {
        const message =
          error instanceof Error
@@ -4553,51 +6943,414 @@ export function CourseWorkspacePage({
              ? 'Error al actualizar producto'
              : 'Error al crear producto';
        setProductError(message);
+       void showAlert({
+         title: editingArchitectureProductId ? 'Error al actualizar' : 'Error al crear',
+         message,
+         tone: 'error',
+       });
      } finally {
+       setCriteriaGeneratorProductId(null);
        setIsProductSaving(null);
      }
   }
 
-  async function handleProductSave(productId: string) {
+  async function handleProductSave(productId: string): Promise<boolean> {
     const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
 
     if (!draft) {
-      return;
+      return false;
     }
 
     setProductError(null);
     setIsProductSaving(productId);
 
     try {
-      const response = await fetch('/api/course-products', {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
+      const currentWritingData: ProductWritingData = {
+        mode: persistedProduct?.writingData?.mode ?? draft.writingData?.mode ?? 'manual',
+        submittedAsset: persistedProduct?.writingData?.submittedAsset ?? draft.writingData?.submittedAsset ?? null,
+        supportAssets: persistedProduct?.writingData?.supportAssets ?? draft.writingData?.supportAssets ?? [],
+        libraryResourceIds:
+          persistedProduct?.writingData?.libraryResourceIds ?? draft.writingData?.libraryResourceIds ?? [],
+        aiPrompt: persistedProduct?.writingData?.aiPrompt ?? draft.writingData?.aiPrompt ?? '',
+        extractedText: persistedProduct?.writingData?.extractedText ?? draft.writingData?.extractedText ?? '',
+        draftText: persistedProduct?.writingData?.draftText ?? draft.writingData?.draftText ?? '',
+        sections: persistedProduct ? getWritingSectionsForProduct(persistedProduct) : draft.writingData?.sections ?? [],
+        lastSavedAt: persistedProduct?.writingData?.lastSavedAt ?? draft.writingData?.lastSavedAt,
+        lastGeneratedAt:
+          persistedProduct?.writingData?.lastGeneratedAt ?? draft.writingData?.lastGeneratedAt,
+      };
+      const syncedWritingSections = syncWritingSectionsFromInstructions(
+        currentWritingData.sections,
+        draft.body,
+        draft.format,
+      );
+      const updatedProduct = await patchCourseProductOnServer(productId, {
+        ...draft,
+        summary: sanitizeRichHtml(draft.summary),
+        body: sanitizeRichHtml(draft.body),
+        writingData: {
+          ...currentWritingData,
+          sections: syncedWritingSections,
+          draftText: createWritingDraftTextFromSections(syncedWritingSections),
+          lastSavedAt: new Date().toISOString(),
         },
-        body: JSON.stringify({
-          courseSlug: currentCourse.slug,
-          id: productId,
-          ...draft,
-          summary: sanitizeRichHtml(draft.summary),
-          body: sanitizeRichHtml(draft.body),
-          tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
-        }),
+        tags: draft.tags.map((tag) => tag.trim()).filter(Boolean),
       });
 
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'No fue posible guardar el producto.');
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
       }
 
-      refreshAppData();
+      void showAlert({
+        title: 'Producto guardado',
+        message: 'Los cambios se guardaron correctamente y quedaron disponibles en el expediente del curso.',
+        tone: 'success',
+      });
+      return true;
     } catch (error) {
-      setProductError(
-        error instanceof Error ? error.message : 'No fue posible guardar el producto.',
-      );
+      const message = error instanceof Error ? error.message : 'No fue posible guardar el producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar',
+        message,
+        tone: 'error',
+      });
+      return false;
     } finally {
       setIsProductSaving(null);
+    }
+  }
+
+  async function handleValidationContentSave(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+
+    if (!draft) {
+      return false;
+    }
+
+    const nextWritingData = draft.writingData ?? persistedProduct?.writingData;
+
+    if (!nextWritingData) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          writingData: {
+            ...nextWritingData,
+            lastSavedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar el contenido del producto.',
+        },
+      );
+
+      if (updatedProduct) {
+        setProductDrafts((current) =>
+          current[productId]
+            ? {
+                ...current,
+                [productId]: {
+                  ...current[productId],
+                  writingData: normalizeWritingDraft(updatedProduct),
+                } as CourseProductMutationInput,
+              }
+            : current,
+        );
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      void showAlert({
+        title: 'Contenido guardado',
+        message: 'El contenido quedó actualizado para la validación instruccional.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar el contenido del producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar contenido',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleSaveValidationReview(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+
+    if (!draft) {
+      return false;
+    }
+
+    const validationData = draft.validationData ?? persistedProduct?.validationData;
+
+    if (!validationData) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          validationData: {
+            ...validationData,
+            lastReviewedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar la validación del producto.',
+        },
+      );
+
+      if (updatedProduct) {
+        setProductDrafts((current) =>
+          current[productId]
+            ? {
+                ...current,
+                [productId]: {
+                  ...current[productId],
+                  validationData: updatedProduct.validationData,
+                },
+              }
+            : current,
+        );
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      void showAlert({
+        title: 'Validación guardada',
+        message: 'La checklist y los comentarios del revisor quedaron guardados.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la validación del producto.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al guardar validación',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleValidateValidationProduct(productId: string): Promise<boolean> {
+    const draft = productDrafts[productId];
+    const persistedProduct = currentCourse.products.find((product) => product.id === productId);
+    const validationData = getValidationData(draft ?? persistedProduct ?? { stage: 'validacion' });
+
+    if (!validationData.readyForProduction) {
+      void showAlert({
+        title: 'Producto aún no listo para producción',
+        message: 'Marca "Sí" en "¿El producto está listo para producción?" para continuar.',
+        tone: 'warning',
+      });
+      return false;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Validar producto',
+      message:
+        'El producto avanzará a Producción multimedia y saldrá de la bandeja de Validación instruccional.',
+      tone: 'success',
+      confirmLabel: 'Validar y avanzar',
+      cancelLabel: 'Seguir revisando',
+    });
+
+    if (!confirmed) {
+      return false;
+    }
+
+    setProductError(null);
+    setIsProductSaving(productId);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        productId,
+        {
+          stage: 'multimedia',
+          owner: 'Diseñador multimedia',
+          status: 'En revisión',
+          validationData: {
+            ...validationData,
+            lastReviewedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible validar el producto para producción.',
+        },
+      );
+
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      navigate(buildCourseSectionPath(currentCourse.slug, 'multimedia'));
+      void showAlert({
+        title: 'Producto validado',
+        message: 'El producto pasó correctamente a Producción multimedia.',
+        tone: 'success',
+      });
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible validar el producto para producción.';
+      setProductError(message);
+      void showAlert({
+        title: 'Error al validar producto',
+        message,
+        tone: 'error',
+      });
+      return false;
+    } finally {
+      setIsProductSaving(null);
+    }
+  }
+
+  async function handleReturnValidationProductToWriting() {
+    if (!selectedValidationProduct || !canEditSelectedValidationProduct) {
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Devolver a escritura',
+      message:
+        'El producto volverá a la bandeja de Escritura para ajustes y quedará nuevamente editable por el experto.',
+      tone: 'warning',
+      confirmLabel: 'Devolver a escritura',
+      cancelLabel: 'Mantener en validación',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setProductError(null);
+    setIsValidationReturnSaving(selectedValidationProduct.id);
+
+    try {
+      const updatedProduct = await patchCourseProductOnServer(
+        selectedValidationProduct.id,
+        {
+          stage: 'escritura',
+          owner: 'Experto',
+          status: 'En revisión',
+        },
+        {
+          fallbackError: 'No fue posible devolver el producto a escritura.',
+        },
+      );
+
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      setIsValidationDetailModalOpen(false);
+      setIsValidationEditModalOpen(false);
+      goToWritingProduct(selectedValidationProduct.id, true);
+
+      void showAlert({
+        title: 'Producto devuelto a escritura',
+        message: 'El experto ya puede retomar el producto desde la bandeja de Escritura.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'No fue posible devolver el producto a escritura.';
+      void showAlert({
+        title: 'Error al devolver',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setIsValidationReturnSaving(null);
     }
   }
 
@@ -4647,7 +7400,7 @@ export function CourseWorkspacePage({
   }
 
   async function handleClearArchitecture() {
-    const architectureProducts = currentCourse.products.filter(
+    const architectureProducts = (currentCourse.products ?? []).filter(
       (product) => product.stage === 'arquitectura',
     );
 
@@ -4782,10 +7535,20 @@ export function CourseWorkspacePage({
 
       refreshAppData();
       closePlanningProductModal();
+      void showAlert({
+        title: 'Planeación guardada',
+        message: 'Las fechas y responsables del producto quedaron actualizados.',
+        tone: 'success',
+      });
     } catch (error) {
-      setPlanningError(
-        error instanceof Error ? error.message : 'No fue posible guardar la planeación del producto.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la planeación del producto.';
+      setPlanningError(message);
+      void showAlert({
+        title: 'Error al guardar planeación',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsPlanningSaving(false);
     }
@@ -4800,6 +7563,27 @@ export function CourseWorkspacePage({
     setWritingError(null);
     setIsWritingInstructionsPanelOpen(false);
     setActiveWritingSectionTab(null);
+  }
+
+  function closeValidationProductWorkspace() {
+    setIsValidationDetailModalOpen(false);
+    setIsValidationEditModalOpen(false);
+    setValidationContentSectionTab(null);
+    const nextPath = buildValidationWorkspacePath(currentCourse.slug, null);
+    navigate(nextPath, { replace: true });
+  }
+
+  function goToValidationProduct(productId: string) {
+    setIsValidationDetailModalOpen(false);
+    setIsValidationEditModalOpen(false);
+    setValidationContentSectionTab(null);
+    navigate(buildValidationWorkspacePath(currentCourse.slug, productId));
+  }
+
+  function goToWritingProduct(productId: string, replace = false) {
+    navigate(`${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(productId)}`, {
+      replace,
+    });
   }
 
   function navigateWritingModeRoute(mode: WritingWorkspaceRoute | null) {
@@ -4995,7 +7779,7 @@ export function CourseWorkspacePage({
       timeoutMs?: number;
       fallbackError?: string;
     },
-  ) {
+  ): Promise<ProductWritingData | null> {
     if (!selectedWritingProduct) {
       throw new Error('Producto de escritura no seleccionado.');
     }
@@ -5039,6 +7823,65 @@ export function CourseWorkspacePage({
     } finally {
       window.clearTimeout(timeoutId);
     }
+  }
+
+  async function patchCourseProductOnServer(
+    productId: string,
+    patch: Partial<CourseProductMutationInput>,
+    options?: {
+      timeoutMs?: number;
+      fallbackError?: string;
+    },
+  ): Promise<CourseProduct | null> {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      options?.timeoutMs ?? WRITING_SAVE_REQUEST_TIMEOUT_MS,
+    );
+
+    try {
+      const response = await fetch('/api/course-products', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          id: productId,
+          ...patch,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; product?: CourseProduct }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? options?.fallbackError ?? 'No fue posible actualizar el producto.',
+        );
+      }
+
+      return payload?.product ?? null;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  async function patchWritingProductOnServer(
+    patch: Partial<CourseProductMutationInput>,
+    options?: {
+      timeoutMs?: number;
+      fallbackError?: string;
+    },
+  ): Promise<CourseProduct | null> {
+    if (!selectedWritingProduct) {
+      throw new Error('Producto de escritura no seleccionado.');
+    }
+
+    return patchCourseProductOnServer(selectedWritingProduct.id, patch, options);
   }
 
   async function handleGenerateWritingProduct() {
@@ -5165,15 +8008,36 @@ export function CourseWorkspacePage({
     setIsWritingSaving(true);
 
     try {
-      const savedDraft = await saveWritingDraftToServer(writingDraft, {
-        fallbackError: 'No fue posible guardar el producto en escritura.',
-      });
+      const savedProduct = await patchWritingProductOnServer(
+        {
+          writingData: {
+            ...writingDraft,
+            lastSavedAt: new Date().toISOString(),
+          },
+        },
+        {
+          fallbackError: 'No fue posible guardar el producto en escritura.',
+        },
+      );
 
-      if (savedDraft) {
-        setWritingDraft(savedDraft);
+      if (savedProduct) {
+        setWritingDraft(normalizeWritingDraft(savedProduct));
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === savedProduct.id ? savedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
       }
 
-      refreshAppData();
       void showAlert({
         title: 'Producto guardado',
         message: 'La escritura del producto quedó actualizada en el expediente del curso.',
@@ -5184,13 +8048,128 @@ export function CourseWorkspacePage({
         setWritingError(
           'El guardado tardó demasiado. Verifica tu conexión e inténtalo de nuevo.',
         );
+        void showAlert({
+          title: 'Error al guardar',
+          message: 'El guardado tardó demasiado. Verifica tu conexión e inténtalo de nuevo.',
+          tone: 'error',
+        });
         return;
       }
-      setWritingError(
-        error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar el producto en escritura.';
+      setWritingError(message);
+      void showAlert({
+        title: 'Error al guardar',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsWritingSaving(false);
+    }
+  }
+
+  async function handleFinalizeWritingProduct() {
+    if (!selectedWritingProduct || !writingDraft || !canEditSelectedWritingProduct) {
+      return;
+    }
+
+    const filledSections = countFilledWritingSections(writingDraft.sections);
+    const totalSections = writingDraft.sections.length;
+    const pendingSections = Math.max(0, totalSections - filledSections);
+    const confirmed = await showConfirm({
+      title: 'Finalizar producto',
+      message:
+        pendingSections > 0
+          ? `Todavía faltan ${pendingSections} secciones por completar. Si finalizas ahora, el producto pasará a Validación instruccional para revisión del diseñador instruccional.`
+          : 'El producto está listo para pasar a Validación instruccional. Se guardará y se abrirá su checklist de revisión.',
+      tone: pendingSections > 0 ? 'warning' : 'success',
+      confirmLabel: 'Finalizar producto',
+      cancelLabel: 'Seguir editando',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    setWritingError(null);
+    setIsWritingFinalizing(true);
+
+    try {
+      const finalDraft = {
+        ...writingDraft,
+        lastSavedAt: new Date().toISOString(),
+      };
+      const validationCriteria = normalizeCriteriaList(
+        productDrafts[selectedWritingProduct.id]?.validationData?.criteria ??
+          selectedWritingProduct.validationData?.criteria,
+        'validacion',
+      );
+
+      const updatedProduct = await patchWritingProductOnServer(
+        {
+          stage: 'validacion',
+          owner: 'Diseñador instruccional',
+          status: 'En revisión',
+          summary: selectedWritingProduct.summary,
+          writingData: finalDraft,
+          validationData: {
+            ...buildDefaultValidationData('validacion'),
+            criteria: validationCriteria,
+            checklist: buildValidationChecklistFromCriteria(validationCriteria),
+          },
+        },
+        {
+          fallbackError: 'No fue posible enviar el producto a validación.',
+        },
+      );
+
+      if (updatedProduct) {
+        mutateAppData((current) => ({
+          ...current,
+          courses: current.courses.map((course) =>
+            course.slug !== currentCourse.slug
+              ? course
+              : {
+                  ...course,
+                  products: course.products.map((product) =>
+                    product.id === updatedProduct.id ? updatedProduct : product,
+                  ),
+                  updatedAt: new Date().toISOString().slice(0, 10),
+                },
+          ),
+        }));
+      }
+
+      navigate(buildValidationWorkspacePath(currentCourse.slug, selectedWritingProduct.id), {
+        replace: true,
+      });
+      void showAlert({
+        title: 'Producto finalizado',
+        message:
+          'El producto quedó enviado a Validación instruccional para checklist, comentarios y revisión editorial.',
+        tone: 'success',
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setWritingError('La finalización tardó demasiado. Inténtalo de nuevo.');
+        void showAlert({
+          title: 'Error al finalizar',
+          message: 'La finalización tardó demasiado. Inténtalo de nuevo.',
+          tone: 'error',
+        });
+        return;
+      }
+
+      const message =
+        error instanceof Error ? error.message : 'No fue posible enviar el producto a validación.';
+      setWritingError(message);
+      void showAlert({
+        title: 'Error al finalizar',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setIsWritingFinalizing(false);
     }
   }
 
@@ -5617,6 +8596,8 @@ export function CourseWorkspacePage({
 
     const filledSections = countFilledWritingSections(writingDraft.sections);
     const totalSections = writingDraft.sections.length;
+    const pendingSections = Math.max(0, totalSections - filledSections);
+    const isWritingReadyForValidation = totalSections > 0 && pendingSections === 0;
     const totalKnowledgeSources =
       writingDraft.supportAssets.length + writingDraft.libraryResourceIds.length;
     const suggestedWritingPrompt = buildSuggestedWritingPrompt(
@@ -5942,6 +8923,11 @@ export function CourseWorkspacePage({
               <span className="badge badge--outline">{selectedWritingProduct.format}</span>
               <span className={productStatusBadgeClass(selectedWritingProduct.status)}>
                 {selectedWritingProduct.status}
+              </span>
+              <span className={isWritingReadyForValidation ? 'badge badge--sage' : 'badge badge--gold'}>
+                {isWritingReadyForValidation
+                  ? 'Listo para validar'
+                  : `${pendingSections} secciones pendientes`}
               </span>
             </div>
             {renderRichTextContent(
@@ -6306,15 +9292,44 @@ export function CourseWorkspacePage({
               Volver a la bandeja
             </button>
             {canEditSelectedWritingProduct ? (
-              <button
-                type="button"
-                className="cta-button"
-                disabled={isWritingSaving}
-                onClick={() => void handleWritingSave()}
-              >
-                <Save size={16} />
-                <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isProductExporting === 'writing:docx' || isProductExporting === 'writing:pdf'}
+                  onClick={() => void handleExportProduct('docx', 'writing')}
+                >
+                  <Download size={16} />
+                  <span>{isProductExporting === 'writing:docx' ? 'Descargando…' : 'DOCX'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isProductExporting === 'writing:docx' || isProductExporting === 'writing:pdf'}
+                  onClick={() => void handleExportProduct('pdf', 'writing')}
+                >
+                  <Download size={16} />
+                  <span>{isProductExporting === 'writing:pdf' ? 'Descargando…' : 'PDF'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isWritingSaving || isWritingFinalizing}
+                  onClick={() => void handleWritingSave()}
+                >
+                  <Save size={16} />
+                  <span>{isWritingSaving ? 'Guardando…' : 'Guardar escritura'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="cta-button"
+                  disabled={isWritingSaving || isWritingFinalizing}
+                  onClick={() => void handleFinalizeWritingProduct()}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{isWritingFinalizing ? 'Finalizando…' : 'Finalizar producto'}</span>
+                </button>
+              </>
             ) : null}
           </div>
         </article>
@@ -6337,7 +9352,7 @@ export function CourseWorkspacePage({
                 </div>
               </div>
               {renderInstructionContent(
-                selectedWritingProduct.body?.trim() || '',
+                getFixedProductInstructionsHtml(selectedWritingProduct),
                 'Sin instrucciones del producto.',
                 'rich-html--panel rich-html--instruction'
               )}
@@ -6452,7 +9467,11 @@ export function CourseWorkspacePage({
                 const startLabel = writingPhase?.startDate ? formatDate(writingPhase.startDate) : 'Sin fecha inicial';
                 const assigneeLabel = writingPhase?.assigneeName?.trim() || 'Sin responsable';
                 const actionLabel = getWritingActionLabel(product);
-                const editorHref = `${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(product.id)}`;
+                const tone = getWritingWorkflowTone(product);
+                const editorHref =
+                  product.stage === 'validacion'
+                    ? buildValidationWorkspacePath(currentCourse.slug, product.id)
+                    : `${buildWritingWorkspacePath(currentCourse.slug, null)}?product=${encodeURIComponent(product.id)}`;
 
                 return (
                   <a
@@ -6460,7 +9479,7 @@ export function CourseWorkspacePage({
                     href={editorHref}
                     target="_blank"
                     rel="noreferrer"
-                    className="writing-queue__item"
+                    className={`writing-queue__item ${workflowToneClass(tone)}`}
                     onClick={() => stashWritingLaunchSnapshot(product)}
                   >
                     <div className="writing-queue__head">
@@ -6471,6 +9490,7 @@ export function CourseWorkspacePage({
                       <div className="writing-queue__meta">
                         <span className="badge badge--outline">{product.format}</span>
                         <span className={productStatusBadgeClass(product.status)}>{product.status}</span>
+                        <span className={workflowToneBadgeClass(tone)}>{workflowToneLabel(tone)}</span>
                       </div>
                     </div>
 
@@ -6548,10 +9568,20 @@ export function CourseWorkspacePage({
       }
 
       refreshAppData();
+      void showAlert({
+        title: 'Bitácora guardada',
+        message: 'Los ajustes de la etapa quedaron actualizados.',
+        tone: 'success',
+      });
     } catch (error) {
-      setStageNoteError(
-        error instanceof Error ? error.message : 'No fue posible guardar la bitácora de etapa.',
-      );
+      const message =
+        error instanceof Error ? error.message : 'No fue posible guardar la bitácora de etapa.';
+      setStageNoteError(message);
+      void showAlert({
+        title: 'Error al guardar bitácora',
+        message,
+        tone: 'error',
+      });
     } finally {
       setIsStageNoteSaving(null);
     }
@@ -7052,12 +10082,29 @@ export function CourseWorkspacePage({
     title: string,
     description: string,
   ) {
-    const stageProducts = currentCourse.products.filter((product) => product.stage === productStage);
+    const stageProducts = (currentCourse.products ?? []).filter(
+      (product) => product.stage === productStage,
+    );
     const stageFormats = productFormatsForStage(productStage);
     const overlayId = `products:${productStage}`;
     const isOverlayOpen = activeModal === overlayId;
     const isComposerOpen = isOverlayOpen && productComposerStage === productStage;
     const stageApprovedCount = stageProducts.filter((product) => product.status === 'Aprobado').length;
+    const validationChecklistCompleted = stageProducts.reduce(
+      (sum, product) =>
+        sum +
+        (getValidationData(product).checklist.filter((item) => item.status === 'Cumple').length),
+      0,
+    );
+    const validationChecklistTotal = stageProducts.reduce(
+      (sum, product) => sum + getValidationData(product).checklist.length,
+      0,
+    );
+    const validationOpenComments = stageProducts.reduce(
+      (sum, product) =>
+        sum + getValidationData(product).comments.filter((comment) => comment.status === 'Abierto').length,
+      0,
+    );
 
     return (
       <>
@@ -7106,6 +10153,25 @@ export function CourseWorkspacePage({
               </div>
               <p>La validación queda registrada por versión, responsable y estado del contenido.</p>
             </div>
+
+            {productStage === 'validacion' ? (
+              <>
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{validationChecklistCompleted}/{validationChecklistTotal}</strong>
+                    <span>criterios</span>
+                  </div>
+                  <p>Checklist de validación instruccional por producto.</p>
+                </div>
+                <div className="module-card">
+                  <div className="module-card__top">
+                    <strong>{validationOpenComments}</strong>
+                    <span>comentarios</span>
+                  </div>
+                  <p>Observaciones ancladas a fragmentos concretos del producto.</p>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="list-stack">
@@ -7468,14 +10534,22 @@ export function CourseWorkspacePage({
                               <div className="list-item">
                                 <div>
                                   <strong>Instrucciones</strong>
-                                  {renderRichTextContent(
-                                    product.body,
+                                  {renderInstructionContent(
+                                    getFixedProductInstructionsHtml(product),
                                     'Sin instrucciones registradas.',
                                     'rich-html--panel',
                                   )}
                                 </div>
                               </div>
                             </div>
+
+                            {product.stage === 'validacion' ? (
+                              renderValidationWorkbench(
+                                product.id,
+                                product,
+                                false,
+                              )
+                            ) : null}
                           </div>
 
                           <div className="task-editor__sidebar">
@@ -7723,6 +10797,14 @@ export function CourseWorkspacePage({
                                   />
                                 </label>
                               </div>
+
+                              {product.stage === 'validacion' ? (
+                                renderValidationWorkbench(
+                                  product.id,
+                                  draft,
+                                  true,
+                                )
+                              ) : null}
                             </>
                           )}
                         </div>
@@ -7774,10 +10856,10 @@ export function CourseWorkspacePage({
   function renderArchitectureVisualizer() {
     if (!currentCourse) return null;
 
-    const products = (currentCourse.products || []).filter((product) => product.stage === 'arquitectura');
-    const units = currentCourse.metadata.units || [];
+    const products = currentCourse.products ?? [];
+    const units = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
     const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
-    const unitTitleHints = units.map((unit) => unit.tituloUnidad ?? '');
+    const unitTitleHints = units.map((unit) => unit?.tituloUnidad ?? '');
     
     const getResolvedSection = (product: CourseProduct) =>
       resolveArchitectureSectionLabel(
@@ -8044,16 +11126,6 @@ export function CourseWorkspacePage({
               <div className="list-stack">
                 <div className="list-item">
                   <div>
-                    <strong>Descripción</strong>
-                    {renderRichTextContent(
-                      architecturePreviewProduct.summary || '',
-                      'Sin descripción ampliada.',
-                      'rich-html--compact',
-                    )}
-                  </div>
-                </div>
-                <div className="list-item">
-                  <div>
                     <strong>Versión</strong>
                     <p>{architecturePreviewProduct.version}</p>
                   </div>
@@ -8062,9 +11134,25 @@ export function CourseWorkspacePage({
                   <div>
                     <strong>Instrucciones</strong>
                     {renderInstructionContent(
-                      architecturePreviewProduct.body?.trim() || '',
+                      getFixedProductInstructionsHtml(architecturePreviewProduct),
                       'Este producto todavía no tiene instrucciones registradas.',
                       'rich-html--panel',
+                    )}
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Criterios de calidad</strong>
+                    {getValidationData(architecturePreviewProduct).criteria.length > 0 ? (
+                      <ul className="rich-copy rich-copy--structured">
+                        {getValidationData(architecturePreviewProduct).criteria.map((criterion, index) => (
+                          <li key={`${architecturePreviewProduct.id}-criterion-${index}`} className="rich-copy__item">
+                            {criterion}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted">Todavía no hay criterios definidos para esta ficha.</p>
                     )}
                   </div>
                 </div>
@@ -8091,6 +11179,7 @@ export function CourseWorkspacePage({
               setIsAddProductModalOpen(false);
               setEditingArchitectureProductId(null);
               setArchitectureEditorMode('create');
+              setCriteriaGeneratorProductId(null);
             }}
             footer={
               <div className="flex justify-end gap-3 w-full">
@@ -8100,6 +11189,7 @@ export function CourseWorkspacePage({
                     setIsAddProductModalOpen(false);
                     setEditingArchitectureProductId(null);
                     setArchitectureEditorMode('create');
+                    setCriteriaGeneratorProductId(null);
                   }}
                   disabled={isProductSaving === (editingArchitectureProductId ?? 'new')}
                 >
@@ -8214,6 +11304,43 @@ export function CourseWorkspacePage({
                 />
               </div>
 
+              <div className="form-group">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <label className="form-label">Criterios de calidad</label>
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    disabled={criteriaGeneratorProductId === (editingArchitectureProductId ?? 'new')}
+                    onClick={() => void handleGenerateArchitectureCriteria()}
+                  >
+                    <Sparkles size={14} />
+                    <span>
+                      {criteriaGeneratorProductId === (editingArchitectureProductId ?? 'new')
+                        ? 'Generando…'
+                        : 'Generar criterios IA'}
+                    </span>
+                  </button>
+                </div>
+                <textarea
+                  className="modern-textarea"
+                  rows={7}
+                  value={joinLines(newProductForm.validationData?.criteria ?? [])}
+                  onChange={(event) =>
+                    setNewProductForm((current) => ({
+                      ...current,
+                      validationData: {
+                        ...(current.validationData ?? buildDefaultValidationData(current.stage)),
+                        criteria: normalizeCriteriaList(splitCriteriaLines(event.target.value), current.stage),
+                        checklist: buildValidationChecklistFromCriteria(
+                          normalizeCriteriaList(splitCriteriaLines(event.target.value), current.stage),
+                        ),
+                      },
+                    }))
+                  }
+                  placeholder="Ingresa un criterio por línea. Estos criterios alimentarán el checklist de Validación instruccional."
+                />
+              </div>
+
               {productError && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-sm flex items-center gap-3">
                   <AlertCircle size={18} />
@@ -8277,14 +11404,14 @@ export function CourseWorkspacePage({
   }
 
   function renderArchitectureProductCard(product: CourseProduct) {
-    const isDone = product.status === 'Aprobado';
-    const isActive = product.status === 'Borrador' || product.status === 'En revisión';
+    const lifecycleTone = getProductLifecycleTone(product);
     const canEdit = canEditCourseProduct(userRole, product.owner, product.stage);
+    const validationCriteria = getValidationData(product).criteria;
     
     return (
       <div
         key={product.id}
-        className={`architecture-card group animate-in fade-in transition-all duration-300 ${isDone ? 'opacity-70' : ''}`}
+        className={`architecture-card group animate-in fade-in transition-all duration-300 ${workflowToneClass(lifecycleTone)}`}
         onClick={() => setArchitecturePreviewProductId(product.id)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -8304,22 +11431,35 @@ export function CourseWorkspacePage({
               <strong className="architecture-card__title">
                 {product.title}
               </strong>
-              {isDone && <CheckCircle2 size={12} className="text-sage" />}
+              {lifecycleTone === 'success' ? <CheckCircle2 size={12} className="text-sage" /> : null}
             </div>
             <div className="architecture-card__meta">
               <span className="architecture-card__format">
                 {product.format}
               </span>
               <div className="h-1 w-1 rounded-full bg-line" />
-              <span className={`architecture-card__status ${isActive ? 'is-active' : 'is-muted'}`}>
+              <span className={`architecture-card__status ${lifecycleTone === 'warning' ? 'is-active' : 'is-muted'}`}>
                 {product.status}
               </span>
+              <span className={workflowToneBadgeClass(lifecycleTone)}>{workflowToneLabel(lifecycleTone)}</span>
             </div>
             {product.summary && (
               <p className="architecture-card__summary">
                 {stripHtmlToText(product.summary)}
               </p>
             )}
+            {validationCriteria.length > 0 ? (
+              <div className="architecture-card__criteria">
+                <span className="architecture-card__criteria-label">Criterios de calidad</span>
+                <span className="architecture-card__criteria-count">{validationCriteria.length}</span>
+              </div>
+            ) : null}
+            {product.stage !== 'arquitectura' ? (
+              <div className="architecture-card__stage">
+                <span>{productStageLabel(product.stage)}</span>
+                <span>{formatDate(product.updatedAt)}</span>
+              </div>
+            ) : null}
           </div>
         </div>
         {(canEdit || canDeleteCourseProducts(userRole)) ? (
@@ -8370,8 +11510,9 @@ export function CourseWorkspacePage({
   }
 
   function renderPlanningWorkspace() {
-    const unitLabels = currentCourse.metadata.units.map((_, index) => `Unidad ${index + 1}`);
-    const unitTitleHints = currentCourse.metadata.units.map((unit) => unit.tituloUnidad ?? '');
+    const units = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
+    const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
+    const unitTitleHints = units.map((unit) => unit?.tituloUnidad ?? '');
     const sectionOrder = ['Introducción', ...unitLabels, 'Cierre'];
     const planningRows = architectureProducts
       .map((product) => ({
@@ -8711,6 +11852,14 @@ export function CourseWorkspacePage({
     );
   }
 
+  if (isValidationProductWorkspaceRoute) {
+    return (
+      <div className="page-stack workspace-page workspace-page--focus workspace-page--validation-product">
+        {renderValidationProductWorkspace()}
+      </div>
+    );
+  }
+
   return (
     <div className={isFocusedStudio ? 'page-stack workspace-page workspace-page--focus' : 'page-stack workspace-page'}>
 
@@ -9018,22 +12167,7 @@ export function CourseWorkspacePage({
         renderWritingWorkspace()
       ) : null}
 
-      {activeSection === 'validacion' ? (
-        <section className="workspace-grid">
-          {renderStageNoteEditor(
-            'validacion',
-            'Validación instruccional',
-            'Ajustes y observaciones pedagógicas',
-            'Esta bitácora captura la revisión experta sobre la pertinencia y calidad instruccional.',
-          )}
-          {renderProductStudio(
-            'validacion',
-            'Producto QA',
-            'Rúbricas y criterio de aprobación',
-            'La validación final ya no depende solo de observaciones: aquí también se construyen y versionan las rúbricas de calidad.',
-          )}
-        </section>
-      ) : null}
+      {activeSection === 'validacion' ? renderValidationStageBoard() : null}
 
       {activeSection === 'multimedia' ? (
         <section className="workspace-grid">

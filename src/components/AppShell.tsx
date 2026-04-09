@@ -113,7 +113,12 @@ export function AppShell({
   const visibleCourses = useMemo(() => getVisibleCourses(appData, role, user), [appData, role, user]);
   const isGovernmentEnabled =
     user.role === 'Administrador' || (user.secondaryRoles ?? []).includes('Administrador');
+  const validationProductMatch = matchPath(
+    '/courses/:slug/:section/producto/:productId',
+    location.pathname,
+  );
   const courseSectionMatch =
+    validationProductMatch ??
     matchPath('/courses/:slug/:section/:workspaceRoute', location.pathname) ??
     matchPath('/courses/:slug/:section', location.pathname);
   const courseMatch = courseSectionMatch ?? matchPath('/courses/:slug', location.pathname);
@@ -179,6 +184,17 @@ export function AppShell({
         items.push({
           label: sectionLabel,
           path: `/courses/${activeCourse.slug}/${activeCourseSection}`,
+        });
+      }
+
+      if (validationProductMatch?.params.productId) {
+        const validationProduct = activeCourse.products.find(
+          (product) => product.id === validationProductMatch.params.productId,
+        );
+
+        items.push({
+          label: validationProduct?.title ?? 'Producto de validación',
+          path: location.pathname,
         });
       }
 

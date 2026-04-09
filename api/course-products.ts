@@ -63,6 +63,7 @@ export default async function handler(request: Request) {
       section: payload.section,
       phasePlan: payload.phasePlan,
       writingData: payload.writingData,
+      validationData: payload.validationData,
     });
 
     if (!product) {

@@ -52,6 +52,9 @@ import type {
   ProductWritingAsset,
   ProductWritingData,
   ProductWritingSection,
+  ProductValidationChecklistItem,
+  ProductValidationComment,
+  ProductValidationData,
   Role,
   RoleProfile,
   StageCheckpoint,
@@ -69,6 +72,12 @@ import type {
   UserProfileUpdateInput,
   UserUpdateInput,
 } from '../src/types.js';
+import {
+  buildDefaultValidationData,
+  buildDefaultValidationCriteria,
+  buildValidationChecklistFromCriteria,
+  normalizeValidationChecklistStatus,
+} from '../src/data/productValidationDefaults.js';
 import { buildCourseDirectoryLabel, buildInstitutionStructureId } from '../src/utils/institutions.js';
 import { getSql } from './db.js';
 import { createPasswordHash, verifyPassword } from './security.js';
@@ -120,6 +129,7 @@ interface CourseProductRow {
   section: string | null;
   phasePlan: JsonValue;
   writingData: JsonValue;
+  validationData: JsonValue;
   createdAt: string;
   updatedAt: string;
 }
@@ -698,6 +708,34 @@ function buildInitialAuditLog(course: Course): CourseAuditEntry[] {
   ];
 }
 
+function normalizeCourseUnits(units: unknown): CourseMetadata['units'] {
+  if (!Array.isArray(units)) {
+    return [];
+  }
+
+  return units
+    .map((unit, index) => {
+      if (!unit || typeof unit !== 'object') {
+        return null;
+      }
+
+      const candidate = unit as Partial<CourseMetadata['units'][number]>;
+      const tituloUnidad =
+        typeof candidate.tituloUnidad === 'string' && candidate.tituloUnidad.trim()
+          ? candidate.tituloUnidad.trim()
+          : `Unidad ${index + 1}`;
+      const tematicas = Array.isArray(candidate.tematicas)
+        ? candidate.tematicas.map((topic) => (typeof topic === 'string' ? topic.trim() : '')).filter(Boolean)
+        : [];
+
+      return {
+        tituloUnidad,
+        tematicas,
+      };
+    })
+    .filter((unit): unit is CourseMetadata['units'][number] => Boolean(unit));
+}
+
 function buildDefaultCourseStageNotes(
   course: Pick<
     Course,
@@ -864,6 +902,7 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('microcurriculo'),
       updatedAt: course.updatedAt,
     },
     {
@@ -884,6 +923,7 @@ function buildDefaultCourseProducts(
       version: 'v1.1',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('arquitectura'),
       updatedAt: course.updatedAt,
     },
     {
@@ -904,6 +944,7 @@ function buildDefaultCourseProducts(
       version: 'v0.9',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('escritura'),
       updatedAt: course.updatedAt,
     },
     {
@@ -924,6 +965,7 @@ function buildDefaultCourseProducts(
       version: 'v0.8',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('validacion'),
       updatedAt: course.updatedAt,
     },
     {
@@ -941,6 +983,7 @@ function buildDefaultCourseProducts(
       version: 'v0.6',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('multimedia'),
       updatedAt: course.updatedAt,
     },
     {
@@ -956,6 +999,7 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('lms'),
       updatedAt: course.updatedAt,
     },
     {
@@ -973,15 +1017,18 @@ function buildDefaultCourseProducts(
       version: 'v1.0',
       phasePlan: [],
       writingData: normalizeProductWritingData(),
+      validationData: buildDefaultValidationData('qa'),
       updatedAt: course.updatedAt,
     },
   ];
 }
 
 function normalizeCourse(course: Course): Course {
+  const sourceProducts = Array.isArray(course.products) ? course.products : [];
   const normalizedMetadata = {
     ...buildDefaultCourseMetadata(course),
     ...(course.metadata ?? {}),
+    units: normalizeCourseUnits(course.metadata?.units),
     route: buildCourseRoute(course),
   };
   const normalizedStageNotes = Object.entries(buildDefaultCourseStageNotes(course)).reduce(
@@ -998,23 +1045,25 @@ function normalizeCourse(course: Course): Course {
   );
   const defaultProducts = buildDefaultCourseProducts(course);
   const normalizedProducts =
-    course.products.length > 0
-      ? course.products
+    sourceProducts.length > 0
+      ? sourceProducts
           .slice()
           .map((product) => ({
             ...product,
             phasePlan: normalizeProductPhasePlan(product.phasePlan),
             writingData: normalizeProductWritingData(product.writingData),
+            validationData: normalizeProductValidationData(product.validationData, product.stage),
           }))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       : defaultProducts.map((product) => ({
           ...product,
           phasePlan: normalizeProductPhasePlan(product.phasePlan),
           writingData: normalizeProductWritingData(product.writingData),
+          validationData: normalizeProductValidationData(product.validationData, product.stage),
         }));
 
   const normalizedAuditLog =
-    course.auditLog.length > 0
+    Array.isArray(course.auditLog) && course.auditLog.length > 0
       ? course.auditLog
           .slice()
           .sort((left, right) => right.happenedAt.localeCompare(left.happenedAt))
@@ -1366,6 +1415,75 @@ function normalizeProductWritingData(writingData?: ProductWritingData): ProductW
     sections: normalizeProductWritingSections(writingData?.sections),
     lastSavedAt: writingData?.lastSavedAt?.trim() || undefined,
     lastGeneratedAt: writingData?.lastGeneratedAt?.trim() || undefined,
+  };
+}
+
+function normalizeProductValidationChecklist(
+  checklist?: ProductValidationChecklistItem[],
+  stage: CourseProductStage = 'validacion',
+): ProductValidationChecklistItem[] {
+  const fallbackChecklist = buildDefaultValidationData(stage).checklist;
+  const source = checklist && checklist.length > 0 ? checklist : fallbackChecklist;
+
+  return source
+    .filter((item): item is ProductValidationChecklistItem => Boolean(item?.label?.trim()))
+    .map((item, index) => ({
+      id: item.id?.trim() || `validation-check-${index + 1}`,
+      label: item.label.trim(),
+      status: normalizeValidationChecklistStatus(item.status),
+      notes: item.notes?.trim() || '',
+      updatedAt: item.updatedAt?.trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeProductValidationComments(
+  comments?: ProductValidationComment[],
+): ProductValidationComment[] {
+  return (comments ?? [])
+    .filter((comment): comment is ProductValidationComment =>
+      Boolean(comment?.fragment?.trim() && comment?.comment?.trim()),
+    )
+    .map((comment) => ({
+      id: comment.id?.trim() || crypto.randomUUID(),
+      fragment: comment.fragment.trim(),
+      comment: comment.comment.trim(),
+      author: comment.author,
+      status: comment.status === 'Resuelto' ? 'Resuelto' : 'Abierto',
+      createdAt: comment.createdAt?.trim() || new Date().toISOString(),
+      updatedAt: comment.updatedAt?.trim() || new Date().toISOString(),
+      resolvedAt: comment.resolvedAt?.trim() || undefined,
+    }));
+}
+
+function normalizeValidationCriteria(criteria?: string[] | null) {
+  return (criteria ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeProductValidationData(
+  validationData?: ProductValidationData,
+  stage: CourseProductStage = 'validacion',
+): ProductValidationData {
+  const fallback = buildDefaultValidationData(stage);
+  const source = validationData ?? fallback;
+  const normalizedChecklist = normalizeProductValidationChecklist(source.checklist, stage);
+  const normalizedCriteria = normalizeValidationCriteria(
+    source.criteria?.length ? source.criteria : normalizedChecklist.map((item) => item.label),
+  );
+  const criteria = normalizedCriteria.length > 0 ? normalizedCriteria : buildDefaultValidationCriteria(stage);
+  const checklist =
+    normalizedChecklist.length > 0
+      ? normalizedChecklist
+      : buildValidationChecklistFromCriteria(criteria);
+
+  return {
+    reviewerNotes: source.reviewerNotes?.trim() ?? '',
+    readyForProduction: source.readyForProduction === true,
+    criteria,
+    checklist,
+    comments: normalizeProductValidationComments(source.comments),
+    lastReviewedAt: source.lastReviewedAt?.trim() || undefined,
   };
 }
 
@@ -1795,6 +1913,20 @@ function splitLegacyArchitectureText({
   };
 }
 
+function normalizeArchitectureEditableText(value?: string | null) {
+  const normalized = normalizeLongTextBlock(value);
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (hasHtmlLikeMarkup(normalized)) {
+    return normalized;
+  }
+
+  return normalizeArchitectureInstructionHtml(normalized);
+}
+
 function normalizeCourseProductTextFields(
   input: {
     stage: CourseProductStage;
@@ -1804,8 +1936,16 @@ function normalizeCourseProductTextFields(
     summary?: string | null;
     body?: string | null;
   },
+  options?: { preserveExplicitRichText?: boolean },
 ) {
   if (input.stage === 'arquitectura') {
+    if (options?.preserveExplicitRichText) {
+      return {
+        summary: normalizeArchitectureEditableText(input.summary),
+        body: normalizeArchitectureEditableText(input.body),
+      };
+    }
+
     return splitLegacyArchitectureText(input);
   }
 
@@ -1823,6 +1963,8 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     section: input.section,
     summary: input.summary,
     body: input.body,
+  }, {
+    preserveExplicitRichText: true,
   });
 
   return {
@@ -1839,6 +1981,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     section: input.section?.trim() || undefined,
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
     writingData: normalizeProductWritingData(input.writingData),
+    validationData: normalizeProductValidationData(input.validationData, input.stage),
     updatedAt: getTodayLabel(),
   };
 }
@@ -3190,6 +3333,7 @@ async function backfillCourseProductsTable() {
           section,
           phase_plan,
           writing_data,
+          validation_data,
           created_at,
           updated_at
         )
@@ -3208,6 +3352,7 @@ async function backfillCourseProductsTable() {
           ${product.section ?? null},
           ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
           ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
+          ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
           ${product.updatedAt},
           ${product.updatedAt}
         )
@@ -3226,6 +3371,7 @@ async function backfillCourseProductsTable() {
           section = EXCLUDED.section,
           phase_plan = EXCLUDED.phase_plan,
           writing_data = EXCLUDED.writing_data,
+          validation_data = EXCLUDED.validation_data,
           updated_at = EXCLUDED.updated_at
       `;
     }
@@ -3249,6 +3395,7 @@ async function syncCourseProductsJsonSnapshot(courseSlug: string) {
       section,
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
+      validation_data AS "validationData",
       updated_at AS "updatedAt"
     FROM maturity_course_products
     WHERE course_slug = ${courseSlug}
@@ -3354,6 +3501,7 @@ async function syncCourseProductsTable(course: Course) {
         section,
         phase_plan,
         writing_data,
+        validation_data,
         created_at,
         updated_at
       )
@@ -3372,6 +3520,7 @@ async function syncCourseProductsTable(course: Course) {
         ${product.section ?? null},
         ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
         ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
+        ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
         ${product.updatedAt},
         ${product.updatedAt}
       )
@@ -3390,6 +3539,7 @@ async function syncCourseProductsTable(course: Course) {
         section = EXCLUDED.section,
         phase_plan = EXCLUDED.phase_plan,
         writing_data = EXCLUDED.writing_data,
+        validation_data = EXCLUDED.validation_data,
         updated_at = EXCLUDED.updated_at
     `;
   }
@@ -3417,6 +3567,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
       section,
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
+      validation_data AS "validationData",
       created_at AS "createdAt",
       updated_at AS "updatedAt"
     FROM maturity_course_products
@@ -3437,7 +3588,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 24; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 25; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -3823,6 +3974,7 @@ async function ensureSchema() {
         section TEXT,
         phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb,
         writing_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        validation_data JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -3836,6 +3988,11 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE maturity_course_products
       ADD COLUMN IF NOT EXISTS writing_data JSONB NOT NULL DEFAULT '{}'::jsonb
+    `;
+
+    await sql`
+      ALTER TABLE maturity_course_products
+      ADD COLUMN IF NOT EXISTS validation_data JSONB NOT NULL DEFAULT '{}'::jsonb
     `;
 
     await sql`
@@ -4506,6 +4663,19 @@ async function ensureSchema() {
       `;
     }
 
+    // Migration 25: Product validation workspace
+    if (currentVersion < 25) {
+      await sql`
+        ALTER TABLE maturity_course_products
+        ADD COLUMN IF NOT EXISTS validation_data JSONB NOT NULL DEFAULT '{}'::jsonb
+      `;
+
+      await sql`
+        UPDATE maturity_course_products
+        SET validation_data = COALESCE(validation_data, '{}'::jsonb)
+      `;
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -4630,6 +4800,10 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     section: row.section ?? undefined,
     phasePlan: normalizeProductPhasePlan(parseJson<ProductPhasePlan[]>(row.phasePlan ?? [])),
     writingData: normalizeProductWritingData(parseJson<ProductWritingData>(row.writingData ?? {})),
+    validationData: normalizeProductValidationData(
+      parseJson<ProductValidationData>(row.validationData ?? {}),
+      row.stage,
+    ),
     updatedAt: row.updatedAt,
   };
 }
@@ -6682,6 +6856,8 @@ export async function updateCourseProductRecord(
       section: nextSection,
       summary: input.summary ?? product.summary,
       body: input.body ?? product.body,
+    }, {
+      preserveExplicitRichText: true,
     });
 
     updatedProduct = {
@@ -6702,6 +6878,10 @@ export async function updateCourseProductRecord(
         input.writingData !== undefined
           ? normalizeProductWritingData(input.writingData)
           : product.writingData,
+      validationData:
+        input.validationData !== undefined
+          ? normalizeProductValidationData(input.validationData, nextStage)
+          : product.validationData,
       updatedAt: getTodayLabel(),
     };
 

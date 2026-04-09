@@ -6,6 +6,7 @@ import { defaultBranding } from './data/platformDefaults.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
+import { LandingPage } from './pages/LandingPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import type { Role } from './types.js';
 
@@ -83,6 +84,7 @@ function LegacyAdminRedirect() {
 export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
   const { theme, setTheme } = useTheme();
+  const location = useLocation();
   const [role, setRole] = useState<Role>('Coordinador');
   const [branding, setBranding] = useState(defaultBranding);
   const {
@@ -155,7 +157,10 @@ export default function App() {
     document.documentElement.style.setProperty('--font-body', `"${branding.bodyFontFamily}", sans-serif`);
     document.documentElement.style.setProperty('--font-display', `"${branding.displayFontFamily}", sans-serif`);
     document.documentElement.style.setProperty('--font-mono', `"${branding.monoFontFamily}", monospace`);
-    document.title = branding.platformName;
+    document.title =
+      !session.authenticated && location.pathname !== '/login'
+        ? `${branding.platformName} · Tecnología e IA para equipos académicos`
+        : branding.platformName;
 
     const faviconHref =
       branding.faviconMode === 'Imagen' && branding.faviconUrl.trim()
@@ -170,7 +175,7 @@ export default function App() {
     }
 
     favicon.href = faviconHref;
-  }, [branding]);
+  }, [branding, location.pathname, session.authenticated]);
 
   function renderBrandMark() {
     if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
@@ -220,11 +225,15 @@ export default function App() {
           </section>
         </main>
       ) : !session.authenticated || !session.user ? (
-        <LoginPage
-          isLoading={false}
-          onLogin={login}
-          branding={branding}
-        />
+        location.pathname === '/login' ? (
+          <LoginPage
+            isLoading={false}
+            onLogin={login}
+            branding={branding}
+          />
+        ) : (
+          <LandingPage branding={branding} />
+        )
       ) : (
         <AppShell
           user={session.user}
@@ -235,6 +244,10 @@ export default function App() {
         >
           <Suspense fallback={<RouteSkeleton />}>
             <Routes>
+          <Route
+            path="/login"
+            element={<Navigate to="/dashboard" replace />}
+          />
           <Route
             path="/dashboard"
             element={
@@ -303,6 +316,20 @@ export default function App() {
           />
           <Route
             path="/courses/:slug/:section"
+            element={
+              <CourseWorkspacePage
+                role={activeRole}
+                userRole={session.user.role}
+                viewer={session.user}
+                appData={appData}
+                isLoading={isLoading}
+                refreshAppData={refreshAppData}
+                mutateAppData={mutateAppData}
+              />
+            }
+          />
+          <Route
+            path="/courses/:slug/:section/producto/:productId"
             element={
               <CourseWorkspacePage
                 role={activeRole}
