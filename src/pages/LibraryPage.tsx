@@ -540,22 +540,29 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [recommendedResults, setRecommendedResults] = useState<LibrarySearchResult[]>([]);
 
   useEffect(() => {
-    if (activeCourse && recommendedResults.length === 0) {
-      const q = activeCourse.metadata.topics && activeCourse.metadata.topics.length > 0 
-        ? activeCourse.metadata.topics.join(' ') 
-        : activeCourse.title;
-      fetch(`/api/library-search?q=${encodeURIComponent(q)}&group=Investigacion`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.results) {
-            setRecommendedResults(data.results);
-          }
-        })
-        .catch(() => {
-          // Fallback to defaults silently if it fails
-        });
+    if (visibleCourses.length > 0 && recommendedResults.length === 0) {
+      // Aggregate topics from all courses
+      const allTopics = visibleCourses.flatMap(c => c.metadata.topics || []);
+      const uniqueTopics = Array.from(new Set(allTopics));
+      
+      const q = uniqueTopics.length > 0 
+        ? uniqueTopics.slice(0, 5).join(' ') 
+        : activeCourse?.title || '';
+
+      if (q) {
+        fetch(`/api/library-search?q=${encodeURIComponent(q)}&group=Investigacion`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && data.results) {
+              setRecommendedResults(data.results);
+            }
+          })
+          .catch(() => {
+            // Fallback silently
+          });
+      }
     }
-  }, [activeCourse, recommendedResults.length]);
+  }, [visibleCourses, recommendedResults.length]);
 
   const baseAssets = isLanding ? (recommendedResults.length > 0 ? recommendedResults : LANDING_RECOMMENDATIONS) : results;
   const isMasked = showFilters || Boolean(previewAsset);

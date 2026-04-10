@@ -5666,21 +5666,15 @@ export function CourseWorkspacePage({
         ];
   }
 
-  function buildQaStructuredBody(
-    criteria: Array<{
-      status: QaCriterionStatus;
-      score: number;
-      label: string;
-    }>,
-  ) {
-    return [
-      '# Rúbrica de validación',
-      ...criteria.map((criterion: { status: QaCriterionStatus; score: number; label: string }) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
-    ].join('\n');
-  }
-
   function renderBiblioteca() {
-    const assets = appData.libraryResources.filter(r => r.courseSlug === currentCourse.slug);
+    const linkedLinks = appData.libraryCourseLinks.filter(link => link.courseSlug === currentCourse.slug);
+    const assets = linkedLinks
+      .map(link => {
+        const asset = appData.libraryAssets.find(a => a.id === link.assetId);
+        if (!asset) return null;
+        return { ...asset, targetUnit: link.targetUnit };
+      })
+      .filter((a): a is any => !!a);
     
     return (
       <div className="library-course-view animate-in fade-in duration-500">
@@ -5693,7 +5687,7 @@ export function CourseWorkspacePage({
         </header>
 
         {assets.length === 0 ? (
-          <div className="surface section-card flex flex-col items-center justify-center p-20 text-center border-dashed border-2">
+          <div className="surface section-card flex flex-col items-center justify-center p-20 text-center border-dashed border-2 bg-slate-50/30">
             <BookOpen size={48} className="text-slate-300 mb-4" />
             <h4 className="text-lg font-medium">No hay recursos vinculados aún</h4>
             <p className="text-sm text-muted max-w-sm mx-auto mt-2">
@@ -5705,34 +5699,45 @@ export function CourseWorkspacePage({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {assets.map((resource) => (
-              <div key={resource.id} className="surface section-card p-5 hover:shadow-lg transition-shadow border border-slate-100 flex flex-col h-full bg-white">
+            {assets.map((asset) => (
+              <div key={asset.id} className="surface section-card p-5 hover:shadow-lg transition-all border border-slate-100 flex flex-col h-full bg-white group">
                 <div className="flex items-start justify-between mb-4">
-                  <span className={`badge ${resource.kind === 'Curado' ? 'badge--sage' : 'badge--ocean'}`}>
-                    {resource.kind}
-                  </span>
-                  <div className="flex gap-1">
-                    {resource.tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full uppercase font-bold">
-                        {tag}
-                      </span>
-                    ))}
+                  <div className="flex gap-2">
+                    <span className={`badge ${asset.group === 'Investigacion' ? 'badge--sage' : 'badge--ocean'}`}>
+                      {asset.group === 'Investigacion' ? 'Curado' : asset.group}
+                    </span>
+                    <span className="text-[10px] bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full uppercase font-bold border border-slate-100">
+                      {asset.provider}
+                    </span>
                   </div>
+                  {asset.targetUnit && (
+                    <span className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-full font-bold">
+                      {asset.targetUnit}
+                    </span>
+                  )}
                 </div>
                 
-                <h4 className="text-base font-bold leading-tight mb-2 flex-grow">{resource.title}</h4>
-                <p className="text-xs text-muted mb-4 line-clamp-2">{resource.summary}</p>
+                <h4 className="text-base font-bold leading-tight mb-2 flex-grow group-hover:text-sky-600 transition-colors">{asset.title}</h4>
+                <p className="text-xs text-muted mb-4 line-clamp-3">{asset.abstract || asset.descriptionHtml?.replace(/<[^>]*>/g, '')}</p>
                 
                 <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Fuente</span>
-                    <span className="text-xs font-semibold">{resource.source}</span>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Autor(es)</span>
+                    <span className="text-xs font-semibold truncate max-w-[120px]">
+                      {asset.authors?.length > 0 ? asset.authors[0] : 'Curaduría editorial'}
+                    </span>
                   </div>
-                  {resource.unit && (
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Módulo</span>
-                      <span className="text-xs">{resource.unit}</span>
-                    </div>
+                  
+                  {asset.canonicalUrl && (
+                    <a 
+                      href={asset.canonicalUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sky-500 hover:text-sky-700 transition-colors"
+                      title="Ver original"
+                    >
+                      <ExternalLink size={16} />
+                    </a>
                   )}
                 </div>
               </div>
