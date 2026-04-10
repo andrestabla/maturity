@@ -533,9 +533,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     label: `${course.title} · ${buildCourseScopeLabel(course)}`,
   }));
   const activeCourse = visibleCourses[0] ?? appData.courses[0];
-  const activeStage = activeCourse
-    ? appData.stages.find((stage) => stage.id === activeCourse.stageId)
-    : null;
+
   const activeGroupCfg = GROUPS.find((group) => group.id === activeGroup) ?? GROUPS[0];
   const hasActiveFilters = filtersAreActive(filters);
   const isLanding = !hasExecutedSearch && submittedQuery === '';
