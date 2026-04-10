@@ -605,6 +605,10 @@ export function AppShell({
             {renderBrandMark()}
           </NavLink>
 
+          <div className="px-3 py-1 mb-2 mx-4 bg-ocean/10 rounded-full text-[10px] font-bold text-ocean uppercase tracking-widest text-center border border-ocean/20">
+            v0.2.2 Live
+          </div>
+
           <nav className="sidebar-nav" aria-label="Navegación principal">
             {shellNavigation.map(({ to, label, icon: Icon }) => (
               <NavLink
