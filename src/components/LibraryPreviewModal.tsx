@@ -232,7 +232,7 @@ export function LibraryPreviewModal({
 
                       <form className="library-quickview-form" onSubmit={handleAddSubmit}>
                         <label style={{ display: 'block', marginBottom: '12px' }}>
-                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', tracking: '0.05em', color: '#64748b', marginBottom: '6px' }}>¿A qué curso deseas enviarlo?</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>¿A qué curso deseas enviarlo?</span>
                           <div className="library-quickview-form__select" style={{ position: 'relative' }}>
                             <select
                               value={selectedCourse}
@@ -251,7 +251,7 @@ export function LibraryPreviewModal({
                         </label>
 
                         <label style={{ display: 'block', marginBottom: '16px' }}>
-                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', tracking: '0.05em', color: '#64748b', marginBottom: '6px' }}>Modulo de destino (Opcional)</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>Modulo de destino (Opcional)</span>
                           <input
                             type="text"
                             value={targetUnit}

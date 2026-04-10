@@ -36,6 +36,7 @@ import {
   MessageSquareText,
   ClipboardList,
   Download,
+  ExternalLink,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -5570,6 +5571,19 @@ export function CourseWorkspacePage({
       '',
       '# Bibliografía base',
       ...input.bibliography.map((item) => `- ${item}`),
+    ].join('\n');
+  }
+
+  function buildQaStructuredBody(
+    criteria: Array<{
+      status: QaCriterionStatus;
+      score: number;
+      label: string;
+    }>,
+  ) {
+    return [
+      '# Rúbrica de validación',
+      ...criteria.map((criterion) => `- [${criterion.status}|${criterion.score}] ${criterion.label}`),
     ].join('\n');
   }
 
