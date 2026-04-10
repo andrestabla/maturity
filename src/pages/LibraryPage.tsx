@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -543,8 +543,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
   useEffect(() => {
     if (activeCourse && recommendedResults.length === 0) {
-      const q = activeCourse.keywords && activeCourse.keywords.length > 0 
-        ? activeCourse.keywords.join(' ') 
+      const q = activeCourse.metadata.topics && activeCourse.metadata.topics.length > 0 
+        ? activeCourse.metadata.topics.join(' ') 
         : activeCourse.title;
       fetch(`/api/library-search?q=${encodeURIComponent(q)}&group=Investigacion`)
         .then((res) => res.json())
@@ -601,9 +601,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     : filteredAssets.slice(0, visibleLimit);
 
   const selectedAssets = filteredAssets.filter((asset) => selectedIds.includes(asset.id));
-  const stageContext = activeStage
-    ? `${activeStage.name} · ${activeCourse?.title ?? 'Curso activo'}`
-    : activeCourse?.title ?? 'Tu etapa actual';
+
 
   const appliedFilterLabels = useMemo(() => {
     const labels: string[] = [];
