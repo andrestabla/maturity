@@ -14,7 +14,7 @@ interface SyncMessage {
   at: number;
 }
 
-const APP_DATA_SNAPSHOT_PREFIX = 'maturity_app_snapshot_v2';
+const APP_DATA_SNAPSHOT_PREFIX = 'maturity_app_snapshot_v3';
 const REQUEST_TIMEOUT_MS = 8000;
 
 function isAppDataSnapshot(value: unknown): value is AppData {
