@@ -834,10 +834,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
 
         <div className="library-search-stage__heading">
+          {/* Release v0.2.0 - Forced Cache Flush */}
           <h1>Búsqueda de recursos educativos</h1>
           <p>
-            Descubre recursos con alto ajuste pedagógico para la etapa actual del curso,
-            combina filtros avanzados y previsualiza sin salir del grid.
+            Descubre recursos con alto ajuste pedagógico para la etapa actual del curso.
           </p>
         </div>
 

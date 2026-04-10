@@ -1,11 +1,11 @@
 {
   "name": "maturity",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --emptyOutDir",
     "preview": "vite preview",
     "db:setup": "tsx scripts/setup-db.ts"
   },
