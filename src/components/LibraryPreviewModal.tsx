@@ -281,7 +281,7 @@ export function LibraryPreviewModal({
                         </div>
                       </form>
                     </div>
-                  )})}
+                  )}
                 </motion.section>
               ) : null}
             </AnimatePresence>
