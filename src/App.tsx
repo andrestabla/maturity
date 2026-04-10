@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-// Build 2026-04-09T19:50 - Library Expansion Release
+// Build 2026-04-09T20:31 v0.2.1 - Force cache invalidation
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
