@@ -159,7 +159,7 @@ const DEFAULT_FILTERS: SearchFilters = {
 };
 
 const SEARCH_REQUEST_TIMEOUT_MS = 6500;
-const ENABLE_LIBRARY_SEEDS = import.meta.env.DEV && import.meta.env.VITE_ENABLE_LIBRARY_SEEDS === 'true';
+const ENABLE_LIBRARY_SEEDS = false;
 
 const LANDING_RECOMMENDATIONS = [
   createSeedResult({
@@ -609,8 +609,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     value: course.slug,
     label: `${course.title} · ${buildCourseScopeLabel(course)}`,
   }));
-  const activeCourse = visibleCourses[0] ?? appData.courses[0];
-
   const activeGroupCfg = GROUPS.find((group) => group.id === activeGroup) ?? GROUPS[0];
   const hasActiveFilters = filtersAreActive(filters);
   const isLanding = !hasExecutedSearch && submittedQuery === '';
