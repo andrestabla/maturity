@@ -5681,7 +5681,9 @@ export function CourseWorkspacePage({
   }
 
   function renderBiblioteca() {
-    const linkedLinks = appData.libraryCourseLinks.filter(link => link.courseSlug === currentCourse.slug);
+    const linkedLinks = appData.libraryCourseLinks.filter((link) =>
+      link.courseSlug === currentCourse.slug && Boolean(link.addedBy),
+    );
     const assets = linkedLinks
       .map(link => {
         const asset = appData.libraryAssets.find(a => a.id === link.assetId);

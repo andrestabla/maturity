@@ -159,6 +159,7 @@ const DEFAULT_FILTERS: SearchFilters = {
 };
 
 const SEARCH_REQUEST_TIMEOUT_MS = 6500;
+const ENABLE_LIBRARY_SEEDS = import.meta.env.DEV && import.meta.env.VITE_ENABLE_LIBRARY_SEEDS === 'true';
 
 const LANDING_RECOMMENDATIONS = [
   createSeedResult({
@@ -461,6 +462,10 @@ function normalizeQuery(value: string): string {
 }
 
 function resolveScenarioResults(query: string): LibrarySearchResult[] {
+  if (!ENABLE_LIBRARY_SEEDS) {
+    return [];
+  }
+
   const normalized = normalizeQuery(query);
 
   if (
@@ -508,6 +513,78 @@ function inferGroupForSearch(group: LibraryGroup, filters: SearchFilters): Libra
   return group;
 }
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isValidLibraryResult(asset: LibrarySearchResult): boolean {
+  return Boolean(
+    asset.id
+      && asset.title?.trim()
+      && asset.provider
+      && asset.providerRecordId?.trim()
+      && isAbsoluteHttpUrl(asset.canonicalUrl),
+  );
+}
+
+function normalizeRecommendationAsset(asset: Partial<LibrarySearchResult> & Record<string, unknown>): LibrarySearchResult | null {
+  const id = String(asset.id ?? '').trim();
+  const title = String(asset.title ?? '').trim();
+  const provider = String(asset.provider ?? '').trim() as LibraryProvider;
+  const canonicalUrl = String(asset.canonicalUrl ?? '').trim();
+  if (!id || !title || !provider || !canonicalUrl) return null;
+
+  const scoreRaw = Number(asset.score ?? asset.relevanceScore ?? 0.72);
+  const normalizedScore = Number.isFinite(scoreRaw)
+    ? (scoreRaw > 1 ? Math.min(0.99, Math.max(0.35, scoreRaw / 10)) : Math.min(0.99, Math.max(0.35, scoreRaw)))
+    : 0.72;
+  const metadata = (asset.metadata && typeof asset.metadata === 'object')
+    ? (asset.metadata as Record<string, unknown>)
+    : {};
+
+  const normalized: LibrarySearchResult = {
+    id,
+    canonicalKey: String(asset.canonicalKey ?? `${provider}:${id}`),
+    provider,
+    providerRecordId: String(asset.providerRecordId ?? id),
+    providers: Array.isArray(asset.providers) && asset.providers.length > 0
+      ? (asset.providers as LibraryProvider[])
+      : [provider],
+    group: (String(asset.group ?? 'Investigacion') as LibraryGroup),
+    title,
+    authors: Array.isArray(asset.authors) ? (asset.authors as string[]).filter(Boolean) : [],
+    publishedAt: String(asset.publishedAt ?? ''),
+    abstract: String(asset.abstract ?? ''),
+    descriptionHtml: String(asset.descriptionHtml ?? ''),
+    doi: String(asset.doi ?? ''),
+    canonicalUrl,
+    resourceType: String(asset.resourceType ?? 'Recurso'),
+    language: String(asset.language ?? 'es'),
+    license: asset.license as LibrarySearchResult['license'],
+    openAccess: Boolean(asset.openAccess),
+    citationCount: Number(asset.citationCount ?? 0),
+    thumbnailUrl: String(asset.thumbnailUrl ?? '') || undefined,
+    embedUrl: String(asset.embedUrl ?? '') || undefined,
+    institutionId: String(asset.institutionId ?? '') || undefined,
+    institutionName: String(asset.institutionName ?? '') || undefined,
+    visibility: (String(asset.visibility ?? 'Publico') as LibrarySearchResult['visibility']),
+    previewKind: (String(asset.previewKind ?? 'article') as LibrarySearchResult['previewKind']),
+    tags: Array.isArray(asset.tags) ? (asset.tags as string[]).filter(Boolean) : [],
+    metadata,
+    score: normalizedScore,
+    sourceKinds: Array.isArray(asset.sourceKinds) ? (asset.sourceKinds as string[]) : [],
+    cached: Boolean(asset.cached),
+  };
+
+  return isValidLibraryResult(normalized) ? normalized : null;
+}
+
 export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPageProps) {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
@@ -538,33 +615,71 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const hasActiveFilters = filtersAreActive(filters);
   const isLanding = !hasExecutedSearch && submittedQuery === '';
   const [recommendedResults, setRecommendedResults] = useState<LibrarySearchResult[]>([]);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+
+  const recommendationContext = useMemo(() => (
+    visibleCourses
+      .map((course) => `${course.slug}:${(course.metadata.topics ?? []).slice(0, 10).join(',')}:${course.title}`)
+      .sort()
+      .join('|')
+  ), [visibleCourses]);
 
   useEffect(() => {
-    if (visibleCourses.length > 0 && recommendedResults.length === 0) {
-      // Aggregate topics from all courses
-      const allTopics = visibleCourses.flatMap(c => c.metadata.topics || []);
-      const uniqueTopics = Array.from(new Set(allTopics));
-      
-      const q = uniqueTopics.length > 0 
-        ? uniqueTopics.slice(0, 5).join(' ') 
-        : activeCourse?.title || '';
+    if (visibleCourses.length === 0) {
+      setRecommendedResults(ENABLE_LIBRARY_SEEDS ? LANDING_RECOMMENDATIONS : []);
+      return;
+    }
 
-      if (q) {
-        fetch(`/api/library-search?q=${encodeURIComponent(q)}&group=Investigacion`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data && data.results) {
-              setRecommendedResults(data.results);
-            }
-          })
-          .catch(() => {
-            // Fallback silently
-          });
+    const controller = new AbortController();
+
+    async function loadRecommendations() {
+      setIsLoadingRecommendations(true);
+      const merged = new Map<string, LibrarySearchResult>();
+
+      const pushResults = (items: Array<Partial<LibrarySearchResult> & Record<string, unknown>>) => {
+        items.forEach((item) => {
+          const normalized = normalizeRecommendationAsset(item);
+          if (!normalized) return;
+          const key = normalized.canonicalKey || normalized.canonicalUrl || normalized.id;
+          if (!merged.has(key)) {
+            merged.set(key, normalized);
+          }
+        });
+      };
+
+      // 1) Preferimos recomendaciones por curso (alineadas al contexto real del usuario).
+      for (const course of visibleCourses.slice(0, 3)) {
+        try {
+          const response = await fetch(
+            `/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`,
+            { signal: controller.signal },
+          );
+          if (!response.ok) continue;
+          const payload = await response.json() as { recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>> };
+          if (Array.isArray(payload.recommendations)) {
+            pushResults(payload.recommendations);
+          }
+        } catch {
+          // seguimos con el siguiente curso/fallback
+        }
+      }
+
+      // Si no hay recomendaciones desde la base, dejamos vacío para evitar recursos no verificados.
+
+      if (!controller.signal.aborted) {
+        setRecommendedResults(Array.from(merged.values()).slice(0, 18));
+        setIsLoadingRecommendations(false);
       }
     }
-  }, [visibleCourses, recommendedResults.length]);
 
-  const baseAssets = isLanding ? (recommendedResults.length > 0 ? recommendedResults : LANDING_RECOMMENDATIONS) : results;
+    void loadRecommendations();
+
+    return () => {
+      controller.abort();
+    };
+  }, [recommendationContext, visibleCourses]);
+
+  const baseAssets = isLanding ? recommendedResults : results;
   const isMasked = showFilters || Boolean(previewAsset);
 
   const filteredAssets = useMemo(() => (
@@ -597,7 +712,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         }
       }
 
-      return true;
+      return isValidLibraryResult(asset);
     })
   ), [baseAssets, filters]);
 
@@ -690,7 +805,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         return;
       }
 
-      const mergedResults = mergeResults(scenarioResults, payload.results ?? []);
+      const mergedResults = mergeResults(
+        scenarioResults,
+        (payload.results ?? []).filter((asset) => isValidLibraryResult(asset)),
+      );
       setResults(mergedResults);
       setSearchMeta({
         cached: payload.cached,
@@ -704,7 +822,9 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       }
 
       const timeoutError = error instanceof Error && error.name === 'AbortError';
-      const fallbackResults = scenarioResults.length > 0 ? scenarioResults : results;
+      const fallbackResults = scenarioResults.length > 0
+        ? scenarioResults
+        : results.filter((asset) => isValidLibraryResult(asset));
       const fallbackMeta = fallbackResults.length > 0
         ? {
             total: fallbackResults.length,
@@ -1077,20 +1197,36 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                 Smart Grid curado con prioridad en madurez, relevancia y facilidad de integración.
               </div>
             </div>
-
-            <div className="library-grid">
-              {visibleAssets.map((asset) => (
-                <LibraryAssetCard
-                  key={asset.id}
-                  asset={asset}
-                  isSelected={selectedIds.includes(asset.id)}
-                  onToggleSelect={(id, selected) => setSelectedIds((current) => (
-                    selected ? [...current, id] : current.filter((item) => item !== id)
-                  ))}
-                  onPreview={setPreviewAsset}
-                />
-              ))}
-            </div>
+            {isLoadingRecommendations ? (
+              <section className="library-results-empty">
+                <Loader2 size={40} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+                <h2>Curando recomendaciones por curso</h2>
+                <p>Estamos alineando recursos válidos con las temáticas de tus cursos activos.</p>
+              </section>
+            ) : visibleAssets.length === 0 ? (
+              <section className="library-results-empty">
+                <Search size={40} />
+                <h2>Sin recomendaciones iniciales disponibles</h2>
+                <p>
+                  Aún no encontramos recursos válidos alineados a tus cursos.
+                  Puedes usar la búsqueda para traer resultados federados en tiempo real.
+                </p>
+              </section>
+            ) : (
+              <div className="library-grid">
+                {visibleAssets.map((asset) => (
+                  <LibraryAssetCard
+                    key={asset.id}
+                    asset={asset}
+                    isSelected={selectedIds.includes(asset.id)}
+                    onToggleSelect={(id, selected) => setSelectedIds((current) => (
+                      selected ? [...current, id] : current.filter((item) => item !== id)
+                    ))}
+                    onPreview={setPreviewAsset}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         ) : isSearching && results.length === 0 ? (
           <section className="library-results-empty">

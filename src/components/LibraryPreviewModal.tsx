@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import type { LibrarySearchResult } from '../types.js';
+import { useSystemDialog } from './SystemDialogProvider.js';
 import {
   buildAiSummary,
   buildMaturityBreakdown,
@@ -36,12 +37,16 @@ export function LibraryPreviewModal({
   courseOptions,
   onAddToCourse,
 }: LibraryPreviewModalProps) {
+  const { showConfirm, showAlert } = useSystemDialog();
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(courseOptions[0]?.value ?? '');
   const [targetUnit, setTargetUnit] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const selectedCourseLabel = useMemo(() => (
+    courseOptions.find((option) => option.value === selectedCourse)?.label ?? ''
+  ), [courseOptions, selectedCourse]);
 
   useEffect(() => {
     setShowCourseForm(false);
@@ -64,16 +69,42 @@ export function LibraryPreviewModal({
     event.preventDefault();
     if (!asset || !selectedCourse) return;
 
+    const confirmed = await showConfirm({
+      title: 'Confirmar vinculación',
+      message: selectedCourseLabel
+        ? `¿Deseas vincular "${asset.title}" al curso "${selectedCourseLabel}"?`
+        : `¿Deseas vincular "${asset.title}" al curso seleccionado?`,
+      confirmLabel: 'Vincular recurso',
+      cancelLabel: 'Cancelar',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
     setIsAdding(true);
     setAddError(null);
     try {
       await onAddToCourse(asset, selectedCourse, targetUnit || undefined);
       setAddSuccess(true);
+      await showAlert({
+        title: 'Recurso vinculado',
+        message: 'El recurso quedó asignado al curso seleccionado.',
+        tone: 'success',
+        confirmLabel: 'Entendido',
+      });
       setTimeout(() => {
         onClose();
       }, 1500);
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'No se pudo realizar la vinculación');
+      const message = err instanceof Error ? err.message : 'No se pudo realizar la vinculación';
+      setAddError(message);
+      await showAlert({
+        title: 'No fue posible vincular el recurso',
+        message,
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
     } finally {
       setIsAdding(false);
     }
