@@ -3588,7 +3588,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 25; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 26; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4673,6 +4673,30 @@ async function ensureSchema() {
       await sql`
         UPDATE maturity_course_products
         SET validation_data = COALESCE(validation_data, '{}'::jsonb)
+      `;
+    }
+
+    // Migration 26: Enforce one link per asset+course in library
+    if (currentVersion < 26) {
+      await sql`
+        WITH ranked AS (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY asset_id, course_slug
+              ORDER BY added_at DESC, id DESC
+            ) AS rn
+          FROM maturity_library_course_links
+        )
+        DELETE FROM maturity_library_course_links
+        WHERE id IN (
+          SELECT id FROM ranked WHERE rn > 1
+        )
+      `;
+
+      await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_library_course_links_asset_course_unique
+        ON maturity_library_course_links(asset_id, course_slug)
       `;
     }
 
