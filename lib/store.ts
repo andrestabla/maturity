@@ -183,6 +183,7 @@ interface LibraryCourseLinkRow {
   courseSlug: string;
   targetStage: string | null;
   targetUnit: string | null;
+  sourceModule: string | null;
   addedBy: string | null;
   addedAt: string;
 }
@@ -2179,12 +2180,14 @@ function normalizeLibraryCourseLink(
     courseSlug: string;
   },
 ): LibraryCourseLink {
+  const sourceModule = (input.sourceModule || 'library').trim().toLowerCase();
   return {
     id: input.id?.trim() || crypto.randomUUID(),
     assetId: input.assetId.trim(),
     courseSlug: input.courseSlug.trim(),
     targetStage: input.targetStage?.trim() || undefined,
     targetUnit: input.targetUnit?.trim() || undefined,
+    sourceModule: sourceModule === 'legacy' ? 'legacy' : 'library',
     addedBy: input.addedBy?.trim() || undefined,
     addedAt: input.addedAt?.trim() || new Date().toISOString(),
   };
@@ -3588,7 +3591,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 26; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 27; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4606,6 +4609,7 @@ async function ensureSchema() {
           course_slug TEXT NOT NULL REFERENCES maturity_courses(slug) ON DELETE CASCADE,
           target_stage TEXT,
           target_unit TEXT,
+          source_module TEXT NOT NULL DEFAULT 'library',
           added_by TEXT,
           added_at TEXT NOT NULL,
           UNIQUE (asset_id, course_slug, target_unit)
@@ -4697,6 +4701,26 @@ async function ensureSchema() {
       await sql`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_library_course_links_asset_course_unique
         ON maturity_library_course_links(asset_id, course_slug)
+      `;
+    }
+
+    // Migration 27: Track source module for course-link visibility rules
+    if (currentVersion < 27) {
+      await sql`
+        ALTER TABLE maturity_library_course_links
+        ADD COLUMN IF NOT EXISTS source_module TEXT NOT NULL DEFAULT 'library'
+      `;
+
+      await sql`
+        UPDATE maturity_library_course_links
+        SET source_module = 'library'
+        WHERE source_module IS NULL
+           OR TRIM(source_module) = ''
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_library_course_links_course_source
+        ON maturity_library_course_links(course_slug, source_module)
       `;
     }
 
@@ -5578,6 +5602,7 @@ async function readLibraryCourseLinks() {
       course_slug AS "courseSlug",
       target_stage AS "targetStage",
       target_unit AS "targetUnit",
+      source_module AS "sourceModule",
       added_by AS "addedBy",
       added_at AS "addedAt"
     FROM maturity_library_course_links
@@ -5670,6 +5695,7 @@ export async function createLibraryCourseLink(input: {
   courseSlug: string;
   targetStage?: string;
   targetUnit?: string;
+  sourceModule?: 'library' | 'legacy';
   addedBy?: string;
 }) {
   const sql = getSql();
@@ -5691,6 +5717,7 @@ export async function createLibraryCourseLink(input: {
       SET
         target_stage = ${link.targetStage || null},
         target_unit = ${link.targetUnit || null},
+        source_module = ${link.sourceModule || 'library'},
         added_by = ${link.addedBy || null},
         added_at = ${link.addedAt}
       WHERE id = ${existing.id}
@@ -5704,11 +5731,11 @@ export async function createLibraryCourseLink(input: {
 
   await sql`
     INSERT INTO maturity_library_course_links (
-      id, asset_id, course_slug, target_stage, target_unit, added_by, added_at
+      id, asset_id, course_slug, target_stage, target_unit, source_module, added_by, added_at
     )
     VALUES (
       ${link.id}, ${link.assetId}, ${link.courseSlug}, ${link.targetStage || null},
-      ${link.targetUnit || null}, ${link.addedBy || null}, ${link.addedAt}
+      ${link.targetUnit || null}, ${link.sourceModule || 'library'}, ${link.addedBy || null}, ${link.addedAt}
     )
   `;
 

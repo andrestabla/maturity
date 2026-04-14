@@ -43,7 +43,7 @@ export interface OrchestratorResult {
 }
 
 const DEFAULT_PROVIDERS_BY_GROUP: Record<LibraryGroup, LibraryProvider[]> = {
-  Investigacion: ['openalex'],
+  Investigacion: ['openalex', 'semantic-scholar', 'arxiv'],
   Didacticos: ['phet'],
   YouTube: ['youtube'],
   Institucional: [],

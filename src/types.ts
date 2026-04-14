@@ -500,6 +500,7 @@ export interface LibraryCourseLink {
   courseSlug: string;
   targetStage?: string;
   targetUnit?: string;
+  sourceModule?: 'library' | 'legacy';
   addedBy?: string;
   addedAt: string;
 }
@@ -963,6 +964,7 @@ export interface LibraryCourseLinkMutationInput {
   courseSlug: string;
   targetStage?: string;
   targetUnit?: string;
+  sourceModule?: 'library' | 'legacy';
 }
 
 export interface CourseMutationInput {

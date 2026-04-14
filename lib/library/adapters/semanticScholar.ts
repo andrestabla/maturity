@@ -4,7 +4,7 @@ import { getProviderConfigValue } from '../provider-settings.js';
 
 const SS_BASE = 'https://api.semanticscholar.org/graph/v1';
 const FIELDS =
-  'paperId,title,abstract,authors,year,url,doi,citationCount,openAccessPdf,' +
+  'paperId,title,abstract,authors,year,url,citationCount,openAccessPdf,' +
   'publicationTypes,venue,externalIds,fieldsOfStudy,s2FieldsOfStudy,referenceCount';
 const DEFAULT_MIN_INTERVAL_MS = 1000;
 let semanticScholarRequestChain = Promise.resolve();

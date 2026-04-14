@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { SidePanel } from './SidePanel.js';
+import { useSystemDialog } from './SystemDialogProvider.js';
 import type { AppData, LibrarySearchResult } from '../types.js';
+
+interface CourseOption {
+  value: string;
+  label: string;
+}
 
 interface BatchIntegrationPanelProps {
   isOpen: boolean;
@@ -9,6 +15,7 @@ interface BatchIntegrationPanelProps {
   selectedAssets: LibrarySearchResult[];
   appData: AppData;
   courseSlug: string;
+  courseOptions: CourseOption[];
   refreshAppData: () => void;
 }
 
@@ -27,21 +34,30 @@ export function BatchIntegrationPanel({
   selectedAssets,
   appData,
   courseSlug,
+  courseOptions,
   refreshAppData
 }: BatchIntegrationPanelProps) {
+  const { showConfirm, showAlert } = useSystemDialog();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [mappings, setMappings] = useState<AIMapping[]>([]);
   const [isIntegrating, setIsIntegrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCourseSlug, setSelectedCourseSlug] = useState(courseSlug);
 
-  const course = appData.courses.find(c => c.slug === courseSlug);
+  const course = appData.courses.find(c => c.slug === selectedCourseSlug);
   const modules = course?.modules || [];
+  const selectedCourseLabel =
+    courseOptions.find((option) => option.value === selectedCourseSlug)?.label || course?.title || selectedCourseSlug;
 
   useEffect(() => {
     if (isOpen && selectedAssets.length > 0) {
       void runAIAnalysis();
     }
-  }, [isOpen]);
+  }, [isOpen, selectedCourseSlug]);
+
+  useEffect(() => {
+    setSelectedCourseSlug(courseSlug);
+  }, [courseSlug]);
 
   const runAIAnalysis = async () => {
     setIsAnalyzing(true);
@@ -50,7 +66,7 @@ export function BatchIntegrationPanel({
       const resp = await fetch('/api/library/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseSlug, assets: selectedAssets })
+        body: JSON.stringify({ courseSlug: selectedCourseSlug, assets: selectedAssets })
       });
       if (!resp.ok) {
         const errData = await resp.json();
@@ -66,7 +82,22 @@ export function BatchIntegrationPanel({
   };
 
   const handleIntegrateAll = async () => {
+    if (!selectedCourseSlug) {
+      setError('Debes seleccionar un curso de destino.');
+      return;
+    }
+    const confirmed = await showConfirm({
+      title: 'Confirmar vinculación por lote',
+      message: `¿Deseas enviar ${selectedAssets.length} recurso(s) exclusivamente al curso "${selectedCourseLabel}"?`,
+      confirmLabel: 'Sí, vincular',
+      cancelLabel: 'Cancelar',
+    });
+    if (!confirmed) {
+      return;
+    }
+
     setIsIntegrating(true);
+    setError(null);
     try {
       // Execute each integration using the federated course-links API
       const promises = selectedAssets.map(asset => {
@@ -84,18 +115,36 @@ export function BatchIntegrationPanel({
                 aiJustification: mapping?.justification,
               },
             },
-            courseSlug,
+            courseSlug: selectedCourseSlug,
             targetStage: mapping?.suggestedModuleId,
             targetUnit: mapping?.suggestedUnit || 'Sin unidad',
           })
         });
       });
 
-      await Promise.all(promises);
+      const responses = await Promise.all(promises);
+      const failed = responses.filter((response) => !response.ok);
+      if (failed.length > 0) {
+        throw new Error(`No se pudo vincular ${failed.length} recurso(s).`);
+      }
+
       refreshAppData();
+      await showAlert({
+        title: 'Vinculación completada',
+        message: `Se vinculó correctamente el lote al curso "${selectedCourseLabel}".`,
+        tone: 'success',
+        confirmLabel: 'Entendido',
+      });
       onClose();
     } catch (err) {
-      setError('Error al integrar recursos.');
+      const message = err instanceof Error ? err.message : 'Error al integrar recursos.';
+      setError(message);
+      await showAlert({
+        title: 'No fue posible completar la vinculación',
+        message,
+        tone: 'error',
+        confirmLabel: 'Entendido',
+      });
     } finally {
       setIsIntegrating(false);
     }
@@ -138,6 +187,21 @@ export function BatchIntegrationPanel({
         ) : (
           <>
             <div className="flex-grow overflow-y-auto pr-2 space-y-4">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <label className="text-xs font-bold tracking-wide text-slate-600 uppercase">Curso de destino</label>
+                <select
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={selectedCourseSlug}
+                  onChange={(event) => setSelectedCourseSlug(event.target.value)}
+                >
+                  {courseOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {selectedAssets.map(asset => {
                 const mapping = mappings.find(m => m.assetId === asset.id);
                 const targetModule = modules.find(m => m.id === mapping?.suggestedModuleId);

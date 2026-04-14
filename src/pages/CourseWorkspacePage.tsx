@@ -5682,7 +5682,7 @@ export function CourseWorkspacePage({
 
   function renderBiblioteca() {
     const linkedLinks = appData.libraryCourseLinks.filter((link) =>
-      link.courseSlug === currentCourse.slug && Boolean(link.addedBy),
+      link.courseSlug === currentCourse.slug && (link.sourceModule ?? 'legacy') === 'library',
     );
     const uniqueByAsset = new Map<string, { targetUnit?: string }>();
     linkedLinks.forEach((link) => {

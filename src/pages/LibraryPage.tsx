@@ -632,68 +632,106 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   useEffect(() => {
     if (visibleCourses.length === 0) {
       setRecommendedResults(ENABLE_LIBRARY_SEEDS ? LANDING_RECOMMENDATIONS : []);
+      setIsLoadingRecommendations(false);
       return;
     }
 
     const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 9000);
 
     async function loadRecommendations() {
-      setIsLoadingRecommendations(true);
-      const merged = new Map<string, LibrarySearchResult>();
-      const keywordPhrases = new Set<string>(courseKeywordQueries);
+      try {
+        setIsLoadingRecommendations(true);
+        const merged = new Map<string, LibrarySearchResult>();
+        const keywordPhrases = new Set<string>(courseKeywordQueries);
 
-      const pushResults = (items: Array<Partial<LibrarySearchResult> & Record<string, unknown>>) => {
-        items.forEach((item) => {
-          const normalized = normalizeRecommendationAsset(item);
-          if (!normalized) return;
-          const key = normalized.canonicalKey || normalized.canonicalUrl || normalized.id;
-          if (!merged.has(key)) {
-            merged.set(key, normalized);
-          }
-        });
-      };
+        const pushResults = (items: Array<Partial<LibrarySearchResult> & Record<string, unknown>>) => {
+          items.forEach((item) => {
+            const normalized = normalizeRecommendationAsset(item);
+            if (!normalized) return;
+            const key = normalized.canonicalKey || normalized.canonicalUrl || normalized.id;
+            if (!merged.has(key)) {
+              merged.set(key, normalized);
+            }
+          });
+        };
 
-      // 1) Preferimos recomendaciones por curso (alineadas al contexto real del usuario).
-      for (const course of visibleCourses.slice(0, 3)) {
-        try {
-          const response = await fetch(
-            `/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`,
-            { signal: controller.signal },
-          );
-          if (!response.ok) continue;
-          const payload = await response.json() as {
-            recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
-            keywords?: string[];
-          };
-          if (Array.isArray(payload.recommendations)) {
-            pushResults(payload.recommendations);
+        // 1) Preferimos recomendaciones por curso (alineadas al contexto real del usuario).
+        for (const course of visibleCourses.slice(0, 3)) {
+          try {
+            const response = await fetch(
+              `/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`,
+              { signal: controller.signal },
+            );
+            if (!response.ok) continue;
+            const payload = await response.json() as {
+              recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
+              keywords?: string[];
+            };
+            if (Array.isArray(payload.recommendations)) {
+              pushResults(payload.recommendations);
+            }
+            if (Array.isArray(payload.keywords)) {
+              payload.keywords
+                .map((item) => item.trim())
+                .filter((item) => item.length >= 4)
+                .forEach((item) => keywordPhrases.add(item));
+            }
+          } catch {
+            // seguimos con el siguiente curso/fallback
           }
-          if (Array.isArray(payload.keywords)) {
-            payload.keywords
-              .map((item) => item.trim())
-              .filter((item) => item.length >= 4)
-              .forEach((item) => keywordPhrases.add(item));
-          }
-        } catch {
-          // seguimos con el siguiente curso/fallback
         }
-      }
 
-      // Si no hay recomendaciones desde la base, dejamos vacío para evitar recursos no verificados.
+        // 2) Fallback de descubrimiento para evitar pantalla vacía.
+        if (merged.size === 0 && !controller.signal.aborted) {
+          const fallbackQuery = Array.from(keywordPhrases)[0] || 'educacion superior';
+          const groups: LibraryGroup[] = ['Investigacion', 'Didacticos', 'YouTube'];
 
-      if (!controller.signal.aborted) {
-        setRecommendedResults(Array.from(merged.values()).slice(0, 18));
-        const contextualQueries = Array.from(keywordPhrases)
-          .filter((item) => !COURSE_TITLE_STOPWORDS.has(item.toLowerCase()))
-          .slice(0, 8);
-        setSuggestedQueries(contextualQueries.length > 0 ? contextualQueries : courseKeywordQueries);
-        setIsLoadingRecommendations(false);
+          for (const group of groups) {
+            try {
+              const params = new URLSearchParams({
+                q: fallbackQuery,
+                group,
+                limit: '6',
+              });
+              const response = await fetch(`/api/library/search?${params.toString()}`, {
+                signal: controller.signal,
+              });
+              if (!response.ok) continue;
+              const payload = await response.json() as {
+                results?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
+              };
+              if (Array.isArray(payload.results)) {
+                pushResults(payload.results);
+              }
+            } catch {
+              // mantenemos robustez por grupo
+            }
+          }
+        }
+
+        if (!controller.signal.aborted) {
+          const finalRecommendations = Array.from(merged.values()).slice(0, 18);
+          setRecommendedResults(finalRecommendations);
+          const contextualQueries = Array.from(keywordPhrases)
+            .filter((item) => !COURSE_TITLE_STOPWORDS.has(item.toLowerCase()))
+            .slice(0, 8);
+          setSuggestedQueries(contextualQueries.length > 0 ? contextualQueries : courseKeywordQueries);
+          if (finalRecommendations.length === 0) {
+            setRecommendedResults(ENABLE_LIBRARY_SEEDS ? LANDING_RECOMMENDATIONS : []);
+          }
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingRecommendations(false);
+        }
       }
     }
 
     void loadRecommendations();
 
     return () => {
+      window.clearTimeout(timeout);
       controller.abort();
     };
   }, [courseKeywordQueries, recommendationContext, visibleCourses]);
@@ -1385,6 +1423,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           selectedAssets={selectedAssets}
           appData={appData}
           courseSlug={visibleCourses[0]?.slug ?? ''}
+          courseOptions={courseOptions}
           refreshAppData={refreshAppData}
         />
       ) : null}

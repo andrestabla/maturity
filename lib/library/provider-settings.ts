@@ -152,7 +152,7 @@ function isProviderReady(provider: LibraryProvider, config: Record<string, strin
     case 'youtube':
       return hasSecret(process.env.YOUTUBE_API_KEY, config.youtubeApiKey, config.apiKey);
     case 'semantic-scholar':
-      return hasSecret(process.env.SEMANTIC_SCHOLAR_API_KEY, config.semanticScholarApiKey, config.apiKey);
+      return true;
     case 'core':
       return hasSecret(process.env.CORE_API_KEY, config.coreApiKey, config.apiKey);
     case 'oer-commons':
@@ -175,9 +175,9 @@ function summarizeProviderRuntime(provider: LibraryProvider, config: Record<stri
         ? 'YouTube Data API lista desde Gobierno.'
         : 'Falta YOUTUBE_API_KEY o credencial guardada en Gobierno.';
     case 'semantic-scholar':
-      return isProviderReady(provider, config)
+      return hasSecret(process.env.SEMANTIC_SCHOLAR_API_KEY, config.semanticScholarApiKey, config.apiKey)
         ? 'Semantic Scholar listo con API key.'
-        : 'Falta API key de Semantic Scholar para un uso productivo estable.';
+        : 'Semantic Scholar activo en modo público (sin API key dedicada).';
     case 'core':
       return isProviderReady(provider, config) ? 'CORE listo con API key.' : 'Falta CORE_API_KEY.';
     case 'oer-commons':

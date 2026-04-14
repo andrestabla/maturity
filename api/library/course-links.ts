@@ -84,6 +84,7 @@ export default async function handler(request: Request) {
       courseSlug,
       targetStage,
       targetUnit,
+      sourceModule: 'library',
     };
 
     await createLibraryCourseLink({
