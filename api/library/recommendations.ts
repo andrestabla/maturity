@@ -1,6 +1,8 @@
 import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
 import { getSql } from '../../lib/db.js';
+import { federatedSearch } from '../../lib/library/orchestrator.js';
+import type { LibrarySearchResult } from '../../src/types.js';
 
 export const config = { runtime: 'edge' };
 
@@ -57,7 +59,7 @@ export default async function handler(request: Request) {
 
     // 4. Build keyword set from course + modules
     const keywords = extractKeywords([
-      course.title,
+      ...buildCourseKeywordPhrases(course.title),
       course.description || '',
       ...modules.map((m: any) =>
         `${m.title} ${m.description || ''}`
@@ -123,7 +125,53 @@ export default async function handler(request: Request) {
       .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
       .slice(0, limit);
 
-    // 7. Try AI enhancement if OPENAI_API_KEY is available
+    // 7) Fallback to live federated search if no curated candidates exist in DB yet
+    if (scored.length === 0) {
+      const liveResults = new Map<string, LibrarySearchResult>();
+      const linkedAssetIds = new Set(
+        (
+          await sql`
+            SELECT asset_id AS "assetId"
+            FROM maturity_library_course_links
+            WHERE course_slug = ${courseSlug}
+          `
+        ).map((row: any) => String(row.assetId)),
+      );
+      const keywordPhrases = buildCourseKeywordPhrases(course.title).slice(0, 3);
+
+      for (const phrase of keywordPhrases) {
+        try {
+          const federated = await federatedSearch('Investigacion', {
+            query: phrase,
+            limit: 8,
+          });
+          for (const result of federated.results) {
+            if (!isValidRecommendationCandidate(result)) continue;
+            if (linkedAssetIds.has(result.id)) continue;
+            const key = result.canonicalKey || result.canonicalUrl || result.id;
+            if (!liveResults.has(key)) {
+              liveResults.set(key, result);
+            }
+          }
+        } catch {
+          // continue with next phrase
+        }
+      }
+
+      if (liveResults.size > 0) {
+        return jsonResponse({
+          ok: true,
+          courseSlug,
+          courseTitle: course.title,
+          recommendations: Array.from(liveResults.values()).slice(0, limit),
+          totalCandidates: liveResults.size,
+          aiEnhanced: false,
+          keywords: keywordPhrases,
+        });
+      }
+    }
+
+    // 8. Try AI enhancement if OPENAI_API_KEY is available
     let aiEnhanced = false;
     const openaiKey = process.env.OPENAI_API_KEY;
     if (openaiKey && scored.length > 0) {
@@ -185,10 +233,13 @@ export default async function handler(request: Request) {
       ok: true,
       courseSlug,
       courseTitle: course.title,
-      recommendations: scored,
+      recommendations: scored.filter(isValidRecommendationCandidate),
       totalCandidates: candidateAssets.length,
       aiEnhanced,
-      keywords: keywords.slice(0, 20),
+      keywords: [
+        ...buildCourseKeywordPhrases(course.title),
+        ...keywords,
+      ].slice(0, 20),
     });
   } catch (err) {
     console.error('[LibraryRecommendations] Error:', err);
@@ -198,6 +249,31 @@ export default async function handler(request: Request) {
     console.error('[LibraryRecommendations] Unhandled error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
   }
+}
+
+function isValidRecommendationCandidate(asset: Partial<LibrarySearchResult> & { canonicalUrl?: string; title?: string }) {
+  const title = String(asset.title ?? '').trim();
+  const canonicalUrl = String(asset.canonicalUrl ?? '').trim();
+  return (
+    title.length >= 4
+    && canonicalUrl.length > 0
+    && /^https?:\/\//i.test(canonicalUrl)
+  );
+}
+
+function buildCourseKeywordPhrases(courseTitle: string) {
+  const compact = courseTitle
+    .toLowerCase()
+    .replace(/[^a-záéíóúñü0-9\s]/gi, ' ')
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !COURSE_STOPWORDS.has(part));
+
+  const phrase = compact.join(' ').trim();
+  const head = compact.slice(0, 3).join(' ').trim();
+  const tail = compact.slice(-3).join(' ').trim();
+  return Array.from(new Set([phrase, head, tail].filter((item) => item.length >= 4)));
 }
 
 /**
@@ -221,3 +297,12 @@ function extractKeywords(text: string): string[] {
       .filter(w => w.length > 3 && !stopWords.has(w))
   )];
 }
+
+const COURSE_STOPWORDS = new Set([
+  'el', 'la', 'los', 'las', 'de', 'del', 'en', 'un', 'una', 'y', 'o', 'que',
+  'es', 'por', 'con', 'para', 'al', 'se', 'su', 'no', 'a', 'the', 'of', 'and',
+  'in', 'to', 'for', 'is', 'on', 'with', 'this', 'that', 'are', 'an', 'be',
+  'as', 'at', 'by', 'from', 'or', 'was', 'but', 'not', 'have', 'has', 'had',
+  'will', 'can', 'do', 'does', 'did', 'been', 'being', 'its', 'más', 'como',
+  'entre', 'sobre', 'sin', 'hacia', 'desde', 'cada', 'todo', 'todos', 'hasta',
+]);

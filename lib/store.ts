@@ -5650,7 +5650,34 @@ export async function createLibraryCourseLink(input: {
 }) {
   const sql = getSql();
   const link = normalizeLibraryCourseLink(input as any);
-  
+
+  const existingRows = (await sql`
+    SELECT id
+    FROM maturity_library_course_links
+    WHERE asset_id = ${link.assetId}
+      AND course_slug = ${link.courseSlug}
+    ORDER BY added_at DESC
+    LIMIT 1
+  `) as Array<{ id: string }>;
+
+  const existing = existingRows[0];
+  if (existing?.id) {
+    await sql`
+      UPDATE maturity_library_course_links
+      SET
+        target_stage = ${link.targetStage || null},
+        target_unit = ${link.targetUnit || null},
+        added_by = ${link.addedBy || null},
+        added_at = ${link.addedAt}
+      WHERE id = ${existing.id}
+    `;
+
+    return {
+      ...link,
+      id: existing.id,
+    };
+  }
+
   await sql`
     INSERT INTO maturity_library_course_links (
       id, asset_id, course_slug, target_stage, target_unit, added_by, added_at
@@ -5659,12 +5686,8 @@ export async function createLibraryCourseLink(input: {
       ${link.id}, ${link.assetId}, ${link.courseSlug}, ${link.targetStage || null},
       ${link.targetUnit || null}, ${link.addedBy || null}, ${link.addedAt}
     )
-    ON CONFLICT (id) DO UPDATE SET
-      target_stage = EXCLUDED.target_stage,
-      target_unit = EXCLUDED.target_unit,
-      added_by = EXCLUDED.added_by
   `;
-  
+
   return link;
 }
 

@@ -126,7 +126,7 @@ const FILTER_SOURCE_OPTIONS: { key: LibraryVisualSourceKey; label: string }[] = 
 ];
 
 const RESOURCE_TYPE_OPTIONS = ['Paper', 'Video', 'Artículo', 'Dataset'];
-const QUICK_QUERIES = [
+const FALLBACK_QUICK_QUERIES = [
   'algoritmos de machine learning',
   'redes neuronales',
   'aprendizaje activo',
@@ -160,6 +160,11 @@ const DEFAULT_FILTERS: SearchFilters = {
 
 const SEARCH_REQUEST_TIMEOUT_MS = 6500;
 const ENABLE_LIBRARY_SEEDS = false;
+const COURSE_TITLE_STOPWORDS = new Set([
+  'el', 'la', 'los', 'las', 'de', 'del', 'en', 'un', 'una', 'y', 'o', 'que',
+  'es', 'por', 'con', 'para', 'al', 'se', 'su', 'no', 'a', 'más', 'como',
+  'entre', 'sobre', 'sin', 'hacia', 'desde', 'cada', 'todo', 'todos', 'hasta',
+]);
 
 const LANDING_RECOMMENDATIONS = [
   createSeedResult({
@@ -614,6 +619,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const isLanding = !hasExecutedSearch && submittedQuery === '';
   const [recommendedResults, setRecommendedResults] = useState<LibrarySearchResult[]>([]);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [suggestedQueries, setSuggestedQueries] = useState<string[]>(fallbackQueriesFromCourses([]));
 
   const recommendationContext = useMemo(() => (
     visibleCourses
@@ -621,6 +627,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       .sort()
       .join('|')
   ), [visibleCourses]);
+  const courseKeywordQueries = useMemo(() => fallbackQueriesFromCourses(visibleCourses.map((course) => course.title)), [visibleCourses]);
 
   useEffect(() => {
     if (visibleCourses.length === 0) {
@@ -633,6 +640,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     async function loadRecommendations() {
       setIsLoadingRecommendations(true);
       const merged = new Map<string, LibrarySearchResult>();
+      const keywordPhrases = new Set<string>(courseKeywordQueries);
 
       const pushResults = (items: Array<Partial<LibrarySearchResult> & Record<string, unknown>>) => {
         items.forEach((item) => {
@@ -653,9 +661,18 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             { signal: controller.signal },
           );
           if (!response.ok) continue;
-          const payload = await response.json() as { recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>> };
+          const payload = await response.json() as {
+            recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
+            keywords?: string[];
+          };
           if (Array.isArray(payload.recommendations)) {
             pushResults(payload.recommendations);
+          }
+          if (Array.isArray(payload.keywords)) {
+            payload.keywords
+              .map((item) => item.trim())
+              .filter((item) => item.length >= 4)
+              .forEach((item) => keywordPhrases.add(item));
           }
         } catch {
           // seguimos con el siguiente curso/fallback
@@ -666,6 +683,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
       if (!controller.signal.aborted) {
         setRecommendedResults(Array.from(merged.values()).slice(0, 18));
+        const contextualQueries = Array.from(keywordPhrases)
+          .filter((item) => !COURSE_TITLE_STOPWORDS.has(item.toLowerCase()))
+          .slice(0, 8);
+        setSuggestedQueries(contextualQueries.length > 0 ? contextualQueries : courseKeywordQueries);
         setIsLoadingRecommendations(false);
       }
     }
@@ -675,7 +696,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     return () => {
       controller.abort();
     };
-  }, [recommendationContext, visibleCourses]);
+  }, [courseKeywordQueries, recommendationContext, visibleCourses]);
 
   const baseAssets = isLanding ? recommendedResults : results;
   const isMasked = showFilters || Boolean(previewAsset);
@@ -776,7 +797,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       if (nextFilters.openAccess) params.set('open_access', 'true');
       if (providerFilters.length > 0) params.set('providers', providerFilters.join(','));
 
-      const response = await fetch(`/api/library-search?${params.toString()}`, {
+      const response = await fetch(`/api/library/search?${params.toString()}`, {
         signal: controller.signal,
       });
 
@@ -1170,7 +1191,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         </div>
 
         <div className="library-search-stage__chips">
-          {QUICK_QUERIES.map((quickQuery) => (
+          {suggestedQueries.map((quickQuery) => (
             <button
               key={quickQuery}
               type="button"
@@ -1369,4 +1390,28 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       ) : null}
     </div>
   );
+}
+
+function fallbackQueriesFromCourses(courseTitles: string[]) {
+  const candidates = courseTitles
+    .flatMap((title) => {
+      const parts = title
+        .toLowerCase()
+        .replace(/[^a-záéíóúñü0-9\s]/gi, ' ')
+        .split(/\s+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .filter((part) => !COURSE_TITLE_STOPWORDS.has(part));
+      const phrase = parts.join(' ').trim();
+      return [
+        phrase,
+        parts.slice(0, 3).join(' ').trim(),
+        parts.slice(-3).join(' ').trim(),
+      ];
+    })
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 4);
+
+  const unique = Array.from(new Set(candidates));
+  return unique.length > 0 ? unique.slice(0, 8) : FALLBACK_QUICK_QUERIES;
 }

@@ -5684,11 +5684,17 @@ export function CourseWorkspacePage({
     const linkedLinks = appData.libraryCourseLinks.filter((link) =>
       link.courseSlug === currentCourse.slug && Boolean(link.addedBy),
     );
-    const assets = linkedLinks
-      .map(link => {
-        const asset = appData.libraryAssets.find(a => a.id === link.assetId);
+    const uniqueByAsset = new Map<string, { targetUnit?: string }>();
+    linkedLinks.forEach((link) => {
+      if (!uniqueByAsset.has(link.assetId)) {
+        uniqueByAsset.set(link.assetId, { targetUnit: link.targetUnit });
+      }
+    });
+    const assets = Array.from(uniqueByAsset.entries())
+      .map(([assetId, linkData]) => {
+        const asset = appData.libraryAssets.find((a) => a.id === assetId);
         if (!asset) return null;
-        return { ...asset, targetUnit: link.targetUnit };
+        return { ...asset, targetUnit: linkData.targetUnit };
       })
       .filter((a): a is any => !!a);
     

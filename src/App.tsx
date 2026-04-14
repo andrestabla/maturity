@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 // Build 2026-04-09T20:31 v0.2.1 - Force cache invalidation
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppShell } from './components/AppShell.js';
@@ -10,6 +10,7 @@ import { useTheme } from './hooks/useTheme.js';
 import { LandingPage } from './pages/LandingPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import type { Role } from './types.js';
+import { getVisibleCourses } from './utils/domain.js';
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage.js').then((module) => ({ default: module.DashboardPage })),
@@ -88,6 +89,7 @@ export default function App() {
   const location = useLocation();
   const [role, setRole] = useState<Role>('Coordinador');
   const [branding, setBranding] = useState(defaultBranding);
+  const recommendationsPrewarmKeyRef = useRef('');
   const {
     appData,
     isLoading,
@@ -177,6 +179,36 @@ export default function App() {
 
     favicon.href = faviconHref;
   }, [branding, location.pathname, session.authenticated]);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !session.user) {
+      return;
+    }
+
+    const visibleCourses = getVisibleCourses(appData, activeRole, session.user).slice(0, 3);
+    if (visibleCourses.length === 0) {
+      return;
+    }
+    const warmKey = `${session.user.id}:${visibleCourses.map((course) => course.slug).join('|')}`;
+    if (recommendationsPrewarmKeyRef.current === warmKey) {
+      return;
+    }
+    recommendationsPrewarmKeyRef.current = warmKey;
+
+    const abortController = new AbortController();
+    visibleCourses.forEach((course) => {
+      void fetch(`/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`, {
+        method: 'GET',
+        signal: abortController.signal,
+      }).catch(() => {
+        // precalentamiento best-effort
+      });
+    });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [activeRole, appData, session.user, status]);
 
   function renderBrandMark() {
     if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
