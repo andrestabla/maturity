@@ -54,7 +54,7 @@ export function LibraryPreviewModal({
     setAddSuccess(false);
     setIsAdding(false);
     setSelectedCourse(courseOptions[0]?.value ?? '');
-  }, [asset, courseOptions]);
+  }, [asset?.id, courseOptions.length]);
 
   if (!asset) {
     return null;

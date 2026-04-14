@@ -722,9 +722,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           }
         }
       } finally {
-        if (!controller.signal.aborted) {
-          setIsLoadingRecommendations(false);
-        }
+        setIsLoadingRecommendations(false);
       }
     }
 

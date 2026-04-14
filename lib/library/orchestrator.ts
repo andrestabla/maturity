@@ -51,11 +51,11 @@ const DEFAULT_PROVIDERS_BY_GROUP: Record<LibraryGroup, LibraryProvider[]> = {
 };
 
 const PROVIDER_TIMEOUT_MS_BY_PROVIDER: Partial<Record<LibraryProvider, number>> = {
-  openalex: 2200,
-  arxiv: 2200,
+  openalex: 3200,
+  arxiv: 6000,
   phet: 1800,
   youtube: 2800,
-  'semantic-scholar': 2400,
+  'semantic-scholar': 6000,
   scielo: 2400,
   redalyc: 2400,
   core: 2000,
