@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { LibrarySearchResult } from '../types.js';
 import { useSystemDialog } from './SystemDialogProvider.js';
+import { ModalFrame } from './ModalFrame.js';
 import {
   buildAiSummary,
   buildMaturityBreakdown,
@@ -38,7 +39,7 @@ export function LibraryPreviewModal({
   onAddToCourse,
 }: LibraryPreviewModalProps) {
   const { showConfirm, showAlert } = useSystemDialog();
-  const [showCourseForm, setShowCourseForm] = useState(false);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(courseOptions[0]?.value ?? '');
   const [targetUnit, setTargetUnit] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -49,7 +50,7 @@ export function LibraryPreviewModal({
   ), [courseOptions, selectedCourse]);
 
   useEffect(() => {
-    setShowCourseForm(false);
+    setIsLinkModalOpen(false);
     setTargetUnit('');
     setAddSuccess(false);
     setIsAdding(false);
@@ -230,102 +231,16 @@ export function LibraryPreviewModal({
               </section>
             ) : null}
 
-            <AnimatePresence>
-              {showCourseForm ? (
-                <motion.section
-                  className="library-quickview-section"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  style={{ overflow: 'hidden' }}
-                >                  {addSuccess ? (
-                    <div className="library-quickview-success animate-in zoom-in duration-300" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', color: '#166534', marginTop: '16px' }}>
-                      <CheckCircle2 size={32} />
-                      <div>
-                        <strong style={{ display: 'block', fontSize: '1rem' }}>¡Recurso vinculado con éxito!</strong>
-                        <span style={{ opacity: 0.8, fontSize: '0.85rem' }}>Estará disponible de inmediato en la biblioteca del curso.</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="library-confirm-container animate-in slide-in-from-bottom duration-300" style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginTop: '16px' }}>
-                      <div className="mb-4" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
-                        <div style={{ background: '#e0f2fe', color: '#0369a1', padding: '6px', borderRadius: '8px' }}>
-                          <Check size={16} />
-                        </div>
-                        <h4 style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem' }}>Confirmar vinculación</h4>
-                      </div>
-
-                      {addError && (
-                        <div style={{ background: '#fef2f2', color: '#991b1b', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '12px', border: '1px solid #fecaca' }}>
-                          {addError}
-                        </div>
-                      )}
-
-                      <form className="library-quickview-form" onSubmit={handleAddSubmit}>
-                        <label style={{ display: 'block', marginBottom: '12px' }}>
-                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>¿A qué curso deseas enviarlo?</span>
-                          <div className="library-quickview-form__select" style={{ position: 'relative' }}>
-                            <select
-                              value={selectedCourse}
-                              onChange={(event) => setSelectedCourse(event.target.value)}
-                              required
-                              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', appearance: 'none' }}
-                            >
-                              {courseOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                          </div>
-                        </label>
-
-                        <label style={{ display: 'block', marginBottom: '16px' }}>
-                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>Modulo de destino (Opcional)</span>
-                          <input
-                            type="text"
-                            value={targetUnit}
-                            onChange={(event) => setTargetUnit(event.target.value)}
-                            placeholder="Ej. Unidad 2 o Microcurrículo"
-                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white' }}
-                          />
-                        </label>
-
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="submit"
-                            className="library-quickview-form__submit"
-                            disabled={isAdding || !selectedCourse}
-                            style={{ flex: 1, background: '#22b9d2', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
-                          >
-                            {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                            <span>{isAdding ? 'Vinculando...' : 'Confirmar y Vincular'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowCourseForm(false)}
-                            style={{ background: '#f1f5f9', color: '#64748b', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
-                </motion.section>
-              ) : null}
-            </AnimatePresence>
           </div>
 
           <div className="library-quickview-panel__footer">
             <button
               type="button"
               className="library-quickview-panel__primary"
-              onClick={() => setShowCourseForm((current) => !current)}
+              onClick={() => setIsLinkModalOpen(true)}
               disabled={courseOptions.length === 0}
             >
-              {showCourseForm ? 'Cerrar vinculacion' : 'Vincular a mi Curso Actual'}
+              Vincular a mi Curso Actual
             </button>
 
             {asset.canonicalUrl ? (
@@ -346,6 +261,83 @@ export function LibraryPreviewModal({
             )}
           </div>
         </motion.aside>
+
+        {isLinkModalOpen ? (
+          <ModalFrame
+            title="Confirmar vinculación"
+            description="Selecciona el curso al que quieres enviar este recurso."
+            width="sm"
+            onClose={() => setIsLinkModalOpen(false)}
+            footer={(
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setIsLinkModalOpen(false)}
+                >
+                  <span>Cancelar</span>
+                </button>
+                <button
+                  type="submit"
+                  form="library-link-course-form"
+                  className="cta-button"
+                  disabled={isAdding || !selectedCourse}
+                >
+                  {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  <span>{isAdding ? 'Vinculando...' : 'Confirmar y Vincular'}</span>
+                </button>
+              </div>
+            )}
+          >
+            {addSuccess ? (
+              <div className="library-quickview-success" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', color: '#166534' }}>
+                <CheckCircle2 size={28} />
+                <div>
+                  <strong style={{ display: 'block', fontSize: '1rem' }}>¡Recurso vinculado con éxito!</strong>
+                  <span style={{ opacity: 0.8, fontSize: '0.85rem' }}>Ya está disponible en la biblioteca del curso.</span>
+                </div>
+              </div>
+            ) : (
+              <form id="library-link-course-form" className="library-quickview-form" onSubmit={handleAddSubmit}>
+                {addError ? (
+                  <div style={{ background: '#fef2f2', color: '#991b1b', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '12px', border: '1px solid #fecaca' }}>
+                    {addError}
+                  </div>
+                ) : null}
+
+                <label style={{ display: 'block', marginBottom: '12px' }}>
+                  <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>Curso destino</span>
+                  <div className="library-quickview-form__select" style={{ position: 'relative' }}>
+                    <select
+                      value={selectedCourse}
+                      onChange={(event) => setSelectedCourse(event.target.value)}
+                      required
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', appearance: 'none' }}
+                    >
+                      {courseOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  </div>
+                </label>
+
+                <label style={{ display: 'block' }}>
+                  <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '6px' }}>Módulo/Unidad (opcional)</span>
+                  <input
+                    type="text"
+                    value={targetUnit}
+                    onChange={(event) => setTargetUnit(event.target.value)}
+                    placeholder="Ej. Unidad 2 o Microcurrículo"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white' }}
+                  />
+                </label>
+              </form>
+            )}
+          </ModalFrame>
+        ) : null}
       </motion.div>
     </AnimatePresence>
   );

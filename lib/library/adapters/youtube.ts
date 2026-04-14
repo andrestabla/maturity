@@ -48,7 +48,7 @@ export async function searchYouTube(
     order: 'relevance',
   });
 
-  const response = await fetch(`${YT_BASE}/search?${urlParams.toString()}`, { signal });
+  let response = await fetch(`${YT_BASE}/search?${urlParams.toString()}`, { signal });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -56,8 +56,27 @@ export async function searchYouTube(
     throw new Error(`YouTube API ${response.status}: ${String(errorData.message ?? response.statusText)}`);
   }
 
-  const data = await response.json() as { items?: unknown[] };
-  const items = (data.items ?? []) as Array<Record<string, unknown>>;
+  let data = await response.json() as { items?: unknown[] };
+  let items = (data.items ?? []) as Array<Record<string, unknown>>;
+
+  // Fallback when Education category yields 0 results.
+  if (items.length === 0) {
+    const broadParams = new URLSearchParams({
+      part: 'snippet',
+      type: 'video',
+      q: queryFilter ? `${query} ${queryFilter}` : query,
+      maxResults: String(Math.min(limit, 50)),
+      key: apiKey,
+      safeSearch,
+      order: 'relevance',
+    });
+
+    response = await fetch(`${YT_BASE}/search?${broadParams.toString()}`, { signal });
+    if (response.ok) {
+      data = await response.json() as { items?: unknown[] };
+      items = (data.items ?? []) as Array<Record<string, unknown>>;
+    }
+  }
 
   const results = items.map((item) => normalizeYouTubeResult(item));
 

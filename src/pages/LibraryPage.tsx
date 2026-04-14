@@ -518,6 +518,28 @@ function inferGroupForSearch(group: LibraryGroup, filters: SearchFilters): Libra
   return group;
 }
 
+function getProviderFiltersForGroup(group: LibraryGroup, providers: LibraryProvider[]) {
+  if (providers.length === 0) {
+    return providers;
+  }
+
+  if (group === 'YouTube') {
+    return providers.includes('youtube') ? (['youtube'] as LibraryProvider[]) : [];
+  }
+
+  if (group === 'Didacticos') {
+    return providers.filter((provider) => provider === 'phet' || provider === 'oer-commons');
+  }
+
+  if (group === 'Investigacion') {
+    return providers.filter((provider) =>
+      ['openalex', 'arxiv', 'semantic-scholar', 'scielo', 'redalyc', 'core'].includes(provider),
+    );
+  }
+
+  return providers;
+}
+
 function isAbsoluteHttpUrl(value: string): boolean {
   if (!value) return false;
   try {
@@ -609,7 +631,14 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const activeSearchControllerRef = useRef<AbortController | null>(null);
   const activeSearchRequestIdRef = useRef(0);
 
-  const visibleCourses = getVisibleCourses(appData, role, viewer);
+  const viewerMembershipKey = useMemo(
+    () => JSON.stringify((viewer.memberships ?? []).map((membership) => membership.id).sort()),
+    [viewer.memberships],
+  );
+  const visibleCourses = useMemo(
+    () => getVisibleCourses(appData, role, viewer),
+    [appData, role, viewer, viewerMembershipKey],
+  );
   const courseOptions = visibleCourses.map((course) => ({
     value: course.slug,
     label: `${course.title} · ${buildCourseScopeLabel(course)}`,
@@ -807,6 +836,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     const searchGroup = inferGroupForSearch(nextGroup, nextFilters);
     const scenarioResults = resolveScenarioResults(trimmedQuery);
     const providerFilters = buildProviderFiltersFromVisualSources(nextFilters.sources);
+    const effectiveProviderFilters = getProviderFiltersForGroup(searchGroup, providerFilters);
     const requestId = activeSearchRequestIdRef.current + 1;
     activeSearchRequestIdRef.current = requestId;
 
@@ -831,7 +861,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       if (nextFilters.language !== 'all') params.set('language', nextFilters.language);
       if (nextFilters.year) params.set('year', nextFilters.year);
       if (nextFilters.openAccess) params.set('open_access', 'true');
-      if (providerFilters.length > 0) params.set('providers', providerFilters.join(','));
+      if (effectiveProviderFilters.length > 0) params.set('providers', effectiveProviderFilters.join(','));
 
       const response = await fetch(`/api/library/search?${params.toString()}`, {
         signal: controller.signal,
