@@ -1,6 +1,7 @@
 import {
   defaultBranding,
   defaultExperienceSettings,
+  defaultHomeContent,
   defaultWorkflowSettings,
   defaultInstitutionSettings,
 } from '../src/data/platformDefaults.js';
@@ -19,6 +20,7 @@ import type {
   AuthUser,
   BrandingSettings,
   ExperienceSettings,
+  HomeContentSettings,
   InstitutionSettings,
   InstitutionStructure,
   Role,
@@ -298,6 +300,126 @@ function sanitizeWorkflowSettings(input: WorkflowSettings): WorkflowSettings {
       typeof input.handoffBlocksOnCriticalObservations === 'boolean'
         ? input.handoffBlocksOnCriticalObservations
         : defaultWorkflowSettings.handoffBlocksOnCriticalObservations,
+  };
+}
+
+function sanitizeHomeContentSettings(input: HomeContentSettings): HomeContentSettings {
+  const fallback = defaultHomeContent;
+  const take = (value: unknown, fallbackValue: string) => {
+    if (typeof value !== 'string') return fallbackValue;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallbackValue;
+  };
+  const takeArray = (value: unknown, fallbackValue: string[]) => {
+    if (!Array.isArray(value) || value.length === 0) return [...fallbackValue];
+    const next = value
+      .map((item, index) => take(item, fallbackValue[index] ?? fallbackValue[0] ?? ''))
+      .filter(Boolean);
+    return next.length > 0 ? next : [...fallbackValue];
+  };
+
+  return {
+    navBrandTagline: take(input.navBrandTagline, fallback.navBrandTagline),
+    navFlowLabel: take(input.navFlowLabel, fallback.navFlowLabel),
+    navLibraryLabel: take(input.navLibraryLabel, fallback.navLibraryLabel),
+    navAnalyticsLabel: take(input.navAnalyticsLabel, fallback.navAnalyticsLabel),
+    navContactLabel: take(input.navContactLabel, fallback.navContactLabel),
+    navLoginLabel: take(input.navLoginLabel, fallback.navLoginLabel),
+    navDemoLabel: take(input.navDemoLabel, fallback.navDemoLabel),
+    heroKicker: take(input.heroKicker, fallback.heroKicker),
+    heroTitle: take(input.heroTitle, fallback.heroTitle),
+    heroLead: take(input.heroLead, fallback.heroLead),
+    heroPrimaryCta: take(input.heroPrimaryCta, fallback.heroPrimaryCta),
+    heroSecondaryCta: take(input.heroSecondaryCta, fallback.heroSecondaryCta),
+    heroSignals: (Array.isArray(input.heroSignals) && input.heroSignals.length > 0
+      ? input.heroSignals
+      : fallback.heroSignals
+    ).map((item, index) => ({
+      title: take(item?.title, fallback.heroSignals[index]?.title ?? fallback.heroSignals[0].title),
+      description: take(
+        item?.description,
+        fallback.heroSignals[index]?.description ?? fallback.heroSignals[0].description,
+      ),
+    })),
+    heroCourseLabel: take(input.heroCourseLabel, fallback.heroCourseLabel),
+    heroCourseTitle: take(input.heroCourseTitle, fallback.heroCourseTitle),
+    heroCourseProgressLabel: take(input.heroCourseProgressLabel, fallback.heroCourseProgressLabel),
+    heroStatusChip: take(input.heroStatusChip, fallback.heroStatusChip),
+    heroStatusText: take(input.heroStatusText, fallback.heroStatusText),
+    heroSidebarDashboard: take(input.heroSidebarDashboard, fallback.heroSidebarDashboard),
+    heroSidebarCourses: take(input.heroSidebarCourses, fallback.heroSidebarCourses),
+    heroSidebarLibrary: take(input.heroSidebarLibrary, fallback.heroSidebarLibrary),
+    heroSidebarAnalytics: take(input.heroSidebarAnalytics, fallback.heroSidebarAnalytics),
+    heroStageOneTitle: take(input.heroStageOneTitle, fallback.heroStageOneTitle),
+    heroStageOneDescription: take(input.heroStageOneDescription, fallback.heroStageOneDescription),
+    heroStageTwoTitle: take(input.heroStageTwoTitle, fallback.heroStageTwoTitle),
+    heroStageTwoDescription: take(input.heroStageTwoDescription, fallback.heroStageTwoDescription),
+    heroStageThreeTitle: take(input.heroStageThreeTitle, fallback.heroStageThreeTitle),
+    heroStageThreeDescription: take(input.heroStageThreeDescription, fallback.heroStageThreeDescription),
+    heroGlobalStatusLabel: take(input.heroGlobalStatusLabel, fallback.heroGlobalStatusLabel),
+    heroCourseProgressValue: take(input.heroCourseProgressValue, fallback.heroCourseProgressValue),
+    heroCourseProgressDescription: take(
+      input.heroCourseProgressDescription,
+      fallback.heroCourseProgressDescription,
+    ),
+    stripItems: takeArray(input.stripItems, fallback.stripItems),
+    flowKicker: take(input.flowKicker, fallback.flowKicker),
+    flowTitle: take(input.flowTitle, fallback.flowTitle),
+    flowLead: take(input.flowLead, fallback.flowLead),
+    timelineSteps: (Array.isArray(input.timelineSteps) && input.timelineSteps.length > 0
+      ? input.timelineSteps
+      : fallback.timelineSteps
+    ).map((item, index) => ({
+      title: take(item?.title, fallback.timelineSteps[index]?.title ?? fallback.timelineSteps[0].title),
+      eyebrow: take(item?.eyebrow, fallback.timelineSteps[index]?.eyebrow ?? fallback.timelineSteps[0].eyebrow),
+      description: take(
+        item?.description,
+        fallback.timelineSteps[index]?.description ?? fallback.timelineSteps[0].description,
+      ),
+    })),
+    libraryKicker: take(input.libraryKicker, fallback.libraryKicker),
+    libraryTitle: take(input.libraryTitle, fallback.libraryTitle),
+    libraryLead: take(input.libraryLead, fallback.libraryLead),
+    libraryFeatures: takeArray(input.libraryFeatures, fallback.libraryFeatures),
+    librarySearchLabel: take(input.librarySearchLabel, fallback.librarySearchLabel),
+    librarySearchSources: take(input.librarySearchSources, fallback.librarySearchSources),
+    libraryCards: (Array.isArray(input.libraryCards) && input.libraryCards.length > 0
+      ? input.libraryCards
+      : fallback.libraryCards
+    ).map((item, index) => ({
+      title: take(item?.title, fallback.libraryCards[index]?.title ?? fallback.libraryCards[0].title),
+      source: take(item?.source, fallback.libraryCards[index]?.source ?? fallback.libraryCards[0].source),
+      tag: take(item?.tag, fallback.libraryCards[index]?.tag ?? fallback.libraryCards[0].tag),
+    })),
+    librarySuggestionLabel: take(input.librarySuggestionLabel, fallback.librarySuggestionLabel),
+    librarySuggestionText: take(input.librarySuggestionText, fallback.librarySuggestionText),
+    analyticsKicker: take(input.analyticsKicker, fallback.analyticsKicker),
+    analyticsTitle: take(input.analyticsTitle, fallback.analyticsTitle),
+    analyticsLead: take(input.analyticsLead, fallback.analyticsLead),
+    analyticsNotes: takeArray(input.analyticsNotes, fallback.analyticsNotes),
+    analyticsChartLabel: take(input.analyticsChartLabel, fallback.analyticsChartLabel),
+    analyticsChartTitle: take(input.analyticsChartTitle, fallback.analyticsChartTitle),
+    analyticsStats: (Array.isArray(input.analyticsStats) && input.analyticsStats.length > 0
+      ? input.analyticsStats
+      : fallback.analyticsStats
+    ).map((item, index) => ({
+      label: take(item?.label, fallback.analyticsStats[index]?.label ?? fallback.analyticsStats[0].label),
+      value: take(item?.value, fallback.analyticsStats[index]?.value ?? fallback.analyticsStats[0].value),
+    })),
+    analyticsRows: (Array.isArray(input.analyticsRows) && input.analyticsRows.length > 0
+      ? input.analyticsRows
+      : fallback.analyticsRows
+    ).map((item, index) => ({
+      label: take(item?.label, fallback.analyticsRows[index]?.label ?? fallback.analyticsRows[0].label),
+      value: take(item?.value, fallback.analyticsRows[index]?.value ?? fallback.analyticsRows[0].value),
+    })),
+    ctaKicker: take(input.ctaKicker, fallback.ctaKicker),
+    ctaTitle: take(input.ctaTitle, fallback.ctaTitle),
+    ctaLead: take(input.ctaLead, fallback.ctaLead),
+    ctaButtonLabel: take(input.ctaButtonLabel, fallback.ctaButtonLabel),
+    footerText: take(input.footerText, fallback.footerText),
+    footerLinkLabel: take(input.footerLinkLabel, fallback.footerLinkLabel),
+    footerLinkUrl: take(input.footerLinkUrl, fallback.footerLinkUrl),
   };
 }
 
@@ -1573,6 +1695,17 @@ async function seedAdminCenterDefaults() {
         ON CONFLICT (key) DO NOTHING
       `;
 
+      await sql`
+        INSERT INTO maturity_admin_settings (key, value, updated_at, updated_by)
+        VALUES (
+          ${'home-content'},
+          ${JSON.stringify(defaultHomeContent)}::jsonb,
+          ${timestamp},
+          ${'system'}
+        )
+        ON CONFLICT (key) DO NOTHING
+      `;
+
       for (const integration of defaultIntegrationPresets) {
         await sql`
           INSERT INTO maturity_admin_integrations (
@@ -2235,14 +2368,20 @@ export async function getWorkflowSettings() {
   return sanitizeWorkflowSettings(settings);
 }
 
+export async function getHomeContentSettings() {
+  const settings = await readSetting<HomeContentSettings>('home-content', defaultHomeContent);
+  return sanitizeHomeContentSettings(settings);
+}
+
 export async function getAdminCenterData(): Promise<AdminCenterData> {
   await seedAdminCenterDefaults();
 
-  const [users, institution, branding, experience, workflow, integrations, logs, audit] =
+  const [users, institution, branding, homeContent, experience, workflow, integrations, logs, audit] =
     await Promise.all([
     getUserDirectory(),
     getInstitutionSettings(),
     getBrandingSettings(),
+    getHomeContentSettings(),
     getExperienceSettings(),
     getWorkflowSettings(),
     readIntegrations(),
@@ -2254,6 +2393,7 @@ export async function getAdminCenterData(): Promise<AdminCenterData> {
     users,
     institution,
     branding,
+    homeContent,
     experience,
     workflow,
     integrations,
@@ -2359,6 +2499,37 @@ export async function updateExperienceSettings(input: ExperienceSettings, actor:
     event: 'experience_settings_updated',
     result: 'ok',
     detail: 'Se guardaron modo de estudio, visibilidad del rail y layout de perfil.',
+    userId: actor.id,
+    userName: actor.name,
+  });
+
+  return next;
+}
+
+export async function updateHomeContentSettings(input: HomeContentSettings, actor: AdminActor) {
+  const before = await getHomeContentSettings();
+  const next = sanitizeHomeContentSettings(input);
+
+  await writeSetting('home-content', next, actor);
+  await recordAdminAudit({
+    classification: 'Funcional',
+    entityType: 'home-content-settings',
+    entityId: 'home-content',
+    action: 'update',
+    actorId: actor.id,
+    actorName: actor.name,
+    detail: 'Se actualizó el contenido editable del home público.',
+    beforeValue: JSON.stringify(before),
+    afterValue: JSON.stringify(next),
+  });
+  await recordAdminLog({
+    category: 'Administración',
+    module: 'Gobierno',
+    service: 'Home público',
+    severity: 'Success',
+    event: 'home_content_updated',
+    result: 'ok',
+    detail: 'Se guardaron los textos del home público desde el editor frontal.',
     userId: actor.id,
     userName: actor.name,
   });

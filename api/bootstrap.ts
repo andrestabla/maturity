@@ -1,6 +1,7 @@
 import {
   getBrandingSettings,
   getExperienceSettings,
+  getHomeContentSettings,
   getInstitutionSettings,
   getWorkflowSettings,
 } from '../lib/admin-center.js';
@@ -20,10 +21,11 @@ export default async function handler(request: Request) {
       return errorResponse(401, 'Authentication required');
     }
 
-    const [data, institution, branding, experience, workflow] = await Promise.all([
+    const [data, institution, branding, homeContent, experience, workflow] = await Promise.all([
       loadAppData(),
       getInstitutionSettings(),
       getBrandingSettings(),
+      getHomeContentSettings(),
       getExperienceSettings(),
       getWorkflowSettings(),
     ]);
@@ -34,6 +36,7 @@ export default async function handler(request: Request) {
           ...data,
           institution,
           branding,
+          homeContent,
           experience,
           workflow,
         },

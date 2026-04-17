@@ -2,6 +2,7 @@ import type {
   AppData,
   BrandingSettings,
   ExperienceSettings,
+  HomeContentSettings,
   InstitutionSettings,
   Role,
   RoleProfile,
@@ -217,6 +218,146 @@ export const defaultExperienceSettings: ExperienceSettings = {
   profileLayout: 'Dos columnas',
 };
 
+export const defaultHomeContent: HomeContentSettings = {
+  navBrandTagline: 'Diseño y producción de experiencias',
+  navFlowLabel: 'Flujo',
+  navLibraryLabel: 'Biblioteca',
+  navAnalyticsLabel: 'Analítica',
+  navContactLabel: 'Contacto',
+  navLoginLabel: 'Ingresar',
+  navDemoLabel: 'Solicitar una demo',
+  heroKicker: 'Gestión de la operación de punta a punta',
+  heroTitle: 'Escala el diseño de experiencias de aprendizaje y la producción de contenidos educativos.',
+  heroLead:
+    'Maturity360 te ayuda a escalar el diseño de experiencias de aprendizaje y la producción de contenidos educativos, asegurando estándares de calidad, control y trazabilidad del 100% del proceso.',
+  heroPrimaryCta: 'Solicitar una demo',
+  heroSecondaryCta: 'Entrar a la plataforma',
+  heroSignals: [
+    { title: '100%', description: 'trazabilidad del proceso académico y productivo.' },
+    { title: 'IA + control', description: 'asistencia operativa sin perder gobierno institucional.' },
+    { title: 'Una sola capa', description: 'planeación, diseño, biblioteca, analítica y QA conectados.' },
+  ],
+  heroCourseLabel: 'Curso activo',
+  heroCourseTitle: 'Diseño de experiencia de aprendizaje',
+  heroCourseProgressLabel: '12 entregables en progreso',
+  heroStatusChip: 'Maturity360',
+  heroStatusText: 'Producción sincronizada',
+  heroSidebarDashboard: 'Dashboard',
+  heroSidebarCourses: 'Cursos',
+  heroSidebarLibrary: 'Biblioteca',
+  heroSidebarAnalytics: 'Analítica',
+  heroStageOneTitle: 'Arquitectura',
+  heroStageOneDescription: 'Momentos, dispositivos y mapa didáctico.',
+  heroStageTwoTitle: 'Diseño con IA',
+  heroStageTwoDescription: 'Actividades, contenidos y criterios editables.',
+  heroStageThreeTitle: 'Validación institucional',
+  heroStageThreeDescription: 'Checklist y control pedagógico antes de publicar.',
+  heroGlobalStatusLabel: 'Estado global',
+  heroCourseProgressValue: '92%',
+  heroCourseProgressDescription: 'Calidad, control y trazabilidad alineados por etapa.',
+  stripItems: [
+    'Diseño, producción y distribución coordinados en un solo flujo.',
+    'Estándares institucionales visibles en cada decisión y entregable.',
+    'Lectura operativa en tiempo real para actuar antes del retraso.',
+  ],
+  flowKicker: 'Timeline operativo',
+  flowTitle: 'Un recorrido que ordena el proyecto, el equipo y la calidad.',
+  flowLead:
+    'Cada etapa aparece como una decisión concreta del proceso. La plataforma no solo acelera tareas: también conserva el hilo lógico, el control institucional y la evidencia de cómo se produjo cada curso.',
+  timelineSteps: [
+    {
+      title: 'Microcurrículo',
+      eyebrow: 'La experiencia inicia aquí',
+      description: 'Crea o carga en el sistema tu planificación microcurricular.',
+    },
+    {
+      title: 'Arquitectura',
+      eyebrow: 'Estructura pedagógica',
+      description:
+        'A partir de los lineamientos institucionales, el sistema genera la arquitectura de la experiencia de aprendizaje (momentos y dispositivos didácticos).',
+    },
+    {
+      title: 'Planificación',
+      eyebrow: 'Ritmo operativo',
+      description: 'Define tiempos y asigna el equipo de trabajo encargado de diseñar y producir la experiencia de aprendizaje.',
+    },
+    {
+      title: 'Diseño',
+      eyebrow: 'Construcción asistida',
+      description:
+        'Construye, con asistencia IA, las actividades de aprendizaje y los contenidos educativos digitales. Integra recursos disponibles en la biblioteca.',
+    },
+    {
+      title: 'Validación institucional',
+      eyebrow: 'Gobierno pedagógico',
+      description:
+        'Valida que los productos generados cumplan con los lineamientos pedagógicos definidos a nivel institucional.',
+    },
+    {
+      title: 'Producción multimedia',
+      eyebrow: 'Recursos listos para salir',
+      description:
+        'Genera los recursos educativos digitales mediante las herramientas de autor integradas o descarga los guiones para producir con otros medios.',
+    },
+    {
+      title: 'Distribución (LMS)',
+      eyebrow: 'Publicación controlada',
+      description: 'Asegura que el contenido generado se cargue en las plataformas definidas para tal fin.',
+    },
+    {
+      title: 'QA',
+      eyebrow: 'Control de calidad final',
+      description: 'Realiza el control de calidad de los productos finales e integrados antes de su publicación.',
+    },
+  ],
+  libraryKicker: 'Biblioteca integrada',
+  libraryTitle: 'Curación asistida para incorporar mejores recursos sin salir del flujo.',
+  libraryLead: 'Integra material educativo a partir de la curación asistida de recursos disponibles en bases de datos académicas y científicas.',
+  libraryFeatures: [
+    'Recursos científicos, académicos y abiertos vinculados al curso.',
+    'Selección guiada para reutilizar contenidos con criterio pedagógico.',
+    'Integración inmediata en diseño, producción y validación.',
+  ],
+  librarySearchLabel: 'Buscar evidencia, artículos y recursos',
+  librarySearchSources: '+ 14 fuentes conectadas',
+  libraryCards: [
+    { title: 'Artículo científico', source: 'OpenAlex + SciELO', tag: 'Curado' },
+    { title: 'Recurso abierto', source: 'CORE + OER', tag: 'Listo para integrar' },
+    { title: 'Video académico', source: 'YouTube educativo', tag: 'Relacionado con módulo 2' },
+  ],
+  librarySuggestionLabel: 'Sugerencia IA',
+  librarySuggestionText: 'Recursos alineados con la actividad de aprendizaje del módulo 2.',
+  analyticsKicker: 'Analítica accionable',
+  analyticsTitle: 'Visibilidad operativa para detectar alertas antes de que se conviertan en cuello de botella.',
+  analyticsLead: 'Visualiza en tiempo real el progreso de producción por curso, identificando alertas tempranas y comparte los tableros con los stakeholders del proyecto.',
+  analyticsNotes: [
+    'Lectura por curso, etapa, equipo y estado de avance.',
+    'Conversación ejecutiva con datos listos para compartir.',
+    'Alertas tempranas para actuar sobre carga, riesgo y calidad.',
+  ],
+  analyticsChartLabel: 'Progreso por curso',
+  analyticsChartTitle: 'Lectura semanal en tiempo real',
+  analyticsStats: [
+    { label: 'Cursos activos', value: '24' },
+    { label: 'Riesgos tempranos', value: '05' },
+    { label: 'Cumplimiento global', value: '92%' },
+  ],
+  analyticsRows: [
+    { label: 'Producción académica', value: '89%' },
+    { label: 'Multimedia', value: '74%' },
+    { label: 'Montaje LMS', value: '67%' },
+    { label: 'QA final', value: '81%' },
+  ],
+  ctaKicker: 'Nueva forma de operar',
+  ctaTitle: 'Preparemos a tu equipo para una nueva forma de trabajar en tiempos de IA.',
+  ctaLead:
+    'Maturity360 conecta criterio pedagógico, producción y control institucional en una sola operación más clara, más rápida y más gobernable.',
+  ctaButtonLabel: 'Hablemos',
+  footerText: 'Soluciones digitales con sentido humano.',
+  footerLinkLabel: 'Producto desarrollado por Algoritmo T',
+  footerLinkUrl: 'https://www.algoritmot.com/educacion',
+};
+
 export const defaultWorkflowSettings: WorkflowSettings = {
   showWorkflowStageCards: true,
   showQuickAccessPanel: true,
@@ -283,6 +424,7 @@ export function createEmptyAppData(): AppData {
       })),
     },
     branding: { ...defaultBranding },
+    homeContent: { ...defaultHomeContent },
     experience: { ...defaultExperienceSettings },
     workflow: { ...defaultWorkflowSettings },
   };

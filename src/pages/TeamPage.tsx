@@ -24,7 +24,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SidePanel } from '../components/SidePanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
-import { NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { IntegrationAssistant } from '../components/admin/IntegrationAssistant.js';
 import type {
   AdminCenterData,
@@ -4983,6 +4983,17 @@ export function TeamPage({
               workflow, integraciones, servicios conectados, logs y auditoría, sin mezclar esta capa
               con la operación diaria de producción de cursos.
             </p>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <Link to="/edit" className="ghost-button">
+                <PencilLine size={16} />
+                <span>Editar home público</span>
+              </Link>
+              <Link to="/" target="_blank" rel="noreferrer" className="ghost-button">
+                <Eye size={16} />
+                <span>Ver home</span>
+              </Link>
+            </div>
 
             <div className="admin-kpi-grid">
               <div className="admin-kpi">

@@ -2,6 +2,7 @@ import {
   getAdminCenterData,
   updateBrandingSettings,
   updateExperienceSettings,
+  updateHomeContentSettings,
   updateInstitutionSettings,
   updateWorkflowSettings,
 } from '../lib/admin-center.js';
@@ -11,6 +12,7 @@ import { getSessionUser } from '../lib/session.js';
 import type {
   BrandingSettings,
   ExperienceSettings,
+  HomeContentSettings,
   InstitutionSettings,
   WorkflowSettings,
 } from '../src/types.js';
@@ -35,6 +37,10 @@ type AdminCenterPatchPayload =
   | {
       section: 'workflow';
       data: WorkflowSettings;
+    }
+  | {
+      section: 'home-content';
+      data: HomeContentSettings;
     };
 
 export default async function handler(request: Request) {
@@ -108,6 +114,17 @@ export default async function handler(request: Request) {
 
         return jsonResponse({
           workflow,
+        });
+      }
+
+      if (payload.section === 'home-content') {
+        const homeContent = await updateHomeContentSettings(payload.data, {
+          id: user.id,
+          name: user.name,
+        });
+
+        return jsonResponse({
+          homeContent,
         });
       }
 

@@ -25,8 +25,7 @@ function buildEmbedHtml(params: {
   height: number;
   title: string;
 }): string {
-  const { contentId, filesBase, width, height, title } = params;
-  const baseUrl = filesBase;
+  const { contentId, filesBase, width, title } = params;
 
   return `<!DOCTYPE html>
 <html lang="es">

@@ -9,6 +9,73 @@ export const config = {
   runtime: 'edge',
 };
 
+interface YouTubeFallbackItem {
+  id: string;
+  title: string;
+  authors: string[];
+  publishedAt: string;
+  abstract: string;
+  tags: string[];
+  videoId: string;
+}
+
+const YOUTUBE_FALLBACK_CATALOG: YouTubeFallbackItem[] = [
+  {
+    id: 'yt-fallback-3b1b-nn',
+    title: 'But what is a Neural Network?',
+    authors: ['3Blue1Brown'],
+    publishedAt: '2017-10-19',
+    abstract: 'Visual explicación de redes neuronales y flujo básico de entrenamiento para clases introductorias.',
+    tags: ['redes neuronales', 'deep learning', 'fundamentos'],
+    videoId: 'aircAruvnKk',
+  },
+  {
+    id: 'yt-fallback-statquest-nn',
+    title: 'Neural Networks Pt. 1 (StatQuest)',
+    authors: ['StatQuest with Josh Starmer'],
+    publishedAt: '2017-11-16',
+    abstract: 'Introducción práctica a neuronas, capas y señales de aprendizaje supervisado.',
+    tags: ['redes neuronales', 'machine learning', 'supervisado'],
+    videoId: 'CqOfi41LfDw',
+  },
+  {
+    id: 'yt-fallback-statquest-overfit',
+    title: 'Overfitting and Underfitting (StatQuest)',
+    authors: ['StatQuest with Josh Starmer'],
+    publishedAt: '2018-07-16',
+    abstract: 'Explica sobreajuste, subajuste y cómo interpretar sesgo/varianza de forma pedagógica.',
+    tags: ['overfitting', 'regularización', 'evaluación'],
+    videoId: 'EuBBz3bI-aA',
+  },
+  {
+    id: 'yt-fallback-cs229',
+    title: 'Machine Learning (Stanford CS229) - Lecture 1',
+    authors: ['Stanford Online'],
+    publishedAt: '2018-09-28',
+    abstract: 'Clase de apertura sobre fundamentos de ML, formulación de problemas y evaluación inicial.',
+    tags: ['machine learning', 'curso', 'fundamentos'],
+    videoId: 'jGwO_UgTS7I',
+  },
+  {
+    id: 'yt-fallback-andrej-nn',
+    title: 'The spelled-out intro to neural networks and backpropagation',
+    authors: ['Andrej Karpathy'],
+    publishedAt: '2022-06-03',
+    abstract: 'Sesión técnica aplicada para entender entrenamiento y backpropagation paso a paso.',
+    tags: ['redes neuronales', 'backpropagation', 'python'],
+    videoId: 'VMj-3S1tku0',
+  },
+  {
+    id: 'yt-fallback-fastai',
+    title: 'Practical Deep Learning for Coders - Lesson 1',
+    authors: ['Jeremy Howard'],
+    publishedAt: '2022-07-06',
+    abstract: 'Clase enfocada en práctica docente para construir modelos sin perder intuición conceptual.',
+    tags: ['deep learning', 'aprendizaje práctico', 'curso'],
+    videoId: '8SF_h3xF3cE',
+  },
+];
+
 /**
  * Federated Library Search — v3 (Full Phase 1+2+3)
  * Supports all 8 external providers + institutional.
@@ -88,16 +155,28 @@ export default async function handler(request: Request) {
     };
 
     const orchestratorResult = await federatedSearch(group, searchParams);
+    let finalResults = orchestratorResult.results;
+    let finalTotal = orchestratorResult.total;
+    let usedYouTubeFallback = false;
+
+    if (group === 'YouTube' && finalResults.length === 0) {
+      const fallbackResults = buildYouTubeFallbackResults(searchParams.query, limit);
+      if (fallbackResults.length > 0) {
+        finalResults = fallbackResults;
+        finalTotal = fallbackResults.length;
+        usedYouTubeFallback = true;
+      }
+    }
 
     // Persist to cache (non-blocking, swallow DB errors)
-    if (q && orchestratorResult.results.length > 0) {
+    if (q && finalResults.length > 0 && !usedYouTubeFallback) {
       const primaryProvider = getPrimaryProviderForGroup(group);
-      void persistLibrarySearchCacheFast(primaryProvider, cacheKey, cacheFilters, orchestratorResult.results).catch(() => {});
+      void persistLibrarySearchCacheFast(primaryProvider, cacheKey, cacheFilters, finalResults).catch(() => {});
     }
 
     return jsonResponse({
-      results: orchestratorResult.results.slice(0, limit),
-      total: orchestratorResult.total,
+      results: finalResults.slice(0, limit),
+      total: finalTotal,
       group,
       query: q,
       providerStates: orchestratorResult.providerStates,
@@ -192,6 +271,75 @@ function getPrimaryProviderForGroup(group: LibraryGroup): LibraryProvider {
     Otros: 'institutional',
   };
   return map[group] ?? 'openalex';
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toYouTubeFallbackResult(item: YouTubeFallbackItem): LibrarySearchResult {
+  const canonicalUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+  return {
+    id: item.id,
+    canonicalKey: `youtube:${item.videoId}`,
+    provider: 'youtube',
+    providerRecordId: item.videoId,
+    providers: ['youtube'],
+    group: 'YouTube',
+    title: item.title,
+    authors: item.authors,
+    publishedAt: item.publishedAt,
+    abstract: item.abstract,
+    descriptionHtml: '',
+    doi: '',
+    canonicalUrl,
+    resourceType: 'Video Educativo',
+    language: 'en',
+    openAccess: true,
+    citationCount: 0,
+    thumbnailUrl: `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
+    embedUrl: `https://www.youtube.com/embed/${item.videoId}?rel=0&modestbranding=1`,
+    institutionId: undefined,
+    institutionName: undefined,
+    visibility: 'Publico',
+    previewKind: 'video',
+    tags: item.tags,
+    metadata: {
+      source: 'youtube-fallback',
+    },
+    score: 0.72,
+    sourceKinds: ['YouTube'],
+    cached: false,
+  };
+}
+
+function buildYouTubeFallbackResults(query: string, limit: number): LibrarySearchResult[] {
+  const normalizedQuery = normalizeText(query);
+  const queryTokens = normalizedQuery.split(' ').filter((token) => token.length >= 3);
+
+  const ranked = YOUTUBE_FALLBACK_CATALOG
+    .map((item) => {
+      const haystack = normalizeText(`${item.title} ${item.abstract} ${item.tags.join(' ')}`);
+      const matchScore = queryTokens.reduce((acc, token) => (haystack.includes(token) ? acc + 1 : acc), 0);
+      return {
+        item,
+        matchScore,
+      };
+    })
+    .sort((left, right) => right.matchScore - left.matchScore);
+
+  const selected = ranked
+    .filter((entry, index) => entry.matchScore > 0 || index < 3)
+    .slice(0, Math.min(limit, 8))
+    .map((entry) => toYouTubeFallbackResult(entry.item));
+
+  return selected;
 }
 
 interface LibrarySearchCacheFastRow {

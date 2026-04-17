@@ -1,16 +1,16 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 // Build 2026-04-09T20:31 v0.2.1 - Force cache invalidation
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
-import { defaultBranding } from './data/platformDefaults.js';
+import { defaultBranding, defaultHomeContent } from './data/platformDefaults.js';
 import { useAppData } from './hooks/useAppData.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
 import { LandingPage } from './pages/LandingPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import type { Role } from './types.js';
-import { getVisibleCourses } from './utils/domain.js';
+import { canManageUsers } from './utils/permissions.js';
 
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage.js').then((module) => ({ default: module.DashboardPage })),
@@ -37,6 +37,9 @@ const TeamPage = lazy(() =>
 );
 const UserProfilePage = lazy(() =>
   import('./pages/UserProfilePage.js').then((module) => ({ default: module.UserProfilePage })),
+);
+const HomeEditorPage = lazy(() =>
+  import('./pages/HomeEditorPage.js').then((module) => ({ default: module.HomeEditorPage })),
 );
 
 function createMonogramFavicon(label: string, background: string, foreground: string) {
@@ -89,7 +92,7 @@ export default function App() {
   const location = useLocation();
   const [role, setRole] = useState<Role>('Coordinador');
   const [branding, setBranding] = useState(defaultBranding);
-  const recommendationsPrewarmKeyRef = useRef('');
+  const [homeContent, setHomeContent] = useState(defaultHomeContent);
   const {
     appData,
     isLoading,
@@ -120,6 +123,7 @@ export default function App() {
   useEffect(() => {
     if (status === 'authenticated') {
       setBranding(appData.branding);
+      setHomeContent(appData.homeContent);
       return;
     }
 
@@ -137,10 +141,16 @@ export default function App() {
           return;
         }
 
-        const payload = (await response.json()) as { branding?: typeof defaultBranding };
+        const payload = (await response.json()) as {
+          branding?: typeof defaultBranding;
+          homeContent?: typeof defaultHomeContent;
+        };
 
         if (!cancelled && payload.branding) {
           setBranding(payload.branding);
+        }
+        if (!cancelled && payload.homeContent) {
+          setHomeContent(payload.homeContent);
         }
       } catch {
         /* noop */
@@ -152,7 +162,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [appData.branding, status]);
+  }, [appData.branding, appData.homeContent, status]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', branding.primaryColor);
@@ -179,36 +189,6 @@ export default function App() {
 
     favicon.href = faviconHref;
   }, [branding, location.pathname, session.authenticated]);
-
-  useEffect(() => {
-    if (status !== 'authenticated' || !session.user) {
-      return;
-    }
-
-    const visibleCourses = getVisibleCourses(appData, activeRole, session.user).slice(0, 3);
-    if (visibleCourses.length === 0) {
-      return;
-    }
-    const warmKey = `${session.user.id}:${visibleCourses.map((course) => course.slug).join('|')}`;
-    if (recommendationsPrewarmKeyRef.current === warmKey) {
-      return;
-    }
-    recommendationsPrewarmKeyRef.current = warmKey;
-
-    const abortController = new AbortController();
-    visibleCourses.forEach((course) => {
-      void fetch(`/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`, {
-        method: 'GET',
-        signal: abortController.signal,
-      }).catch(() => {
-        // precalentamiento best-effort
-      });
-    });
-
-    return () => {
-      abortController.abort();
-    };
-  }, [activeRole, appData, session.user, status]);
 
   function renderBrandMark() {
     if (branding.logoMode === 'Imagen' && branding.logoUrl.trim()) {
@@ -265,7 +245,7 @@ export default function App() {
             branding={branding}
           />
         ) : (
-          <LandingPage branding={branding} />
+          <LandingPage branding={branding} homeContent={homeContent} />
         )
       ) : (
         <AppShell
@@ -399,6 +379,16 @@ export default function App() {
                 appData={appData}
                 refreshAppData={refreshAppData}
               />
+            }
+          />
+          <Route
+            path="/edit"
+            element={
+              canManageUsers(session.user.role) ? (
+                <HomeEditorPage />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
             }
           />
           <Route

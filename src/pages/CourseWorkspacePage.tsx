@@ -154,9 +154,8 @@ const WRITING_SAVE_REQUEST_TIMEOUT_MS = 20000;
 const WRITING_INLINE_EXTRACTION_MAX_BYTES = 2 * 1024 * 1024;
 const WRITING_CLIENT_EXTRACTION_TIMEOUT_MS = 120000;
 const WRITING_UPLOAD_ALLOWED_EXTENSIONS = new Set(['pdf', 'docx']);
-const WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS = 45000;
+const WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS = 90000;
 const WRITING_AI_GENERATION_MAX_ATTEMPTS = 2;
-const WRITING_AI_GENERATION_COOLDOWN_MS = 500;
 const WRITING_AI_RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const WRITING_AI_RETRY_DELAYS_MS = [900, 1600] as const;
 
@@ -2326,7 +2325,6 @@ export function CourseWorkspacePage({
   const [writingProcessingProgress, setWritingProcessingProgress] = useState(0);
   const [writingKnowledgeProgress, setWritingKnowledgeProgress] = useState(0);
   const [writingGenerationProgress, setWritingGenerationProgress] = useState(0);
-  const [isWritingGeneratingAll, setIsWritingGeneratingAll] = useState(false);
   const [isWritingFinalizing, setIsWritingFinalizing] = useState(false);
   const [isWritingInstructionsPanelOpen, setIsWritingInstructionsPanelOpen] = useState(false);
   const [planningSectionFilter, setPlanningSectionFilter] = useState('Todas');
@@ -5682,7 +5680,10 @@ export function CourseWorkspacePage({
 
   function renderBiblioteca() {
     const linkedLinks = appData.libraryCourseLinks.filter((link) =>
-      link.courseSlug === currentCourse.slug && (link.sourceModule ?? 'legacy') === 'library',
+      link.courseSlug === currentCourse.slug
+        && (link.sourceModule ?? 'legacy') === 'library'
+        && typeof link.addedBy === 'string'
+        && link.addedBy.trim().length > 0,
     );
     const uniqueByAsset = new Map<string, { targetUnit?: string }>();
     linkedLinks.forEach((link) => {
@@ -7803,6 +7804,7 @@ export function CourseWorkspacePage({
       supportAssets?: ProductWritingAsset[];
       libraryResourceIds?: string[];
       timeoutMs?: number;
+      aiPromptOverride?: string;
     },
   ) {
     const controller = new AbortController();
@@ -7828,7 +7830,7 @@ export function CourseWorkspacePage({
           sectionInstructions: section.instructions,
           supportAssets: options?.supportAssets ?? writingDraft?.supportAssets ?? [],
           libraryResourceIds: options?.libraryResourceIds ?? writingDraft?.libraryResourceIds ?? [],
-          aiPrompt: writingDraft?.aiPrompt,
+          aiPrompt: options?.aiPromptOverride ?? writingDraft?.aiPrompt,
         }),
       });
 
@@ -7975,121 +7977,6 @@ export function CourseWorkspacePage({
     }
 
     return patchCourseProductOnServer(selectedWritingProduct.id, patch, options);
-  }
-
-  async function handleGenerateWritingProduct() {
-    if (!selectedWritingProduct || !writingDraft || writingDraft.sections.length === 0) {
-      return;
-    }
-
-    setWritingError(null);
-    setIsWritingGeneratingAll(true);
-    setWritingGenerationProgress(0);
-
-    try {
-      const pendingSections = writingDraft.sections.filter(
-        (section) => stripHtmlToText(section.content).trim().length === 0,
-      );
-      const sectionsToGenerate =
-        pendingSections.length > 0 ? pendingSections : writingDraft.sections;
-      const total = sectionsToGenerate.length;
-      const progressBase =
-        writingDraft.sections.length > 0
-          ? Math.round(((writingDraft.sections.length - total) / writingDraft.sections.length) * 100)
-          : 0;
-      const failedSections: string[] = [];
-      setWritingGenerationProgress(progressBase);
-
-      for (let index = 0; index < total; index += 1) {
-        const section = sectionsToGenerate[index];
-        setWritingGeneratingSectionId(section.id);
-        const stepStart = progressBase + Math.round((index / total) * (100 - progressBase));
-        const stepTarget = progressBase + Math.round(((index + 1) / total) * (100 - progressBase));
-        setWritingGenerationProgress((current) => Math.max(current, stepStart));
-
-        let stepTicker: number | null = window.setInterval(() => {
-          setWritingGenerationProgress((current) => {
-            if (current >= stepTarget - 1) {
-              return current;
-            }
-            return Math.min(stepTarget - 1, current + 1);
-          });
-        }, 250);
-
-        let sectionCompleted = false;
-        let sectionErrorMessage = '';
-
-        for (let attempt = 1; attempt <= WRITING_AI_GENERATION_MAX_ATTEMPTS; attempt += 1) {
-          const shouldUseLiteContext = attempt >= 2;
-          try {
-            const payload = await requestWritingSectionGeneration(section, {
-              supportAssets: shouldUseLiteContext ? [] : writingDraft.supportAssets,
-              libraryResourceIds: shouldUseLiteContext ? [] : writingDraft.libraryResourceIds,
-              timeoutMs: Math.round(
-                WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS * (shouldUseLiteContext ? 0.8 : 1),
-              ),
-            });
-
-            if (payload?.product) {
-              setWritingDraft(normalizeWritingDraft(payload.product));
-            }
-
-            sectionCompleted = true;
-            break;
-          } catch (rawError) {
-            const error = rawError as Error & { retryable?: boolean };
-            sectionErrorMessage = error.message || `No fue posible generar "${section.title}".`;
-            const canRetry =
-              error.retryable !== false && attempt < WRITING_AI_GENERATION_MAX_ATTEMPTS;
-
-            if (!canRetry) {
-              break;
-            }
-
-            await sleep(
-              WRITING_AI_RETRY_DELAYS_MS[Math.min(attempt - 1, WRITING_AI_RETRY_DELAYS_MS.length - 1)],
-            );
-          }
-        }
-
-        if (stepTicker !== null) {
-          window.clearInterval(stepTicker);
-          stepTicker = null;
-        }
-
-        if (!sectionCompleted) {
-          failedSections.push(section.title);
-          setWritingError(sectionErrorMessage || `No fue posible generar "${section.title}".`);
-        }
-
-        setWritingGenerationProgress(stepTarget);
-
-        if (index < total - 1) {
-          await sleep(WRITING_AI_GENERATION_COOLDOWN_MS);
-        }
-      }
-
-      if (failedSections.length > 0) {
-        throw new Error(
-          `No se pudieron completar ${failedSections.length} secciones: ${failedSections.join(', ')}. ` +
-            'Puedes reintentar la generación; el sistema conserva el avance logrado.',
-        );
-      }
-
-      refreshAppData();
-      void showAlert({
-        title: 'Producto generado',
-        message: `La IA completó ${total}/${total} secciones pendientes del producto.`,
-        tone: 'success',
-      });
-    } catch (error) {
-      setWritingError(
-        error instanceof Error ? error.message : 'No fue posible generar el producto con IA.',
-      );
-    } finally {
-      setWritingGeneratingSectionId(null);
-      setIsWritingGeneratingAll(false);
-    }
   }
 
   async function handleWritingSave() {
@@ -8639,6 +8526,20 @@ export function CourseWorkspacePage({
 
     setWritingError(null);
     setWritingGeneratingSectionId(section.id);
+    setWritingGenerationProgress(5);
+    const suggestedPrompt = buildSuggestedWritingPrompt(
+      selectedWritingProduct,
+      writingDraft.sections,
+    );
+    const effectivePrompt = (writingDraft.aiPrompt?.trim() || suggestedPrompt).trim();
+    let progressTicker: number | null = window.setInterval(() => {
+      setWritingGenerationProgress((current) => {
+        if (current >= 99) {
+          return current;
+        }
+        return Math.min(99, current + 2);
+      });
+    }, 350);
 
     try {
       let payload: { error?: string; product?: CourseProduct } | null = null;
@@ -8647,6 +8548,7 @@ export function CourseWorkspacePage({
           payload = await requestWritingSectionGeneration(section, {
             supportAssets: attempt >= 2 ? [] : writingDraft.supportAssets,
             libraryResourceIds: attempt >= 2 ? [] : writingDraft.libraryResourceIds,
+            aiPromptOverride: effectivePrompt,
             timeoutMs: Math.round(
               WRITING_AI_GENERATION_REQUEST_TIMEOUT_MS * (attempt >= 2 ? 0.8 : 1),
             ),
@@ -8667,18 +8569,32 @@ export function CourseWorkspacePage({
         setWritingDraft(normalizeWritingDraft(payload.product));
       }
 
+      setWritingGenerationProgress(100);
       refreshAppData();
       void showAlert({
         title: 'Sección generada',
-        message: `La sección "${section.title}" quedó actualizada.`,
+        message: `La sección "${section.title}" quedó actualizada con la IA.`,
         tone: 'success',
       });
     } catch (error) {
-      setWritingError(
-        error instanceof Error ? error.message : `No fue posible generar "${section.title}".`,
-      );
+      const message =
+        error instanceof Error ? error.message : `No fue posible generar "${section.title}".`;
+      setWritingGenerationProgress(100);
+      setWritingError(message);
+      void showAlert({
+        title: 'Error al generar sección',
+        message,
+        tone: 'error',
+      });
     } finally {
+      if (progressTicker !== null) {
+        window.clearInterval(progressTicker);
+        progressTicker = null;
+      }
       setWritingGeneratingSectionId(null);
+      window.setTimeout(() => {
+        setWritingGenerationProgress(0);
+      }, 800);
     }
   }
 
@@ -8701,6 +8617,7 @@ export function CourseWorkspacePage({
     const activeWritingMode = activeWritingRoute;
     const generatingSectionTitle =
       writingDraft.sections.find((section) => section.id === writingGeneratingSectionId)?.title ?? '';
+    const isGeneratingSection = Boolean(writingGeneratingSectionId);
     const generationCompletionRatio =
       totalSections > 0 ? Math.round((filledSections / totalSections) * 100) : 0;
 
@@ -8803,17 +8720,36 @@ export function CourseWorkspacePage({
                 <h4>{activeSection.title}</h4>
               </div>
               {options?.allowGenerate && canEditSelectedWritingProduct ? (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  disabled={writingGeneratingSectionId === activeSection.id || isWritingGeneratingAll}
-                  onClick={() => void handleGenerateWritingSection(activeSection)}
-                >
-                  <Sparkles size={16} />
-                  <span>
-                    {writingGeneratingSectionId === activeSection.id ? 'Generando…' : 'Generar sección'}
-                  </span>
-                </button>
+                <div className="stack-xs">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={isGeneratingSection}
+                    onClick={() => void handleGenerateWritingSection(activeSection)}
+                  >
+                    {writingGeneratingSectionId === activeSection.id ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={16} />
+                    )}
+                    <span>
+                      {writingGeneratingSectionId === activeSection.id ? 'Generando…' : 'Generar sección'}
+                    </span>
+                  </button>
+                  {writingGeneratingSectionId === activeSection.id ? (
+                    <div className="writing-progress-wrap">
+                      <div className="writing-progress">
+                        <div
+                          className="writing-progress__bar"
+                          style={{ width: `${Math.max(0, Math.min(100, writingGenerationProgress))}%` }}
+                        />
+                      </div>
+                      <span className="writing-progress__value">
+                        {Math.max(1, Math.min(99, Math.round(writingGenerationProgress)))}%
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <RichTextEditor
@@ -8892,24 +8828,24 @@ export function CourseWorkspacePage({
       },
       {
         key: 'generate',
-        title: 'Generar producto',
+        title: 'Generar sección',
         detail:
-          isWritingGeneratingAll
+          isGeneratingSection
             ? generatingSectionTitle
               ? `Generando sección "${generatingSectionTitle}" (${Math.max(1, Math.min(99, writingGenerationProgress))}%).`
-              : `La IA está construyendo el producto por secciones (${Math.max(1, Math.min(99, writingGenerationProgress))}%).`
+              : `Generando sección con IA (${Math.max(1, Math.min(99, writingGenerationProgress))}%).`
             : generationCompletionRatio >= 100
-              ? 'La generación por IA completó todas las secciones.'
+              ? 'Todas las secciones ya tienen contenido.'
               : generationCompletionRatio > 0
-                ? `Generación parcial completada (${generationCompletionRatio}%). Puedes continuar o reintentar.`
-            : 'Genera todas las secciones con base en instrucciones y fuentes.',
+                ? `${generationCompletionRatio}% del producto ya está diligenciado por secciones.`
+                : 'Usa "Generar sección" en cada sección activa para producir contenido.',
         status:
-          isWritingGeneratingAll
+          isGeneratingSection
             ? ('active' as const)
             : generationCompletionRatio >= 100
               ? ('done' as const)
               : ('pending' as const),
-        progress: isWritingGeneratingAll
+        progress: isGeneratingSection
           ? writingGenerationProgress
           : Math.max(writingGenerationProgress, generationCompletionRatio),
       },
@@ -9189,7 +9125,7 @@ export function CourseWorkspacePage({
                   <div className="section-heading">
                     <div>
                       <span className="eyebrow">Opción 2</span>
-                      <h4>Generar producto con asistente IA</h4>
+                      <h4>Escritura asistida por IA</h4>
                     </div>
                   </div>
                   <p className="field-help">
@@ -9293,7 +9229,7 @@ export function CourseWorkspacePage({
                       </button>
                     </div>
                     <label className="field">
-                      <span>Prompt adicional</span>
+                      <span>Prompt de generación por secciones</span>
                       <div className="field__control">
                         <textarea
                           rows={8}
@@ -9309,45 +9245,15 @@ export function CourseWorkspacePage({
                         />
                       </div>
                     </label>
+                    <p className="field-help">
+                      Este prompt alimenta exclusivamente la acción "Generar sección".
+                    </p>
                   </div>
 
                   <div className="writing-step-stage">
                     <div className="section-heading">
                       <div>
                         <span className="eyebrow">Paso 3</span>
-                        <h4>Generar producto</h4>
-                      </div>
-                      {canEditSelectedWritingProduct ? (
-                        <button
-                          type="button"
-                          className="cta-button"
-                          disabled={isWritingGeneratingAll}
-                          onClick={() => void handleGenerateWritingProduct()}
-                        >
-                          <Sparkles size={16} />
-                          <span>{isWritingGeneratingAll ? 'Generando…' : 'Generar producto'}</span>
-                        </button>
-                      ) : null}
-                    </div>
-                    <p className="field-help">
-                      La IA generará el producto por secciones, usando fuentes cargadas, recursos
-                      de biblioteca y el prompt estructural.
-                      {' '}
-                      {isWritingGeneratingAll
-                        ? `Progreso actual: ${Math.max(1, Math.min(99, Math.round(writingGenerationProgress)))}%.`
-                        : writingGenerationProgress > 0
-                          ? `Último avance: ${Math.max(0, Math.min(100, Math.round(writingGenerationProgress)))}%.`
-                          : ''}
-                    </p>
-                    <div className="writing-progress">
-                      <div className="writing-progress__bar" style={{ width: `${Math.max(0, Math.min(100, writingGenerationProgress))}%` }} />
-                    </div>
-                  </div>
-
-                  <div className="writing-step-stage">
-                    <div className="section-heading">
-                      <div>
-                        <span className="eyebrow">Paso 4</span>
                         <h4>Ver o editar producto</h4>
                       </div>
                     </div>

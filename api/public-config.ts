@@ -1,4 +1,4 @@
-import { getBrandingSettings } from '../lib/admin-center.js';
+import { getBrandingSettings, getHomeContentSettings } from '../lib/admin-center.js';
 import { errorResponse, jsonResponse } from '../lib/http.js';
 
 export const config = {
@@ -11,11 +11,15 @@ export default async function handler(request: Request) {
   }
 
   try {
-    const branding = await getBrandingSettings();
+    const [branding, homeContent] = await Promise.all([
+      getBrandingSettings(),
+      getHomeContentSettings(),
+    ]);
 
     return jsonResponse(
       {
         branding,
+        homeContent,
       },
       {
         headers: {

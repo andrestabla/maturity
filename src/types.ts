@@ -561,6 +561,7 @@ export interface AppData {
   users: AuthUser[];
   institution: InstitutionSettings;
   branding: BrandingSettings;
+  homeContent: HomeContentSettings;
   experience: ExperienceSettings;
   workflow: WorkflowSettings;
 }
@@ -705,6 +706,96 @@ export interface BrandingSettings {
   supportUrl: string;
 }
 
+export interface HomeHeroSignal {
+  title: string;
+  description: string;
+}
+
+export interface HomeTimelineStep {
+  title: string;
+  eyebrow: string;
+  description: string;
+}
+
+export interface HomeLibraryCard {
+  title: string;
+  source: string;
+  tag: string;
+}
+
+export interface HomeAnalyticsStat {
+  label: string;
+  value: string;
+}
+
+export interface HomeAnalyticsRow {
+  label: string;
+  value: string;
+}
+
+export interface HomeContentSettings {
+  navBrandTagline: string;
+  navFlowLabel: string;
+  navLibraryLabel: string;
+  navAnalyticsLabel: string;
+  navContactLabel: string;
+  navLoginLabel: string;
+  navDemoLabel: string;
+  heroKicker: string;
+  heroTitle: string;
+  heroLead: string;
+  heroPrimaryCta: string;
+  heroSecondaryCta: string;
+  heroSignals: HomeHeroSignal[];
+  heroCourseLabel: string;
+  heroCourseTitle: string;
+  heroCourseProgressLabel: string;
+  heroStatusChip: string;
+  heroStatusText: string;
+  heroSidebarDashboard: string;
+  heroSidebarCourses: string;
+  heroSidebarLibrary: string;
+  heroSidebarAnalytics: string;
+  heroStageOneTitle: string;
+  heroStageOneDescription: string;
+  heroStageTwoTitle: string;
+  heroStageTwoDescription: string;
+  heroStageThreeTitle: string;
+  heroStageThreeDescription: string;
+  heroGlobalStatusLabel: string;
+  heroCourseProgressValue: string;
+  heroCourseProgressDescription: string;
+  stripItems: string[];
+  flowKicker: string;
+  flowTitle: string;
+  flowLead: string;
+  timelineSteps: HomeTimelineStep[];
+  libraryKicker: string;
+  libraryTitle: string;
+  libraryLead: string;
+  libraryFeatures: string[];
+  librarySearchLabel: string;
+  librarySearchSources: string;
+  libraryCards: HomeLibraryCard[];
+  librarySuggestionLabel: string;
+  librarySuggestionText: string;
+  analyticsKicker: string;
+  analyticsTitle: string;
+  analyticsLead: string;
+  analyticsNotes: string[];
+  analyticsChartLabel: string;
+  analyticsChartTitle: string;
+  analyticsStats: HomeAnalyticsStat[];
+  analyticsRows: HomeAnalyticsRow[];
+  ctaKicker: string;
+  ctaTitle: string;
+  ctaLead: string;
+  ctaButtonLabel: string;
+  footerText: string;
+  footerLinkLabel: string;
+  footerLinkUrl: string;
+}
+
 export interface ExperienceSettings {
   studioMode: WorkspaceStudioMode;
   showSummaryHero: boolean;
@@ -776,6 +867,7 @@ export interface AdminCenterData {
   users: AuthUser[];
   institution: InstitutionSettings;
   branding: BrandingSettings;
+  homeContent: HomeContentSettings;
   experience: ExperienceSettings;
   workflow: WorkflowSettings;
   integrations: AdminIntegration[];

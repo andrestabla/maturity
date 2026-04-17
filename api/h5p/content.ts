@@ -71,7 +71,7 @@ export default async function handler(request: Request) {
       if (!existing) return errorResponse(404, 'Actividad H5P no encontrada');
 
       // Only creator or admin can update
-      if (existing.createdBy !== user.id && user.role !== 'admin') {
+      if (existing.createdBy !== user.id && user.role !== 'Administrador') {
         return errorResponse(403, 'Sin permiso para editar esta actividad');
       }
 
@@ -88,7 +88,7 @@ export default async function handler(request: Request) {
       const existing = await getH5PContent(id);
       if (!existing) return errorResponse(404, 'Actividad H5P no encontrada');
 
-      if (existing.createdBy !== user.id && user.role !== 'admin') {
+      if (existing.createdBy !== user.id && user.role !== 'Administrador') {
         return errorResponse(403, 'Sin permiso para eliminar esta actividad');
       }
 

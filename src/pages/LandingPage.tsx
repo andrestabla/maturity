@@ -22,106 +22,20 @@ import {
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import type { BrandingSettings } from '../types.js';
+import type { BrandingSettings, HomeContentSettings } from '../types.js';
 
 const whatsappUrl =
   'https://api.whatsapp.com/send/?phone=573006590161&text&type=phone_number&app_absent=0';
 
 interface LandingPageProps {
   branding: BrandingSettings;
+  homeContent: HomeContentSettings;
 }
 
-const timelineSteps = [
-  {
-    title: 'Microcurrículo',
-    eyebrow: 'La experiencia inicia aquí',
-    description: 'Crea o carga en el sistema tu planificación microcurricular.',
-    accent: 'coral',
-  },
-  {
-    title: 'Arquitectura',
-    eyebrow: 'Estructura pedagógica',
-    description:
-      'A partir de los lineamientos institucionales, el sistema genera la arquitectura de la experiencia de aprendizaje (momentos y dispositivos didácticos).',
-    accent: 'gold',
-  },
-  {
-    title: 'Planificación',
-    eyebrow: 'Ritmo operativo',
-    description:
-      'Define tiempos y asigna el equipo de trabajo encargado de diseñar y producir la experiencia de aprendizaje.',
-    accent: 'ocean',
-  },
-  {
-    title: 'Diseño',
-    eyebrow: 'Construcción asistida',
-    description:
-      'Construye, con asistencia IA, las actividades de aprendizaje y los contenidos educativos digitales. Integra recursos disponibles en la biblioteca.',
-    accent: 'sage',
-  },
-  {
-    title: 'Validación institucional',
-    eyebrow: 'Gobierno pedagógico',
-    description:
-      'Valida que los productos generados cumplan con los lineamientos pedagógicos definidos a nivel institucional.',
-    accent: 'ink',
-  },
-  {
-    title: 'Producción multimedia',
-    eyebrow: 'Recursos listos para salir',
-    description:
-      'Genera los recursos educativos digitales mediante las herramientas de autor integradas o descarga los guiones para producir con otros medios.',
-    accent: 'coral',
-  },
-  {
-    title: 'Distribución (LMS)',
-    eyebrow: 'Publicación controlada',
-    description:
-      'Asegura que el contenido generado se cargue en las plataformas definidas para tal fin.',
-    accent: 'ocean',
-  },
-  {
-    title: 'QA',
-    eyebrow: 'Control de calidad final',
-    description:
-      'Realiza el control de calidad de los productos finales e integrados antes de su publicación.',
-    accent: 'sage',
-  },
-];
-
-const libraryCards = [
-  {
-    title: 'Artículo científico',
-    source: 'OpenAlex + SciELO',
-    tag: 'Curado',
-    icon: FileText,
-  },
-  {
-    title: 'Recurso abierto',
-    source: 'CORE + OER',
-    tag: 'Listo para integrar',
-    icon: Globe,
-  },
-  {
-    title: 'Video académico',
-    source: 'YouTube educativo',
-    tag: 'Relacionado con módulo 2',
-    icon: PlayCircle,
-  },
-];
-
-const analyticsStats = [
-  { label: 'Cursos activos', value: '24', tone: 'ocean' },
-  { label: 'Riesgos tempranos', value: '05', tone: 'coral' },
-  { label: 'Cumplimiento global', value: '92%', tone: 'sage' },
-];
-
-const analyticsRows = [
-  { label: 'Producción académica', value: '89%', tone: 'ocean' },
-  { label: 'Multimedia', value: '74%', tone: 'gold' },
-  { label: 'Montaje LMS', value: '67%', tone: 'coral' },
-  { label: 'QA final', value: '81%', tone: 'sage' },
-];
+const timelineAccents = ['coral', 'gold', 'ocean', 'sage', 'ink', 'coral', 'ocean', 'sage'] as const;
+const libraryCardIcons = [FileText, Globe, PlayCircle];
+const analyticsStatTones = ['ocean', 'coral', 'sage'] as const;
+const analyticsRowTones = ['ocean', 'gold', 'coral', 'sage'] as const;
 
 function getRevealProps(reduceMotion: boolean, delay = 0) {
   if (reduceMotion) {
@@ -161,7 +75,7 @@ function getTimelineRevealProps(reduceMotion: boolean, index: number) {
   };
 }
 
-export function LandingPage({ branding }: LandingPageProps) {
+export function LandingPage({ branding, homeContent }: LandingPageProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const reduceMotion = Boolean(useReducedMotion());
   const platformLabel = branding.platformName.endsWith('360')
@@ -189,7 +103,7 @@ export function LandingPage({ branding }: LandingPageProps) {
           {renderBrandMark()}
           <span className="m360-brand__copy">
             <strong>{platformLabel}</strong>
-            <span>Diseño y producción de experiencias</span>
+            <span>{homeContent.navBrandTagline}</span>
           </span>
         </Link>
 
@@ -202,15 +116,15 @@ export function LandingPage({ branding }: LandingPageProps) {
         </button>
 
         <nav className={`m360-nav__links ${isMenuOpen ? 'is-open' : ''}`} aria-label="Secciones principales">
-          <a href="#flujo" onClick={() => setIsMenuOpen(false)}>Flujo</a>
-          <a href="#biblioteca" onClick={() => setIsMenuOpen(false)}>Biblioteca</a>
-          <a href="#analitica" onClick={() => setIsMenuOpen(false)}>Analítica</a>
-          <a href="#contacto" onClick={() => setIsMenuOpen(false)}>Contacto</a>
+          <a href="#flujo" onClick={() => setIsMenuOpen(false)}>{homeContent.navFlowLabel}</a>
+          <a href="#biblioteca" onClick={() => setIsMenuOpen(false)}>{homeContent.navLibraryLabel}</a>
+          <a href="#analitica" onClick={() => setIsMenuOpen(false)}>{homeContent.navAnalyticsLabel}</a>
+          <a href="#contacto" onClick={() => setIsMenuOpen(false)}>{homeContent.navContactLabel}</a>
         </nav>
 
         <div className={`m360-nav__actions ${isMenuOpen ? 'is-open' : ''}`}>
           <Link to="/login" className="m360-button m360-button--ghost">
-            Ingresar
+            {homeContent.navLoginLabel}
           </Link>
           <a
             href={whatsappUrl}
@@ -218,7 +132,7 @@ export function LandingPage({ branding }: LandingPageProps) {
             rel="noreferrer"
             className="m360-button m360-button--primary"
           >
-            Solicitar una demo
+            {homeContent.navDemoLabel}
           </a>
         </div>
       </header>
@@ -228,19 +142,12 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-hero__copy" {...getRevealProps(reduceMotion)}>
             <span className="m360-kicker">
               <Sparkles size={16} />
-              Gestión de la operación de punta a punta
+              {homeContent.heroKicker}
             </span>
 
-            <h1>
-              Escala el diseño de experiencias de aprendizaje y la producción de contenidos
-              educativos.
-            </h1>
+            <h1>{homeContent.heroTitle}</h1>
 
-            <p className="m360-hero__lead">
-              {platformLabel} te ayuda a escalar el diseño de experiencias de aprendizaje y la
-              producción de contenidos educativos, asegurando estándares de calidad, control y
-              trazabilidad del 100% del proceso.
-            </p>
+            <p className="m360-hero__lead">{homeContent.heroLead}</p>
 
             <div className="m360-hero__actions">
               <a
@@ -249,56 +156,50 @@ export function LandingPage({ branding }: LandingPageProps) {
                 rel="noreferrer"
                 className="m360-button m360-button--primary"
               >
-                <span>Solicitar una demo</span>
+                <span>{homeContent.heroPrimaryCta}</span>
                 <ArrowRight size={18} />
               </a>
               <Link to="/login" className="m360-button m360-button--ghost">
-                Entrar a la plataforma
+                {homeContent.heroSecondaryCta}
               </Link>
             </div>
 
             <div className="m360-hero__signals">
-              <div>
-                <strong>100%</strong>
-                <span>trazabilidad del proceso académico y productivo.</span>
-              </div>
-              <div>
-                <strong>IA + control</strong>
-                <span>asistencia operativa sin perder gobierno institucional.</span>
-              </div>
-              <div>
-                <strong>Una sola capa</strong>
-                <span>planeación, diseño, biblioteca, analítica y QA conectados.</span>
-              </div>
+              {homeContent.heroSignals.map((signal) => (
+                <div key={signal.title}>
+                  <strong>{signal.title}</strong>
+                  <span>{signal.description}</span>
+                </div>
+              ))}
             </div>
           </motion.div>
 
           <motion.div className="m360-hero__visual" {...getRevealProps(reduceMotion, 0.08)}>
             <div className="m360-ui-shot m360-ui-shot--hero">
               <div className="m360-ui-shot__topbar">
-                <span className="m360-ui-shot__chip">Maturity360</span>
+                <span className="m360-ui-shot__chip">{homeContent.heroStatusChip}</span>
                 <span className="m360-ui-shot__status">
                   <CircleCheckBig size={16} />
-                  Producción sincronizada
+                  {homeContent.heroStatusText}
                 </span>
               </div>
 
               <div className="m360-ui-shot__workspace">
                 <aside className="m360-ui-shot__sidebar">
                   <div className="m360-ui-shot__brand-mini">{branding.shortMark}</div>
-                  <span className="is-active" style={{ background: 'transparent', color: '#18b7d2', paddingLeft: 0 }}>Dashboard</span>
-                  <span>Cursos</span>
-                  <span>Biblioteca</span>
-                  <span>Analítica</span>
+                  <span className="is-active" style={{ background: 'transparent', color: '#18b7d2', paddingLeft: 0 }}>{homeContent.heroSidebarDashboard}</span>
+                  <span>{homeContent.heroSidebarCourses}</span>
+                  <span>{homeContent.heroSidebarLibrary}</span>
+                  <span>{homeContent.heroSidebarAnalytics}</span>
                 </aside>
 
                 <div className="m360-ui-shot__main">
                   <div className="m360-ui-shot__panel m360-ui-shot__panel--headline">
                     <div>
-                      <small>Curso activo</small>
-                      <strong>Diseño de experiencia de aprendizaje</strong>
+                      <small>{homeContent.heroCourseLabel}</small>
+                      <strong>{homeContent.heroCourseTitle}</strong>
                     </div>
-                    <span>12 entregables en progreso</span>
+                    <span>{homeContent.heroCourseProgressLabel}</span>
                   </div>
 
                   <div className="m360-ui-shot__hero-grid">
@@ -306,30 +207,30 @@ export function LandingPage({ branding }: LandingPageProps) {
                       <article>
                         <LayoutGrid size={18} />
                         <div>
-                          <strong>Arquitectura</strong>
-                          <span>Momentos, dispositivos y mapa didáctico.</span>
+                          <strong>{homeContent.heroStageOneTitle}</strong>
+                          <span>{homeContent.heroStageOneDescription}</span>
                         </div>
                       </article>
                       <article>
                         <Bot size={18} />
                         <div>
-                          <strong>Diseño con IA</strong>
-                          <span>Actividades, contenidos y criterios editables.</span>
+                          <strong>{homeContent.heroStageTwoTitle}</strong>
+                          <span>{homeContent.heroStageTwoDescription}</span>
                         </div>
                       </article>
                       <article>
                         <ShieldCheck size={18} />
                         <div>
-                          <strong>Validación institucional</strong>
-                          <span>Checklist y control pedagógico antes de publicar.</span>
+                          <strong>{homeContent.heroStageThreeTitle}</strong>
+                          <span>{homeContent.heroStageThreeDescription}</span>
                         </div>
                       </article>
                     </div>
 
                     <div className="m360-ui-shot__scorecard">
-                      <span>Estado global</span>
-                      <strong>92%</strong>
-                      <p>Calidad, control y trazabilidad alineados por etapa.</p>
+                      <span>{homeContent.heroGlobalStatusLabel}</span>
+                      <strong>{homeContent.heroCourseProgressValue}</strong>
+                      <p>{homeContent.heroCourseProgressDescription}</p>
                       <div className="m360-ui-shot__scorebars" aria-hidden>
                         <span style={{ width: '92%' }} />
                         <span style={{ width: '74%' }} />
@@ -348,15 +249,15 @@ export function LandingPage({ branding }: LandingPageProps) {
         <div className="m360-section__inner m360-strip__inner">
           <div className="m360-strip__item">
             <Workflow size={18} />
-            <span>Diseño, producción y distribución coordinados en un solo flujo.</span>
+            <span>{homeContent.stripItems[0]}</span>
           </div>
           <div className="m360-strip__item">
             <ShieldCheck size={18} />
-            <span>Estándares institucionales visibles en cada decisión y entregable.</span>
+            <span>{homeContent.stripItems[1]}</span>
           </div>
           <div className="m360-strip__item">
             <ChartNoAxesCombined size={18} />
-            <span>Lectura operativa en tiempo real para actuar antes del retraso.</span>
+            <span>{homeContent.stripItems[2]}</span>
           </div>
         </div>
       </section>
@@ -366,26 +267,22 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-flow__intro" {...getRevealProps(reduceMotion)}>
             <span className="m360-kicker">
               <Clock3 size={16} />
-              Timeline operativo
+              {homeContent.flowKicker}
             </span>
-            <h2>Un recorrido que ordena el proyecto, el equipo y la calidad.</h2>
-            <p>
-              Cada etapa aparece como una decisión concreta del proceso. La plataforma no solo
-              acelera tareas: también conserva el hilo lógico, el control institucional y la
-              evidencia de cómo se produjo cada curso.
-            </p>
+            <h2>{homeContent.flowTitle}</h2>
+            <p>{homeContent.flowLead}</p>
           </motion.div>
 
           <div className="m360-timeline">
-            {timelineSteps.map((step, index) => (
+            {homeContent.timelineSteps.map((step, index) => (
               <motion.article
                 key={step.title}
-                className={`m360-timeline__item m360-timeline__item--${step.accent}`}
+                className={`m360-timeline__item m360-timeline__item--${timelineAccents[index % timelineAccents.length]}`}
                 {...getTimelineRevealProps(reduceMotion, index)}
               >
                 <div className="m360-timeline__rail" aria-hidden>
                   <span className="m360-timeline__index">{String(index + 1).padStart(2, '0')}</span>
-                  {index < timelineSteps.length - 1 ? <span className="m360-timeline__line" /> : null}
+                  {index < homeContent.timelineSteps.length - 1 ? <span className="m360-timeline__line" /> : null}
                 </div>
 
                 <div className="m360-timeline__body">
@@ -404,26 +301,23 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-library__copy" {...getRevealProps(reduceMotion)}>
             <span className="m360-kicker m360-kicker--light">
               <LibraryBig size={16} />
-              Biblioteca integrada
+              {homeContent.libraryKicker}
             </span>
-            <h2>Curación asistida para incorporar mejores recursos sin salir del flujo.</h2>
-            <p>
-              Integra material educativo a partir de la curación asistida de recursos disponibles
-              en bases de datos académicas y científicas.
-            </p>
+            <h2>{homeContent.libraryTitle}</h2>
+            <p>{homeContent.libraryLead}</p>
 
             <div className="m360-library__features">
               <div>
                 <CheckCircle2 size={18} />
-                <span>Recursos científicos, académicos y abiertos vinculados al curso.</span>
+                <span>{homeContent.libraryFeatures[0]}</span>
               </div>
               <div>
                 <CheckCircle2 size={18} />
-                <span>Selección guiada para reutilizar contenidos con criterio pedagógico.</span>
+                <span>{homeContent.libraryFeatures[1]}</span>
               </div>
               <div>
                 <CheckCircle2 size={18} />
-                <span>Integración inmediata en diseño, producción y validación.</span>
+                <span>{homeContent.libraryFeatures[2]}</span>
               </div>
             </div>
           </motion.div>
@@ -431,27 +325,30 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-library__visual" {...getRevealProps(reduceMotion, 0.08)}>
             <div className="m360-ui-shot m360-ui-shot--light m360-ui-shot--library">
               <div className="m360-ui-shot__searchbar m360-ui-shot__searchbar--light">
-                <span>Buscar evidencia, artículos y recursos</span>
-                <strong>+ 14 fuentes conectadas</strong>
+                <span>{homeContent.librarySearchLabel}</span>
+                <strong>{homeContent.librarySearchSources}</strong>
               </div>
 
               <div className="m360-library-grid">
-                {libraryCards.map((card) => (
+                {homeContent.libraryCards.map((card, index) => {
+                  const Icon = libraryCardIcons[index % libraryCardIcons.length];
+                  return (
                   <article key={card.title} className="m360-library-card m360-library-card--light">
                     <div className="m360-library-card__header">
                        <span>{card.tag}</span>
-                       <card.icon size={20} className="m360-library-card__icon" />
+                       <Icon size={20} className="m360-library-card__icon" />
                     </div>
                     <strong>{card.title}</strong>
                     <p>{card.source}</p>
                   </article>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="m360-ui-shot__drawer m360-ui-shot__drawer--light">
                 <div>
-                  <small>Sugerencia IA</small>
-                  <strong>Recursos alineados con la actividad de aprendizaje del módulo 2.</strong>
+                  <small>{homeContent.librarySuggestionLabel}</small>
+                  <strong>{homeContent.librarySuggestionText}</strong>
                 </div>
                 <FileCheck2 size={18} className="m360-ui-shot__drawer-icon" />
               </div>
@@ -465,8 +362,8 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-analytics__visual" {...getRevealProps(reduceMotion)}>
             <div className="m360-ui-shot m360-ui-shot--analytics">
               <div className="m360-analytics-shot__stats">
-                {analyticsStats.map((item) => (
-                  <article key={item.label} className={`m360-stat m360-stat--${item.tone}`}>
+                {homeContent.analyticsStats.map((item, index) => (
+                  <article key={item.label} className={`m360-stat m360-stat--${analyticsStatTones[index % analyticsStatTones.length]}`}>
                     <span>{item.label}</span>
                     <strong>{item.value}</strong>
                   </article>
@@ -482,13 +379,13 @@ export function LandingPage({ branding }: LandingPageProps) {
                     <span />
                   </div>
                   <div className="m360-analytics-shot__footer">
-                    <small>Progreso por curso</small>
-                    <strong>Lectura semanal en tiempo real</strong>
+                    <small>{homeContent.analyticsChartLabel}</small>
+                    <strong>{homeContent.analyticsChartTitle}</strong>
                   </div>
                 </div>
 
                 <div className="m360-analytics-shot__list">
-                  {analyticsRows.map((row) => (
+                  {homeContent.analyticsRows.map((row, index) => (
                     <div key={row.label} className="m360-progress-row">
                       <div>
                         <span>{row.label}</span>
@@ -496,7 +393,7 @@ export function LandingPage({ branding }: LandingPageProps) {
                       </div>
                       <div className="m360-progress-row__track" aria-hidden>
                         <span
-                          className={`m360-progress-row__fill m360-progress-row__fill--${row.tone}`}
+                          className={`m360-progress-row__fill m360-progress-row__fill--${analyticsRowTones[index % analyticsRowTones.length]}`}
                           style={{ width: row.value }}
                         />
                       </div>
@@ -510,26 +407,23 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-analytics__copy" {...getRevealProps(reduceMotion, 0.08)}>
             <span className="m360-kicker">
               <ChartNoAxesCombined size={16} />
-              Analítica accionable
+              {homeContent.analyticsKicker}
             </span>
-            <h2>Visibilidad operativa para detectar alertas antes de que se conviertan en cuello de botella.</h2>
-            <p>
-              Visualiza en tiempo real el progreso de producción por curso, identificando alertas
-              tempranas y comparte los tableros con los stakeholders del proyecto.
-            </p>
+            <h2>{homeContent.analyticsTitle}</h2>
+            <p>{homeContent.analyticsLead}</p>
 
             <div className="m360-analytics__notes">
               <div>
                 <MonitorSmartphone size={18} />
-                <span>Lectura por curso, etapa, equipo y estado de avance.</span>
+                <span>{homeContent.analyticsNotes[0]}</span>
               </div>
               <div>
                 <MessagesSquare size={18} />
-                <span>Conversación ejecutiva con datos listos para compartir.</span>
+                <span>{homeContent.analyticsNotes[1]}</span>
               </div>
               <div>
                 <ShieldCheck size={18} />
-                <span>Alertas tempranas para actuar sobre carga, riesgo y calidad.</span>
+                <span>{homeContent.analyticsNotes[2]}</span>
               </div>
             </div>
           </motion.div>
@@ -549,12 +443,11 @@ export function LandingPage({ branding }: LandingPageProps) {
           <motion.div className="m360-cta__copy" {...getRevealProps(reduceMotion)} style={{ maxWidth: '800px' }}>
             <span className="m360-kicker m360-kicker--light" style={{ margin: '0 auto 24px' }}>
               <Sparkles size={16} />
-              Nueva forma de operar
+              {homeContent.ctaKicker}
             </span>
-            <h2 style={{ color: 'white' }}>Preparemos a tu equipo para una nueva forma de trabajar en tiempos de IA.</h2>
+            <h2 style={{ color: 'white' }}>{homeContent.ctaTitle}</h2>
             <p style={{ color: 'rgba(255,255,255,0.85)', margin: '20px auto 0' }}>
-              Maturity360 conecta criterio pedagógico, producción y control institucional en una
-              sola operación más clara, más rápida y más gobernable.
+              {homeContent.ctaLead}
             </p>
           </motion.div>
 
@@ -565,7 +458,7 @@ export function LandingPage({ branding }: LandingPageProps) {
               rel="noreferrer"
               className="m360-button m360-button--primary"
             >
-              <span>Hablemos</span>
+              <span>{homeContent.ctaButtonLabel}</span>
               <ArrowRight size={18} />
             </a>
           </motion.div>
@@ -574,9 +467,9 @@ export function LandingPage({ branding }: LandingPageProps) {
 
       <footer className="m360-footer">
         <div className="m360-section__inner m360-footer__inner">
-          <p>Soluciones digitales con sentido humano.</p>
-          <a href="https://www.algoritmot.com/educacion" target="_blank" rel="noreferrer">
-            Producto desarrollado por Algoritmo T
+          <p>{homeContent.footerText}</p>
+          <a href={homeContent.footerLinkUrl} target="_blank" rel="noreferrer">
+            {homeContent.footerLinkLabel}
           </a>
         </div>
       </footer>

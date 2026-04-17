@@ -12,11 +12,8 @@ import {
   PlayCircle,
   Search,
   Sparkles,
-  X,
-  Zap,
   Puzzle,
   RefreshCw,
-  Clock,
 } from 'lucide-react';
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
@@ -198,7 +195,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
   const [recommendations, setRecommendations] = useState<LibrarySearchResult[]>([]);
 
-  const searchRef = useRef<HTMLFormElement>(null);
   const visibleCourses = getVisibleCourses(appData, role, viewer);
   const courseOptions = visibleCourses.map((c) => ({
     value: c.slug,
@@ -856,6 +852,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           selectedAssets={selectedAssets}
           appData={appData}
           courseSlug={visibleCourses[0]?.slug ?? ''}
+          courseOptions={courseOptions}
           refreshAppData={refreshAppData}
         />
       )}

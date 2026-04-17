@@ -13,7 +13,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
   ExternalLink,
   FileUp,
   Loader2,
@@ -21,7 +20,6 @@ import {
   Play,
   Plus,
   Trash2,
-  X,
   Zap,
 } from 'lucide-react';
 import { H5PPlayer } from './H5PPlayer.js';
@@ -35,7 +33,6 @@ interface H5PManagerProps {
 }
 
 type Tab = 'list' | 'create-embed' | 'create-upload' | 'preview';
-type CreateKind = 'embed' | 'package';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component

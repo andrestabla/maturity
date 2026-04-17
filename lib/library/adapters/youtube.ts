@@ -4,6 +4,31 @@ import { getProviderConfigValue } from '../provider-settings.js';
 
 const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 
+function sanitizeYouTubeErrorMessage(value: unknown): string {
+  return String(value ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toSpanishYouTubeError(status: number, message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (status === 403 && normalized.includes('quota')) {
+    return 'YouTube agotó la cuota diaria del proyecto API. Intenta de nuevo más tarde o aumenta la cuota en Google Cloud.';
+  }
+
+  if (status === 403) {
+    return 'YouTube rechazó la solicitud por permisos o configuración de la API.';
+  }
+
+  if (status === 401) {
+    return 'YouTube rechazó la credencial de API.';
+  }
+
+  return `YouTube devolvió un error (${status}).`;
+}
+
 /**
  * YouTube Data API v3 Adapter with Academic Ranking
  * Requires YOUTUBE_API_KEY environment variable.
@@ -53,7 +78,8 @@ export async function searchYouTube(
   if (!response.ok) {
     const error = await response.json().catch(() => ({})) as Record<string, unknown>;
     const errorData = (error.error ?? {}) as Record<string, unknown>;
-    throw new Error(`YouTube API ${response.status}: ${String(errorData.message ?? response.statusText)}`);
+    const rawMessage = sanitizeYouTubeErrorMessage(errorData.message ?? response.statusText);
+    throw new Error(toSpanishYouTubeError(response.status, rawMessage));
   }
 
   let data = await response.json() as { items?: unknown[] };
