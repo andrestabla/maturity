@@ -74,6 +74,18 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+// Derive "Compatibilidad de madures" metrics from the asset score
+function getCompatMetrics(score: number) {
+  const s = Math.min(score, 0.99);
+  return [
+    { label: 'Relevancia temática',      pct: Math.round(Math.min(s * 1.05, 0.99) * 100) },
+    { label: 'Nivel de complejidad',     pct: Math.round(Math.min(s * 0.98, 0.99) * 100) },
+    { label: 'Compatibilidad de fuente', pct: Math.round(Math.min(s * 1.02, 0.99) * 100) },
+    { label: 'Densidad conceptual',      pct: Math.round(Math.min(s * 0.95, 0.99) * 100) },
+    { label: 'Actualidad del contenido', pct: Math.round(Math.min(s * 0.92, 0.99) * 100) },
+  ];
+}
+
 export function LibraryPreviewModal({
   asset,
   onClose,
@@ -159,7 +171,7 @@ export function LibraryPreviewModal({
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">
-                    Detalles del Recurso
+                    Detalles:
                   </div>
                   <h2 className="text-sm font-bold text-ink leading-snug line-clamp-2 font-display">
                     {asset.title}
@@ -207,17 +219,35 @@ export function LibraryPreviewModal({
                     color: 'white',
                   }}
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-white/20 rounded-lg">
-                      <Sparkles size={14} className="text-white" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-white/20 rounded-lg">
+                        <Sparkles size={14} className="text-white" />
+                      </div>
+                      <span className="text-xs font-black uppercase tracking-widest text-white/90">
+                        Resumen de IA
+                      </span>
                     </div>
-                    <span className="text-xs font-black uppercase tracking-widest text-white/90">
-                      Resumen de IA
+                    <span className="text-[9px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white/80">
+                      Chispa/IA
                     </span>
                   </div>
-                  <p className="text-sm leading-relaxed text-white/90">
-                    {asset.abstract.slice(0, 320)}{asset.abstract.length > 320 ? '…' : ''}
+                  <p className="text-sm leading-relaxed text-white/90 mb-4">
+                    {asset.abstract.slice(0, 280)}{asset.abstract.length > 280 ? '…' : ''}
                   </p>
+
+                  {/* Compatibilidad de madures */}
+                  <div className="border-t border-white/20 pt-3 space-y-1.5">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-2">
+                      Compatibilidad de madures
+                    </div>
+                    {getCompatMetrics(asset.score).map((m) => (
+                      <div key={m.label} className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] text-white/80 flex-1 truncate">· {m.label}</span>
+                        <span className="text-[10px] font-bold text-white/90 flex-shrink-0">{m.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -362,7 +392,8 @@ export function LibraryPreviewModal({
                         <button
                           type="submit"
                           disabled={isAdding || !selectedCourse}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-all disabled:opacity-60 shadow"
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-60 shadow"
+                          style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
                         >
                           {isAdding ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                           <span>{isAdding ? 'Vinculando…' : 'Confirmar'}</span>
@@ -386,7 +417,7 @@ export function LibraryPreviewModal({
                 style={{
                   background: showCourseForm
                     ? 'linear-gradient(135deg, #475569, #334155)'
-                    : 'linear-gradient(135deg, #4f46e5 0%, #2563eb 100%)',
+                    : 'linear-gradient(135deg, #0d9488 0%, #0891b2 100%)',
                   color: 'white',
                 }}
               >
