@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -14,6 +14,7 @@ import {
   Sparkles,
   Puzzle,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
@@ -28,7 +29,7 @@ import type {
   Role,
 } from '../types.js';
 import { getVisibleCourses } from '../utils/domain.js';
-import { buildCourseScopeLabel, countCoursesForStructure } from '../utils/institutions.js';
+import { buildCourseScopeLabel } from '../utils/institutions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
