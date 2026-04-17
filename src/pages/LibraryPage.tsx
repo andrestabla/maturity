@@ -126,7 +126,7 @@ const DISCOVERY_TOPICS: Partial<Record<LibraryGroup, string[]>> = {
     'lecciones Khan Academy', 'cursos universitarios', 'divulgación científica',
     'clases magistrales', 'debates académicos',
   ],
-  Institucional: [],
+  Institucional: ['recursos abiertos', 'bibliografía básica', 'programas de curso'],
 };
 
 const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: string; description: string; icon: string }[]>> = {
@@ -144,6 +144,10 @@ const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: s
     { query: 'MIT OpenCourseWare lecture', title: 'Clases MIT', description: 'Conferencias completas del MIT sobre tecnología y ciencias.', icon: '🎓' },
     { query: 'TED talk education innovation', title: 'TED · Educación', description: 'Charlas inspiradoras sobre el futuro del aprendizaje.', icon: '💡' },
     { query: 'science documentary BBC', title: 'Documentales Ciencia', description: 'Documentales de alta calidad para complementar clases.', icon: '🔬' },
+  ],
+  Institucional: [
+    { query: 'bibliografía básica', title: 'Bibliografía Básica', description: 'Materiales esenciales para los cursos de este semestre.', icon: '📚' },
+    { query: 'guías de estudio', title: 'Guías de Estudio', description: 'Documentos oficiales de apoyo pedagógico.', icon: '📝' },
   ],
 };
 
@@ -587,11 +591,12 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                         setQuery(topic);
                         void performSearch(topic, activeGroup, filters);
                       }}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-full border font-semibold text-sm transition-all hover:shadow-md active:scale-95"
+                      className="library-search-stage__chips button"
                       style={{
                         borderColor: `${activeGroupCfg.color}30`,
                         color: activeGroupCfg.color,
-                        backgroundColor: `${activeGroupCfg.color}08`,
+                        background: `${activeGroupCfg.color}08`,
+                        fontWeight: 700,
                       }}
                     >
                       <Sparkles size={11} />

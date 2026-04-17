@@ -13,9 +13,9 @@ import {
   Microscope,
   Sparkles,
   Users,
-  X,
 } from 'lucide-react';
 import type { LibrarySearchResult } from '../types.js';
+import { SidePanel } from './SidePanel.js';
 
 interface CourseOption {
   value: string;
@@ -128,319 +128,225 @@ export function LibraryPreviewModal({
     }
   }
 
-  const panel = (
-    <AnimatePresence>
-      {asset && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            key="backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onClose}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 400,
-              background: 'rgba(15,23,42,0.25)',
-              backdropFilter: 'blur(3px)',
-              WebkitBackdropFilter: 'blur(3px)',
-            }}
-          />
+  return (
+    <SidePanel
+      isOpen={!!asset}
+      onClose={onClose}
+      title={asset?.title || 'Detalles del recurso'}
+      description="Previsualización y vinculación de contenido inteligente."
+      sideLabel="RECURSO"
+      sideDescription={providerCfg.label}
+      width="lg"
+      footer={
+        asset ? (
+          <div className="flex flex-col gap-2.5 w-full">
+            <button
+              onClick={() => { setShowCourseForm((v) => !v); setAddSuccess(false); }}
+              disabled={courseOptions.length === 0}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-[0.98] disabled:opacity-40"
+              style={{
+                background: showCourseForm
+                  ? 'linear-gradient(135deg, #475569, #334155)'
+                  : 'linear-gradient(135deg, #0d9488 0%, #0891b2 100%)',
+                color: 'white',
+              }}
+            >
+              <span>{showCourseForm ? '✕ Cancelar' : '🔗 Vincular a mi Curso Actual'}</span>
+            </button>
 
-          {/* Panel */}
-          <motion.div
-            key="panel"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 260 }}
-            style={{
-              position: 'fixed', top: 0, right: 0, bottom: 0,
-              width: 'min(480px, 100vw)',
-              zIndex: 401,
-              background: '#f8fafc',
-              borderRadius: '20px 0 0 20px',
-              boxShadow: '-32px 0 80px rgba(0,0,0,0.18)',
-              display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* ── Header ── */}
-            <div style={{ padding: '18px 20px 14px', background: 'white', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">
-                    Detalles:
-                  </div>
-                  <h2 className="text-sm font-bold text-ink leading-snug line-clamp-2 font-display">
-                    {asset.title}
-                  </h2>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="flex-shrink-0 p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            {asset.canonicalUrl && (
+              <a
+                href={asset.canonicalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all border-2 border-line hover:border-ink hover:bg-ink hover:text-white text-ink"
+              >
+                <ExternalLink size={15} />
+                <span>Abrir Original</span>
+              </a>
+            )}
+          </div>
+        ) : null
+      }
+    >
+      {asset && (
+        <div className="space-y-4">
+          {/* Provider + badges */}
+          <div className="flex flex-wrap gap-1.5">
+            {asset.providers.map((p) => {
+              const cfg = PROVIDER_LABELS[p] ?? { label: p, color: '#6b7280' };
+              return (
+                <span
+                  key={p}
+                  className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border"
+                  style={{ color: cfg.color, borderColor: `${cfg.color}40`, backgroundColor: `${cfg.color}10` }}
                 >
-                  <X size={18} />
+                  {cfg.label}
+                </span>
+              );
+            })}
+            {asset.openAccess && (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Open Access
+              </span>
+            )}
+          </div>
+
+          {/* ── AI Summary block ── */}
+          {asset.abstract && (
+            <div
+              className="rounded-2xl p-6"
+              style={{
+                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 40%, #2563eb 100%)',
+                color: 'white',
+                boxShadow: '0 20px 40px rgba(79, 70, 229, 0.15)',
+              }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-white/20 rounded-lg">
+                    <Sparkles size={16} className="text-white" />
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-widest text-white/90">
+                    Resumen de IA
+                  </span>
+                </div>
+                <span className="text-[9px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white/80">
+                  Chispa/IA
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed text-white/95 mb-6">
+                {asset.abstract.slice(0, 480)}{asset.abstract.length > 480 ? '…' : ''}
+              </p>
+
+              {/* Compatibilidad de madures */}
+              <div className="border-t border-white/20 pt-4 space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-3">
+                  Compatibilidad de madures
+                </div>
+                {getCompatMetrics(asset.score).map((m) => (
+                  <div key={m.label} className="flex items-center justify-between gap-3">
+                    <span className="text-xs text-white/80 flex-1 truncate">· {m.label}</span>
+                    <span className="text-xs font-bold text-white/90 flex-shrink-0">{m.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Metadata card ── */}
+          <div className="bg-white rounded-2xl p-5 space-y-4 border border-slate-100 shadow-sm">
+            <ScoreRing score={asset.score} />
+
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+              <div>
+                <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Fuente</div>
+                <div className="text-xs font-bold" style={{ color: providerCfg.color }}>{providerCfg.label}</div>
+              </div>
+              {asset.publishedAt && (
+                <div>
+                  <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Fecha</div>
+                  <div className="text-xs font-semibold text-ink">{asset.publishedAt.slice(0, 10)}</div>
+                </div>
+              )}
+              {asset.authors.length > 0 && (
+                <div className="col-span-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Users size={12} className="text-muted" />
+                    <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Autores</span>
+                  </div>
+                  <div className="text-xs text-ink leading-relaxed font-medium">
+                    {asset.authors.slice(0, 5).join(', ')}{asset.authors.length > 5 ? ` +${asset.authors.length - 5}` : ''}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* DOI */}
+            {asset.doi && (
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <FileText size={14} className="text-muted flex-shrink-0" />
+                <span className="text-[11px] text-slate-500 font-mono truncate flex-1">doi:{asset.doi}</span>
+                <button
+                  onClick={copyDOI}
+                  className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors text-muted"
+                  title="Copiar DOI"
+                >
+                  {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
                 </button>
               </div>
+            )}
+          </div>
 
-              {/* Provider + badges */}
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {asset.providers.map((p) => {
-                  const cfg = PROVIDER_LABELS[p] ?? { label: p, color: '#6b7280' };
-                  return (
-                    <span
-                      key={p}
-                      className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border"
-                      style={{ color: cfg.color, borderColor: `${cfg.color}40`, backgroundColor: `${cfg.color}10` }}
-                    >
-                      {cfg.label}
-                    </span>
-                  );
-                })}
-                {asset.openAccess && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Open Access
-                  </span>
-                )}
-              </div>
+          {/* Embeds */}
+          {asset.previewKind === 'video' && asset.embedUrl && (
+            <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-xl border border-slate-200">
+              <iframe
+                src={asset.embedUrl}
+                className="w-full h-full"
+                title={asset.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
             </div>
+          )}
 
-            {/* ── Body (scrollable) ── */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }} className="space-y-3">
-
-              {/* ── AI Summary block (gradient purple→blue) ── */}
-              {asset.abstract && (
-                <div
-                  className="rounded-2xl p-5"
-                  style={{
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 40%, #2563eb 100%)',
-                    color: 'white',
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-white/20 rounded-lg">
-                        <Sparkles size={14} className="text-white" />
-                      </div>
-                      <span className="text-xs font-black uppercase tracking-widest text-white/90">
-                        Resumen de IA
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-white/80">
-                      Chispa/IA
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-white/90 mb-4">
-                    {asset.abstract.slice(0, 280)}{asset.abstract.length > 280 ? '…' : ''}
-                  </p>
-
-                  {/* Compatibilidad de madures */}
-                  <div className="border-t border-white/20 pt-3 space-y-1.5">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-2">
-                      Compatibilidad de madures
-                    </div>
-                    {getCompatMetrics(asset.score).map((m) => (
-                      <div key={m.label} className="flex items-center justify-between gap-3">
-                        <span className="text-[10px] text-white/80 flex-1 truncate">· {m.label}</span>
-                        <span className="text-[10px] font-bold text-white/90 flex-shrink-0">{m.pct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Metadata card ── */}
-              <div className="bg-white rounded-2xl p-4 space-y-3" style={{ border: '1px solid #f1f5f9' }}>
-                {/* Score ring */}
-                <ScoreRing score={asset.score} />
-
-                <div
-                  className="grid grid-cols-2 gap-3 pt-3"
-                  style={{ borderTop: '1px solid #f8fafc' }}
-                >
-                  <div>
-                    <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-0.5">Fuente</div>
-                    <div className="text-xs font-bold" style={{ color: providerCfg.color }}>{providerCfg.label}</div>
-                  </div>
-                  {asset.publishedAt && (
-                    <div>
-                      <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-0.5">Fecha</div>
-                      <div className="text-xs font-semibold text-ink">{asset.publishedAt.slice(0, 10)}</div>
-                    </div>
-                  )}
-                  {asset.authors.length > 0 && (
-                    <div className="col-span-2">
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <Users size={10} className="text-muted" />
-                        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Autores</span>
-                      </div>
-                      <div className="text-xs text-ink leading-relaxed">
-                        {asset.authors.slice(0, 3).join(', ')}{asset.authors.length > 3 ? ` +${asset.authors.length - 3}` : ''}
-                      </div>
-                    </div>
-                  )}
-                  {asset.citationCount > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <Microscope size={10} className="text-muted" />
-                        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Citas</span>
-                      </div>
-                      <div className="text-xs font-bold text-ink">{asset.citationCount.toLocaleString()}</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* DOI */}
-                {asset.doi && (
-                  <div
-                    className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl"
-                    style={{ borderTop: '1px solid #f1f5f9' }}
-                  >
-                    <FileText size={12} className="text-muted flex-shrink-0" />
-                    <span className="text-[10px] text-slate-500 font-mono truncate flex-1">doi:{asset.doi}</span>
-                    <button
-                      onClick={copyDOI}
-                      className="p-1 hover:bg-slate-200 rounded-lg transition-colors text-muted"
-                      title="Copiar DOI"
-                    >
-                      {copied ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tags */}
-              {asset.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {asset.tags.slice(0, 8).map((tag) => (
-                    <span key={tag} className="px-2 py-0.5 bg-white text-slate-500 rounded-md text-[10px] font-medium border border-line/30">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Embed (video/sim/pdf) */}
-              {asset.previewKind === 'video' && asset.embedUrl && (
-                <div className="rounded-2xl overflow-hidden bg-black aspect-video shadow-lg">
-                  <iframe
-                    src={asset.embedUrl}
-                    className="w-full h-full"
-                    title={asset.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
-              {asset.previewKind === 'simulation' && asset.embedUrl && (
-                <div className="rounded-2xl overflow-hidden bg-slate-900 aspect-video shadow-lg">
-                  <iframe src={asset.embedUrl} className="w-full h-full" title={asset.title} allow="fullscreen" />
-                </div>
-              )}
-
-              {/* Institutional */}
-              {asset.institutionName && (
-                <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
-                  <Layers size={13} className="text-indigo-500 flex-shrink-0" />
-                  <span className="text-xs font-semibold text-indigo-700">{asset.institutionName}</span>
-                </div>
-              )}
-
-              {/* Inline course form */}
-              <AnimatePresence>
-                {showCourseForm && (
-                  <motion.div
-                    key="course-form"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2 }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    {addSuccess ? (
-                      <div className="flex flex-col items-center gap-2 py-5 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                        <CheckCircle2 size={32} className="text-emerald-500" />
-                        <div className="text-sm font-bold text-emerald-700">¡Recurso vinculado al curso!</div>
-                      </div>
-                    ) : (
-                      <form onSubmit={handleAddSubmit} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-2.5">
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                          Seleccionar curso
-                        </div>
-                        <div className="relative">
-                          <select
-                            className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl py-2.5 px-3 pr-8 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 appearance-none text-ink"
-                            value={selectedCourse}
-                            onChange={(e) => setSelectedCourse(e.target.value)}
-                            required
-                          >
-                            {courseOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        </div>
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl py-2.5 px-3 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 placeholder:text-slate-400"
-                          placeholder="Unidad / Módulo (opcional)"
-                          value={targetUnit}
-                          onChange={(e) => setTargetUnit(e.target.value)}
-                        />
-                        <button
-                          type="submit"
-                          disabled={isAdding || !selectedCourse}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-60 shadow"
-                          style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
-                        >
-                          {isAdding ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                          <span>{isAdding ? 'Vinculando…' : 'Confirmar'}</span>
-                        </button>
-                      </form>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* ── Footer CTAs ── */}
-            <div
-              style={{ padding: '16px 16px 20px', background: 'white', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}
-              className="space-y-2.5"
-            >
-              <button
-                onClick={() => { setShowCourseForm((v) => !v); setAddSuccess(false); }}
-                disabled={courseOptions.length === 0}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-[0.98] disabled:opacity-40"
-                style={{
-                  background: showCourseForm
-                    ? 'linear-gradient(135deg, #475569, #334155)'
-                    : 'linear-gradient(135deg, #0d9488 0%, #0891b2 100%)',
-                  color: 'white',
-                }}
+          {/* Inline course form */}
+          <AnimatePresence>
+            {showCourseForm && (
+              <motion.div
+                key="course-form"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="pt-2"
               >
-                <span>{showCourseForm ? '✕ Cancelar' : '🔗 Vincular a mi Curso Actual'}</span>
-              </button>
-
-              {asset.canonicalUrl && (
-                <a
-                  href={asset.canonicalUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition-all border-2 border-line hover:border-ink hover:bg-ink hover:text-white text-ink"
-                >
-                  <ExternalLink size={15} />
-                  <span>Abrir Original</span>
-                </a>
-              )}
-            </div>
-          </motion.div>
-        </>
+                {addSuccess ? (
+                  <div className="flex flex-col items-center gap-3 py-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center">
+                    <CheckCircle2 size={40} className="text-emerald-500" />
+                    <div className="text-sm font-bold text-emerald-700">¡Recurso vinculado con éxito!</div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleAddSubmit} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      Vinculación institucional
+                    </div>
+                    <div className="relative">
+                      <select
+                        className="w-full bg-white border border-slate-200 text-sm rounded-xl py-3 px-4 pr-10 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 appearance-none text-ink font-semibold"
+                        value={selectedCourse}
+                        onChange={(e) => setSelectedCourse(e.target.value)}
+                        required
+                      >
+                        {courseOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                    <input
+                      type="text"
+                      className="w-full bg-white border border-slate-200 text-sm rounded-xl py-3 px-4 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 placeholder:text-slate-400 font-medium"
+                      placeholder="Nombre de la unidad o sección (opcional)"
+                      value={targetUnit}
+                      onChange={(e) => setTargetUnit(e.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAdding || !selectedCourse}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-60 shadow-lg active:scale-95"
+                      style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
+                    >
+                      {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                      <span>{isAdding ? 'Sincronizando…' : 'Finalizar Vinculación'}</span>
+                    </button>
+                  </form>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
-    </AnimatePresence>
+    </SidePanel>
   );
-
-  return createPortal(panel, document.body);
 }
