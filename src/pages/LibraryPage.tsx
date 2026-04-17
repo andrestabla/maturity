@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -10,16 +10,18 @@ import {
   LibraryBig,
   Loader2,
   PlayCircle,
-  Puzzle,
-  RefreshCw,
   Search,
   Sparkles,
   X,
   Zap,
+  Puzzle,
+  RefreshCw,
+  Clock,
 } from 'lucide-react';
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
 import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
+import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import type {
   AppData,
   AuthUser,
@@ -29,13 +31,11 @@ import type {
   Role,
 } from '../types.js';
 import { getVisibleCourses } from '../utils/domain.js';
-import { buildCourseScopeLabel } from '../utils/institutions.js';
-import {
-  buildProviderFiltersFromVisualSources,
-  matchesSelectedResourceTypes,
-  matchesSelectedSources,
-  type LibraryVisualSourceKey,
-} from '../utils/libraryPresentation.js';
+import { buildCourseScopeLabel, countCoursesForStructure } from '../utils/institutions.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface LibraryPageProps {
   role: Role;
@@ -63,81 +63,98 @@ interface SearchFilters {
   language: string;
   year: string;
   openAccess: boolean;
-  sources: LibraryVisualSourceKey[];
+  providers: LibraryProvider[];
   resourceTypes: string[];
   minScore: number;
 }
 
-interface SeedResultConfig {
-  id: string;
-  title: string;
-  authors: string[];
-  provider: LibraryProvider;
-  brandKey?: LibraryVisualSourceKey;
-  group?: LibraryGroup;
-  score: number;
-  resourceType: string;
-  previewKind?: LibrarySearchResult['previewKind'];
-  abstract: string;
-  canonicalUrl: string;
-  publishedAt: string;
-  openAccess?: boolean;
-  citationCount?: number;
-  tags?: string[];
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
 
 const GROUPS: { id: LibraryGroup; label: string; icon: React.ElementType; description: string; color: string }[] = [
-  {
-    id: 'Investigacion',
-    label: 'Investigacion',
-    icon: GraduationCap,
-    description: 'Papers, articulos y referencias curadas para el curso actual.',
-    color: '#2563eb',
-  },
-  {
-    id: 'Didacticos',
-    label: 'Didacticos',
-    icon: Puzzle,
-    description: 'Recursos abiertos, practicas y experiencias interactivas.',
-    color: '#d97706',
-  },
-  {
-    id: 'YouTube',
-    label: 'Video',
-    icon: PlayCircle,
-    description: 'Material audiovisual para explicar conceptos rapidamente.',
-    color: '#ef4444',
-  },
-  {
-    id: 'Institucional',
-    label: 'Institucional',
-    icon: Building2,
-    description: 'Recursos propios de la institucion y material privado.',
-    color: '#4f46e5',
-  },
+  { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers, preprints y artículos científicos de repositorios globales.', color: '#1d4ed8' },
+  { id: 'Didacticos', label: 'Didácticos', icon: Puzzle, description: 'Recursos educativos abiertos: OER Commons y simulaciones PhET.', color: '#d97706' },
+  { id: 'YouTube', label: 'YouTube', icon: PlayCircle, description: 'Videos académicos con ranking por calidad educativa.', color: '#dc2626' },
+  { id: 'Institucional', label: 'Institucional', icon: Building2, description: 'Repositorio propio de la institución.', color: '#4f46e5' },
 ];
 
-const FILTER_SOURCE_OPTIONS: { key: LibraryVisualSourceKey; label: string }[] = [
-  { key: 'arxiv', label: 'arXiv' },
-  { key: 'youtube', label: 'YouTube' },
-  { key: 'semantic-scholar', label: 'Semantic Scholar' },
-  { key: 'openalex', label: 'OpenAlex' },
-  { key: 'pubmed', label: 'PubMed' },
+const INVESTIGATION_PROVIDERS: LibraryProvider[] = [
+  'semantic-scholar', 'openalex', 'arxiv', 'core', 'scielo', 'redalyc',
 ];
+const DIDACTICOS_PROVIDERS: LibraryProvider[] = ['oer-commons', 'phet'];
 
-const RESOURCE_TYPE_OPTIONS = ['Paper', 'Video', 'Artículo', 'Dataset'];
-const FALLBACK_QUICK_QUERIES = [
-  'algoritmos de machine learning',
-  'redes neuronales',
-  'aprendizaje activo',
-  'arquitectura limpia',
-];
+const PROVIDER_LABELS: Record<string, string> = {
+  'semantic-scholar': 'Semantic Scholar',
+  openalex: 'OpenAlex',
+  arxiv: 'arXiv',
+  core: 'CORE',
+  scielo: 'SciELO',
+  redalyc: 'Redalyc',
+  'oer-commons': 'OER Commons',
+  phet: 'PhET',
+  youtube: 'YouTube',
+  institutional: 'Institucional',
+};
+
+const PROVIDER_COLORS: Record<string, string> = {
+  'semantic-scholar': '#1d4ed8',
+  openalex: '#0f766e',
+  arxiv: '#b91c1c',
+  core: '#15803d',
+  scielo: '#0ea5e9',
+  redalyc: '#7c3aed',
+  'oer-commons': '#d97706',
+  phet: '#0891b2',
+  youtube: '#dc2626',
+  institutional: '#4f46e5',
+};
+
+// ─── Descubridor Inteligente ─────────────────────────────────────────────────
+
+const DISCOVERY_TOPICS: Partial<Record<LibraryGroup, string[]>> = {
+  Investigacion: [
+    'inteligencia artificial', 'aprendizaje automático', 'cambio climático', 'neurociencia',
+    'bioinformática', 'computación cuántica', 'salud pública', 'economía conductual',
+    'robótica', 'genómica', 'ética en IA', 'sostenibilidad',
+  ],
+  Didacticos: [
+    'pensamiento crítico', 'aprendizaje colaborativo', 'gamificación', 'STEM',
+    'diseño instruccional', 'evaluación formativa', 'aula invertida', 'ABP',
+    'matemáticas interactivas', 'física experimental', 'química laboratorio',
+  ],
+  YouTube: [
+    'conferencias TED educación', 'tutoriales programación', 'documentales ciencia',
+    'lecciones Khan Academy', 'cursos universitarios', 'divulgación científica',
+    'clases magistrales', 'debates académicos',
+  ],
+  Institucional: [],
+};
+
+const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: string; description: string; icon: string }[]>> = {
+  Investigacion: [
+    { query: 'large language models education', title: 'IA en Educación', description: 'Últimos papers sobre modelos de lenguaje y su impacto pedagógico.', icon: '🤖' },
+    { query: 'climate change mitigation', title: 'Cambio Climático', description: 'Investigaciones de vanguardia en mitigación y adaptación climática.', icon: '🌍' },
+    { query: 'CRISPR gene therapy', title: 'Biotecnología', description: 'Avances en edición genómica y terapias de nueva generación.', icon: '🧬' },
+  ],
+  Didacticos: [
+    { query: 'project based learning', title: 'Aprendizaje por Proyectos', description: 'Recursos OER para implementar ABP en el aula.', icon: '📐' },
+    { query: 'physics simulation', title: 'Simulaciones PhET', description: 'Laboratorios virtuales interactivos de física y química.', icon: '⚡' },
+    { query: 'math games elementary', title: 'Matemáticas Gamificadas', description: 'Juegos y actividades que hacen las matemáticas divertidas.', icon: '🎯' },
+  ],
+  YouTube: [
+    { query: 'MIT OpenCourseWare lecture', title: 'Clases MIT', description: 'Conferencias completas del MIT sobre tecnología y ciencias.', icon: '🎓' },
+    { query: 'TED talk education innovation', title: 'TED · Educación', description: 'Charlas inspiradoras sobre el futuro del aprendizaje.', icon: '💡' },
+    { query: 'science documentary BBC', title: 'Documentales Ciencia', description: 'Documentales de alta calidad para complementar clases.', icon: '🔬' },
+  ],
+};
 
 const LANGUAGES = [
   { value: 'all', label: 'Todos los idiomas' },
   { value: 'es', label: 'Español' },
   { value: 'en', label: 'English' },
   { value: 'pt', label: 'Português' },
+  { value: 'fr', label: 'Français' },
 ];
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -147,738 +164,89 @@ const YEAR_OPTIONS = [
   { value: String(CURRENT_YEAR - 1), label: `${CURRENT_YEAR - 1}` },
   { value: String(CURRENT_YEAR - 3), label: `Desde ${CURRENT_YEAR - 3}` },
   { value: String(CURRENT_YEAR - 5), label: `Desde ${CURRENT_YEAR - 5}` },
+  { value: String(CURRENT_YEAR - 10), label: `Desde ${CURRENT_YEAR - 10}` },
 ];
 
-const DEFAULT_FILTERS: SearchFilters = {
-  language: 'all',
-  year: '',
-  openAccess: false,
-  sources: [],
-  resourceTypes: [],
-  minScore: 0,
-};
-
-const SEARCH_REQUEST_TIMEOUT_MS = 6500;
-const ENABLE_LIBRARY_SEEDS = false;
-const COURSE_TITLE_STOPWORDS = new Set([
-  'el', 'la', 'los', 'las', 'de', 'del', 'en', 'un', 'una', 'y', 'o', 'que',
-  'es', 'por', 'con', 'para', 'al', 'se', 'su', 'no', 'a', 'más', 'como',
-  'entre', 'sobre', 'sin', 'hacia', 'desde', 'cada', 'todo', 'todos', 'hasta',
-]);
-
-const LANDING_RECOMMENDATIONS = [
-  createSeedResult({
-    id: 'landing-neural-arxiv',
-    title: 'Intro a Redes Neuronales',
-    authors: ['Remus', 'Smeice'],
-    provider: 'arxiv',
-    score: 0.95,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Panorama introductorio de arquitecturas neuronales, funciones de activacion y criterios basicos para evaluar si un recurso sirve en formacion aplicada.',
-    canonicalUrl: 'https://arxiv.org/abs/2402.10001',
-    publishedAt: '2024-02-18',
-    citationCount: 31,
-    tags: ['redes neuronales', 'deep learning', 'fundamentos'],
-  }),
-  createSeedResult({
-    id: 'landing-ux-youtube',
-    title: 'Patrones de Diseño UX',
-    authors: ['Gunnstien'],
-    provider: 'youtube',
-    score: 0.88,
-    resourceType: 'Video',
-    previewKind: 'video',
-    abstract: 'Explicacion visual de patrones UX reutilizables, decisiones de interfaz y momentos de friccion comun en rutas de aprendizaje digital.',
-    canonicalUrl: 'https://www.youtube.com/watch?v=ux-patterns-maturity',
-    publishedAt: '2024-01-11',
-    citationCount: 18,
-    tags: ['ux', 'patrones', 'interfaz'],
-  }),
-  createSeedResult({
-    id: 'landing-clean-devto',
-    title: 'Arquitectura Limpia',
-    authors: ['Demoa'],
-    provider: 'core',
-    brandKey: 'devto',
-    score: 0.75,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Lectura corta sobre separacion de responsabilidades, diseño mantenible y decisiones de modularidad para equipos que producen rapido.',
-    canonicalUrl: 'https://dev.to/maturity360/arquitectura-limpia-curso',
-    publishedAt: '2023-11-02',
-    citationCount: 12,
-    tags: ['arquitectura', 'codigo limpio', 'escalabilidad'],
-  }),
-  createSeedResult({
-    id: 'landing-design-pubmed',
-    title: 'Tutorial de Diseño',
-    authors: ['Bevilaqua'],
-    provider: 'semantic-scholar',
-    brandKey: 'pubmed',
-    score: 0.75,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Recurso con enfoque metodologico sobre diseño instruccional, secuencias de aprendizaje y evaluacion de impacto en cohortes universitarias.',
-    canonicalUrl: 'https://pubmed.ncbi.nlm.nih.gov/39999888/',
-    publishedAt: '2024-03-07',
-    citationCount: 22,
-    tags: ['diseño instruccional', 'salud digital', 'aprendizaje'],
-  }),
-  createSeedResult({
-    id: 'landing-openalex-feedback',
-    title: 'Feedback Formativo en Ambientes Digitales',
-    authors: ['Linares', 'Torres'],
-    provider: 'openalex',
-    score: 0.84,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Sintetiza practicas de retroalimentacion inmediata y evidencia que mejora la retencion en experiencias asincronicas.',
-    canonicalUrl: 'https://openalex.org/W420000001',
-    publishedAt: '2023-09-26',
-    citationCount: 44,
-    tags: ['feedback', 'evaluacion', 'aprendizaje asincronico'],
-  }),
-  createSeedResult({
-    id: 'landing-scielo-analytics',
-    title: 'Analitica de Aprendizaje para Tutorias',
-    authors: ['Morales', 'Perez'],
-    provider: 'scielo',
-    score: 0.81,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Describe indicadores accionables para detectar abandono, medir participacion y priorizar acompanamiento docente.',
-    canonicalUrl: 'https://scielo.org/article/maturity-analytics',
-    publishedAt: '2022-08-14',
-    citationCount: 27,
-    tags: ['learning analytics', 'tutorias', 'retencion'],
-  }),
-];
-
-const MACHINE_LEARNING_SCENARIO_RESULTS = [
-  createSeedResult({
-    id: 'ml-intro-pubmed',
-    title: 'Introducción a Algoritmos de Machine Learning',
-    authors: ['Garcia', 'Santos'],
-    provider: 'semantic-scholar',
-    brandKey: 'pubmed',
-    score: 0.98,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Revision breve de algoritmos supervisados y no supervisados con foco en casos de clasificacion, prediccion y criterios de interpretabilidad.',
-    canonicalUrl: 'https://pubmed.ncbi.nlm.nih.gov/35555771/',
-    publishedAt: '2024-02-22',
-    citationCount: 91,
-    tags: ['machine learning', 'fundamentos', 'clasificacion'],
-  }),
-  createSeedResult({
-    id: 'ml-regresion-youtube',
-    title: 'Regresión Lineal y Logística',
-    authors: ['Ments', 'Utmantes', 'Betires'],
-    provider: 'youtube',
-    score: 0.91,
-    resourceType: 'Video',
-    previewKind: 'video',
-    abstract: 'Este video de YouTube explica los fundamentos de la regresion lineal y logistica para clasificacion y prediccion, con ejemplos practicos en Python.',
-    canonicalUrl: 'https://www.youtube.com/watch?v=linear-logistic-ml',
-    publishedAt: '2022-12-22',
-    citationCount: 38,
-    tags: ['regresion', 'clasificacion', 'python'],
-  }),
-  createSeedResult({
-    id: 'ml-knn-arxiv',
-    title: 'Clasificación con KNN',
-    authors: ['Ardenes', 'Comes'],
-    provider: 'arxiv',
-    score: 0.94,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Documento corto que compara distancia euclidiana, normalizacion de variables y validacion cruzada para KNN en datasets pequenos.',
-    canonicalUrl: 'https://arxiv.org/abs/2401.01010',
-    publishedAt: '2024-01-19',
-    citationCount: 57,
-    tags: ['knn', 'clasificacion', 'modelado'],
-  }),
-  createSeedResult({
-    id: 'ml-decision-scielo',
-    title: 'Árboles de Decisión Explicados',
-    authors: ['Serfie', 'Alvarado'],
-    provider: 'scielo',
-    score: 0.9,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Guia aplicada sobre arboles de decision, poda, pureza y lectura de reglas para equipos que necesitan explicar el modelo.',
-    canonicalUrl: 'https://scielo.org/article/decision-trees-course',
-    publishedAt: '2023-08-03',
-    citationCount: 25,
-    tags: ['decision trees', 'explicabilidad', 'reglas'],
-  }),
-  createSeedResult({
-    id: 'ml-tensorflow-youtube',
-    title: 'Tutorial de TensorFlow',
-    authors: ['Dervlin'],
-    provider: 'youtube',
-    score: 0.85,
-    resourceType: 'Video',
-    previewKind: 'video',
-    abstract: 'Recorrido guiado para cargar datos, entrenar un modelo base y revisar metricas de validacion en TensorFlow con ejemplos compactos.',
-    canonicalUrl: 'https://www.youtube.com/watch?v=tensorflow-ml-course',
-    publishedAt: '2023-05-15',
-    citationCount: 17,
-    tags: ['tensorflow', 'entrenamiento', 'metricas'],
-  }),
-  createSeedResult({
-    id: 'ml-clustering-devto',
-    title: 'Algoritmos de Agrupamiento',
-    authors: ['Demoa'],
-    provider: 'core',
-    brandKey: 'devto',
-    score: 0.87,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Resumen operativo de clustering, eleccion de k, lectura de centroides y escenarios donde conviene preferir K-Means o DBSCAN.',
-    canonicalUrl: 'https://dev.to/maturity360/algoritmos-de-agrupamiento',
-    publishedAt: '2024-01-09',
-    citationCount: 11,
-    tags: ['clustering', 'k-means', 'dbscan'],
-  }),
-  createSeedResult({
-    id: 'ml-openalex-feature',
-    title: 'Ingeniería de Variables para Modelos Supervisados',
-    authors: ['Ledesma', 'Horton'],
-    provider: 'openalex',
-    score: 0.89,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Explica como seleccionar, escalar y transformar variables antes de entrenar clasificadores y regresores de uso comun.',
-    canonicalUrl: 'https://openalex.org/W520000777',
-    publishedAt: '2024-02-04',
-    citationCount: 43,
-    tags: ['feature engineering', 'preprocesamiento', 'supervisado'],
-  }),
-  createSeedResult({
-    id: 'ml-scielo-eval',
-    title: 'Métricas para Evaluar Clasificadores',
-    authors: ['Serrano', 'Mejia'],
-    provider: 'scielo',
-    score: 0.92,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Cubre precision, recall, F1 y curvas ROC con ejemplos de lectura para no especialistas y equipos de curso.',
-    canonicalUrl: 'https://scielo.org/article/ml-metricas-clasificadores',
-    publishedAt: '2023-06-28',
-    citationCount: 36,
-    tags: ['metricas', 'f1', 'roc'],
-  }),
-  createSeedResult({
-    id: 'ml-neural-arxiv',
-    title: 'Redes Neuronales Profundas',
-    authors: ['Norez', 'Briante'],
-    provider: 'arxiv',
-    score: 0.93,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Describe arquitecturas densas y convolucionales, tuning inicial y criterios para escoger un modelo profundo sin complejidad innecesaria.',
-    canonicalUrl: 'https://arxiv.org/abs/2403.09090',
-    publishedAt: '2024-03-18',
-    citationCount: 74,
-    tags: ['deep learning', 'cnn', 'seleccion de modelo'],
-  }),
-  createSeedResult({
-    id: 'ml-devto-pipelines',
-    title: 'Pipelines Reproducibles de Machine Learning',
-    authors: ['Kendal'],
-    provider: 'core',
-    brandKey: 'devto',
-    score: 0.86,
-    resourceType: 'Artículo',
-    previewKind: 'article',
-    abstract: 'Propone una ruta concreta para versionar datos, pipelines y artefactos del modelo sin perder trazabilidad docente.',
-    canonicalUrl: 'https://dev.to/maturity360/pipelines-reproducibles-ml',
-    publishedAt: '2023-12-12',
-    citationCount: 9,
-    tags: ['pipelines', 'mlops', 'reproducibilidad'],
-  }),
-  createSeedResult({
-    id: 'ml-youtube-overfitting',
-    title: 'Cómo Detectar Overfitting',
-    authors: ['Ruiz', 'Cano'],
-    provider: 'youtube',
-    score: 0.88,
-    resourceType: 'Video',
-    previewKind: 'video',
-    abstract: 'Video claro para explicar sobreajuste, regularizacion, validacion cruzada y lectura de curvas de aprendizaje con ejemplos sencillos.',
-    canonicalUrl: 'https://www.youtube.com/watch?v=ml-overfitting-explained',
-    publishedAt: '2024-02-10',
-    citationCount: 14,
-    tags: ['overfitting', 'regularizacion', 'cross validation'],
-  }),
-  createSeedResult({
-    id: 'ml-pubmed-health',
-    title: 'Machine Learning Aplicado a Salud',
-    authors: ['Ortega', 'Beltran'],
-    provider: 'semantic-scholar',
-    brandKey: 'pubmed',
-    score: 0.9,
-    resourceType: 'Paper',
-    previewKind: 'paper',
-    abstract: 'Caso de uso que aterriza algoritmos de clasificacion, sesgo de datos y requerimientos de interpretabilidad en contextos clinicos.',
-    canonicalUrl: 'https://pubmed.ncbi.nlm.nih.gov/36666221/',
-    publishedAt: '2023-04-21',
-    citationCount: 68,
-    tags: ['salud', 'clasificacion', 'sesgo'],
-  }),
-];
-
-function createSeedResult(config: SeedResultConfig): LibrarySearchResult {
-  return {
-    id: config.id,
-    canonicalKey: `seed:${config.id}`,
-    provider: config.provider,
-    providerRecordId: config.id,
-    providers: [config.provider],
-    group: config.group ?? 'Investigacion',
-    title: config.title,
-    authors: config.authors,
-    publishedAt: config.publishedAt,
-    abstract: config.abstract,
-    descriptionHtml: '',
-    canonicalUrl: config.canonicalUrl,
-    resourceType: config.resourceType,
-    language: 'es',
-    openAccess: config.openAccess ?? true,
-    citationCount: config.citationCount ?? 0,
-    visibility: 'Publico',
-    previewKind: config.previewKind ?? 'article',
-    tags: config.tags ?? [],
-    metadata: config.brandKey ? { brandKey: config.brandKey } : {},
-    score: config.score,
-    sourceKinds: [config.resourceType],
-    cached: false,
-  };
-}
-
-function normalizeQuery(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
-}
-
-function resolveScenarioResults(query: string): LibrarySearchResult[] {
-  if (!ENABLE_LIBRARY_SEEDS) {
-    return [];
-  }
-
-  const normalized = normalizeQuery(query);
-
-  if (
-    normalized.includes('algoritmos de machine learning')
-    || normalized.includes('machine learning')
-    || normalized.includes('aprendizaje automatico')
-  ) {
-    return MACHINE_LEARNING_SCENARIO_RESULTS;
-  }
-
-  return [];
-}
-
-function mergeResults(primary: LibrarySearchResult[], secondary: LibrarySearchResult[]): LibrarySearchResult[] {
-  const merged = new Map<string, LibrarySearchResult>();
-
-  [...primary, ...secondary].forEach((asset) => {
-    const key = asset.canonicalKey || asset.canonicalUrl || asset.title.toLowerCase();
-    if (!merged.has(key)) {
-      merged.set(key, asset);
-    }
-  });
-
-  return [...merged.values()].sort((left, right) => right.score - left.score);
-}
-
-function filtersAreActive(filters: SearchFilters): boolean {
-  return filters.language !== 'all'
-    || filters.year !== ''
-    || filters.openAccess
-    || filters.sources.length > 0
-    || filters.resourceTypes.length > 0
-    || filters.minScore > 0;
-}
-
-function inferGroupForSearch(group: LibraryGroup, filters: SearchFilters): LibraryGroup {
-  if (filters.sources.length === 1 && filters.sources[0] === 'youtube') {
-    return 'YouTube';
-  }
-
-  if (group === 'Institucional') {
-    return 'Institucional';
-  }
-
-  return group;
-}
-
-function getProviderFiltersForGroup(group: LibraryGroup, providers: LibraryProvider[]) {
-  if (providers.length === 0) {
-    return providers;
-  }
-
-  if (group === 'YouTube') {
-    return providers.includes('youtube') ? (['youtube'] as LibraryProvider[]) : [];
-  }
-
-  if (group === 'Didacticos') {
-    return providers.filter((provider) => provider === 'phet' || provider === 'oer-commons');
-  }
-
-  if (group === 'Investigacion') {
-    return providers.filter((provider) =>
-      ['openalex', 'arxiv', 'semantic-scholar', 'scielo', 'redalyc', 'core'].includes(provider),
-    );
-  }
-
-  return providers;
-}
-
-function isAbsoluteHttpUrl(value: string): boolean {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function isValidLibraryResult(asset: LibrarySearchResult): boolean {
-  return Boolean(
-    asset.id
-      && asset.title?.trim()
-      && asset.provider
-      && asset.providerRecordId?.trim()
-      && isAbsoluteHttpUrl(asset.canonicalUrl),
-  );
-}
-
-function normalizeRecommendationAsset(asset: Partial<LibrarySearchResult> & Record<string, unknown>): LibrarySearchResult | null {
-  const id = String(asset.id ?? '').trim();
-  const title = String(asset.title ?? '').trim();
-  const provider = String(asset.provider ?? '').trim() as LibraryProvider;
-  const canonicalUrl = String(asset.canonicalUrl ?? '').trim();
-  if (!id || !title || !provider || !canonicalUrl) return null;
-
-  const scoreRaw = Number(asset.score ?? asset.relevanceScore ?? 0.72);
-  const normalizedScore = Number.isFinite(scoreRaw)
-    ? (scoreRaw > 1 ? Math.min(0.99, Math.max(0.35, scoreRaw / 10)) : Math.min(0.99, Math.max(0.35, scoreRaw)))
-    : 0.72;
-  const metadata = (asset.metadata && typeof asset.metadata === 'object')
-    ? (asset.metadata as Record<string, unknown>)
-    : {};
-
-  const normalized: LibrarySearchResult = {
-    id,
-    canonicalKey: String(asset.canonicalKey ?? `${provider}:${id}`),
-    provider,
-    providerRecordId: String(asset.providerRecordId ?? id),
-    providers: Array.isArray(asset.providers) && asset.providers.length > 0
-      ? (asset.providers as LibraryProvider[])
-      : [provider],
-    group: (String(asset.group ?? 'Investigacion') as LibraryGroup),
-    title,
-    authors: Array.isArray(asset.authors) ? (asset.authors as string[]).filter(Boolean) : [],
-    publishedAt: String(asset.publishedAt ?? ''),
-    abstract: String(asset.abstract ?? ''),
-    descriptionHtml: String(asset.descriptionHtml ?? ''),
-    doi: String(asset.doi ?? ''),
-    canonicalUrl,
-    resourceType: String(asset.resourceType ?? 'Recurso'),
-    language: String(asset.language ?? 'es'),
-    license: asset.license as LibrarySearchResult['license'],
-    openAccess: Boolean(asset.openAccess),
-    citationCount: Number(asset.citationCount ?? 0),
-    thumbnailUrl: String(asset.thumbnailUrl ?? '') || undefined,
-    embedUrl: String(asset.embedUrl ?? '') || undefined,
-    institutionId: String(asset.institutionId ?? '') || undefined,
-    institutionName: String(asset.institutionName ?? '') || undefined,
-    visibility: (String(asset.visibility ?? 'Publico') as LibrarySearchResult['visibility']),
-    previewKind: (String(asset.previewKind ?? 'article') as LibrarySearchResult['previewKind']),
-    tags: Array.isArray(asset.tags) ? (asset.tags as string[]).filter(Boolean) : [],
-    metadata,
-    score: normalizedScore,
-    sourceKinds: Array.isArray(asset.sourceKinds) ? (asset.sourceKinds as string[]) : [],
-    cached: Boolean(asset.cached),
-  };
-
-  return isValidLibraryResult(normalized) ? normalized : null;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPageProps) {
+  const { showAlert } = useSystemDialog();
+
+  // Search state
   const [query, setQuery] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
   const [activeGroup, setActiveGroup] = useState<LibraryGroup>('Investigacion');
   const [results, setResults] = useState<LibrarySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchWarning, setSearchWarning] = useState<string | null>(null);
   const [searchMeta, setSearchMeta] = useState<SearchMeta>({});
-  const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
-  const [draftFilters, setDraftFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<SearchFilters>({
+    language: 'all',
+    year: '',
+    openAccess: false,
+    providers: [],
+    resourceTypes: [],
+    minScore: 0,
+  });
+
+  // UI state
+  const [hasSearched, setHasSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [visibleLimit, setVisibleLimit] = useState(9);
+  const [visibleLimit, setVisibleLimit] = useState(24);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
-  const [hasExecutedSearch, setHasExecutedSearch] = useState(false);
-  const activeSearchControllerRef = useRef<AbortController | null>(null);
-  const activeSearchRequestIdRef = useRef(0);
+  const [recommendations, setRecommendations] = useState<LibrarySearchResult[]>([]);
 
-  const viewerMembershipKey = useMemo(
-    () => JSON.stringify((viewer.memberships ?? []).map((membership) => membership.id).sort()),
-    [viewer.memberships],
-  );
-  const visibleCourses = useMemo(
-    () => getVisibleCourses(appData, role, viewer),
-    [appData, role, viewer, viewerMembershipKey],
-  );
-  const courseOptions = visibleCourses.map((course) => ({
-    value: course.slug,
-    label: `${course.title} · ${buildCourseScopeLabel(course)}`,
+  const searchRef = useRef<HTMLFormElement>(null);
+  const visibleCourses = getVisibleCourses(appData, role, viewer);
+  const courseOptions = visibleCourses.map((c) => ({
+    value: c.slug,
+    label: `${c.title} · ${buildCourseScopeLabel(c)}`,
   }));
-  const activeGroupCfg = GROUPS.find((group) => group.id === activeGroup) ?? GROUPS[0];
-  const hasActiveFilters = filtersAreActive(filters);
-  const isLanding = !hasExecutedSearch && submittedQuery === '';
-  const [recommendedResults, setRecommendedResults] = useState<LibrarySearchResult[]>([]);
-  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
-  const [suggestedQueries, setSuggestedQueries] = useState<string[]>(fallbackQueriesFromCourses([]));
+  const selectedAssets = results.filter((r) => selectedIds.includes(r.id));
 
-  const recommendationContext = useMemo(() => (
-    visibleCourses
-      .map((course) => `${course.slug}:${(course.metadata.topics ?? []).slice(0, 10).join(',')}:${course.title}`)
-      .sort()
-      .join('|')
-  ), [visibleCourses]);
-  const courseKeywordQueries = useMemo(() => fallbackQueriesFromCourses(visibleCourses.map((course) => course.title)), [visibleCourses]);
-
-  useEffect(() => {
-    if (visibleCourses.length === 0) {
-      setRecommendedResults(ENABLE_LIBRARY_SEEDS ? LANDING_RECOMMENDATIONS : []);
-      setIsLoadingRecommendations(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 9000);
-
-    async function loadRecommendations() {
-      try {
-        setIsLoadingRecommendations(true);
-        const merged = new Map<string, LibrarySearchResult>();
-        const keywordPhrases = new Set<string>(courseKeywordQueries);
-
-        const pushResults = (items: Array<Partial<LibrarySearchResult> & Record<string, unknown>>) => {
-          items.forEach((item) => {
-            const normalized = normalizeRecommendationAsset(item);
-            if (!normalized) return;
-            const key = normalized.canonicalKey || normalized.canonicalUrl || normalized.id;
-            if (!merged.has(key)) {
-              merged.set(key, normalized);
-            }
-          });
-        };
-
-        // 1) Preferimos recomendaciones por curso (alineadas al contexto real del usuario).
-        for (const course of visibleCourses.slice(0, 3)) {
-          try {
-            const response = await fetch(
-              `/api/library/recommendations?courseSlug=${encodeURIComponent(course.slug)}&limit=8`,
-              { signal: controller.signal },
-            );
-            if (!response.ok) continue;
-            const payload = await response.json() as {
-              recommendations?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
-              keywords?: string[];
-            };
-            if (Array.isArray(payload.recommendations)) {
-              pushResults(payload.recommendations);
-            }
-            if (Array.isArray(payload.keywords)) {
-              payload.keywords
-                .map((item) => item.trim())
-                .filter((item) => item.length >= 4)
-                .forEach((item) => keywordPhrases.add(item));
-            }
-          } catch {
-            // seguimos con el siguiente curso/fallback
-          }
-        }
-
-        // 2) Fallback de descubrimiento para evitar pantalla vacía.
-        if (merged.size === 0 && !controller.signal.aborted) {
-          const fallbackQuery = Array.from(keywordPhrases)[0] || 'educacion superior';
-          const groups: LibraryGroup[] = ['Investigacion', 'Didacticos', 'YouTube'];
-
-          for (const group of groups) {
-            try {
-              const params = new URLSearchParams({
-                q: fallbackQuery,
-                group,
-                limit: '6',
-              });
-              const response = await fetch(`/api/library/search?${params.toString()}`, {
-                signal: controller.signal,
-              });
-              if (!response.ok) continue;
-              const payload = await response.json() as {
-                results?: Array<Partial<LibrarySearchResult> & Record<string, unknown>>;
-              };
-              if (Array.isArray(payload.results)) {
-                pushResults(payload.results);
-              }
-            } catch {
-              // mantenemos robustez por grupo
-            }
-          }
-        }
-
-        if (!controller.signal.aborted) {
-          const finalRecommendations = Array.from(merged.values()).slice(0, 18);
-          setRecommendedResults(finalRecommendations);
-          const contextualQueries = Array.from(keywordPhrases)
-            .filter((item) => !COURSE_TITLE_STOPWORDS.has(item.toLowerCase()))
-            .slice(0, 8);
-          setSuggestedQueries(contextualQueries.length > 0 ? contextualQueries : courseKeywordQueries);
-          if (finalRecommendations.length === 0) {
-            setRecommendedResults(ENABLE_LIBRARY_SEEDS ? LANDING_RECOMMENDATIONS : []);
-          }
-        }
-      } finally {
-        setIsLoadingRecommendations(false);
-      }
-    }
-
-    void loadRecommendations();
-
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [courseKeywordQueries, recommendationContext, visibleCourses]);
-
-  const baseAssets = isLanding ? recommendedResults : results;
-  const isMasked = showFilters || Boolean(previewAsset);
-
-  const filteredAssets = useMemo(() => (
-    baseAssets.filter((asset) => {
-      if (filters.minScore > 0 && Math.round(asset.score * 100) < filters.minScore) {
-        return false;
-      }
-
-      if (!matchesSelectedResourceTypes(asset, filters.resourceTypes)) {
-        return false;
-      }
-
-      if (!matchesSelectedSources(asset, filters.sources)) {
-        return false;
-      }
-
-      if (filters.language !== 'all' && asset.language !== filters.language) {
-        return false;
-      }
-
-      if (filters.openAccess && !asset.openAccess) {
-        return false;
-      }
-
-      if (filters.year) {
-        const minYear = Number(filters.year);
-        const assetYear = Number(asset.publishedAt.slice(0, 4));
-        if (!Number.isNaN(minYear) && !Number.isNaN(assetYear) && assetYear < minYear) {
-          return false;
-        }
-      }
-
-      return isValidLibraryResult(asset);
-    })
-  ), [baseAssets, filters]);
-
-  const visibleAssets = isLanding
-    ? filteredAssets.slice(0, 6)
-    : filteredAssets.slice(0, visibleLimit);
-
-  const selectedAssets = filteredAssets.filter((asset) => selectedIds.includes(asset.id));
-
-
-  const appliedFilterLabels = useMemo(() => {
-    const labels: string[] = [];
-
+  // Client-side post-filtering for resource type and score
+  const filteredResults = results.filter((r) => {
+    if (filters.minScore > 0 && r.score * 100 < filters.minScore) return false;
     if (filters.resourceTypes.length > 0) {
-      labels.push(...filters.resourceTypes);
+      const rt = r.resourceType.toLowerCase();
+      const match = filters.resourceTypes.some((t) => rt.includes(t.toLowerCase()));
+      if (!match) return false;
     }
+    return true;
+  });
+  const visibleResults = filteredResults.slice(0, visibleLimit);
 
-    if (filters.sources.length > 0) {
-      labels.push(...filters.sources.map((source) => (
-        FILTER_SOURCE_OPTIONS.find((option) => option.key === source)?.label ?? source
-      )));
-    }
+  // ── Search ─────────────────────────────────────────────────────────────────
 
-    if (filters.minScore > 0) {
-      labels.push(`Score ${filters.minScore}%+`);
-    }
-
-    if (filters.openAccess) {
-      labels.push('Open access');
-    }
-
-    return labels;
-  }, [filters]);
-
-  const performSearch = useCallback(async (rawQuery: string, nextGroup: LibraryGroup, nextFilters: SearchFilters) => {
-    const trimmedQuery = rawQuery.trim();
-    const searchGroup = inferGroupForSearch(nextGroup, nextFilters);
-    const scenarioResults = resolveScenarioResults(trimmedQuery);
-    const providerFilters = buildProviderFiltersFromVisualSources(nextFilters.sources);
-    const effectiveProviderFilters = getProviderFiltersForGroup(searchGroup, providerFilters);
-    const requestId = activeSearchRequestIdRef.current + 1;
-    activeSearchRequestIdRef.current = requestId;
-
-    activeSearchControllerRef.current?.abort();
-    const controller = new AbortController();
-    activeSearchControllerRef.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), SEARCH_REQUEST_TIMEOUT_MS);
-
+  const performSearch = useCallback(async (q: string, group: LibraryGroup, f: SearchFilters) => {
+    setHasSearched(true);
     setIsSearching(true);
     setSelectedIds([]);
-    setVisibleLimit(9);
-    setHasExecutedSearch(true);
-    setSubmittedQuery(trimmedQuery);
-    setSearchWarning(null);
+    setVisibleLimit(24);
 
     try {
-      const params = new URLSearchParams({
-        q: trimmedQuery,
-        group: searchGroup,
-      });
+      const params = new URLSearchParams({ q, group });
+      if (f.language !== 'all') params.set('language', f.language);
+      if (f.year) params.set('year', f.year);
+      if (f.openAccess) params.set('open_access', 'true');
+      if (f.providers.length > 0) params.set('providers', f.providers.join(','));
 
-      if (nextFilters.language !== 'all') params.set('language', nextFilters.language);
-      if (nextFilters.year) params.set('year', nextFilters.year);
-      if (nextFilters.openAccess) params.set('open_access', 'true');
-      if (effectiveProviderFilters.length > 0) params.set('providers', effectiveProviderFilters.join(','));
+      const resp = await fetch(`/api/library/search?${params.toString()}`);
 
-      const response = await fetch(`/api/library/search?${params.toString()}`, {
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'No se pudo completar la búsqueda federada.';
+      if (!resp.ok) {
+        let errMsg = 'Error en la búsqueda federada';
         try {
-          const payload = await response.json() as { error?: string };
-          errorMessage = payload.error ?? errorMessage;
+          const err = await resp.json() as { error?: string };
+          errMsg = err.error ?? errMsg;
         } catch {
-          errorMessage = `No se pudo completar la búsqueda (${response.status}).`;
+          errMsg = `Error del servidor (${resp.status})`;
         }
-        throw new Error(errorMessage);
+        throw new Error(errMsg);
       }
 
-      const payload = await response.json() as {
+      const data = await resp.json() as {
         results: LibrarySearchResult[];
         total: number;
         cached: boolean;
@@ -886,554 +254,1061 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         providerStates: ProviderState[];
       };
 
-      if (requestId !== activeSearchRequestIdRef.current) {
-        return;
-      }
-
-      const mergedResults = mergeResults(
-        scenarioResults,
-        (payload.results ?? []).filter((asset) => isValidLibraryResult(asset)),
-      );
-      setResults(mergedResults);
+      setResults(data.results ?? []);
       setSearchMeta({
-        cached: payload.cached,
-        fetchedAt: payload.fetchedAt,
-        providerStates: payload.providerStates ?? [],
-        total: mergedResults.length,
+        cached: data.cached,
+        fetchedAt: data.fetchedAt,
+        providerStates: data.providerStates ?? [],
+        total: data.total,
       });
-    } catch (error) {
-      if (requestId !== activeSearchRequestIdRef.current) {
-        return;
-      }
-
-      const timeoutError = error instanceof Error && error.name === 'AbortError';
-      const fallbackResults = scenarioResults.length > 0
-        ? scenarioResults
-        : results.filter((asset) => isValidLibraryResult(asset));
-      const fallbackMeta = fallbackResults.length > 0
-        ? {
-            total: fallbackResults.length,
-            providerStates: searchMeta.providerStates ?? [],
-            cached: searchMeta.cached,
-            fetchedAt: searchMeta.fetchedAt,
-          }
-        : {};
-
-      setResults(fallbackResults);
-      setSearchMeta(fallbackMeta);
-      setSearchWarning(
-        timeoutError
-          ? 'La consulta tardó más de lo esperado. Mostramos resultados disponibles para mantener el flujo.'
-          : 'Algunos adaptadores no respondieron. Mostramos resultados disponibles.',
-      );
+    } catch (err) {
+      setResults([]);
+      setSearchMeta({});
+      await showAlert({
+        title: 'Error de búsqueda',
+        message: err instanceof Error ? err.message : 'No se pudo conectar al hub de búsqueda',
+        tone: 'error',
+      });
     } finally {
-      window.clearTimeout(timeout);
-      if (requestId === activeSearchRequestIdRef.current) {
-        activeSearchControllerRef.current = null;
-        setIsSearching(false);
-      }
+      setIsSearching(false);
     }
-  }, [results, searchMeta]);
+  }, [showAlert]);
+
+  // Load recommendations for landing page
+  useEffect(() => {
+    void (async () => {
+      try {
+        const resp = await fetch(`/api/library/search?q=machine+learning&group=${activeGroup}&limit=4`);
+        if (resp.ok) {
+          const data = await resp.json() as { results: LibrarySearchResult[] };
+          setRecommendations((data.results ?? []).slice(0, 4));
+        }
+      } catch {
+        // Recommendations are best-effort — silently ignore errors
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    void performSearch(query, activeGroup, filters);
+  }
+
+  function switchGroup(group: LibraryGroup) {
+    setActiveGroup(group);
+    setResults([]);
+    setFilters((f) => ({ ...f, providers: [] }));
+    void performSearch(query, group, { ...filters, providers: [] });
+  }
+
+  function applyFilters(newFilters: SearchFilters) {
+    setFilters(newFilters);
+    void performSearch(query, activeGroup, newFilters);
+  }
+
+  // ── Add to course ──────────────────────────────────────────────────────────
 
   async function handleAddToCourse(asset: LibrarySearchResult, courseSlug: string, targetUnit?: string) {
-    const response = await fetch('/api/library/course-links', {
+    const resp = await fetch('/api/library/course-links', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ asset, courseSlug, targetUnit }),
     });
 
-    if (!response.ok) {
-      let errorMessage = 'No se pudo vincular el recurso al curso.';
+    if (!resp.ok) {
+      let errMsg = 'No se pudo vincular el recurso';
       try {
-        const payload = await response.json() as { error?: string };
-        errorMessage = payload.error ?? errorMessage;
-      } catch {
-        /* noop */
-      }
-
-      throw new Error(errorMessage);
+        const err = await resp.json() as { error?: string };
+        errMsg = err.error ?? errMsg;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
     }
 
     refreshAppData();
   }
 
-  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setShowFilters(false);
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render helpers
+  // ─────────────────────────────────────────────────────────────────────────
 
-    if (!query.trim() && !hasActiveFilters && activeGroup === 'Investigacion') {
-      setHasExecutedSearch(false);
-      setSubmittedQuery('');
-      setResults([]);
-      setSearchMeta({});
-      return;
-    }
+  const activeGroupCfg = GROUPS.find((g) => g.id === activeGroup)!;
+  const hasActiveFilters = filters.language !== 'all' || filters.year !== '' || filters.openAccess || filters.providers.length > 0 || filters.resourceTypes.length > 0 || filters.minScore > 0;
 
-    void performSearch(query, activeGroup, filters);
-  }
+  // ── Filter panel (shared between landing and results) ─────────────────────
+  const filterPanel = showFilters && (
+    <div
+      className="absolute left-0 right-0 mt-2 bg-white border border-line rounded-2xl shadow-2xl z-40 p-5"
+      style={{ top: '100%' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-xs font-black uppercase tracking-widest text-slate-500">
+          Filtros Avanzados (Adaptadores)
+        </span>
+        <button
+          type="button"
+          onClick={() => { setShowFilters(false); applyFilters(filters); }}
+          className="px-5 py-2 rounded-xl text-sm font-bold text-white shadow-sm transition-all active:scale-95"
+          style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
+        >
+          Aplicar Filtros
+        </button>
+      </div>
 
-  function handleSuggestionClick(suggestion: string) {
-    setQuery(suggestion);
-    setShowFilters(false);
-    void performSearch(suggestion, activeGroup, filters);
-  }
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        {/* Tipo de Recurso */}
+        <div>
+          <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Tipo de Recurso</label>
+          <div className="space-y-2">
+            {['Paper', 'Video', 'Artículo', 'Dataset'].map((type) => {
+              const checked = filters.resourceTypes.includes(type);
+              return (
+                <label key={type} className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => setFilters((f) => ({
+                      ...f,
+                      resourceTypes: checked
+                        ? f.resourceTypes.filter((t) => t !== type)
+                        : [...f.resourceTypes, type],
+                    }))}
+                    className="w-4 h-4 rounded cursor-pointer"
+                    style={{ accentColor: '#0d9488' }}
+                  />
+                  <span className="text-sm text-secondary group-hover:text-ink transition-colors">{type}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
 
-  function handleToggleFilters() {
-    setShowFilters((current) => {
-      if (!current) {
-        setDraftFilters(filters);
-      }
-      return !current;
-    });
-  }
+        {/* Fuente */}
+        <div>
+          <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Fuente</label>
+          <div className="space-y-2">
+            {(activeGroup === 'Investigacion' ? INVESTIGATION_PROVIDERS : activeGroup === 'Didacticos' ? DIDACTICOS_PROVIDERS : []).map((p) => {
+              const active = filters.providers.length === 0 || filters.providers.includes(p);
+              return (
+                <label key={p} className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => {
+                      setFilters((f) => {
+                        const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
+                        const next = all.includes(p) ? all.filter((x) => x !== p) : [...all, p];
+                        return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
+                      });
+                    }}
+                    className="w-4 h-4 rounded cursor-pointer"
+                    style={{ accentColor: '#0d9488' }}
+                  />
+                  <span className="text-sm text-secondary group-hover:text-ink transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
 
-  function handleApplyFilters() {
-    setFilters(draftFilters);
-    setShowFilters(false);
+        {/* Puntuación Mínima */}
+        <div>
+          <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">
+            Puntuación Mínima
+            <span className="ml-2 font-bold text-teal-600">
+              {filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}
+            </span>
+          </label>
+          <input
+            type="range"
+            min={0} max={90} step={10}
+            value={filters.minScore}
+            onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
+            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+            style={{ accentColor: '#0d9488', background: '#e2e8f0' }}
+          />
+          <div className="flex justify-between text-[9px] text-muted mt-1">
+            <span>0%</span><span>50%</span><span>90%</span>
+          </div>
+        </div>
 
-    if (query.trim() || hasExecutedSearch || filtersAreActive(draftFilters) || activeGroup !== 'Investigacion') {
-      void performSearch(query, activeGroup, draftFilters);
-    }
-  }
+        {/* Idioma + Año + Open Access */}
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-1.5">Idioma</label>
+            <div className="relative">
+              <select
+                className="w-full bg-slate-50 border border-line text-ink text-sm rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                value={filters.language}
+                onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+              >
+                {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-1.5">Año</label>
+            <div className="relative">
+              <select
+                className="w-full bg-slate-50 border border-line text-ink text-sm rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                value={filters.year}
+                onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
+              >
+                {YEAR_OPTIONS.map((y) => <option key={y.value} value={y.value}>{y.label}</option>)}
+              </select>
+              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filters.openAccess}
+              onChange={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
+              className="w-4 h-4 rounded cursor-pointer"
+              style={{ accentColor: '#0d9488' }}
+            />
+            <span className="text-sm text-secondary font-medium">Solo Open Access</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
 
-  function handleClearFilters() {
-    setDraftFilters(DEFAULT_FILTERS);
-    setFilters(DEFAULT_FILTERS);
-    setShowFilters(false);
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
 
-    if (query.trim()) {
-      void performSearch(query, activeGroup, DEFAULT_FILTERS);
-      return;
-    }
-
-    if (activeGroup === 'Investigacion') {
-      setHasExecutedSearch(false);
-      setSubmittedQuery('');
-      setResults([]);
-      setSearchMeta({});
-    } else {
-      void performSearch('', activeGroup, DEFAULT_FILTERS);
-    }
-  }
-
-  function switchGroup(group: LibraryGroup) {
-    setActiveGroup(group);
-    setSelectedIds([]);
-
-    if (group === 'Investigacion' && !query.trim() && !hasActiveFilters) {
-      setHasExecutedSearch(false);
-      setSubmittedQuery('');
-      setResults([]);
-      setSearchMeta({});
-      return;
-    }
-
-    void performSearch(query, group, filters);
-  }
+  // ── Group tab strip (reused in both states) ───────────────────────────────
+  const groupTabs = (
+    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+      {GROUPS.map((g) => {
+        const Icon = g.icon;
+        const isActive = activeGroup === g.id;
+        return (
+          <button
+            key={g.id}
+            onClick={() => switchGroup(g.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
+              isActive ? 'text-white shadow-md' : 'hover:bg-slate-100 text-slate-500'
+            }`}
+            style={isActive ? { backgroundColor: g.color } : {}}
+          >
+            <Icon size={14} />
+            <span>{g.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <div className="library-experience">
-      <section className="library-search-stage">
-        <div className="library-search-stage__topline">
-          <span className="library-search-stage__eyebrow">
-            <LibraryBig size={15} />
-            Biblioteca Inteligente
-          </span>
-        </div>
+    <div className="library-page pb-32" style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-        <div className="library-search-stage__heading">
-          {/* Release v0.2.0 - Forced Cache Flush */}
-          <h1>Búsqueda de recursos educativos</h1>
-          <p>
-            Descubre recursos con alto ajuste pedagógico para la etapa actual del curso.
-          </p>
-        </div>
+      {/* ══════════════════════════════════════════════════════════════════
+          LANDING STATE — centered hero, shown before first search
+      ══════════════════════════════════════════════════════════════════ */}
+      {!hasSearched && (
+        <div className="flex flex-col items-center px-6 pt-16 pb-12">
 
-        <form className="library-search-shell" onSubmit={handleSearch}>
-          <div className="library-search-shell__field">
-            <Search size={18} />
-            <input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="¿Qué temática te interesa hoy?"
-              aria-label="Buscar en biblioteca"
-            />
+          {/* Title */}
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <LibraryBig size={22} className="text-slate-400" />
+              <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                Biblioteca Inteligente
+              </span>
+            </div>
+            <h1 className="text-3xl font-bold text-ink font-display">
+              Barra de Búsqueda Semántica
+            </h1>
           </div>
 
-          <button
-            type="button"
-            className={`library-search-shell__toggle ${showFilters || hasActiveFilters ? 'is-active' : ''}`}
-            onClick={handleToggleFilters}
+          {/* Centered search bar */}
+          <form
+            onSubmit={handleSearch}
+            className="relative w-full max-w-2xl mb-6"
           >
-            <Filter size={16} />
-            <span>Filtros Avanzados</span>
-          </button>
-
-          <button type="submit" className="library-search-shell__submit" disabled={isSearching}>
-            {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-            <span>{isSearching ? 'Buscando...' : 'Buscar'}</span>
-          </button>
-        </form>
-
-        {showFilters ? (
-          <section className="library-filter-panel">
-            <div className="library-filter-panel__header">
-              <div>
-                <span className="library-filter-panel__eyebrow">Filtros Avanzados (Adaptadores)</span>
-                <p>Refina por tipo, fuente, compatibilidad y señales de calidad.</p>
-              </div>
-
-              <button type="button" className="library-filter-panel__close" onClick={() => setShowFilters(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="library-filter-panel__grid">
-              <div className="library-filter-group">
-                <h3>Tipo de Recurso</h3>
-                <div className="library-filter-checklist">
-                  {RESOURCE_TYPE_OPTIONS.map((type) => {
-                    const checked = draftFilters.resourceTypes.includes(type);
-                    return (
-                      <label key={type}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => setDraftFilters((current) => ({
-                            ...current,
-                            resourceTypes: checked
-                              ? current.resourceTypes.filter((item) => item !== type)
-                              : [...current.resourceTypes, type],
-                          }))}
-                        />
-                        <span>{type}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="library-filter-group">
-                <h3>Fuente</h3>
-                <div className="library-filter-checklist">
-                  {FILTER_SOURCE_OPTIONS.map((source) => {
-                    const checked = draftFilters.sources.includes(source.key);
-                    return (
-                      <label key={source.key}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => setDraftFilters((current) => ({
-                            ...current,
-                            sources: checked
-                              ? current.sources.filter((item) => item !== source.key)
-                              : [...current.sources, source.key],
-                          }))}
-                        />
-                        <span>{source.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="library-filter-group">
-                <h3>Puntuación Mínima</h3>
-                <div className="library-filter-range">
-                  <div className="library-filter-range__value">
-                    {draftFilters.minScore > 0 ? `${draftFilters.minScore}%` : 'Sin mínimo'}
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={95}
-                    step={5}
-                    value={draftFilters.minScore}
-                    onChange={(event) => setDraftFilters((current) => ({
-                      ...current,
-                      minScore: Number(event.target.value),
-                    }))}
-                  />
-                  <div className="library-filter-range__ticks">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>95%</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="library-filter-group">
-                <h3>Contexto adicional</h3>
-                <div className="library-filter-selects">
-                  <label>
-                    <span>Idioma</span>
-                    <div className="library-filter-selects__field">
-                      <select
-                        value={draftFilters.language}
-                        onChange={(event) => setDraftFilters((current) => ({
-                          ...current,
-                          language: event.target.value,
-                        }))}
-                      >
-                        {LANGUAGES.map((language) => (
-                          <option key={language.value} value={language.value}>
-                            {language.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} />
-                    </div>
-                  </label>
-
-                  <label>
-                    <span>Año</span>
-                    <div className="library-filter-selects__field">
-                      <select
-                        value={draftFilters.year}
-                        onChange={(event) => setDraftFilters((current) => ({
-                          ...current,
-                          year: event.target.value,
-                        }))}
-                      >
-                        {YEAR_OPTIONS.map((year) => (
-                          <option key={year.value} value={year.value}>
-                            {year.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} />
-                    </div>
-                  </label>
-
-                  <label className="library-filter-selects__inline">
-                    <input
-                      type="checkbox"
-                      checked={draftFilters.openAccess}
-                      onChange={() => setDraftFilters((current) => ({
-                        ...current,
-                        openAccess: !current.openAccess,
-                      }))}
-                    />
-                    <span>Solo Open Access</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div className="library-filter-panel__actions">
-              <button type="button" className="library-filter-panel__ghost" onClick={handleClearFilters}>
-                Limpiar filtros
-              </button>
-              <button type="button" className="library-filter-panel__apply" onClick={handleApplyFilters}>
-                Aplicar Filtros
-              </button>
-            </div>
-          </section>
-        ) : null}
-
-        <div className="library-search-stage__collections">
-          {GROUPS.map((group) => {
-            const Icon = group.icon;
-            const isActive = group.id === activeGroup;
-            return (
-              <button
-                key={group.id}
-                type="button"
-                className={`library-search-stage__collection ${isActive ? 'is-active' : ''}`}
-                onClick={() => switchGroup(group.id)}
-              >
-                <Icon size={15} />
-                <span>{group.label}</span>
-              </button>
-            );
-          })}
-
-          {searchMeta.cached ? (
-            <span className="library-search-stage__badge">
-              Resultados desde caché
-            </span>
-          ) : null}
-        </div>
-
-        <div className="library-search-stage__chips">
-          {suggestedQueries.map((quickQuery) => (
-            <button
-              key={quickQuery}
-              type="button"
-              onClick={() => handleSuggestionClick(quickQuery)}
+            <div
+              className="flex items-center bg-white border-2 rounded-2xl shadow-md transition-all"
+              style={{ borderColor: showFilters || hasActiveFilters ? '#0d9488' : '#e2e8f0' }}
             >
-              <Sparkles size={13} />
-              <span>{quickQuery}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <main className={`library-results-wrap ${isMasked ? 'is-muted' : ''}`}>
-        {isLanding ? (
-          <section className="library-results-section">
-            <div className="library-results-section__head">
-              <div>
-                <span className="library-results-section__eyebrow">Descubrimiento Inicial</span>
-                <h2>Recomendados para tu etapa actual</h2>
-              </div>
-              <div className="library-results-section__summary">
-                Smart Grid curado con prioridad en madurez, relevancia y facilidad de integración.
-              </div>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="¿Qué concepto necesitas dominar hoy?"
+                className="flex-1 bg-transparent border-0 focus:ring-0 text-base text-ink placeholder:text-slate-300 font-medium py-4 pl-5"
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                disabled={isSearching}
+                className="flex items-center gap-2 mr-2 px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all shadow active:scale-95"
+                style={{ backgroundColor: isSearching ? '#94a3b8' : '#0d9488' }}
+              >
+                {isSearching
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <Search size={16} />}
+              </button>
             </div>
-            {isLoadingRecommendations ? (
-              <section className="library-results-empty">
-                <Loader2 size={40} className="animate-spin" style={{ color: activeGroupCfg.color }} />
-                <h2>Curando recomendaciones por curso</h2>
-                <p>Estamos alineando recursos válidos con las temáticas de tus cursos activos.</p>
-              </section>
-            ) : visibleAssets.length === 0 ? (
-              <section className="library-results-empty">
-                <Search size={40} />
-                <h2>Sin recomendaciones iniciales disponibles</h2>
-                <p>
-                  Aún no encontramos recursos válidos alineados a tus cursos.
-                  Puedes usar la búsqueda para traer resultados federados en tiempo real.
-                </p>
-              </section>
-            ) : (
-              <div className="library-grid">
-                {visibleAssets.map((asset) => (
+            {filterPanel}
+          </form>
+
+          {/* Group tabs */}
+          <div className="w-full max-w-2xl mb-12">
+            {groupTabs}
+          </div>
+
+          {/* Recommended section */}
+          <div className="w-full max-w-4xl">
+            <h2 className="text-lg font-bold text-ink mb-6">
+              Recomendados para tu etapa actual
+            </h2>
+            {recommendations.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                {recommendations.map((asset) => (
                   <LibraryAssetCard
                     key={asset.id}
                     asset={asset}
-                    isSelected={selectedIds.includes(asset.id)}
-                    onToggleSelect={(id, selected) => setSelectedIds((current) => (
-                      selected ? [...current, id] : current.filter((item) => item !== id)
-                    ))}
-                    onPreview={setPreviewAsset}
+                    onPreview={(a) => setPreviewAsset(a)}
+                    onAddToCourse={(a) => setPreviewAsset(a)}
                   />
                 ))}
               </div>
-            )}
-          </section>
-        ) : isSearching && results.length === 0 ? (
-          <section className="library-results-empty">
-            <Loader2 size={44} className="animate-spin" style={{ color: activeGroupCfg.color }} />
-            <h2>Consultando {activeGroupCfg.label}</h2>
-            <p>Estamos refinando resultados para tu búsqueda y cruzando adaptadores en paralelo.</p>
-          </section>
-        ) : filteredAssets.length === 0 ? (
-          <section className="library-results-empty">
-            <Search size={42} />
-            <h2>Sin resultados en este refinamiento</h2>
-            <p>
-              {searchWarning
-                ? `${searchWarning} Ajusta el texto o relaja filtros para ampliar el grid.`
-                : 'Ajusta el texto de búsqueda o relaja uno de los filtros avanzados para ampliar el grid.'}
-            </p>
-          </section>
-        ) : (
-          <section className="library-results-section">
-            <div className="library-results-section__head">
+            ) : (
+              /* Descubridor Inteligente chips while recommendations load */
               <div>
-                <span className="library-results-section__eyebrow">AdaptiveGrid</span>
-                <h2>
-                  {submittedQuery
-                    ? `Resultados refinados para "${submittedQuery}"`
-                    : `Exploración ${activeGroupCfg.label}`}
-                </h2>
-                <p>
-                  {filteredAssets.length} recursos listos para revisión rápida
-                  {searchMeta.total && filteredAssets.length < searchMeta.total ? ` de ${searchMeta.total}` : ''}.
-                </p>
+                <div className="flex flex-wrap gap-2 mb-8">
+                  {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
+                    <button
+                      key={topic}
+                      onClick={() => {
+                        setQuery(topic);
+                        void performSearch(topic, activeGroup, filters);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-full border font-semibold text-sm transition-all hover:shadow-md active:scale-95"
+                      style={{
+                        borderColor: `${activeGroupCfg.color}30`,
+                        color: activeGroupCfg.color,
+                        backgroundColor: `${activeGroupCfg.color}08`,
+                      }}
+                    >
+                      <Sparkles size={11} />
+                      {topic}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {DISCOVERY_FEATURED[activeGroup]?.map((item) => (
+                    <button
+                      key={item.query}
+                      onClick={() => {
+                        setQuery(item.query);
+                        void performSearch(item.query, activeGroup, filters);
+                      }}
+                      className="text-left p-6 rounded-[24px] border border-line bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all group"
+                    >
+                      <div
+                        className="text-3xl mb-3 w-12 h-12 rounded-2xl flex items-center justify-center"
+                        style={{ backgroundColor: `${activeGroupCfg.color}10` }}
+                      >
+                        {item.icon}
+                      </div>
+                      <h4 className="font-bold text-ink mb-1 font-display group-hover:text-teal-600 transition-colors">
+                        {item.title}
+                      </h4>
+                      <p className="text-xs text-muted leading-relaxed">{item.description}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
 
-              <div className="library-results-section__toolbar">
-                {appliedFilterLabels.length > 0 ? (
-                  <div className="library-results-section__chips">
-                    {appliedFilterLabels.slice(0, 4).map((label) => (
-                      <span key={label}>{label}</span>
-                    ))}
+      {/* ══════════════════════════════════════════════════════════════════
+          RESULTS STATE — compact header + 3-col grid
+      ══════════════════════════════════════════════════════════════════ */}
+      {hasSearched && (
+        <>
+          {/* ── Compact header ─────────────────────────────────────────── */}
+          <div className="bg-white border-b border-line sticky top-0 z-30 shadow-sm">
+            <div className="max-w-6xl mx-auto px-6 py-3 space-y-3">
+
+              {/* Row 1: title + search bar + filters button */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setHasSearched(false); setResults([]); setQuery(''); }}
+                  className="flex-shrink-0 text-base font-bold text-ink font-display whitespace-nowrap hover:text-teal-600 transition-colors"
+                  title="Volver a inicio"
+                >
+                  Biblioteca Inteligente
+                </button>
+
+                <form
+                  onSubmit={handleSearch}
+                  className="relative flex-1"
+                >
+                  <div
+                    className="flex items-center bg-white border-2 rounded-xl transition-all"
+                    style={{ borderColor: showFilters || hasActiveFilters ? '#0d9488' : '#e2e8f0' }}
+                  >
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="¿Qué concepto necesitas dominar hoy?"
+                      className="flex-1 bg-transparent border-0 focus:ring-0 text-sm text-ink placeholder:text-slate-300 font-medium py-2.5 pl-4"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSearching}
+                      className="flex items-center justify-center w-9 h-9 mr-1 rounded-lg text-white transition-all"
+                      style={{ backgroundColor: isSearching ? '#94a3b8' : '#0d9488' }}
+                    >
+                      {isSearching
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <Search size={14} />}
+                    </button>
                   </div>
-                ) : null}
+                  {filterPanel}
+                </form>
 
                 <button
                   type="button"
-                  className="library-results-section__refresh"
-                  onClick={() => void performSearch(query, activeGroup, filters)}
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${
+                    showFilters || hasActiveFilters
+                      ? 'text-white border-teal-600'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                  style={showFilters || hasActiveFilters ? { backgroundColor: '#0d9488', borderColor: '#0d9488' } : {}}
                 >
-                  <RefreshCw size={14} />
-                  <span>Actualizar</span>
+                  <Filter size={14} />
+                  <span>Filtros Avanzados</span>
+                  {hasActiveFilters && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                </button>
+              </div>
+
+              {/* Row 2: group tabs + result count */}
+              <div className="flex items-center gap-2">
+                {groupTabs}
+                {filteredResults.length > 0 && (
+                  <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-slate-200">
+                    <span className="text-xs font-bold text-slate-400">
+                      {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
+                    </span>
+                    <button
+                      onClick={() => void performSearch(query, activeGroup, filters)}
+                      className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-ink rounded-lg transition-colors"
+                      title="Actualizar"
+                    >
+                      <RefreshCw size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Provider status pills ───────────────────────────────────── */}
+          {searchMeta.providerStates && searchMeta.providerStates.length > 0 && (
+            <div className="px-6 py-2 max-w-6xl mx-auto">
+              <div className="flex flex-wrap gap-2">
+                {searchMeta.providerStates.map((ps) => {
+                  const color = PROVIDER_COLORS[ps.provider] ?? '#6b7280';
+                  const hasError = Boolean(ps.error);
+                  return (
+                    <div
+                      key={ps.provider}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border"
+                      style={{
+                        color: hasError ? '#ef4444' : color,
+                        borderColor: hasError ? '#fecaca' : `${color}30`,
+                        backgroundColor: hasError ? '#fef2f2' : `${color}08`,
+                      }}
+                    >
+                      {hasError ? <AlertCircle size={10} /> : <CheckCircle2 size={10} />}
+                      <span>{PROVIDER_LABELS[ps.provider] ?? ps.provider}</span>
+                      {!hasError && <span className="opacity-60">· {ps.count}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Results grid ────────────────────────────────────────────── */}
+          <main className="px-6 mt-4 max-w-6xl mx-auto w-full">
+            {isSearching && results.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-6">
+                <div className="relative">
+                  <Loader2 size={56} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <activeGroupCfg.icon size={20} style={{ color: activeGroupCfg.color }} />
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h3 className="text-xl font-bold font-display text-ink">Consultando {activeGroupCfg.label}</h3>
+                  <p className="text-sm text-muted mt-1">Buscando en múltiples repositorios en paralelo…</p>
+                </div>
+              </div>
+            ) : filteredResults.length === 0 ? (
+              <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
+                <div className="max-w-sm mx-auto">
+                  <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
+                    <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.5 }} />
+                  </div>
+                  <h3 className="text-2xl font-bold font-display text-ink mb-2">Sin resultados</h3>
+                  <p className="text-sm text-muted leading-relaxed">
+                    {`No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* 3-column results grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visibleResults.map((asset) => (
+                    <LibraryAssetCard
+                      key={asset.id}
+                      asset={asset}
+                      isSelected={selectedIds.includes(asset.id)}
+                      onToggleSelect={(id, sel) =>
+                        setSelectedIds((prev) => sel ? [...prev, id] : prev.filter((i) => i !== id))
+                      }
+                      onPreview={setPreviewAsset}
+                      onAddToCourse={setPreviewAsset}
+                    />
+                  ))}
+                </div>
+
+                {visibleLimit < filteredResults.length && (
+                  <div className="flex justify-center mt-10">
+                    <button
+                      onClick={() => setVisibleLimit((n) => n + 24)}
+                      className="flex items-center gap-2 px-10 py-4 rounded-[20px] border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white transition-all shadow-lg active:scale-95"
+                    >
+                      <span>Cargar más ({filteredResults.length - visibleLimit} restantes)</span>
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </main>
+        </>
+      )}
+
+      {/* ── Floating batch selection bar (both states) ───────────────── */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-6">
+          <div className="bg-ink text-white py-4 px-7 rounded-[28px] shadow-2xl flex items-center gap-6 border border-white/10">
+            <div className="flex items-center gap-3 pr-6 border-r border-white/10">
+        <div className="max-w-6xl mx-auto px-6 pt-6 pb-4 space-y-4">
+
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <LibraryBig size={18} className="text-muted" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted">
+                  Barra de Búsqueda Semántica
+                </span>
+                {searchMeta.cached && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                    <Clock size={9} />
+                    Caché
+                  </span>
+                )}
+              </div>
+              <h1 className="text-xl font-bold text-ink font-display leading-none">
+                Biblioteca Inteligente
+              </h1>
+            </div>
+            <span className="text-[10px] font-bold text-muted hidden md:block">
+              {INVESTIGATION_PROVIDERS.length + DIDACTICOS_PROVIDERS.length + 1} fuentes federadas
+            </span>
+          </div>
+
+          {/* Search bar */}
+          <form ref={searchRef} onSubmit={handleSearch} className="relative">
+            <div
+              className="flex items-center bg-white border-2 rounded-2xl transition-all shadow-sm"
+              style={{ borderColor: showFilters || hasActiveFilters ? activeGroupCfg.color : '#e2e8f0' }}
+            >
+              <div className="pl-4 pr-2 text-slate-300">
+                <Search size={20} strokeWidth={2} />
+              </div>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="¿Qué concepto necesitas dominar hoy?"
+                className="flex-grow bg-transparent border-0 focus:ring-0 text-base text-ink placeholder:text-slate-300 font-medium py-3"
+                autoComplete="off"
+              />
+              <div className="flex items-center gap-1 pr-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    showFilters || hasActiveFilters
+                      ? 'text-white shadow'
+                      : 'hover:bg-slate-100 text-muted'
+                  }`}
+                  style={showFilters || hasActiveFilters ? { backgroundColor: activeGroupCfg.color } : {}}
+                  title="Filtros avanzados"
+                >
+                  <Filter size={14} />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {hasActiveFilters && (
+                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                  )}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSearching}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-sm transition-all shadow active:scale-95 text-white"
+                  style={{ backgroundColor: isSearching ? '#94a3b8' : activeGroupCfg.color }}
+                >
+                  {isSearching
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Zap size={16} />}
+                  <span>{isSearching ? 'Buscando…' : 'Buscar'}</span>
                 </button>
               </div>
             </div>
 
-            {searchMeta.providerStates && searchMeta.providerStates.length > 0 ? (
-              <div className="library-provider-strip">
-                {searchMeta.providerStates.map((providerState) => (
-                  <span key={providerState.provider} className={`library-provider-strip__item ${providerState.error ? 'is-error' : ''}`}>
-                    {providerState.error ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
-                    <strong>{providerState.provider}</strong>
-                    <small>{providerState.error ? providerState.error : `${providerState.count} resultados`}</small>
+            {/* ── Filtros Avanzados dropdown ── */}
+            {showFilters && (
+              <div
+                className="absolute top-full left-0 right-0 mt-2 bg-white border border-line rounded-2xl shadow-2xl z-40 p-5 space-y-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-black uppercase tracking-widest" style={{ color: activeGroupCfg.color }}>
+                    Filtros Avanzados (Adaptadores)
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => applyFilters(filters)}
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold text-white shadow transition-all"
+                    style={{ backgroundColor: activeGroupCfg.color }}
+                  >
+                    Aplicar Filtros
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                  {/* Tipo de Recurso */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Tipo de Recurso</label>
+                    <div className="space-y-1.5">
+                      {['Paper', 'Video', 'Artículo', 'Dataset'].map((type) => {
+                        const checked = filters.resourceTypes.includes(type);
+                        return (
+                          <label key={type} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setFilters((f) => ({
+                                ...f,
+                                resourceTypes: checked
+                                  ? f.resourceTypes.filter((t) => t !== type)
+                                  : [...f.resourceTypes, type],
+                              }))}
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
+                            />
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{type}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Fuente */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Fuente</label>
+                    <div className="space-y-1.5">
+                      {(activeGroup === 'Investigacion' ? INVESTIGATION_PROVIDERS : activeGroup === 'Didacticos' ? DIDACTICOS_PROVIDERS : []).map((p) => {
+                        const active = filters.providers.length === 0 || filters.providers.includes(p);
+                        return (
+                          <label key={p} className="flex items-center gap-2 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => {
+                                setFilters((f) => {
+                                  const all = f.providers.length === 0 ? INVESTIGATION_PROVIDERS : f.providers;
+                                  const next = all.includes(p) ? all.filter((x) => x !== p) : [...all, p];
+                                  return { ...f, providers: next.length === INVESTIGATION_PROVIDERS.length ? [] : next };
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded cursor-pointer"
+                              style={{ accentColor: activeGroupCfg.color }}
+                            />
+                            <span className="text-xs text-secondary group-hover:text-ink transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Puntuación Mínima */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">
+                      Puntuación Mínima
+                      <span className="ml-2 font-bold" style={{ color: activeGroupCfg.color }}>
+                        {filters.minScore > 0 ? `${filters.minScore}%` : 'Todas'}
+                      </span>
+                    </label>
+                    <input
+                      type="range"
+                      min={0} max={90} step={10}
+                      value={filters.minScore}
+                      onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
+                      className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer"
+                      style={{ accentColor: activeGroupCfg.color }}
+                    />
+                    <div className="flex justify-between text-[9px] text-muted mt-1">
+                      <span>0%</span><span>50%</span><span>90%</span>
+                    </div>
+                  </div>
+
+                  {/* Other filters */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Idioma</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.language}
+                          onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}
+                        >
+                          {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">Año</label>
+                      <div className="relative">
+                        <select
+                          className="w-full bg-slate-50 border border-line text-ink text-xs rounded-xl py-2 px-3 outline-none focus:ring-1 appearance-none"
+                          value={filters.year}
+                          onChange={(e) => setFilters((f) => ({ ...f, year: e.target.value }))}
+                        >
+                          {YEAR_OPTIONS.map((y) => <option key={y.value} value={y.value}>{y.label}</option>)}
+                        </select>
+                        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filters.openAccess}
+                        onChange={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
+                        className="w-3.5 h-3.5 rounded cursor-pointer"
+                        style={{ accentColor: activeGroupCfg.color }}
+                      />
+                      <span className="text-xs text-secondary font-medium">Solo Open Access</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </form>
+
+          {/* ── Group tabs ── */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            {GROUPS.map((g) => {
+              const Icon = g.icon;
+              const isActive = activeGroup === g.id;
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => switchGroup(g.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
+                    isActive ? 'text-white shadow' : 'hover:bg-slate-50 text-muted'
+                  }`}
+                  style={isActive ? { backgroundColor: g.color } : {}}
+                >
+                  <Icon size={14} />
+                  <span>{g.label}</span>
+                </button>
+              );
+            })}
+
+            {/* Stats inline with tabs */}
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-line">
+              {isSearching ? (
+                <div className="flex items-center gap-1.5 text-xs text-muted">
+                  <Loader2 size={13} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+                  <span>Consultando…</span>
+                </div>
+              ) : filteredResults.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted">
+                    {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
+                  </span>
+                  <button
+                    onClick={() => void performSearch(query, activeGroup, filters)}
+                    className="p-1.5 hover:bg-slate-100 text-muted hover:text-ink rounded-lg transition-colors"
+                    title="Actualizar"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Provider status pills ─────────────────────────────────────── */}
+      {searchMeta.providerStates && searchMeta.providerStates.length > 0 && (
+        <div className="px-4">
+          <div className="flex flex-wrap gap-2 max-w-7xl mx-auto">
+            {searchMeta.providerStates.map((ps) => {
+              const color = PROVIDER_COLORS[ps.provider] ?? '#6b7280';
+              const hasError = Boolean(ps.error);
+              return (
+                <div
+                  key={ps.provider}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold border"
+                  style={{
+                    color: hasError ? '#ef4444' : color,
+                    borderColor: hasError ? '#fecaca' : `${color}30`,
+                    backgroundColor: hasError ? '#fef2f2' : `${color}08`,
+                  }}
+                >
+                  {hasError ? (
+                    <AlertCircle size={10} />
+                  ) : (
+                    <CheckCircle2 size={10} />
+                  )}
+                  <span>{PROVIDER_LABELS[ps.provider] ?? ps.provider}</span>
+                  {!hasError && <span className="opacity-60">· {ps.count}</span>}
+                  {ps.durationMs !== undefined && (
+                    <span className="opacity-40">· {ps.durationMs}ms</span>
+                  )}
+                  {hasError && ps.error && (
+                    <span className="opacity-70 max-w-[120px] truncate" title={ps.error}> · {ps.error}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Results ──────────────────────────────────────────────────── */}
+      <main className="px-4 mt-4">
+        {isSearching && results.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 gap-6">
+            <div className="relative">
+              <Loader2 size={56} className="animate-spin" style={{ color: activeGroupCfg.color }} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <activeGroupCfg.icon size={20} style={{ color: activeGroupCfg.color }} />
+              </div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-bold font-display text-ink">Consultando {activeGroupCfg.label}</h3>
+              <p className="text-sm text-muted mt-1">Buscando en múltiples repositorios en paralelo…</p>
+            </div>
+          </div>
+        ) : results.length === 0 ? (
+          query ? (
+            /* No results for a query */
+            <div className="py-24 text-center border-2 border-dashed border-line rounded-[32px] bg-white/40">
+              <div className="max-w-sm mx-auto">
+                <div className="inline-flex p-6 rounded-full mb-5" style={{ backgroundColor: `${activeGroupCfg.color}10` }}>
+                  <activeGroupCfg.icon size={48} style={{ color: activeGroupCfg.color, opacity: 0.6 }} />
+                </div>
+                <h3 className="text-2xl font-bold font-display text-ink mb-2">Sin resultados</h3>
+                <p className="text-sm text-muted leading-relaxed">
+                  {`No encontramos recursos para "${query}". Prueba con otros términos o ajusta los filtros.`}
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* ── Descubridor Inteligente (initial empty state) ───────── */
+            <div className="max-w-5xl mx-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl" style={{ backgroundColor: `${activeGroupCfg.color}15` }}>
+                  <Sparkles size={18} style={{ color: activeGroupCfg.color }} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-display text-ink">Descubridor Inteligente</h3>
+                  <p className="text-xs text-muted">Tópicos sugeridos para {activeGroupCfg.label}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-10">
+                {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
+                  <button
+                    key={topic}
+                    onClick={() => {
+                      setQuery(topic);
+                      void performSearch(topic, activeGroup, filters);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full border font-semibold text-sm transition-all hover:shadow-md active:scale-95"
+                    style={{
+                      borderColor: `${activeGroupCfg.color}30`,
+                      color: activeGroupCfg.color,
+                      backgroundColor: `${activeGroupCfg.color}08`,
+                    }}
+                  >
+                    <Sparkles size={11} />
+                    {topic}
+                  </button>
                 ))}
               </div>
-            ) : null}
 
-            {searchWarning ? (
-              <div className="library-provider-strip">
-                <span className="library-provider-strip__item is-error">
-                  <AlertCircle size={12} />
-                  <strong>Rendimiento</strong>
-                  <small>{searchWarning}</small>
-                </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {DISCOVERY_FEATURED[activeGroup]?.map((item) => (
+                  <button
+                    key={item.query}
+                    onClick={() => {
+                      setQuery(item.query);
+                      void performSearch(item.query, activeGroup, filters);
+                    }}
+                    className="text-left p-6 rounded-[24px] border border-line bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all group"
+                  >
+                    <div
+                      className="text-3xl mb-3 w-12 h-12 rounded-2xl flex items-center justify-center"
+                      style={{ backgroundColor: `${activeGroupCfg.color}10` }}
+                    >
+                      {item.icon}
+                    </div>
+                    <h4 className="font-bold text-ink mb-1 font-display group-hover:text-ocean transition-colors">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-muted leading-relaxed">{item.description}</p>
+                  </button>
+                ))}
               </div>
-            ) : null}
-
-            <div className="library-grid">
-              {visibleAssets.map((asset) => (
+            </div>
+          )
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {visibleResults.map((asset) => (
                 <LibraryAssetCard
                   key={asset.id}
                   asset={asset}
                   isSelected={selectedIds.includes(asset.id)}
-                  onToggleSelect={(id, selected) => setSelectedIds((current) => (
-                    selected ? [...current, id] : current.filter((item) => item !== id)
-                  ))}
+                  onToggleSelect={(id, sel) =>
+                    setSelectedIds((prev) => sel ? [...prev, id] : prev.filter((i) => i !== id))
+                  }
                   onPreview={setPreviewAsset}
+                  onAddToCourse={setPreviewAsset}
                 />
               ))}
             </div>
 
-            {visibleLimit < filteredAssets.length ? (
-              <div className="library-results-section__loadmore">
-                <button type="button" onClick={() => setVisibleLimit((current) => current + 9)}>
-                  <span>Cargar más resultados</span>
-                  <ArrowRight size={16} />
+            {visibleLimit < filteredResults.length && (
+              <div className="flex justify-center mt-10">
+                <button
+                  onClick={() => setVisibleLimit((n) => n + 24)}
+                  className="flex items-center gap-2 px-10 py-4 rounded-[20px] border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white transition-all shadow-lg active:scale-95"
+                >
+                  <span>Cargar más ({filteredResults.length - visibleLimit} restantes)</span>
+                  <ArrowRight size={18} />
                 </button>
               </div>
-            ) : null}
-          </section>
+            )}
+          </>
         )}
       </main>
 
-      {selectedIds.length > 0 ? (
-        <div className="library-batch-floating">
-          <div className="library-batch-floating__copy">
-            <strong>{selectedIds.length}</strong>
-            <span>recursos seleccionados</span>
+      {/* ── Institutional directory ───────────────────────────────────── */}
+      {appData.institution.structures.length > 0 && (
+        <section className="mt-24 px-4">
+          <div className="max-w-7xl mx-auto border-t border-line pt-16">
+            <div className="flex items-end justify-between mb-10">
+              <div>
+                <span className="eyebrow">Gobernanza</span>
+                <h3 className="text-3xl font-bold font-display mt-1">Arquitectura Institucional</h3>
+              </div>
+              <Building2 size={40} className="text-muted opacity-10" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {appData.institution.structures.slice(0, 4).map((structure) => {
+                const linked = countCoursesForStructure(visibleCourses, structure);
+                return (
+                  <article key={structure.id} className="surface group p-7 hover:shadow-2xl transition-all">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="p-2.5 rounded-xl bg-slate-50 group-hover:bg-indigo-50 transition-colors">
+                        <Building2 size={22} className="text-muted group-hover:text-indigo-500 transition-colors" />
+                      </div>
+                      <span className="badge badge--outline font-bold">{linked} cursos</span>
+                    </div>
+                    <h4 className="text-base font-bold text-ink mb-1">{structure.institution}</h4>
+                    <p className="text-xs text-muted font-medium mb-5 uppercase tracking-wider">
+                      {structure.programs.length} Programas
+                    </p>
+                    <div className="space-y-2 pt-5 border-t border-line/40">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted">Tipologías</span>
+                        <span className="font-bold text-ink">{structure.courseTypes.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted">Lineamientos pedagógicos</span>
+                        <span className="font-bold text-ink">{structure.pedagogicalGuidelines.length}</span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
-          <button type="button" onClick={() => setIsBatchPanelOpen(true)}>
-            <Sparkles size={16} />
-            <span>Mapear con IA</span>
-          </button>
-          <button
-            type="button"
-            className="library-batch-floating__clear"
-            onClick={() => setSelectedIds([])}
-            aria-label="Limpiar selección"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      ) : null}
+        </section>
+      )}
 
+      {/* ── Floating batch bar ────────────────────────────────────────── */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-6">
+          <div className="bg-ink text-white py-4 px-7 rounded-[28px] shadow-2xl flex items-center gap-6 border border-white/10">
+            <div className="flex items-center gap-3 pr-6 border-r border-white/10">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center font-black text-base shadow-lg"
+                style={{ backgroundColor: activeGroupCfg.color }}
+              >
+                {selectedIds.length}
+              </div>
+              <div>
+                <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Seleccionados</div>
+                <div className="text-sm font-bold">Recursos listos</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsBatchPanelOpen(true)}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm active:scale-95 transition-all shadow-lg"
+                style={{ backgroundColor: activeGroupCfg.color }}
+              >
+                <Sparkles size={16} />
+                <span>Mapear con IA</span>
+              </button>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="p-2.5 rounded-xl hover:bg-white/10 transition-colors text-white/50 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Preview panel (right-side drawer) ────────────────────────── */}
       <LibraryPreviewModal
         asset={previewAsset}
         onClose={() => setPreviewAsset(null)}
@@ -1441,44 +1316,17 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         onAddToCourse={handleAddToCourse}
       />
 
-      {isBatchPanelOpen ? (
+      {/* ── Batch AI panel ────────────────────────────────────────────── */}
+      {isBatchPanelOpen && (
         <BatchIntegrationPanel
           isOpen={isBatchPanelOpen}
-          onClose={() => {
-            setIsBatchPanelOpen(false);
-            setSelectedIds([]);
-          }}
+          onClose={() => { setIsBatchPanelOpen(false); setSelectedIds([]); }}
           selectedAssets={selectedAssets}
           appData={appData}
           courseSlug={visibleCourses[0]?.slug ?? ''}
-          courseOptions={courseOptions}
           refreshAppData={refreshAppData}
         />
-      ) : null}
+      )}
     </div>
   );
-}
-
-function fallbackQueriesFromCourses(courseTitles: string[]) {
-  const candidates = courseTitles
-    .flatMap((title) => {
-      const parts = title
-        .toLowerCase()
-        .replace(/[^a-záéíóúñü0-9\s]/gi, ' ')
-        .split(/\s+/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .filter((part) => !COURSE_TITLE_STOPWORDS.has(part));
-      const phrase = parts.join(' ').trim();
-      return [
-        phrase,
-        parts.slice(0, 3).join(' ').trim(),
-        parts.slice(-3).join(' ').trim(),
-      ];
-    })
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 4);
-
-  const unique = Array.from(new Set(candidates));
-  return unique.length > 0 ? unique.slice(0, 8) : FALLBACK_QUICK_QUERIES;
 }
