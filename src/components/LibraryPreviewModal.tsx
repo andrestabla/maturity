@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check,
@@ -8,9 +7,7 @@ import {
   Copy,
   ExternalLink,
   FileText,
-  Layers,
   Loader2,
-  Microscope,
   Sparkles,
   Users,
 } from 'lucide-react';
