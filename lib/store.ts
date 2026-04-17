@@ -1,6 +1,7 @@
 import {
   defaultBranding,
   defaultExperienceSettings,
+  defaultHomeContent,
   defaultInstitutionSettings,
   defaultWorkflowSettings,
   defaultRoleProfiles,
@@ -3591,7 +3592,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 27; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 29; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4721,6 +4722,75 @@ async function ensureSchema() {
       await sql`
         CREATE INDEX IF NOT EXISTS idx_library_course_links_course_source
         ON maturity_library_course_links(course_slug, source_module)
+      `;
+    }
+
+    // Migration 28: Reclassify legacy links incorrectly marked as library
+    if (currentVersion < 28) {
+      await sql`
+        UPDATE maturity_library_course_links AS cl
+        SET source_module = 'legacy'
+        FROM maturity_library_assets AS a
+        WHERE cl.asset_id = a.id
+          AND cl.source_module = 'library'
+          AND (cl.added_by IS NULL OR TRIM(cl.added_by) = '')
+          AND (
+            a.provider = 'institutional'
+            OR a.canonical_key LIKE 'legacy-%'
+          )
+      `;
+    }
+
+    // Migration 29: H5P interactive content + xAPI tracking
+    if (currentVersion < 29) {
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_h5p_content (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          course_slug TEXT REFERENCES maturity_courses(slug) ON DELETE CASCADE,
+          institution_id TEXT,
+          title TEXT NOT NULL,
+          description TEXT,
+          kind TEXT NOT NULL DEFAULT 'embed',
+          embed_url TEXT,
+          embed_html TEXT,
+          r2_base_path TEXT,
+          library_name TEXT,
+          library_version TEXT,
+          content_json JSONB,
+          h5p_json JSONB,
+          width INTEGER NOT NULL DEFAULT 800,
+          height INTEGER NOT NULL DEFAULT 500,
+          xapi_tracking BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_h5p_content_course_slug
+        ON maturity_h5p_content(course_slug)
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS maturity_h5p_user_state (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          content_id UUID NOT NULL REFERENCES maturity_h5p_content(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL,
+          course_slug TEXT,
+          xapi_statements JSONB NOT NULL DEFAULT '[]'::jsonb,
+          score NUMERIC,
+          max_score NUMERIC,
+          completion BOOLEAN NOT NULL DEFAULT FALSE,
+          success BOOLEAN,
+          updated_at TEXT NOT NULL,
+          UNIQUE(content_id, user_id)
+        )
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_h5p_user_state_user_id
+        ON maturity_h5p_user_state(user_id)
       `;
     }
 
@@ -6064,6 +6134,7 @@ export async function loadAppData(): Promise<AppData> {
     users,
     institution: defaultInstitutionSettings,
     branding: defaultBranding,
+    homeContent: defaultHomeContent,
     experience: defaultExperienceSettings,
     workflow: defaultWorkflowSettings,
   };
