@@ -37,12 +37,14 @@ import {
   ClipboardList,
   Download,
   ExternalLink,
+  Gamepad2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ModalFrame } from '../components/ModalFrame.js';
 import { SidePanel } from '../components/SidePanel.js';
 import { useModalStore } from '../store/modalStore.js';
+import { H5PManager } from '../components/H5PManager.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
@@ -12201,6 +12203,17 @@ export function CourseWorkspacePage({
             'Avances de producción',
             'Reportes sobre la producción de piezas gráficas y video.',
           )}
+          
+          <article className="surface section-card">
+            <div className="section-heading">
+              <div>
+                <span className="eyebrow">Herramientas de autoría</span>
+                <h3>Contenido Interactivo</h3>
+              </div>
+              <Gamepad2 size={18} className="text-ocean" />
+            </div>
+            <H5PManager courseSlug={currentCourse.slug} />
+          </article>
         </section>
       ) : null}
 

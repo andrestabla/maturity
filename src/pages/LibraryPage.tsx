@@ -479,7 +479,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
 
   // ── Group tab strip (reused in both states) ───────────────────────────────
   const groupTabs = (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+    <div className="library-search-stage__chips">
       {GROUPS.map((g) => {
         const Icon = g.icon;
         const isActive = activeGroup === g.id;
@@ -487,12 +487,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           <button
             key={g.id}
             onClick={() => switchGroup(g.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap text-sm active:scale-95 ${
-              isActive ? 'text-white shadow-md' : 'hover:bg-slate-100 text-slate-500'
-            }`}
-            style={isActive ? { backgroundColor: g.color } : {}}
+            className={isActive ? 'is-active' : ''}
+            style={isActive ? { background: g.color, color: 'white' } : {}}
           >
-            <Icon size={14} />
+            <Icon size={16} />
             <span>{g.label}</span>
           </button>
         );
@@ -507,54 +505,58 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           LANDING STATE — centered hero, shown before first search
       ══════════════════════════════════════════════════════════════════ */}
       {!hasSearched && (
-        <div className="flex flex-col items-center px-6 pt-16 pb-12">
-
-          {/* Title */}
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <LibraryBig size={22} className="text-slate-400" />
-              <span className="text-xs font-black uppercase tracking-widest text-slate-400">
-                Biblioteca Inteligente
-              </span>
-            </div>
-            <h1 className="text-3xl font-bold text-ink font-display">
-              Barra de Búsqueda Semántica
-            </h1>
+        <div className="library-search-stage">
+          <div className="library-search-stage__topline">
+            <LibraryBig size={22} />
+            <span className="library-search-stage__eyebrow">
+              Biblioteca Inteligente
+            </span>
+          </div>
+          
+          <div className="library-search-stage__heading">
+            <h1>Barra de Búsqueda Semántica</h1>
+            <p>Acceso directo a recursos académicos, didácticos e institucionales curados con IA.</p>
           </div>
 
-          {/* Centered search bar */}
           <form
             onSubmit={handleSearch}
-            className="relative w-full max-w-2xl mb-6"
+            className="library-search-shell"
           >
-            <div
-              className="flex items-center bg-white border-2 rounded-2xl shadow-md transition-all"
-              style={{ borderColor: showFilters || hasActiveFilters ? '#0d9488' : '#e2e8f0' }}
-            >
+            <div className="library-search-shell__field">
+              <Search size={20} />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="¿Qué concepto necesitas dominar hoy?"
-                className="flex-1 bg-transparent border-0 focus:ring-0 text-base text-ink placeholder:text-slate-300 font-medium py-4 pl-5"
                 autoComplete="off"
               />
-              <button
-                type="submit"
-                disabled={isSearching}
-                className="flex items-center gap-2 mr-2 px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all shadow active:scale-95"
-                style={{ backgroundColor: isSearching ? '#94a3b8' : '#0d9488' }}
-              >
-                {isSearching
-                  ? <Loader2 size={16} className="animate-spin" />
-                  : <Search size={16} />}
-              </button>
             </div>
+            
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`library-search-shell__toggle ${showFilters || hasActiveFilters ? 'is-active' : ''}`}
+            >
+              <Filter size={18} />
+              <span>Filtros</span>
+            </button>
+
+            <button
+              type="submit"
+              disabled={isSearching}
+              className="library-search-shell__submit"
+              style={{ background: isSearching ? '#94a3b8' : '#0d9488', color: 'white' }}
+            >
+              {isSearching
+                ? <Loader2 size={20} className="animate-spin" />
+                : <span>Buscar Recursos</span>}
+            </button>
             {filterPanel}
           </form>
 
           {/* Group tabs */}
-          <div className="w-full max-w-2xl mb-12">
+          <div className="library-search-stage__context">
             {groupTabs}
           </div>
 
