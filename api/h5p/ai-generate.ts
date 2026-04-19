@@ -8,10 +8,11 @@
  * Returns: { contentJson, suggestedTitle, tokensUsed }
  */
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { getSessionUser } from '../../lib/auth.js';
-import { errorResponse, jsonResponse } from '../../lib/api-utils.js';
+import { getSessionUser } from '../../lib/session.js';
+import { errorResponse, readJson } from '../../lib/http.js';
+
+export const config = { runtime: 'edge' };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Supported AI-generatable types
@@ -123,31 +124,33 @@ function buildPrompt(h5pType: AIGeneratableType, sourceText: string, title: stri
 // Handler
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return errorResponse(405, 'Method not allowed')(res);
+export default async function handler(request: Request) {
+  if (request.method !== 'POST') return errorResponse(405, 'Method not allowed');
 
-  const user = await getSessionUser(req);
-  if (!user) return errorResponse(401, 'No autenticado')(res);
+  const user = await getSessionUser(request);
+  if (!user) return errorResponse(401, 'No autenticado');
 
-  const { sourceText, h5pType, title, language = 'es' } = req.body as {
+  const body = await readJson<{
     sourceText?: string;
     h5pType?: string;
     title?: string;
     language?: string;
-  };
+  }>(request);
 
-  if (!sourceText?.trim()) return errorResponse(400, 'sourceText es requerido')(res);
+  const { sourceText, h5pType, title, language = 'es' } = body;
+
+  if (!sourceText?.trim()) return errorResponse(400, 'sourceText es requerido');
   if (!h5pType || !AI_GENERATABLE_TYPES.includes(h5pType as AIGeneratableType)) {
-    return errorResponse(400, `h5pType inválido. Tipos soportados: ${AI_GENERATABLE_TYPES.join(', ')}`)(res);
+    return errorResponse(400, `h5pType inválido. Tipos soportados: ${AI_GENERATABLE_TYPES.join(', ')}`);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return errorResponse(500, 'OPENAI_API_KEY no disponible')(res);
+  const apiKey = (process.env.OPENAI_API_KEY as string | undefined)?.trim();
+  if (!apiKey) return errorResponse(500, 'OPENAI_API_KEY no disponible');
 
   const openai = new OpenAI({ apiKey });
   const prompt = buildPrompt(h5pType as AIGeneratableType, sourceText, title ?? 'Actividad interactiva', language);
 
-  const primaryModel = process.env.WRITING_AI_MODEL?.trim() || 'gpt-4o-mini';
+  const primaryModel = (process.env.WRITING_AI_MODEL as string | undefined)?.trim() ?? 'gpt-4o-mini';
 
   try {
     const completion = await openai.chat.completions.create({
@@ -167,22 +170,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       contentJson = JSON.parse(raw) as AIGeneratedContent;
     } catch {
-      return errorResponse(502, 'La IA devolvió un JSON inválido. Intenta de nuevo.')(res);
+      return errorResponse(502, 'La IA devolvió un JSON inválido. Intenta de nuevo.');
     }
 
-    // Ensure type field is set
     if (!contentJson.type) {
       (contentJson as Record<string, unknown>).type = h5pType;
     }
 
-    return jsonResponse({
+    return Response.json({
       contentJson,
       suggestedTitle: contentJson.title ?? title ?? 'Actividad interactiva',
       tokensUsed: completion.usage?.total_tokens ?? 0,
-    })(res);
+    });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error en generación IA';
-    return errorResponse(502, `Error al generar contenido: ${message}`)(res);
+    return errorResponse(502, `Error al generar contenido: ${message}`);
   }
 }
