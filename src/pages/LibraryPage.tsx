@@ -583,7 +583,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             ) : (
               /* Descubridor Inteligente chips while recommendations load */
               <div>
-                <div className="flex flex-wrap gap-2 mb-8">
+                <div className="library-search-stage__chips mb-8">
                   {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
                     <button
                       key={topic}
@@ -591,12 +591,10 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                         setQuery(topic);
                         void performSearch(topic, activeGroup, filters);
                       }}
-                      className="library-search-stage__chips button"
                       style={{
                         borderColor: `${activeGroupCfg.color}30`,
                         color: activeGroupCfg.color,
                         background: `${activeGroupCfg.color}08`,
-                        fontWeight: 700,
                       }}
                     >
                       <Sparkles size={11} />
