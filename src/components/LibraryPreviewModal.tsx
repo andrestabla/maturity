@@ -133,7 +133,7 @@ export function LibraryPreviewModal({
       description="Previsualización y vinculación de contenido inteligente."
       sideLabel="RECURSO"
       sideDescription={providerCfg.label}
-      width="lg"
+      width="md"
       footer={
         asset ? (
           <div className="flex flex-col gap-2.5 w-full">
@@ -144,7 +144,7 @@ export function LibraryPreviewModal({
               style={{
                 background: showCourseForm
                   ? 'linear-gradient(135deg, #475569, #334155)'
-                  : 'linear-gradient(135deg, #0d9488 0%, #0891b2 100%)',
+                  : 'var(--library-teal-gradient)',
                 color: 'white',
               }}
             >

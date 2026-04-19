@@ -351,7 +351,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
           type="button"
           onClick={() => { setShowFilters(false); applyFilters(filters); }}
           className="px-5 py-2 rounded-xl text-sm font-bold text-white shadow-sm transition-all active:scale-95"
-          style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
+          style={{ background: 'var(--library-teal-gradient)' }}
         >
           Aplicar Filtros
         </button>
@@ -376,7 +376,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                         : [...f.resourceTypes, type],
                     }))}
                     className="w-4 h-4 rounded cursor-pointer"
-                    style={{ accentColor: '#0d9488' }}
+                    style={{ accentColor: 'var(--library-teal)' }}
                   />
                   <span className="text-sm text-secondary group-hover:text-ink transition-colors">{type}</span>
                 </label>
@@ -404,7 +404,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                       });
                     }}
                     className="w-4 h-4 rounded cursor-pointer"
-                    style={{ accentColor: '#0d9488' }}
+                    style={{ accentColor: 'var(--library-teal)' }}
                   />
                   <span className="text-sm text-secondary group-hover:text-ink transition-colors">{PROVIDER_LABELS[p] ?? p}</span>
                 </label>
@@ -427,7 +427,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             value={filters.minScore}
             onChange={(e) => setFilters((f) => ({ ...f, minScore: Number(e.target.value) }))}
             className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{ accentColor: '#0d9488', background: '#e2e8f0' }}
+            style={{ accentColor: 'var(--library-teal)', background: '#e2e8f0' }}
           />
           <div className="flex justify-between text-[9px] text-muted mt-1">
             <span>0%</span><span>50%</span><span>90%</span>
@@ -468,7 +468,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               checked={filters.openAccess}
               onChange={() => setFilters((f) => ({ ...f, openAccess: !f.openAccess }))}
               className="w-4 h-4 rounded cursor-pointer"
-              style={{ accentColor: '#0d9488' }}
+              style={{ accentColor: 'var(--library-teal)' }}
             />
             <span className="text-sm text-secondary font-medium">Solo Open Access</span>
           </label>
@@ -550,7 +550,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               type="submit"
               disabled={isSearching}
               className="library-search-shell__submit"
-              style={{ background: isSearching ? '#94a3b8' : '#0d9488', color: 'white' }}
+              style={{ background: isSearching ? '#94a3b8' : 'var(--library-teal)', color: 'white' }}
             >
               {isSearching
                 ? <Loader2 size={20} className="animate-spin" />
@@ -656,7 +656,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                 >
                   <div
                     className="flex items-center bg-white border-2 rounded-xl transition-all"
-                    style={{ borderColor: showFilters || hasActiveFilters ? '#0d9488' : '#e2e8f0' }}
+                    style={{ borderColor: showFilters || hasActiveFilters ? 'var(--library-teal)' : '#e2e8f0' }}
                   >
                     <input
                       type="text"
@@ -670,7 +670,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                       type="submit"
                       disabled={isSearching}
                       className="flex items-center justify-center w-9 h-9 mr-1 rounded-lg text-white transition-all"
-                      style={{ backgroundColor: isSearching ? '#94a3b8' : '#0d9488' }}
+                      style={{ backgroundColor: isSearching ? '#94a3b8' : 'var(--library-teal)' }}
                     >
                       {isSearching
                         ? <Loader2 size={14} className="animate-spin" />
@@ -688,7 +688,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                       ? 'text-white border-teal-600'
                       : 'border-slate-200 text-slate-500 hover:border-slate-300'
                   }`}
-                  style={showFilters || hasActiveFilters ? { backgroundColor: '#0d9488', borderColor: '#0d9488' } : {}}
+                  style={showFilters || hasActiveFilters ? { backgroundColor: 'var(--library-teal)', borderColor: 'var(--library-teal)' } : {}}
                 >
                   <Filter size={14} />
                   <span>Filtros Avanzados</span>

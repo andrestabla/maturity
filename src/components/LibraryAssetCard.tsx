@@ -102,31 +102,34 @@ export function LibraryAssetCard({
 
   return (
     <article
-      className="group relative bg-white cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+      className="group relative bg-white cursor-pointer transition-all duration-200 hover:-translate-y-0.5 focus-visible:outline-none"
       style={{
         borderRadius: 16,
-        border: isSelected ? '2px solid #0d9488' : '1.5px solid #e2e8f0',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        border: isSelected ? '2px solid var(--library-teal)' : '1.5px solid #e2e8f0',
+        boxShadow: isSelected
+          ? '0 0 0 3px color-mix(in srgb, var(--library-teal) 20%, transparent), 0 1px 4px rgba(0,0,0,0.06)'
+          : '0 1px 4px rgba(0,0,0,0.06)',
         padding: '16px',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
       }}
+      tabIndex={0}
+      role="button"
+      aria-label={`Ver recurso: ${asset.title}`}
       onClick={() => onPreview(asset)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPreview(asset); } }}
     >
-      {/* Hover border overlay */}
+      {/* Hover/focus border overlay */}
       <div
-        className="absolute inset-0 rounded-2xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{ border: '2px solid #0d9488', borderRadius: 16 }}
+        className="absolute inset-0 rounded-2xl pointer-events-none opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity"
+        style={{ border: '2px solid var(--library-teal)', borderRadius: 16 }}
       />
 
       {/* ── Main content row: text + score ring ── */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         {/* Text */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>
-            Source: {(PROVIDER_META[asset.provider] ?? { label: asset.provider }).label}
-          </p>
           <h3
             className="group-hover:text-teal-600 transition-colors"
             style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', lineHeight: 1.4, marginBottom: 4,
@@ -136,7 +139,7 @@ export function LibraryAssetCard({
           </h3>
           {asset.authors.length > 0 && (
             <p style={{ fontSize: 10, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Autor: {asset.authors.slice(0, 2).join(', ')}
+              {asset.authors.slice(0, 2).join(', ')}
             </p>
           )}
           {yearLabel && (
@@ -155,36 +158,39 @@ export function LibraryAssetCard({
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Checkbox on hover */}
-          <div
-            className="opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); onToggleSelect?.(asset.id, !isSelected); }}
-          >
-            <input
-              type="checkbox"
-              className="w-3.5 h-3.5 rounded cursor-pointer"
-              style={{ accentColor: '#0d9488' }}
-              checked={isSelected}
-              onChange={(e) => { e.stopPropagation(); onToggleSelect?.(asset.id, e.target.checked); }}
-              onClick={(e) => e.stopPropagation()}
-              aria-label="Seleccionar recurso"
-            />
-          </div>
+          {/* Checkbox — visible when selected, visible on hover/focus-within */}
+          {onToggleSelect && (
+            <div
+              className={`transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(asset.id, !isSelected); }}
+            >
+              <input
+                type="checkbox"
+                className="w-3.5 h-3.5 rounded cursor-pointer"
+                style={{ accentColor: 'var(--library-teal)' }}
+                checked={isSelected}
+                onChange={(e) => { e.stopPropagation(); onToggleSelect(asset.id, e.target.checked); }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Seleccionar recurso"
+              />
+            </div>
+          )}
           <ProviderBadge provider={asset.provider} />
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Previsualizar — visible on hover */}
+          {/* Previsualizar — visible on hover/focus */}
           <button
             type="button"
-            className="opacity-0 group-hover:opacity-100 transition-all"
+            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all focus-visible:outline-none focus-visible:ring-2"
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
-              background: '#0d9488', color: 'white', border: 'none',
+              background: 'var(--library-teal)', color: 'white', border: 'none',
               borderRadius: 8, padding: '5px 10px', fontSize: 10, fontWeight: 700,
               cursor: 'pointer',
             }}
             onClick={(e) => { e.stopPropagation(); onPreview(asset); }}
+            aria-label={`Previsualizar: ${asset.title}`}
           >
             <Eye size={11} />
             Previsualizar
@@ -196,16 +202,17 @@ export function LibraryAssetCard({
               href={asset.canonicalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="opacity-0 group-hover:opacity-100 transition-all"
+              className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all"
               style={{ color: '#94a3b8', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center' }}
               title="Abrir fuente"
               onClick={(e) => e.stopPropagation()}
+              aria-label="Abrir fuente original"
             >
               <ExternalLink size={11} />
             </a>
           )}
 
-          {/* Add to course */}
+          {/* Add to course — always visible */}
           <button
             type="button"
             style={{
@@ -214,6 +221,7 @@ export function LibraryAssetCard({
               cursor: 'pointer', display: 'flex', alignItems: 'center',
             }}
             onClick={(e) => { e.stopPropagation(); onAddToCourse(asset); }}
+            aria-label="Añadir al curso"
             title="Añadir al curso"
           >
             +
