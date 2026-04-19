@@ -12212,7 +12212,12 @@ export function CourseWorkspacePage({
               </div>
               <Gamepad2 size={18} className="text-ocean" />
             </div>
-            <H5PManager courseSlug={currentCourse.slug} />
+            <H5PManager
+              courseSlug={currentCourse.slug}
+              validationProducts={currentCourse.products.filter(
+                (p) => p.stage === 'validacion' && p.validationData?.readyForProduction === true,
+              )}
+            />
           </article>
         </section>
       ) : null}

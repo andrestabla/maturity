@@ -17,7 +17,7 @@ import { ensureInitialized } from './store.js';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type H5PContentKind = 'embed' | 'package';
+export type H5PContentKind = 'embed' | 'package' | 'ai-generated';
 
 export interface H5PContent {
   id: string;

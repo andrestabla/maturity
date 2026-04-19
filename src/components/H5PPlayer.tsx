@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Maximize2 } from 'lucide-react';
 import type { H5PContent } from '../../lib/h5p.js';
+import { H5PAIPlayer } from './H5PAIPlayer.js';
+import type { AIGeneratedContent } from '../../api/h5p/ai-generate.js';
 
 interface H5PPlayerProps {
   content: H5PContent;
@@ -25,6 +27,14 @@ interface ProgressState {
 }
 
 export function H5PPlayer({ content, onProgress, className }: H5PPlayerProps) {
+  // AI-generated content renders natively without iframe
+  if (content.kind === 'ai-generated' && content.contentJson) {
+    return <H5PAIPlayer content={content.contentJson as unknown as AIGeneratedContent} />;
+  }
+  return <H5PIframePlayer content={content} onProgress={onProgress} className={className} />;
+}
+
+function H5PIframePlayer({ content, onProgress, className }: H5PPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

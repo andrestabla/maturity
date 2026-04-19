@@ -19,26 +19,31 @@ import {
   Package2,
   Play,
   Plus,
+  Sparkles,
   Trash2,
   Zap,
 } from 'lucide-react';
 import { H5PPlayer } from './H5PPlayer.js';
+import { H5PAICreator } from './H5PAICreator.js';
 import type { H5PContent } from '../../lib/h5p.js';
 import { H5P_CONTENT_TYPES } from '../../lib/h5p.js';
+import type { CourseProduct } from '../types.js';
 
 interface H5PManagerProps {
   courseSlug?: string;
   /** If false (viewer/student), only show player — no create/delete */
   canEdit?: boolean;
+  /** Approved products from the validation phase (readyForProduction = true) */
+  validationProducts?: CourseProduct[];
 }
 
-type Tab = 'list' | 'create-embed' | 'create-upload' | 'preview';
+type Tab = 'list' | 'create-embed' | 'create-upload' | 'create-ai' | 'preview';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function H5PManager({ courseSlug, canEdit = true }: H5PManagerProps) {
+export function H5PManager({ courseSlug, canEdit = true, validationProducts = [] }: H5PManagerProps) {
   const [items, setItems] = useState<H5PContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +93,17 @@ export function H5PManager({ courseSlug, canEdit = true }: H5PManagerProps) {
         </div>
         <H5PPlayer content={previewItem} />
       </div>
+    );
+  }
+
+  if (tab === 'create-ai') {
+    return (
+      <H5PAICreator
+        courseSlug={courseSlug}
+        validationProducts={validationProducts}
+        onCancel={() => setTab('list')}
+        onCreated={() => { void fetchItems(); setTab('list'); }}
+      />
     );
   }
 
@@ -142,11 +158,18 @@ export function H5PManager({ courseSlug, canEdit = true }: H5PManagerProps) {
             </button>
             <button
               onClick={() => setTab('create-upload')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white shadow-sm transition-all active:scale-95"
-              style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-600 hover:border-teal-400 hover:text-teal-600 transition-all"
             >
               <FileUp size={13} />
               Subir .h5p
+            </button>
+            <button
+              onClick={() => setTab('create-ai')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}
+            >
+              <Sparkles size={13} />
+              Crear con IA
             </button>
           </div>
         )}
@@ -172,6 +195,7 @@ export function H5PManager({ courseSlug, canEdit = true }: H5PManagerProps) {
         <ContentTypePicker
           onSelectEmbed={() => setTab('create-embed')}
           onSelectUpload={() => setTab('create-upload')}
+          onSelectAI={() => setTab('create-ai')}
           canEdit={canEdit}
         />
       )}
@@ -190,13 +214,25 @@ export function H5PManager({ courseSlug, canEdit = true }: H5PManagerProps) {
           ))}
 
           {canEdit && (
-            <button
-              onClick={() => setTab('create-upload')}
-              className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-teal-400 hover:text-teal-500 transition-all group min-h-[160px]"
-            >
-              <Plus size={24} className="group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-bold">Añadir actividad</span>
-            </button>
+            <div className="flex flex-col gap-2 min-h-[160px]">
+              <button
+                onClick={() => setTab('create-ai')}
+                className="flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border-2 border-dashed transition-all group"
+                style={{ borderColor: '#6366f140' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#6366f1'; (e.currentTarget as HTMLElement).style.background = '#6366f108'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#6366f140'; (e.currentTarget as HTMLElement).style.background = ''; }}
+              >
+                <Sparkles size={20} style={{ color: '#6366f1' }} />
+                <span className="text-xs font-bold" style={{ color: '#6366f1' }}>Crear con IA</span>
+              </button>
+              <button
+                onClick={() => setTab('create-upload')}
+                className="flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-teal-400 hover:text-teal-500 transition-all"
+              >
+                <Plus size={18} />
+                <span className="text-xs font-bold">Subir .h5p</span>
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -258,9 +294,11 @@ function H5PCard({
           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
             item.kind === 'embed'
               ? 'text-blue-600 bg-blue-50 border-blue-200'
+              : item.kind === 'ai-generated'
+              ? 'text-indigo-600 bg-indigo-50 border-indigo-200'
               : 'text-teal-600 bg-teal-50 border-teal-200'
           }`}>
-            {item.kind === 'embed' ? 'Embed' : 'Paquete'}
+            {item.kind === 'embed' ? 'Embed' : item.kind === 'ai-generated' ? '✦ IA' : 'Paquete'}
           </span>
           {item.xapiTracking && (
             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full text-violet-600 bg-violet-50 border border-violet-200 uppercase tracking-wider">
@@ -307,10 +345,12 @@ function H5PCard({
 function ContentTypePicker({
   onSelectEmbed,
   onSelectUpload,
+  onSelectAI,
   canEdit,
 }: {
   onSelectEmbed: () => void;
   onSelectUpload: () => void;
+  onSelectAI: () => void;
   canEdit: boolean;
 }) {
   return (
@@ -331,7 +371,20 @@ function ContentTypePicker({
 
       {canEdit && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8 max-w-2xl mx-auto">
+            <button
+              onClick={onSelectAI}
+              className="flex items-center gap-3 p-4 rounded-2xl border-2 border-indigo-200 hover:border-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 transition-all group text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Sparkles size={18} className="text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-indigo-700">Crear con IA</p>
+                <p className="text-[11px] text-indigo-500">Genera contenido automáticamente</p>
+              </div>
+            </button>
+
             <button
               onClick={onSelectUpload}
               className="flex items-center gap-3 p-4 rounded-2xl border-2 border-teal-200 hover:border-teal-400 bg-teal-50/50 hover:bg-teal-50 transition-all group text-left"
