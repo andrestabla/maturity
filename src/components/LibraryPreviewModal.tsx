@@ -308,15 +308,18 @@ export function LibraryPreviewModal({
                     <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                       Vinculación institucional
                     </div>
-                    <div className="relative">
+                    <div className="relative min-w-0 overflow-hidden">
                       <select
-                        className="w-full bg-white border border-slate-200 text-sm rounded-xl py-3 px-4 pr-10 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 appearance-none text-ink font-semibold"
+                        className="w-full bg-white border border-slate-200 text-sm rounded-xl py-3 px-4 pr-10 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-400 appearance-none text-ink font-semibold overflow-hidden text-ellipsis"
                         value={selectedCourse}
                         onChange={(e) => setSelectedCourse(e.target.value)}
                         required
+                        style={{ maxWidth: '100%' }}
                       >
                         {courseOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label.length > 60 ? `${opt.label.slice(0, 57)}…` : opt.label}
+                          </option>
                         ))}
                       </select>
                       <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
