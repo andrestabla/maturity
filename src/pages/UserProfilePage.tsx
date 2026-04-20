@@ -1174,27 +1174,6 @@ export function UserProfilePage({
                   </div>
                 </div>
 
-                {availableRoles.length > 1 ? (
-                  <div className="checklist__item">
-                    <strong>Vista operativa</strong>
-                    <p>Define con qué rol quieres recorrer la plataforma.</p>
-                    <label className="field field--compact">
-                      <span>Rol activo</span>
-                      <div className="field__control">
-                        <select
-                          value={activeRole}
-                          onChange={(event) => onRoleChange(event.target.value as Role)}
-                        >
-                          {availableRoles.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-                  </div>
-                ) : null}
               </div>
             </article>
           ) : null}

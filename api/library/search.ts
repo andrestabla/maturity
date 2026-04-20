@@ -479,10 +479,8 @@ async function readInstitutionalAssetsFast() {
       tags,
       metadata
     FROM maturity_library_assets
-    WHERE group_name = ${'Institucional'}
-       OR visibility = ${'Institucional'}
-       OR provider = ${'institutional'}
-    ORDER BY title ASC
+    WHERE provider = ${'institutional'}
+    ORDER BY created_at DESC
   `) as LibraryAssetFastRow[];
 
   return rows.map((row) => ({
