@@ -291,6 +291,120 @@
 .overflow-hidden { overflow: hidden; }
 .overflow-y-auto { overflow-y: auto; }
 
+/* --- Extended Utilities (LibraryAddResourceModal and beyond) --- */
+
+/* Width / Height */
+.w-full { width: 100%; }
+.w-20 { width: 5rem; }
+.h-20 { height: 5rem; }
+.min-w-0 { min-width: 0; }
+
+/* Display */
+.grid { display: grid; }
+.block { display: block; }
+.inline-block { display: inline-block; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.shrink-0 { flex-shrink: 0; }
+
+/* Grid columns */
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.col-span-2 { grid-column: span 2 / span 2; }
+
+/* Position helpers */
+.top-1\/2 { top: 50%; }
+.right-3 { right: 0.75rem; }
+.-translate-y-1\/2 { transform: translateY(-50%); }
+.pointer-events-none { pointer-events: none; }
+
+/* Spacing extras */
+.space-y-3\.5 > * + * { margin-top: 0.875rem; }
+.space-y-5 > * + * { margin-top: 1.25rem; }
+.mb-1\.5 { margin-bottom: 0.375rem; }
+.ml-0\.5 { margin-left: 0.125rem; }
+.ml-1\.5 { margin-left: 0.375rem; }
+.mt-1\.5 { margin-top: 0.375rem; }
+.pt-4 { padding-top: 1rem; }
+.py-7 { padding-top: 1.75rem; padding-bottom: 1.75rem; }
+.py-16 { padding-top: 4rem; padding-bottom: 4rem; }
+.px-3\.5 { padding-left: 0.875rem; padding-right: 0.875rem; }
+.pr-8 { padding-right: 2rem; }
+
+/* Typography extras */
+.font-normal { font-weight: 400; }
+.normal-case { text-transform: none; }
+.tracking-normal { letter-spacing: 0; }
+.text-center { text-align: center; }
+.items-baseline { align-items: baseline; }
+
+/* Colors — text */
+.text-slate-300 { color: #cbd5e1; }
+.text-slate-400 { color: #94a3b8; }
+.text-red-400 { color: #f87171; }
+.text-red-600 { color: #dc2626; }
+.text-emerald-500 { color: #10b981; }
+.text-emerald-700 { color: #047857; }
+.text-emerald-800 { color: #065f46; }
+.text-teal-500 { color: #14b8a6; }
+.text-teal-600 { color: #0d9488; }
+.text-teal-700 { color: #0f766e; }
+.text-violet-700 { color: #6d28d9; }
+.text-white { color: #ffffff; }
+
+/* Colors — background */
+.bg-red-50 { background-color: #fef2f2; }
+.bg-teal-50 { background-color: #f0fdfa; }
+.bg-violet-50 { background-color: #f5f3ff; }
+.bg-violet-100 { background-color: #ede9fe; }
+.bg-slate-50 { background-color: #f8fafc; }
+
+/* Colors — border */
+.border-dashed { border-style: dashed; }
+.border-slate-200 { border-color: #e2e8f0; }
+.border-slate-100 { border-color: #f1f5f9; }
+.border-red-200 { border-color: #fecaca; }
+.border-emerald-200 { border-color: #a7f3d0; }
+.border-emerald-300 { border-color: #6ee7b7; }
+.border-violet-300 { border-color: #c4b5fd; }
+.border-teal-400 { border-color: #2dd4bf; }
+.border-teal-300 { border-color: #5eead4; }
+.border-ink { border-color: var(--ink); }
+
+/* Form extras */
+.outline-none { outline: none; }
+.appearance-none { appearance: none; -webkit-appearance: none; }
+.resize-none { resize: none; }
+.resize-y { resize: vertical; }
+
+/* Shadow */
+.shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+.shadow-sm { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
+
+/* Hover states */
+.hover\:bg-ink:hover { background-color: var(--ink); }
+.hover\:text-white:hover { color: #ffffff; }
+.hover\:text-emerald-700:hover { color: #047857; }
+.hover\:text-slate-600:hover { color: #475569; }
+.hover\:text-teal-500:hover { color: #14b8a6; }
+.hover\:text-teal-600:hover { color: #0d9488; }
+.hover\:border-teal-300:hover { border-color: #5eead4; }
+.hover\:bg-violet-100:hover { background-color: #ede9fe; }
+.hover\:bg-teal-50:hover { background-color: #f0fdfa; }
+.transition-colors { transition-property: color, background-color, border-color; transition-timing-function: cubic-bezier(0.4,0,0.2,1); transition-duration: 150ms; }
+
+/* Focus states */
+.focus\:ring-2:focus { outline: none; }
+.focus\:ring-teal-100:focus { box-shadow: 0 0 0 3px #ccfbf1; }
+.focus\:border-teal-400:focus { border-color: #2dd4bf; }
+
+/* Placeholder */
+.placeholder\:text-slate-300::placeholder { color: #cbd5e1; }
+
+/* Active / disabled */
+.active\:scale-\[0\.98\]:active { transform: scale(0.98); }
+.disabled\:opacity-40:disabled { opacity: 0.4; }
+
 /* Modal Content Cleaning */
 .modal-stack-clean .detail-section,
 .modal-stack-clean .section-card,
