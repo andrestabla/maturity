@@ -796,6 +796,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSubmit={handleAddInstitutionalResource}
+        institutionSettings={appData.institution}
       />
 
       {/* ── Batch AI panel ────────────────────────────────────────────── */}

@@ -38,9 +38,6 @@ interface UserProfilePageProps {
   refreshSession: () => Promise<void>;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
-  activeRole: Role;
-  availableRoles: Role[];
-  onRoleChange: (role: Role) => void;
 }
 
 function buildProfileDraft(user: AuthUser): UserProfileUpdateInput {
@@ -173,9 +170,6 @@ export function UserProfilePage({
   refreshSession,
   theme,
   onThemeChange,
-  activeRole,
-  availableRoles,
-  onRoleChange,
 }: UserProfilePageProps) {
   const { userId } = useParams<{ userId?: string }>();
   const location = useLocation();
