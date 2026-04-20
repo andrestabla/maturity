@@ -1,25 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
-  Building2,
   CheckCircle2,
   ChevronDown,
-  Filter,
-  GraduationCap,
-  LibraryBig,
+  FlaskConical,
+  Landmark,
+  Layers,
+  Library,
   Loader2,
-  PlayCircle,
+  Plus,
+  RotateCcw,
   Search,
+  SlidersHorizontal,
   Sparkles,
-  Puzzle,
-  RefreshCw,
+  Youtube,
   X,
 } from 'lucide-react';
 import { LibraryAssetCard } from '../components/LibraryAssetCard.js';
 import { LibraryPreviewModal } from '../components/LibraryPreviewModal.js';
+import { LibraryAddResourceModal } from '../components/LibraryAddResourceModal.js';
 import { BatchIntegrationPanel } from '../components/BatchIntegrationPanel.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
+import type { InstitutionalResourceInput } from '../components/LibraryAddResourceModal.js';
 import type {
   AppData,
   AuthUser,
@@ -71,10 +74,10 @@ interface SearchFilters {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GROUPS: { id: LibraryGroup; label: string; icon: React.ElementType; description: string; color: string }[] = [
-  { id: 'Investigacion', label: 'Investigación', icon: GraduationCap, description: 'Papers, preprints y artículos científicos de repositorios globales.', color: '#1d4ed8' },
-  { id: 'Didacticos', label: 'Didácticos', icon: Puzzle, description: 'Recursos educativos abiertos: OER Commons y simulaciones PhET.', color: '#d97706' },
-  { id: 'YouTube', label: 'YouTube', icon: PlayCircle, description: 'Videos académicos con ranking por calidad educativa.', color: '#dc2626' },
-  { id: 'Institucional', label: 'Institucional', icon: Building2, description: 'Repositorio propio de la institución.', color: '#4f46e5' },
+  { id: 'Investigacion', label: 'Investigación', icon: FlaskConical, description: 'Papers, preprints y artículos científicos de repositorios globales.', color: '#1d4ed8' },
+  { id: 'Didacticos', label: 'Didácticos', icon: Layers, description: 'Recursos educativos abiertos: OER Commons y simulaciones PhET.', color: '#d97706' },
+  { id: 'YouTube', label: 'YouTube', icon: Youtube, description: 'Videos académicos con ranking por calidad educativa.', color: '#dc2626' },
+  { id: 'Institucional', label: 'Institucional', icon: Landmark, description: 'Repositorio propio de la institución.', color: '#4f46e5' },
 ];
 
 const INVESTIGATION_PROVIDERS: LibraryProvider[] = [
@@ -106,49 +109,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   phet: '#0891b2',
   youtube: '#dc2626',
   institutional: '#4f46e5',
-};
-
-// ─── Descubridor Inteligente ─────────────────────────────────────────────────
-
-const DISCOVERY_TOPICS: Partial<Record<LibraryGroup, string[]>> = {
-  Investigacion: [
-    'inteligencia artificial', 'aprendizaje automático', 'cambio climático', 'neurociencia',
-    'bioinformática', 'computación cuántica', 'salud pública', 'economía conductual',
-    'robótica', 'genómica', 'ética en IA', 'sostenibilidad',
-  ],
-  Didacticos: [
-    'pensamiento crítico', 'aprendizaje colaborativo', 'gamificación', 'STEM',
-    'diseño instruccional', 'evaluación formativa', 'aula invertida', 'ABP',
-    'matemáticas interactivas', 'física experimental', 'química laboratorio',
-  ],
-  YouTube: [
-    'conferencias TED educación', 'tutoriales programación', 'documentales ciencia',
-    'lecciones Khan Academy', 'cursos universitarios', 'divulgación científica',
-    'clases magistrales', 'debates académicos',
-  ],
-  Institucional: ['recursos abiertos', 'bibliografía básica', 'programas de curso'],
-};
-
-const DISCOVERY_FEATURED: Partial<Record<LibraryGroup, { query: string; title: string; description: string; icon: string }[]>> = {
-  Investigacion: [
-    { query: 'large language models education', title: 'IA en Educación', description: 'Últimos papers sobre modelos de lenguaje y su impacto pedagógico.', icon: '🤖' },
-    { query: 'climate change mitigation', title: 'Cambio Climático', description: 'Investigaciones de vanguardia en mitigación y adaptación climática.', icon: '🌍' },
-    { query: 'CRISPR gene therapy', title: 'Biotecnología', description: 'Avances en edición genómica y terapias de nueva generación.', icon: '🧬' },
-  ],
-  Didacticos: [
-    { query: 'project based learning', title: 'Aprendizaje por Proyectos', description: 'Recursos OER para implementar ABP en el aula.', icon: '📐' },
-    { query: 'physics simulation', title: 'Simulaciones PhET', description: 'Laboratorios virtuales interactivos de física y química.', icon: '⚡' },
-    { query: 'math games elementary', title: 'Matemáticas Gamificadas', description: 'Juegos y actividades que hacen las matemáticas divertidas.', icon: '🎯' },
-  ],
-  YouTube: [
-    { query: 'MIT OpenCourseWare lecture', title: 'Clases MIT', description: 'Conferencias completas del MIT sobre tecnología y ciencias.', icon: '🎓' },
-    { query: 'TED talk education innovation', title: 'TED · Educación', description: 'Charlas inspiradoras sobre el futuro del aprendizaje.', icon: '💡' },
-    { query: 'science documentary BBC', title: 'Documentales Ciencia', description: 'Documentales de alta calidad para complementar clases.', icon: '🔬' },
-  ],
-  Institucional: [
-    { query: 'bibliografía básica', title: 'Bibliografía Básica', description: 'Materiales esenciales para los cursos de este semestre.', icon: '📚' },
-    { query: 'guías de estudio', title: 'Guías de Estudio', description: 'Documentos oficiales de apoyo pedagógico.', icon: '📝' },
-  ],
 };
 
 const LANGUAGES = [
@@ -198,7 +158,9 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
-  const [recommendations, setRecommendations] = useState<LibrarySearchResult[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const isAdminOrGestor = role === 'Administrador' || role === 'Gestor LMS';
 
   const visibleCourses = getVisibleCourses(appData, role, viewer);
   const courseOptions = visibleCourses.map((c) => ({
@@ -275,22 +237,6 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     }
   }, [showAlert]);
 
-  // Load recommendations for landing page
-  useEffect(() => {
-    void (async () => {
-      try {
-        const resp = await fetch(`/api/library/search?q=machine+learning&group=${activeGroup}&limit=4`);
-        if (resp.ok) {
-          const data = await resp.json() as { results: LibrarySearchResult[] };
-          setRecommendations((data.results ?? []).slice(0, 4));
-        }
-      } catch {
-        // Recommendations are best-effort — silently ignore errors
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     void performSearch(query, activeGroup, filters);
@@ -306,6 +252,25 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   function applyFilters(newFilters: SearchFilters) {
     setFilters(newFilters);
     void performSearch(query, activeGroup, newFilters);
+  }
+
+  // ── Add institutional resource ─────────────────────────────────────────────
+
+  async function handleAddInstitutionalResource(data: InstitutionalResourceInput) {
+    const resp = await fetch('/api/library/institutional-asset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) {
+      let errMsg = 'No se pudo agregar el recurso';
+      try {
+        const err = await resp.json() as { error?: string };
+        errMsg = err.error ?? errMsg;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+    refreshAppData();
   }
 
   // ── Add to course ──────────────────────────────────────────────────────────
@@ -511,7 +476,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       {!hasSearched && (
         <div className="library-search-stage">
           <div className="library-search-stage__topline">
-            <LibraryBig size={22} />
+            <Library size={22} />
             <span className="library-search-stage__eyebrow">
               Biblioteca Inteligente
             </span>
@@ -542,7 +507,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               onClick={() => setShowFilters(!showFilters)}
               className={`library-search-shell__toggle ${showFilters || hasActiveFilters ? 'is-active' : ''}`}
             >
-              <Filter size={18} />
+              <SlidersHorizontal size={18} />
               <span>Filtros</span>
             </button>
 
@@ -564,68 +529,32 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
             {groupTabs}
           </div>
 
-          {/* Recommended section */}
-          <div className="w-full max-w-4xl">
-            <h2 className="text-lg font-bold text-ink mb-6">
-              Recomendados para tu etapa actual
+          {/* Empty state */}
+          <div className="w-full max-w-xl text-center py-12">
+            <div
+              className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6"
+              style={{ background: `${activeGroupCfg.color}10` }}
+            >
+              <activeGroupCfg.icon size={36} style={{ color: activeGroupCfg.color, opacity: 0.7 }} />
+            </div>
+            <h2 className="text-2xl font-bold font-display text-ink mb-3">
+              ¿Qué quieres explorar hoy?
             </h2>
-            {recommendations.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-                {recommendations.map((asset) => (
-                  <LibraryAssetCard
-                    key={asset.id}
-                    asset={asset}
-                    onPreview={(a) => setPreviewAsset(a)}
-                    onAddToCourse={(a) => setPreviewAsset(a)}
-                  />
-                ))}
-              </div>
-            ) : (
-              /* Descubridor Inteligente chips while recommendations load */
-              <div>
-                <div className="library-search-stage__chips mb-8">
-                  {DISCOVERY_TOPICS[activeGroup]?.map((topic) => (
-                    <button
-                      key={topic}
-                      onClick={() => {
-                        setQuery(topic);
-                        void performSearch(topic, activeGroup, filters);
-                      }}
-                      style={{
-                        borderColor: `${activeGroupCfg.color}30`,
-                        color: activeGroupCfg.color,
-                        background: `${activeGroupCfg.color}08`,
-                      }}
-                    >
-                      <Sparkles size={11} />
-                      {topic}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {DISCOVERY_FEATURED[activeGroup]?.map((item) => (
-                    <button
-                      key={item.query}
-                      onClick={() => {
-                        setQuery(item.query);
-                        void performSearch(item.query, activeGroup, filters);
-                      }}
-                      className="text-left p-6 rounded-[24px] border border-line bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all group"
-                    >
-                      <div
-                        className="text-3xl mb-3 w-12 h-12 rounded-2xl flex items-center justify-center"
-                        style={{ backgroundColor: `${activeGroupCfg.color}10` }}
-                      >
-                        {item.icon}
-                      </div>
-                      <h4 className="font-bold text-ink mb-1 font-display group-hover:text-teal-600 transition-colors">
-                        {item.title}
-                      </h4>
-                      <p className="text-xs text-muted leading-relaxed">{item.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <p className="text-muted text-base leading-relaxed">
+              Escribe un concepto en la barra de búsqueda para descubrir{' '}
+              {activeGroupCfg.description.toLowerCase()}
+            </p>
+
+            {/* Add resource button for admin/gestor in Institucional tab */}
+            {isAdminOrGestor && activeGroup === 'Institucional' && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="mt-8 inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-95"
+                style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
+              >
+                <Plus size={16} />
+                Agregar Recurso al Repositorio
+              </button>
             )}
           </div>
         </div>
@@ -690,8 +619,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
                   }`}
                   style={showFilters || hasActiveFilters ? { backgroundColor: 'var(--library-teal)', borderColor: 'var(--library-teal)' } : {}}
                 >
-                  <Filter size={14} />
-                  <span>Filtros Avanzados</span>
+                  <SlidersHorizontal size={14} />
+                  <span>Filtros</span>
                   {hasActiveFilters && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
                 </button>
               </div>
@@ -699,20 +628,32 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
               {/* Row 2: group tabs + result count */}
               <div className="flex items-center gap-2">
                 {groupTabs}
-                {filteredResults.length > 0 && (
-                  <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-slate-200">
-                    <span className="text-xs font-bold text-slate-400">
-                      {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
-                    </span>
+                <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-slate-200">
+                  {isAdminOrGestor && activeGroup === 'Institucional' && (
                     <button
-                      onClick={() => void performSearch(query, activeGroup, filters)}
-                      className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-ink rounded-lg transition-colors"
-                      title="Actualizar"
+                      onClick={() => setShowAddModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
+                      style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
                     >
-                      <RefreshCw size={13} />
+                      <Plus size={13} />
+                      <span>Agregar</span>
                     </button>
-                  </div>
-                )}
+                  )}
+                  {filteredResults.length > 0 && (
+                    <>
+                      <span className="text-xs font-bold text-slate-400">
+                        {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
+                      </span>
+                      <button
+                        onClick={() => void performSearch(query, activeGroup, filters)}
+                        className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-ink rounded-lg transition-colors"
+                        title="Actualizar"
+                      >
+                        <RotateCcw size={13} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -848,6 +789,13 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         onClose={() => setPreviewAsset(null)}
         courseOptions={courseOptions}
         onAddToCourse={handleAddToCourse}
+      />
+
+      {/* ── Add institutional resource panel ─────────────────────────── */}
+      <LibraryAddResourceModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddInstitutionalResource}
       />
 
       {/* ── Batch AI panel ────────────────────────────────────────────── */}
