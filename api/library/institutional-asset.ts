@@ -22,6 +22,10 @@ interface InstitutionalAssetInput {
   visibility: 'Institucional' | 'Publico';
   embedCode?: string;
   sourceType: 'link' | 'youtube' | 'iframe' | 'file';
+  institutionId?: string;
+  institutionName?: string;
+  faculty?: string;
+  program?: string;
 }
 
 function inferPreviewKind(sourceType: string, extension: string): LibraryAsset['previewKind'] {
@@ -86,8 +90,8 @@ export default async function handler(request: Request) {
       openAccess: body.visibility === 'Publico',
       citationCount: 0,
       embedUrl: inferEmbedUrl(body.sourceType, body.canonicalUrl?.trim() ?? ''),
-      institutionId: user.institutionId,
-      institutionName: user.institution,
+      institutionId: body.institutionId ?? user.institutionId,
+      institutionName: body.institutionName ?? user.institution,
       visibility: body.visibility ?? 'Institucional',
       previewKind: inferPreviewKind(body.sourceType, body.extension ?? ''),
       tags: [...(body.thematicAreas ?? []), ...(body.keywords ?? [])],
@@ -100,6 +104,8 @@ export default async function handler(request: Request) {
         addedBy: user.id,
         sourceType: body.sourceType,
         embedCode: body.embedCode ?? null,
+        faculty: body.faculty ?? null,
+        program: body.program ?? null,
       },
       createdAt: now,
       updatedAt: now,
