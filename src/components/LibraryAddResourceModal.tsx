@@ -92,7 +92,7 @@ const DEFAULT_FORM: FormState = {
 
 function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="w-full min-w-0">
       <label className="flex items-baseline gap-1 text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">
         <span>{label}{required && <span className="text-red-400 ml-0.5">*</span>}</span>
         {hint && <span className="font-normal text-slate-400" style={{ textTransform: 'none', letterSpacing: 0 }}>· {hint}</span>}

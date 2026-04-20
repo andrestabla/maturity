@@ -3048,6 +3048,7 @@ html.has-modal-open .ambient-cursor {
 
 .side-sheet__content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 24px;
   width: 100%;
