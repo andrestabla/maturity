@@ -93,10 +93,9 @@ const DEFAULT_FORM: FormState = {
 function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">
-        {label}
-        {required && <span className="text-red-400 ml-0.5">*</span>}
-        {hint && <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-400">{hint}</span>}
+      <label className="flex items-baseline gap-1 text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">
+        <span>{label}{required && <span className="text-red-400 ml-0.5">*</span>}</span>
+        {hint && <span className="font-normal text-slate-400" style={{ textTransform: 'none', letterSpacing: 0 }}>· {hint}</span>}
       </label>
       {children}
     </div>
@@ -340,7 +339,7 @@ export function LibraryAddResourceModal({
       description="Añade un recurso al repositorio con metadatos curados por IA."
       sideLabel="REPOSITORIO"
       sideDescription="Institucional"
-      width="lg"
+      width="xl"
       footer={
         success ? null : (
           <button
@@ -474,8 +473,8 @@ export function LibraryAddResourceModal({
               </div>
             ) : sourceType === 'iframe' ? (
               <textarea
-                className={`${inputClass} resize-none font-mono text-xs`}
-                rows={3}
+                className={`${inputClass} resize-y font-mono text-xs`}
+                rows={7}
                 placeholder={SOURCE_TYPES.find((s) => s.id === 'iframe')!.placeholder}
                 value={sourceInput}
                 onChange={(e) => setSourceInput(e.target.value)}
