@@ -90,7 +90,6 @@ export default function App() {
   const { session, status, login, logout, refreshSession } = useSession();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
-  const [role, setRole] = useState<Role>('Coordinador');
   const [branding, setBranding] = useState(defaultBranding);
   const [homeContent, setHomeContent] = useState(defaultHomeContent);
   const {
@@ -101,24 +100,6 @@ export default function App() {
     mutateAppData,
   } = useAppData(status === 'authenticated', session.user?.id ?? 'anonymous');
   const authenticatedUser = session.user;
-  const availableRoles =
-    authenticatedUser?.role === 'Administrador'
-      ? appData.roles
-      : authenticatedUser
-        ? Array.from(new Set([authenticatedUser.role, ...(authenticatedUser.secondaryRoles ?? [])]))
-        : [];
-  const activeRole =
-    authenticatedUser && availableRoles.includes(role) ? role : authenticatedUser?.role ?? role;
-
-  useEffect(() => {
-    if (!authenticatedUser) {
-      return;
-    }
-
-    if (activeRole !== role) {
-      setRole(activeRole);
-    }
-  }, [activeRole, authenticatedUser, role]);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -250,7 +231,7 @@ export default function App() {
       ) : (
         <AppShell
           user={session.user}
-          role={activeRole}
+          role={session.user.role}
           onLogout={logout}
           branding={branding}
           appData={appData}
@@ -265,7 +246,7 @@ export default function App() {
             path="/dashboard"
             element={
               <DashboardPage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -278,7 +259,7 @@ export default function App() {
             path="/analytics"
             element={
               <AnalyticsPage
-                role={activeRole}
+                role={session.user.role}
                 viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
@@ -289,7 +270,7 @@ export default function App() {
             path="/helpdesk"
             element={
               <HelpDeskPage
-                role={activeRole}
+                role={session.user.role}
                 viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
@@ -302,7 +283,7 @@ export default function App() {
             path="/courses"
             element={
               <CoursesPage
-                role={activeRole}
+                role={session.user.role}
                 viewer={session.user}
                 appData={appData}
                 isLoading={isLoading}
@@ -317,7 +298,7 @@ export default function App() {
             path="/courses/:slug"
             element={
               <CourseWorkspacePage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -331,7 +312,7 @@ export default function App() {
             path="/courses/:slug/:section"
             element={
               <CourseWorkspacePage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -345,7 +326,7 @@ export default function App() {
             path="/courses/:slug/:section/producto/:productId"
             element={
               <CourseWorkspacePage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -359,7 +340,7 @@ export default function App() {
             path="/courses/:slug/:section/:workspaceRoute"
             element={
               <CourseWorkspacePage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -373,7 +354,7 @@ export default function App() {
             path="/library"
             element={
               <LibraryPage
-                role={activeRole}
+                role={session.user.role}
                 userRole={session.user.role}
                 viewer={session.user}
                 appData={appData}
@@ -467,9 +448,9 @@ export default function App() {
                 refreshSession={refreshSession}
                 theme={theme}
                 onThemeChange={setTheme}
-                activeRole={activeRole}
-                availableRoles={availableRoles}
-                onRoleChange={setRole}
+                activeRole={session.user.role}
+                availableRoles={[session.user.role]}
+                onRoleChange={() => {}}
               />
             }
           />
@@ -483,9 +464,9 @@ export default function App() {
                 refreshSession={refreshSession}
                 theme={theme}
                 onThemeChange={setTheme}
-                activeRole={activeRole}
-                availableRoles={availableRoles}
-                onRoleChange={setRole}
+                activeRole={session.user.role}
+                availableRoles={[session.user.role]}
+                onRoleChange={() => {}}
               />
             }
           />
