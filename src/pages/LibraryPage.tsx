@@ -246,6 +246,8 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     setActiveGroup(group);
     setResults([]);
     setFilters((f) => ({ ...f, providers: [] }));
+    // For Institucional tab in landing state: don't auto-search, just show empty state
+    if (group === 'Institucional' && !hasSearched) return;
     void performSearch(query, group, { ...filters, providers: [] });
   }
 
