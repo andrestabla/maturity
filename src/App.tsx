@@ -9,7 +9,6 @@ import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
 import { LandingPage } from './pages/LandingPage.js';
 import { LoginPage } from './pages/LoginPage.js';
-import type { Role } from './types.js';
 import { canManageUsers } from './utils/permissions.js';
 
 const DashboardPage = lazy(() =>
@@ -99,7 +98,6 @@ export default function App() {
     refreshAppData,
     mutateAppData,
   } = useAppData(status === 'authenticated', session.user?.id ?? 'anonymous');
-  const authenticatedUser = session.user;
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -448,9 +446,6 @@ export default function App() {
                 refreshSession={refreshSession}
                 theme={theme}
                 onThemeChange={setTheme}
-                activeRole={session.user.role}
-                availableRoles={[session.user.role]}
-                onRoleChange={() => {}}
               />
             }
           />
@@ -464,9 +459,6 @@ export default function App() {
                 refreshSession={refreshSession}
                 theme={theme}
                 onThemeChange={setTheme}
-                activeRole={session.user.role}
-                availableRoles={[session.user.role]}
-                onRoleChange={() => {}}
               />
             }
           />
