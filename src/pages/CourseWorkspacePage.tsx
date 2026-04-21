@@ -6915,6 +6915,7 @@ export function CourseWorkspacePage({
       version: '1.0',
       section: sectionName,
       phasePlan: normalizeProductPhasePlanDraft([]),
+      architectureSections: getFormatTemplateForDraft('Video'),
     });
     setActiveAddSection(sectionName);
     setIsAddProductModalOpen(true);
@@ -6927,6 +6928,8 @@ export function CourseWorkspacePage({
     setEditingArchitectureProductId(product.id);
     setArchitectureEditorMode(mode);
     setActiveAddSection(product.section ?? 'Introducción');
+    const existingSections = product.architectureSections ?? [];
+    const sections = existingSections.length > 0 ? existingSections : getFormatTemplateForDraft(product.format);
     setNewProductForm({
       title: product.title,
       summary: product.summary,
@@ -6940,6 +6943,7 @@ export function CourseWorkspacePage({
       section: product.section ?? 'Introducción',
       phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
       validationData: product.validationData ?? buildDefaultValidationData(product.stage),
+      architectureSections: sections,
     });
     setIsAddProductModalOpen(true);
   }
@@ -11472,7 +11476,15 @@ export function CourseWorkspacePage({
                     <select
                       className="modern-select"
                       value={newProductForm.format}
-                      onChange={(e) => setNewProductForm({ ...newProductForm, format: e.target.value as any })}
+                      onChange={(e) => {
+                        const fmt = e.target.value as any;
+                        const tplSections = getFormatTemplateForDraft(fmt);
+                        setNewProductForm((current) => ({
+                          ...current,
+                          format: fmt,
+                          architectureSections: tplSections.length > 0 ? tplSections : (current.architectureSections ?? []),
+                        }));
+                      }}
                     >
                       <option value="">Seleccionar formato</option>
                       <option value="Video">Video</option>
@@ -11508,13 +11520,72 @@ export function CourseWorkspacePage({
               </div>
 
               <div className="form-group">
-                <label className="form-label">Instrucciones</label>
-                <RichTextEditor
-                  value={newProductForm.body}
-                  onChange={(value) => setNewProductForm({ ...newProductForm, body: value })}
-                  placeholder="Detalla cómo debe desarrollarse este producto, su estructura, alcance, criterios técnicos, tono y entregables esperados."
-                  minHeight={280}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Secciones del producto</label>
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    style={{ fontSize: 12 }}
+                    onClick={() => applyFormatTemplateToNewForm(newProductForm.format)}
+                  >
+                    <RefreshCcw size={13} />
+                    <span>Aplicar plantilla {newProductForm.format}</span>
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(newProductForm.architectureSections ?? []).map((section, idx) => (
+                    <div key={section.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 14px', background: '#fafafa' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <input
+                          style={{ flex: 1, fontSize: 13, fontWeight: 700, border: '1px solid #cbd5e1', borderRadius: 8, padding: '5px 10px', background: 'white', color: '#1e293b' }}
+                          value={section.title}
+                          onChange={(e) => setNewProductForm((current) => {
+                            const secs = [...(current.architectureSections ?? [])];
+                            secs[idx] = { ...secs[idx], title: e.target.value };
+                            return { ...current, architectureSections: secs };
+                          })}
+                          placeholder="Nombre de la sección"
+                        />
+                        <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === 0} onClick={() => setNewProductForm((current) => {
+                          const secs = [...(current.architectureSections ?? [])];
+                          [secs[idx - 1], secs[idx]] = [secs[idx], secs[idx - 1]];
+                          return { ...current, architectureSections: secs };
+                        })}>↑</button>
+                        <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === (newProductForm.architectureSections?.length ?? 0) - 1} onClick={() => setNewProductForm((current) => {
+                          const secs = [...(current.architectureSections ?? [])];
+                          [secs[idx], secs[idx + 1]] = [secs[idx + 1], secs[idx]];
+                          return { ...current, architectureSections: secs };
+                        })}>↓</button>
+                        <button type="button" className="danger-button danger-button--ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => setNewProductForm((current) => {
+                          const secs = [...(current.architectureSections ?? [])];
+                          secs.splice(idx, 1);
+                          return { ...current, architectureSections: secs };
+                        })}>✕</button>
+                      </div>
+                      <RichTextEditor
+                        value={section.instructions}
+                        onChange={(value) => setNewProductForm((current) => {
+                          const secs = [...(current.architectureSections ?? [])];
+                          secs[idx] = { ...secs[idx], instructions: value };
+                          return { ...current, architectureSections: secs };
+                        })}
+                        placeholder="Instrucciones para producir esta sección…"
+                        minHeight={100}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  style={{ marginTop: 8, width: '100%' }}
+                  onClick={() => setNewProductForm((current) => ({
+                    ...current,
+                    architectureSections: [...(current.architectureSections ?? []), { id: crypto.randomUUID(), title: 'Nueva sección', instructions: '' }],
+                  }))}
+                >
+                  + Agregar sección
+                </button>
               </div>
 
               <div className="form-group">
