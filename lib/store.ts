@@ -48,8 +48,10 @@ import type {
   ObservationMutationInput,
   PasswordChangeInput,
   Priority,
+  ProductFormatTemplate,
   ProductPhasePlan,
   ProductPlanningPhase,
+  ProductSectionTemplate,
   ProductWritingAsset,
   ProductWritingData,
   ProductWritingSection,
@@ -1341,6 +1343,19 @@ function makeLearningModuleRecord(input: LearningModuleMutationInput): LearningM
   };
 }
 
+function normalizeProductArchitectureSections(
+  sections?: ProductSectionTemplate[],
+): ProductSectionTemplate[] | undefined {
+  if (!Array.isArray(sections)) return undefined;
+  return sections
+    .filter((s) => s && typeof s.title === 'string' && s.title.trim())
+    .map((s) => ({
+      id: typeof s.id === 'string' && s.id ? s.id : crypto.randomUUID(),
+      title: s.title.trim(),
+      instructions: typeof s.instructions === 'string' ? s.instructions : '',
+    }));
+}
+
 function normalizeProductPhasePlan(
   phasePlan?: ProductPhasePlan[],
 ): ProductPhasePlan[] {
@@ -1981,6 +1996,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     version: input.version?.trim?.() || '1.0',
     section: input.section?.trim() || undefined,
+    architectureSections: normalizeProductArchitectureSections(input.architectureSections),
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
     writingData: normalizeProductWritingData(input.writingData),
     validationData: normalizeProductValidationData(input.validationData, input.stage),
@@ -3592,7 +3608,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 29; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 30; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4793,6 +4809,17 @@ async function ensureSchema() {
         ON maturity_h5p_user_state(user_id)
       `;
     }
+
+    // Migration v30: product format section templates
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_product_format_templates (
+        id TEXT PRIMARY KEY,
+        format_key TEXT NOT NULL UNIQUE,
+        label TEXT NOT NULL,
+        sections JSONB NOT NULL DEFAULT '[]'::jsonb,
+        updated_at TEXT NOT NULL
+      )
+    `;
 
     // 4. Update the stored version to avoid running this again
     await sql`
@@ -7019,6 +7046,10 @@ export async function updateCourseProductRecord(
         input.phasePlan !== undefined
           ? normalizeProductPhasePlan(input.phasePlan)
           : product.phasePlan,
+      architectureSections:
+        input.architectureSections !== undefined
+          ? normalizeProductArchitectureSections(input.architectureSections)
+          : product.architectureSections,
       writingData:
         input.writingData !== undefined
           ? normalizeProductWritingData(input.writingData)
@@ -8136,4 +8167,237 @@ ${modules}
 UNIDADES DETALLADAS:
 ${units}
   `.trim();
+}
+
+// ─── Product Format Templates ─────────────────────────────────────────────────
+
+const DEFAULT_FORMAT_TEMPLATES: Array<{ formatKey: string; label: string; sections: Array<{ title: string; instructions: string }> }> = [
+  {
+    formatKey: 'video',
+    label: 'Video',
+    sections: [
+      { title: 'Título', instructions: 'Redacta un título claro y atractivo que describa el contenido del video en máximo 10 palabras.' },
+      { title: 'Inicio o introducción', instructions: 'Presenta el tema, el propósito del video y lo que el estudiante aprenderá. Duración sugerida: 10-15% del video.' },
+      { title: 'Desarrollo', instructions: 'Expón los contenidos centrales con ejemplos, casos o demostraciones. Mantén un ritmo dinámico y usa recursos visuales de apoyo.' },
+      { title: 'Cierre', instructions: 'Resume los puntos clave, refuerza el aprendizaje esperado e indica los siguientes pasos o recursos complementarios.' },
+    ],
+  },
+  {
+    formatKey: 'documento',
+    label: 'Documento',
+    sections: [
+      { title: 'Título', instructions: 'Define un título académico preciso que refleje el tema central del documento.' },
+      { title: 'Introducción', instructions: 'Presenta el contexto, la relevancia del tema y los objetivos del documento en 1-2 párrafos.' },
+      { title: 'Desarrollo', instructions: 'Desarrolla los contenidos con rigor académico. Usa subtítulos, ejemplos y referencias para estructurar el argumento.' },
+      { title: 'Conclusiones', instructions: 'Sintetiza los hallazgos principales y su impacto en el aprendizaje del estudiante.' },
+      { title: 'Bibliografía', instructions: 'Lista las fuentes consultadas en formato APA 7. Incluye al menos 3 referencias actualizadas (últimos 5 años).' },
+    ],
+  },
+  {
+    formatKey: 'evaluacion',
+    label: 'Evaluación',
+    sections: [
+      { title: 'Título', instructions: 'Indica claramente el tipo de evaluación y la unidad o competencia que evalúa.' },
+      { title: 'Instrucciones', instructions: 'Explica cómo debe completarse la evaluación, tiempo estimado, criterios de aprobación y condiciones de entrega.' },
+      { title: 'Preguntas', instructions: 'Diseña preguntas alineadas a los objetivos de aprendizaje. Varía el tipo (selección múltiple, abierta, caso). Indica el peso de cada ítem.' },
+      { title: 'Retroalimentación', instructions: 'Describe qué retroalimentación recibirá el estudiante y cómo puede mejorar en caso de no aprobar.' },
+    ],
+  },
+  {
+    formatKey: 'actividad',
+    label: 'Actividad',
+    sections: [
+      { title: 'Título', instructions: 'Nombre la actividad de forma descriptiva indicando el tipo de tarea y la unidad a la que pertenece.' },
+      { title: 'Contexto', instructions: 'Explica el escenario o situación que enmarca la actividad y su relevancia para la práctica profesional o académica.' },
+      { title: 'Instrucciones', instructions: 'Detalla paso a paso lo que el estudiante debe hacer. Sé específico: herramientas, formatos, extensión esperada.' },
+      { title: 'Entregable esperado', instructions: 'Describe con precisión qué debe entregar el estudiante: tipo de archivo, extensión, formato y canal de entrega.' },
+      { title: 'Criterios de evaluación', instructions: 'Lista los criterios con los que se calificará la actividad. Incluye porcentajes o niveles de desempeño.' },
+    ],
+  },
+  {
+    formatKey: 'lectura',
+    label: 'Lectura',
+    sections: [
+      { title: 'Título', instructions: 'Redacta un título que anticipe el contenido y motive la lectura.' },
+      { title: 'Introducción', instructions: 'Presenta el autor (si aplica), el contexto de la lectura y su relevancia en el programa.' },
+      { title: 'Desarrollo', instructions: 'Incluye el cuerpo principal del texto con subtítulos temáticos que faciliten la comprensión.' },
+      { title: 'Conclusiones', instructions: 'Cierra con las ideas esenciales del texto y preguntas reflexivas para el estudiante.' },
+      { title: 'Bibliografía', instructions: 'Referencias citadas en el texto en formato APA 7.' },
+    ],
+  },
+  {
+    formatKey: 'infografia',
+    label: 'Infografía',
+    sections: [
+      { title: 'Título', instructions: 'Título visual, conciso y atractivo que comunique el tema principal en máximo 6 palabras.' },
+      { title: 'Mensaje central', instructions: 'Define el concepto o dato más importante que el estudiante debe recordar. Es el eje de la infografía.' },
+      { title: 'Desarrollo visual', instructions: 'Estructura la información en bloques visuales: estadísticas, íconos, flechas, listas. Máximo 5-7 elementos clave.' },
+      { title: 'Cierre', instructions: 'Incluye una llamada a la acción o reflexión final que invite al estudiante a profundizar.' },
+      { title: 'Fuentes', instructions: 'Cita las fuentes de datos o imágenes usadas, en formato breve (apellido, año) al pie de la infografía.' },
+    ],
+  },
+  {
+    formatKey: 'podcast',
+    label: 'Pódcast',
+    sections: [
+      { title: 'Título', instructions: 'Título del episodio: descriptivo, enganchador, máximo 8 palabras.' },
+      { title: 'Apertura', instructions: 'Saludo, presentación del tema y del/los invitado(s) si aplica. Duración: 1-2 min.' },
+      { title: 'Desarrollo', instructions: 'Conversación o exposición de los contenidos. Usa preguntas guía, ejemplos y anécdotas para mantener el interés.' },
+      { title: 'Cierre', instructions: 'Resumen de aprendizajes, despedida y mención de recursos o próximo episodio.' },
+    ],
+  },
+  {
+    formatKey: 'guia',
+    label: 'Guía',
+    sections: [
+      { title: 'Título', instructions: 'Nombre descriptivo de la guía que indique el proceso o competencia que orienta.' },
+      { title: 'Introducción', instructions: 'Propósito de la guía, a quién está dirigida y cómo usarla.' },
+      { title: 'Desarrollo', instructions: 'Paso a paso del proceso con instrucciones claras, ejemplos y recursos de apoyo por sección.' },
+      { title: 'Cierre', instructions: 'Síntesis del proceso y checklist de verificación para que el estudiante confirme su avance.' },
+      { title: 'Bibliografía', instructions: 'Recursos y referencias recomendados para ampliar el aprendizaje.' },
+    ],
+  },
+  {
+    formatKey: 'red',
+    label: 'RED',
+    sections: [
+      { title: 'Título', instructions: 'Nombre del recurso educativo digital que describa su funcionalidad principal.' },
+      { title: 'Objetivo de aprendizaje', instructions: 'Indica qué competencia o resultado de aprendizaje desarrolla este RED.' },
+      { title: 'Descripción funcional', instructions: 'Explica cómo funciona el recurso, su interactividad y qué hace el estudiante al usarlo.' },
+      { title: 'Instrucciones de uso', instructions: 'Paso a paso de cómo el estudiante debe interactuar con el recurso para lograr el objetivo.' },
+      { title: 'Especificaciones técnicas', instructions: 'Plataforma, formato de archivo, requisitos técnicos y estándares (SCORM, xAPI, HTML5, etc.).' },
+    ],
+  },
+];
+
+function normalizeProductSectionTemplate(raw: unknown): ProductSectionTemplate {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: typeof r.id === 'string' ? r.id : crypto.randomUUID(),
+    title: typeof r.title === 'string' ? r.title : '',
+    instructions: typeof r.instructions === 'string' ? r.instructions : '',
+  };
+}
+
+function normalizeProductFormatTemplate(row: {
+  id: string;
+  format_key: string;
+  label: string;
+  sections: unknown;
+  updated_at: string;
+}): ProductFormatTemplate {
+  const rawSections = Array.isArray(row.sections) ? row.sections : [];
+  return {
+    id: row.id,
+    formatKey: row.format_key,
+    label: row.label,
+    sections: rawSections.map(normalizeProductSectionTemplate),
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getProductFormatTemplates(): Promise<ProductFormatTemplate[]> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT id, format_key, label, sections, updated_at
+    FROM maturity_product_format_templates
+    ORDER BY label ASC
+  `) as Array<{ id: string; format_key: string; label: string; sections: unknown; updated_at: string }>;
+
+  if (rows.length === 0) {
+    // Seed defaults on first access
+    await seedDefaultProductFormatTemplates();
+    const seeded = (await sql`
+      SELECT id, format_key, label, sections, updated_at
+      FROM maturity_product_format_templates
+      ORDER BY label ASC
+    `) as Array<{ id: string; format_key: string; label: string; sections: unknown; updated_at: string }>;
+    return seeded.map(normalizeProductFormatTemplate);
+  }
+
+  return rows.map(normalizeProductFormatTemplate);
+}
+
+async function seedDefaultProductFormatTemplates() {
+  const sql = getSql();
+  const now = new Date().toISOString();
+  for (const tpl of DEFAULT_FORMAT_TEMPLATES) {
+    const id = `fmt-${tpl.formatKey}`;
+    const sections = tpl.sections.map((s, i) => ({
+      id: `${id}-s${i + 1}`,
+      title: s.title,
+      instructions: s.instructions,
+    }));
+    await sql`
+      INSERT INTO maturity_product_format_templates (id, format_key, label, sections, updated_at)
+      VALUES (${id}, ${tpl.formatKey}, ${tpl.label}, ${JSON.stringify(sections)}::jsonb, ${now})
+      ON CONFLICT (format_key) DO NOTHING
+    `;
+  }
+}
+
+export async function upsertProductFormatTemplate(input: {
+  id?: string;
+  formatKey: string;
+  label: string;
+  sections: ProductSectionTemplate[];
+}): Promise<ProductFormatTemplate> {
+  await ensureInitialized();
+  const sql = getSql();
+  const id = input.id ?? `fmt-${input.formatKey.toLowerCase().replace(/\s+/g, '-')}`;
+  const now = new Date().toISOString();
+  const sections = input.sections.map((s) => ({
+    id: s.id || crypto.randomUUID(),
+    title: s.title,
+    instructions: s.instructions,
+  }));
+
+  await sql`
+    INSERT INTO maturity_product_format_templates (id, format_key, label, sections, updated_at)
+    VALUES (${id}, ${input.formatKey}, ${input.label}, ${JSON.stringify(sections)}::jsonb, ${now})
+    ON CONFLICT (format_key) DO UPDATE SET
+      label = EXCLUDED.label,
+      sections = EXCLUDED.sections,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  return {
+    id,
+    formatKey: input.formatKey,
+    label: input.label,
+    sections,
+    updatedAt: now,
+  };
+}
+
+export async function deleteProductFormatTemplate(formatKey: string): Promise<void> {
+  await ensureInitialized();
+  const sql = getSql();
+  await sql`DELETE FROM maturity_product_format_templates WHERE format_key = ${formatKey}`;
+}
+
+export async function getProductFormatTemplateByKey(formatKey: string): Promise<ProductFormatTemplate | null> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT id, format_key, label, sections, updated_at
+    FROM maturity_product_format_templates
+    WHERE format_key = ${formatKey}
+    LIMIT 1
+  `) as Array<{ id: string; format_key: string; label: string; sections: unknown; updated_at: string }>;
+
+  if (rows.length === 0) {
+    // Try seeding first
+    await seedDefaultProductFormatTemplates();
+    const seeded = (await sql`
+      SELECT id, format_key, label, sections, updated_at
+      FROM maturity_product_format_templates
+      WHERE format_key = ${formatKey}
+      LIMIT 1
+    `) as Array<{ id: string; format_key: string; label: string; sections: unknown; updated_at: string }>;
+    return seeded.length > 0 ? normalizeProductFormatTemplate(seeded[0]) : null;
+  }
+
+  return normalizeProductFormatTemplate(rows[0]);
 }

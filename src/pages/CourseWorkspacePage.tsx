@@ -62,6 +62,8 @@ import type {
   CourseStageNoteMutationInput,
   CourseMutationInput,
   LibraryResource,
+  ProductFormatTemplate,
+  ProductSectionTemplate,
   ProductWritingAsset,
   ProductWritingData,
   ProductWritingSection,
@@ -1116,6 +1118,7 @@ function makeCourseProductForm(
     tags: [],
     version: 'v0.1',
     section,
+    architectureSections: [],
     phasePlan: normalizeProductPhasePlanDraft([]),
     validationData: buildDefaultValidationData(stage),
   };
@@ -1136,6 +1139,7 @@ function makeCourseProductDrafts(products: CourseProduct[]) {
         tags: product.tags,
         version: product.version,
         section: product.section,
+        architectureSections: product.architectureSections ?? [],
         phasePlan: normalizeProductPhasePlanDraft(product.phasePlan),
         validationData: product.validationData ?? buildDefaultValidationData(product.stage),
       },
@@ -2484,6 +2488,7 @@ export function CourseWorkspacePage({
   );
   const hydratedCourseSlugRef = useRef<string | null>(course?.slug ?? null);
   const [criteriaGeneratorProductId, setCriteriaGeneratorProductId] = useState<string | null>(null);
+  const [productFormatTemplates, setProductFormatTemplates] = useState<ProductFormatTemplate[]>([]);
   const [planningPhaseDraft, setPlanningPhaseDraft] = useState<ProductPhasePlan[]>(() =>
     normalizeProductPhasePlanDraft([]),
   );
@@ -2664,6 +2669,18 @@ export function CourseWorkspacePage({
   useEffect(() => {
     setCourseForm((current) => syncCourseStructureFields(appData, current));
   }, [appData]);
+
+  // Load product format templates once
+  useEffect(() => {
+    fetch('/api/product-templates')
+      .then((r) => r.json())
+      .then((data: { ok?: boolean; templates?: ProductFormatTemplate[] }) => {
+        if (data.ok && Array.isArray(data.templates)) {
+          setProductFormatTemplates(data.templates);
+        }
+      })
+      .catch(() => {/* non-critical */});
+  }, []);
 
   useEffect(() => {
     if (!sectionParam) {
@@ -9538,6 +9555,106 @@ export function CourseWorkspacePage({
     }));
   }
 
+  // ── Architecture section helpers ──────────────────────────────────────────
+
+  function getFormatTemplateForDraft(format: string): ProductSectionTemplate[] {
+    const key = format.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const tpl = productFormatTemplates.find((t) => t.formatKey === key || t.label.toLowerCase() === key);
+    return tpl?.sections ?? [];
+  }
+
+  function applyFormatTemplateToDraft(productId: string, format: string) {
+    const sections = getFormatTemplateForDraft(format);
+    if (sections.length === 0) return;
+    updateProductDraft(productId, 'architectureSections', sections);
+  }
+
+  function applyFormatTemplateToNewForm(format: string) {
+    const sections = getFormatTemplateForDraft(format);
+    setNewProductForm((current) => ({ ...current, architectureSections: sections }));
+  }
+
+  function updateProductArchitectureSection(
+    productId: string,
+    index: number,
+    field: keyof ProductSectionTemplate,
+    value: string,
+  ) {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+      if (!draft) return current;
+      const sections = [...(draft.architectureSections ?? [])];
+      sections[index] = { ...sections[index], [field]: value };
+      return { ...current, [productId]: { ...draft, architectureSections: sections } };
+    });
+  }
+
+  function addProductArchitectureSection(productId: string) {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+      if (!draft) return current;
+      const sections = [...(draft.architectureSections ?? [])];
+      sections.push({ id: crypto.randomUUID(), title: 'Nueva sección', instructions: '' });
+      return { ...current, [productId]: { ...draft, architectureSections: sections } };
+    });
+  }
+
+  function removeProductArchitectureSection(productId: string, index: number) {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+      if (!draft) return current;
+      const sections = [...(draft.architectureSections ?? [])];
+      sections.splice(index, 1);
+      return { ...current, [productId]: { ...draft, architectureSections: sections } };
+    });
+  }
+
+  function moveProductArchitectureSection(productId: string, index: number, direction: 'up' | 'down') {
+    setProductDrafts((current) => {
+      const draft = current[productId];
+      if (!draft) return current;
+      const sections = [...(draft.architectureSections ?? [])];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= sections.length) return current;
+      [sections[index], sections[target]] = [sections[target], sections[index]];
+      return { ...current, [productId]: { ...draft, architectureSections: sections } };
+    });
+  }
+
+  function updateNewFormArchitectureSection(index: number, field: keyof ProductSectionTemplate, value: string) {
+    setNewProductForm((current) => {
+      const sections = [...(current.architectureSections ?? [])];
+      sections[index] = { ...sections[index], [field]: value };
+      return { ...current, architectureSections: sections };
+    });
+  }
+
+  function addNewFormArchitectureSection() {
+    setNewProductForm((current) => {
+      const sections = [...(current.architectureSections ?? [])];
+      sections.push({ id: crypto.randomUUID(), title: 'Nueva sección', instructions: '' });
+      return { ...current, architectureSections: sections };
+    });
+  }
+
+  function removeNewFormArchitectureSection(index: number) {
+    setNewProductForm((current) => {
+      const sections = [...(current.architectureSections ?? [])];
+      sections.splice(index, 1);
+      return { ...current, architectureSections: sections };
+    });
+  }
+
+  function moveNewFormArchitectureSection(index: number, direction: 'up' | 'down') {
+    setNewProductForm((current) => {
+      const sections = [...(current.architectureSections ?? [])];
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= sections.length) return current;
+      [sections[index], sections[target]] = [sections[target], sections[index]];
+      return { ...current, architectureSections: sections };
+    });
+  }
+
   async function handleStageNoteSave(key: CourseStageNoteKey) {
     const draft = stageNoteDrafts[key];
 
@@ -10319,6 +10436,53 @@ export function CourseWorkspacePage({
                             minHeight={180}
                           />
                         </label>
+
+                        <div className="field field--full">
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <span className="field__label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+                              Secciones del producto
+                            </span>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              style={{ fontSize: 11, padding: '2px 10px' }}
+                              onClick={() => applyFormatTemplateToNewForm(newProductForm.format)}
+                            >
+                              Aplicar plantilla {newProductForm.format}
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {(newProductForm.architectureSections ?? []).map((section, idx) => (
+                              <div key={section.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 14px', background: '#fafafa' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                  <input
+                                    style={{ flex: 1, fontSize: 13, fontWeight: 700, border: '1px solid #cbd5e1', borderRadius: 8, padding: '5px 10px', background: 'white', color: '#1e293b' }}
+                                    value={section.title}
+                                    onChange={(e) => updateNewFormArchitectureSection(idx, 'title', e.target.value)}
+                                    placeholder="Nombre de la sección"
+                                  />
+                                  <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === 0} onClick={() => moveNewFormArchitectureSection(idx, 'up')}>↑</button>
+                                  <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === (newProductForm.architectureSections?.length ?? 0) - 1} onClick={() => moveNewFormArchitectureSection(idx, 'down')}>↓</button>
+                                  <button type="button" className="danger-button danger-button--ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => removeNewFormArchitectureSection(idx)}>✕</button>
+                                </div>
+                                <RichTextEditor
+                                  value={section.instructions}
+                                  onChange={(value) => updateNewFormArchitectureSection(idx, 'instructions', value)}
+                                  placeholder="Instrucciones para producir esta sección…"
+                                  minHeight={100}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            style={{ marginTop: 8, width: '100%' }}
+                            onClick={() => addNewFormArchitectureSection()}
+                          >
+                            + Agregar sección
+                          </button>
+                        </div>
                       </div>
                     </>
                   ) : (
@@ -10655,6 +10819,54 @@ export function CourseWorkspacePage({
                                     minHeight={180}
                                   />
                                 </label>
+
+                                <div className="field field--full">
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <span className="field__label" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b' }}>
+                                      Secciones del producto
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="ghost-button"
+                                      style={{ fontSize: 11, padding: '2px 10px' }}
+                                      onClick={() => applyFormatTemplateToDraft(product.id, draft.format)}
+                                      title="Repoblar desde la plantilla del formato"
+                                    >
+                                      Aplicar plantilla {draft.format}
+                                    </button>
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    {(draft.architectureSections ?? []).map((section, idx) => (
+                                      <div key={section.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 14px', background: '#fafafa' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                          <input
+                                            style={{ flex: 1, fontSize: 13, fontWeight: 700, border: '1px solid #cbd5e1', borderRadius: 8, padding: '5px 10px', background: 'white', color: '#1e293b' }}
+                                            value={section.title}
+                                            onChange={(e) => updateProductArchitectureSection(product.id, idx, 'title', e.target.value)}
+                                            placeholder="Nombre de la sección"
+                                          />
+                                          <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === 0} onClick={() => moveProductArchitectureSection(product.id, idx, 'up')} title="Subir">↑</button>
+                                          <button type="button" className="ghost-button" style={{ padding: '4px 8px', fontSize: 12 }} disabled={idx === (draft.architectureSections?.length ?? 0) - 1} onClick={() => moveProductArchitectureSection(product.id, idx, 'down')} title="Bajar">↓</button>
+                                          <button type="button" className="danger-button danger-button--ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => removeProductArchitectureSection(product.id, idx)} title="Eliminar sección">✕</button>
+                                        </div>
+                                        <RichTextEditor
+                                          value={section.instructions}
+                                          onChange={(value) => updateProductArchitectureSection(product.id, idx, 'instructions', value)}
+                                          placeholder="Instrucciones para producir esta sección del producto…"
+                                          minHeight={100}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    style={{ marginTop: 8, width: '100%' }}
+                                    onClick={() => addProductArchitectureSection(product.id)}
+                                  >
+                                    + Agregar sección
+                                  </button>
+                                </div>
                               </div>
                             </>
                           ) : (

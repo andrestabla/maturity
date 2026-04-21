@@ -226,6 +226,20 @@ export interface CourseStageNotes {
   entrega: CourseStageNote;
 }
 
+export interface ProductSectionTemplate {
+  id: string;
+  title: string;
+  instructions: string;
+}
+
+export interface ProductFormatTemplate {
+  id: string;
+  formatKey: string;   // normalized lowercase key, e.g. "video", "actividad"
+  label: string;       // display label, e.g. "Video", "Actividad"
+  sections: ProductSectionTemplate[];
+  updatedAt?: string;
+}
+
 export interface CourseProduct {
   id: string;
   title: string;
@@ -238,6 +252,7 @@ export interface CourseProduct {
   tags: string[];
   version: string;
   section?: string;
+  architectureSections?: ProductSectionTemplate[];
   phasePlan: ProductPhasePlan[];
   writingData: ProductWritingData;
   validationData: ProductValidationData;
@@ -873,6 +888,7 @@ export interface AdminCenterData {
   integrations: AdminIntegration[];
   logs: AdminLogEntry[];
   audit: AdminAuditEntry[];
+  productFormatTemplates: ProductFormatTemplate[];
 }
 
 export interface AdminIntegrationMutationInput {
@@ -989,6 +1005,7 @@ export interface CourseProductMutationInput {
   tags: string[];
   version: string;
   section?: string;
+  architectureSections?: ProductSectionTemplate[];
   phasePlan?: ProductPhasePlan[];
   writingData?: ProductWritingData;
   validationData?: ProductValidationData;

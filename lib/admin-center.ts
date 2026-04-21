@@ -30,6 +30,7 @@ import { getSql } from './db.js';
 import { probeR2Connectivity } from './r2.js';
 import {
   getInstitutionSettingsRecord,
+  getProductFormatTemplates,
   getUserDirectory,
   syncInstitutionSettingsRecord,
 } from './store.js';
@@ -2376,7 +2377,7 @@ export async function getHomeContentSettings() {
 export async function getAdminCenterData(): Promise<AdminCenterData> {
   await seedAdminCenterDefaults();
 
-  const [users, institution, branding, homeContent, experience, workflow, integrations, logs, audit] =
+  const [users, institution, branding, homeContent, experience, workflow, integrations, logs, audit, productFormatTemplates] =
     await Promise.all([
     getUserDirectory(),
     getInstitutionSettings(),
@@ -2387,6 +2388,7 @@ export async function getAdminCenterData(): Promise<AdminCenterData> {
     readIntegrations(),
     readLogs(),
     readAudit(),
+    getProductFormatTemplates(),
   ]);
 
   return {
@@ -2399,6 +2401,7 @@ export async function getAdminCenterData(): Promise<AdminCenterData> {
     integrations,
     logs,
     audit,
+    productFormatTemplates,
   };
 }
 

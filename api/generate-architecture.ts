@@ -2,7 +2,7 @@ import { getIntegrationConfig } from '../lib/admin-center.js';
 import { errorResponse } from '../lib/http.js';
 import { canManageArchitecture } from '../lib/permissions.js';
 import { getSessionUser } from '../lib/session.js';
-import { findCourseRecordBySlug, getInstitutionSettingsRecord } from '../lib/store.js';
+import { findCourseRecordBySlug, getInstitutionSettingsRecord, getProductFormatTemplates } from '../lib/store.js';
 import OpenAI from 'openai';
 
 export const config = {
@@ -77,12 +77,23 @@ export default async function handler(request: Request | any, response?: any) {
       const course = await findCourseRecordBySlug(courseSlug);
       if (!course) throw new Error('Curso no encontrado.');
 
-      const settings = await getInstitutionSettingsRecord();
+      const [settings, formatTemplates] = await Promise.all([
+        getInstitutionSettingsRecord(),
+        getProductFormatTemplates(),
+      ]);
       const structureId = institutionStructureId || course.institutionStructureId;
       const structure = settings.structures.find(s => s.id === structureId);
-      
+
       const finalStructure = structure || settings.structures.find(s => s.institution === course.faculty || s.institution === course.program);
       const guidelines = finalStructure?.pedagogicalGuidelines || [];
+
+      // Build section template reference for the AI prompt
+      const sectionTemplateGuide = formatTemplates.length > 0
+        ? formatTemplates.map(tpl => {
+            const sectionsList = tpl.sections.map(s => `    - ${s.title}: ${s.instructions.slice(0, 120)}`).join('\n');
+            return `  ${tpl.label}:\n${sectionsList}`;
+          }).join('\n')
+        : '';
 
       notify({ progress: 10, step: 'Conectando con el Arquitecto IA...' });
 
@@ -144,6 +155,10 @@ export default async function handler(request: Request | any, response?: any) {
       Asegúrate de que el campo "format" coincida EXACTAMENTE con uno de estos valores: Video, RED, Pódcast, Infografía, Documento, Actividad, Lectura, Evaluación.
       El campo "description" debe explicar en 1 o 2 frases qué es el producto y cuál es su propósito.
       El campo "instructions" debe ser detallado, accionable y útil para quien tendrá que producir el recurso. Incluye estructura esperada, restricciones, componentes obligatorios, criterios pedagógicos y cualquier especificación relevante derivada del microcurrículo y los lineamientos institucionales.
+      Cuando generes las instrucciones, estructura el contenido USANDO LAS SECCIONES definidas para cada formato (ver PLANTILLAS abajo). Cada sección debe aparecer como un encabezado seguido de sus instrucciones específicas para este producto y curso.
+
+      PLANTILLAS DE SECCIONES POR FORMATO:
+${sectionTemplateGuide || '      (Usar estructura libre por sección: Título, Introducción, Desarrollo, Cierre)'}
 
       Asegúrate de que el campo "section" sea "Introducción", "Cierre" o exactamente una de estas unidades:
       ${units.length > 0 ? units.map((_: any, index: number) => `- Unidad ${index + 1}`).join('\n') : '- Unidad 1'}

@@ -465,6 +465,16 @@ function hydrateWritingSectionsFromText(
 }
 
 function buildStructuredSections(product: CourseProduct): ProductWritingSection[] {
+  // If the product has architecture sections (parametric template), use them directly
+  if (Array.isArray(product.architectureSections) && product.architectureSections.length > 0) {
+    return product.architectureSections.map((s, index) => ({
+      id: s.id || `section-${index + 1}`,
+      title: s.title,
+      instructions: s.instructions,
+      content: '',
+    }));
+  }
+
   const instructionHtml = product.body?.trim() || product.summary?.trim() || '';
   const inferredTitles = inferWritingSectionTitlesFromText(instructionHtml, product.format);
   return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
