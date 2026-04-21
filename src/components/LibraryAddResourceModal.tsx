@@ -274,10 +274,13 @@ export function LibraryAddResourceModal({
     setAiError('');
     setAiDone(false);
     try {
+      // For file type, pass the filename (more descriptive than the R2 URL)
+      const urlHint =
+        sourceType === 'file' && uploadedFile ? uploadedFile.name : sourceInput;
       const resp = await fetch('/api/library/metadata-assist', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: sourceInput, sourceType, existingTitle: form.title || undefined }),
+        body: JSON.stringify({ url: urlHint, sourceType, existingTitle: form.title || undefined }),
       });
       if (!resp.ok) {
         const err = (await resp.json()) as { error?: string };
@@ -357,7 +360,9 @@ export function LibraryAddResourceModal({
     }
   }
 
-  const canAssist = sourceInput.trim().length > 0 && sourceType !== 'iframe' && sourceType !== 'file';
+  const canAssist =
+    sourceType !== 'iframe' &&
+    (sourceType === 'file' ? uploadedFile !== null : sourceInput.trim().length > 0);
   const canSubmit =
     !isSubmitting &&
     form.title.trim().length > 0 &&
@@ -549,9 +554,7 @@ export function LibraryAddResourceModal({
                     ? 'Analizando con IA…'
                     : aiDone
                       ? 'Metadatos completados por IA'
-                      : sourceType === 'file'
-                        ? 'Completar metadatos con IA (requiere URL)'
-                        : 'Completar metadatos con IA'}
+                      : 'Completar metadatos con IA'}
                 </span>
               </button>
             )}
