@@ -25,6 +25,19 @@ interface MetadataAssistResult {
   estimatedStudyMinutes: number;
 }
 
+function parseIsoDuration(iso: string): number {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const h = parseInt(match[1] ?? '0', 10);
+  const m = parseInt(match[2] ?? '0', 10);
+  const s = parseInt(match[3] ?? '0', 10);
+  return h * 60 + m + Math.round(s / 60);
+}
+
+function extractYouTubeId(url: string): string | null {
+  return url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] ?? null;
+}
+
 export default async function handler(request: Request) {
   try {
     const user = await getSessionUser(request);
@@ -40,6 +53,50 @@ export default async function handler(request: Request) {
 
     const { url, sourceType, existingTitle } = body;
 
+    // ── YouTube Data API v3 (real metadata) ───────────────────────────────────
+    if (sourceType === 'youtube' && url) {
+      const ytKey = process.env.YOUTUBE_API_KEY?.trim();
+      const videoId = extractYouTubeId(url);
+      if (ytKey && videoId) {
+        try {
+          const ytResp = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${ytKey}`,
+          );
+          if (ytResp.ok) {
+            const ytData = await ytResp.json() as {
+              items?: Array<{
+                snippet: { title: string; description: string; channelTitle: string; publishedAt: string; tags?: string[] };
+                contentDetails: { duration: string };
+              }>;
+            };
+            const video = ytData.items?.[0];
+            if (video) {
+              const { snippet, contentDetails } = video;
+              const minutes = parseIsoDuration(contentDetails.duration);
+              return jsonResponse({
+                ok: true,
+                metadata: {
+                  title: snippet.title,
+                  description: snippet.description?.slice(0, 600) ?? '',
+                  authors: [snippet.channelTitle],
+                  year: new Date(snippet.publishedAt).getFullYear(),
+                  keywords: (snippet.tags ?? []).slice(0, 5),
+                  thematicAreas: [],
+                  resourceType: 'Video',
+                  extension: 'MP4',
+                  format: 'Video',
+                  estimatedStudyMinutes: minutes,
+                } satisfies MetadataAssistResult,
+              });
+            }
+          }
+        } catch {
+          // fall through to OpenAI
+        }
+      }
+    }
+
+    // ── OpenAI fallback (all types) ───────────────────────────────────────────
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) return errorResponse(500, 'Servicio de IA no disponible');
 

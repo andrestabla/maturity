@@ -14,9 +14,10 @@ import {
   Youtube,
 } from 'lucide-react';
 import { SidePanel } from './SidePanel.js';
-import type { InstitutionSettings, InstitutionStructure } from '../types.js';
+import type { InstitutionSettings, InstitutionStructure, LibrarySearchResult } from '../types.js';
 
 export interface InstitutionalResourceInput {
+  id?: string;
   title: string;
   description: string;
   authors: string[];
@@ -42,6 +43,7 @@ interface LibraryAddResourceModalProps {
   onClose: () => void;
   onSubmit: (data: InstitutionalResourceInput) => Promise<void>;
   institutionSettings: InstitutionSettings;
+  editAsset?: LibrarySearchResult | null;
 }
 
 type SourceType = 'link' | 'youtube' | 'iframe' | 'file';
@@ -122,6 +124,7 @@ export function LibraryAddResourceModal({
   onClose,
   onSubmit,
   institutionSettings,
+  editAsset,
 }: LibraryAddResourceModalProps) {
   const [sourceType, setSourceType] = useState<SourceType>('link');
   const [sourceInput, setSourceInput] = useState('');
@@ -142,9 +145,6 @@ export function LibraryAddResourceModal({
 
   useEffect(() => {
     if (isOpen) {
-      setSourceType('link');
-      setSourceInput('');
-      setForm(DEFAULT_FORM);
       setIsAssisting(false);
       setAiError('');
       setAiDone(false);
@@ -154,8 +154,39 @@ export function LibraryAddResourceModal({
       setUploadedFile(null);
       setIsUploading(false);
       setUploadError('');
+
+      if (editAsset) {
+        const meta = editAsset.metadata ?? {};
+        const srcType = (meta.sourceType as SourceType) ?? 'link';
+        setSourceType(srcType);
+        setSourceInput(
+          srcType === 'iframe'
+            ? ((meta.embedCode as string) ?? '')
+            : (editAsset.canonicalUrl ?? ''),
+        );
+        setForm({
+          title: editAsset.title ?? '',
+          description: editAsset.abstract ?? '',
+          authors: (editAsset.authors ?? []).join(', '),
+          thematicAreas: ((meta.thematicAreas as string[]) ?? []).join(', '),
+          keywords: ((meta.keywords as string[]) ?? []).join(', '),
+          year: editAsset.publishedAt?.slice(0, 4) ?? String(new Date().getFullYear()),
+          resourceType: editAsset.resourceType ?? 'Artículo',
+          extension: (meta.extension as string) ?? '',
+          format: (meta.format as string) ?? 'Enlace externo',
+          estimatedStudyMinutes: String((meta.estimatedStudyMinutes as number) ?? ''),
+          visibility: (editAsset.visibility as 'Institucional' | 'Publico') ?? 'Institucional',
+          institutionStructureId: '',
+          faculty: (meta.faculty as string) ?? '',
+          program: (meta.program as string) ?? '',
+        });
+      } else {
+        setSourceType('link');
+        setSourceInput('');
+        setForm(DEFAULT_FORM);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, editAsset]);
 
   // ── Institution hierarchy ────────────────────────────────────────────────────
 
@@ -289,6 +320,7 @@ export function LibraryAddResourceModal({
     try {
       const structure = structures.find((s) => s.id === form.institutionStructureId);
       await onSubmit({
+        id: editAsset?.id,
         title: form.title.trim(),
         description: form.description.trim(),
         authors: form.authors
@@ -331,12 +363,14 @@ export function LibraryAddResourceModal({
     form.title.trim().length > 0 &&
     (sourceType === 'iframe' ? sourceInput.trim().length > 0 : sourceInput.trim().length > 0);
 
+  const isEditing = Boolean(editAsset);
+
   return (
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title="Agregar Recurso Institucional"
-      description="Añade un recurso al repositorio con metadatos curados por IA."
+      title={isEditing ? 'Editar Recurso' : 'Agregar Recurso Institucional'}
+      description={isEditing ? 'Modifica los metadatos del recurso institucional.' : 'Añade un recurso al repositorio con metadatos curados por IA.'}
       sideLabel="REPOSITORIO"
       sideDescription="Institucional"
       width="xl"
@@ -350,7 +384,7 @@ export function LibraryAddResourceModal({
             style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
           >
             {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            <span>{isSubmitting ? 'Guardando…' : 'Agregar al Repositorio'}</span>
+            <span>{isSubmitting ? 'Guardando…' : isEditing ? 'Guardar Cambios' : 'Agregar al Repositorio'}</span>
           </button>
         )
       }
@@ -361,8 +395,8 @@ export function LibraryAddResourceModal({
             <CheckCircle2 size={44} className="text-emerald-500" />
           </div>
           <div>
-            <div className="text-xl font-bold text-ink mb-1">¡Recurso agregado!</div>
-            <div className="text-sm text-muted">Ya está disponible en el repositorio institucional.</div>
+            <div className="text-xl font-bold text-ink mb-1">{isEditing ? '¡Recurso actualizado!' : '¡Recurso agregado!'}</div>
+            <div className="text-sm text-muted">{isEditing ? 'Los cambios se han guardado correctamente.' : 'Ya está disponible en el repositorio institucional.'}</div>
           </div>
           <button
             onClick={onClose}

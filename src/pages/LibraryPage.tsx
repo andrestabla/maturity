@@ -159,6 +159,7 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<LibrarySearchResult | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editAsset, setEditAsset] = useState<LibrarySearchResult | null>(null);
 
   const isAdminOrGestor = role === 'Administrador' || role === 'Gestor LMS';
 
@@ -259,13 +260,17 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
   // ── Add institutional resource ─────────────────────────────────────────────
 
   async function handleAddInstitutionalResource(data: InstitutionalResourceInput) {
-    const resp = await fetch('/api/library/institutional-asset', {
-      method: 'POST',
+    const isEdit = Boolean(data.id);
+    const url = isEdit
+      ? `/api/library/institutional-asset?id=${encodeURIComponent(data.id!)}`
+      : '/api/library/institutional-asset';
+    const resp = await fetch(url, {
+      method: isEdit ? 'PATCH' : 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!resp.ok) {
-      let errMsg = 'No se pudo agregar el recurso';
+      let errMsg = isEdit ? 'No se pudo actualizar el recurso' : 'No se pudo agregar el recurso';
       try {
         const err = await resp.json() as { error?: string };
         errMsg = err.error ?? errMsg;
@@ -273,6 +278,28 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
       throw new Error(errMsg);
     }
     refreshAppData();
+  }
+
+  async function handleDeleteAsset(assetId: string) {
+    const resp = await fetch(`/api/library/institutional-asset?id=${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    });
+    if (!resp.ok) {
+      let errMsg = 'No se pudo eliminar el recurso';
+      try {
+        const err = await resp.json() as { error?: string };
+        errMsg = err.error ?? errMsg;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+    setResults((prev) => prev.filter((r) => r.id !== assetId));
+    refreshAppData();
+  }
+
+  function handleEditAsset(asset: LibrarySearchResult) {
+    setEditAsset(asset);
+    setPreviewAsset(null);
+    setShowAddModal(true);
   }
 
   // ── Add to course ──────────────────────────────────────────────────────────
@@ -791,14 +818,18 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
         onClose={() => setPreviewAsset(null)}
         courseOptions={courseOptions}
         onAddToCourse={handleAddToCourse}
+        userRole={role}
+        onDeleteAsset={handleDeleteAsset}
+        onEditAsset={handleEditAsset}
       />
 
       {/* ── Add institutional resource panel ─────────────────────────── */}
       <LibraryAddResourceModal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => { setShowAddModal(false); setEditAsset(null); }}
         onSubmit={handleAddInstitutionalResource}
         institutionSettings={appData.institution}
+        editAsset={editAsset}
       />
 
       {/* ── Batch AI panel ────────────────────────────────────────────── */}
