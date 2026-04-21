@@ -310,14 +310,22 @@ export function LibraryPreviewModal({
             </div>
           )}
 
+          {/* PDF: only embed institutional files (R2) or direct arXiv PDFs — other providers block iframes */}
           {asset.previewKind === 'pdf' && asset.canonicalUrl && (
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
-              <iframe
-                src={asset.canonicalUrl}
-                style={{ width: '100%', height: '75vh', border: 'none', display: 'block', background: '#f8fafc' }}
-                title={asset.title}
-              />
-            </div>
+            asset.provider === 'institutional' || asset.canonicalUrl.startsWith('https://arxiv.org/pdf/')
+              ? (
+                <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
+                  <iframe
+                    src={asset.canonicalUrl}
+                    style={{ width: '100%', height: '75vh', border: 'none', display: 'block', background: '#f8fafc' }}
+                    title={asset.title}
+                  />
+                </div>
+              ) : asset.thumbnailUrl ? (
+                <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', maxHeight: 220, background: '#f8fafc' }}>
+                  <img src={asset.thumbnailUrl} alt={asset.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </div>
+              ) : null
           )}
 
           {asset.previewKind !== 'video' && asset.previewKind !== 'pdf' && metaEmbedCode && (
