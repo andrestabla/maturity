@@ -48,6 +48,7 @@ import { H5PManager } from '../components/H5PManager.js';
 import { useSystemDialog } from '../components/SystemDialogProvider.js';
 import { ProgressRing } from '../components/ProgressRing.js';
 import { VerticalStageTimeline } from '../components/VerticalStageTimeline.js';
+import { buildAiSummary } from '../utils/libraryPresentation.js';
 import type {
   AppData,
   AuthUser,
@@ -5760,7 +5761,7 @@ export function CourseWorkspacePage({
                 </div>
                 
                 <h4 className="text-base font-bold leading-tight mb-2 flex-grow group-hover:text-sky-600 transition-colors">{asset.title}</h4>
-                <p className="text-xs text-muted mb-4 line-clamp-3">{asset.abstract || asset.descriptionHtml?.replace(/<[^>]*>/g, '')}</p>
+                <p className="text-xs text-muted mb-4 line-clamp-3">{buildAiSummary(asset)}</p>
                 
                 <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                   <div className="flex flex-col">

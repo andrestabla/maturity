@@ -227,18 +227,38 @@ export function matchesSelectedResourceTypes(
 }
 
 export function buildAiSummary(asset: LibrarySearchResult): string {
+  const cachedSpanishSummary = typeof asset.metadata?.aiSummaryEs === 'string'
+    ? asset.metadata.aiSummaryEs.trim()
+    : '';
+  if (cachedSpanishSummary) {
+    return truncateSummary(cachedSpanishSummary, 260);
+  }
+
   const abstract = asset.abstract?.trim();
-  if (abstract) {
-    return abstract.length > 260 ? `${abstract.slice(0, 257).trim()}...` : abstract;
+  if (abstract && (asset.language?.toLowerCase().startsWith('es') || looksLikeSpanishText(abstract))) {
+    return truncateSummary(abstract, 260);
   }
 
   const source = getLibraryVisualSource(asset).label;
   const authors = asset.authors.length > 0 ? asset.authors.slice(0, 2).join(', ') : 'autoría curada';
-  const topics = asset.tags.slice(0, 2).join(' y ');
+  const topics = asset.tags.slice(0, 3).join(', ');
+  const resourceType = asset.resourceType?.trim() || 'recurso académico';
+  const publicationYear = asset.publishedAt?.slice(0, 4);
+  const modality =
+    asset.previewKind === 'video'
+      ? 'en formato audiovisual'
+      : asset.previewKind === 'pdf'
+        ? 'en formato documental'
+        : 'como material curado';
 
-  return `Este recurso de ${source} resume ${asset.title.toLowerCase()} con un enfoque claro y aplicable. ` +
-    `Destaca conceptos clave, ejemplos prácticos y una lectura rápida para integrarlo en clase. ` +
-    `${topics ? `Aporta contexto adicional en ${topics}` : `Su curaduría lo convierte en una referencia confiable`}, respaldado por ${authors}.`;
+  const summary =
+    `${asset.title} es un ${resourceType.toLowerCase()} disponible en ${source} ${modality}. ` +
+    `${abstract ? 'Presenta una síntesis útil para orientar su lectura y aplicación pedagógica. ' : 'Ofrece una entrada clara para trabajar el tema en contexto formativo. '}` +
+    `${topics ? `Aborda especialmente ${topics}. ` : ''}` +
+    `${publicationYear ? `Su edición consultada corresponde a ${publicationYear}` : 'Cuenta con curaduría vigente'} y puede incorporarse como apoyo de estudio, discusión o profundización. ` +
+    `La referencia principal está asociada a ${authors}.`;
+
+  return truncateSummary(summary, 260);
 }
 
 export function buildMaturityBreakdown(asset: LibrarySearchResult): string[] {
@@ -281,4 +301,18 @@ function normalizeText(value: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function truncateSummary(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3).trim()}...` : value;
+}
+
+function looksLikeSpanishText(value: string): boolean {
+  const sample = ` ${normalizeText(value)} `;
+  const spanishMarkers = [' el ', ' la ', ' los ', ' las ', ' de ', ' para ', ' con ', ' una ', ' un ', ' y '];
+  const englishMarkers = [' the ', ' and ', ' with ', ' for ', ' from ', ' this ', ' that ', ' are ', ' is '];
+  const spanishHits = spanishMarkers.filter((token) => sample.includes(token)).length;
+  const englishHits = englishMarkers.filter((token) => sample.includes(token)).length;
+
+  return spanishHits >= englishHits;
 }

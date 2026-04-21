@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { LibrarySearchResult } from '../types.js';
 import { SidePanel } from './SidePanel.js';
+import { buildAiSummary } from '../utils/libraryPresentation.js';
 
 interface CourseOption {
   value: string;
@@ -136,6 +137,7 @@ export function LibraryPreviewModal({
   const providerCfg = asset
     ? (PROVIDER_LABELS[asset.provider] ?? { label: asset.provider, color: '#6b7280' })
     : { label: '', color: '#6b7280' };
+  const aiSummary = asset ? buildAiSummary(asset) : '';
 
   const panelWidth = asset?.previewKind === 'pdf' ? '2xl' : 'lg';
 
@@ -374,7 +376,7 @@ export function LibraryPreviewModal({
           </div>
 
           {/* ── 3. AI Summary ────────────────────────────────────────────── */}
-          {asset.abstract && (
+          {aiSummary && (
             <div style={{
               borderRadius: 16, padding: 24,
               background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 40%, #2563eb 100%)',
@@ -394,7 +396,7 @@ export function LibraryPreviewModal({
                 </span>
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.65, color: 'rgba(255,255,255,0.95)', marginBottom: 20 }}>
-                {asset.abstract.slice(0, 480)}{asset.abstract.length > 480 ? '…' : ''}
+                {aiSummary}
               </p>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: 16 }}>
                 <div style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.6)', marginBottom: 12 }}>
