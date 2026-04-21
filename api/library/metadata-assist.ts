@@ -1,6 +1,5 @@
 import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
-import OpenAI from 'openai';
 
 export const config = {
   runtime: 'edge',
@@ -38,80 +37,40 @@ function extractYouTubeId(url: string): string | null {
   return url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] ?? null;
 }
 
-export default async function handler(request: Request) {
-  try {
-    const user = await getSessionUser(request);
-    if (!user) return errorResponse(401, 'No autorizado');
-    if (request.method !== 'POST') return errorResponse(405, 'Método no permitido');
+async function callGemini(prompt: string, apiKey: string): Promise<MetadataAssistResult> {
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3,
+          maxOutputTokens: 800,
+        },
+      }),
+    },
+  );
 
-    let body: MetadataAssistRequest;
-    try {
-      body = (await request.json()) as MetadataAssistRequest;
-    } catch {
-      return errorResponse(400, 'Cuerpo JSON inválido');
-    }
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => 'unknown error');
+    throw new Error(`Gemini API error ${resp.status}: ${errText}`);
+  }
 
-    const { url, sourceType, existingTitle } = body;
+  const data = await resp.json() as {
+    candidates?: Array<{ content: { parts: Array<{ text: string }> } }>;
+  };
 
-    // ── YouTube Data API v3 (real metadata) ───────────────────────────────────
-    if (sourceType === 'youtube' && url) {
-      const ytKey = process.env.YOUTUBE_API_KEY?.trim();
-      const videoId = extractYouTubeId(url);
-      if (ytKey && videoId) {
-        try {
-          const ytResp = await fetch(
-            `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${ytKey}`,
-          );
-          if (ytResp.ok) {
-            const ytData = await ytResp.json() as {
-              items?: Array<{
-                snippet: { title: string; description: string; channelTitle: string; publishedAt: string; tags?: string[] };
-                contentDetails: { duration: string };
-              }>;
-            };
-            const video = ytData.items?.[0];
-            if (video) {
-              const { snippet, contentDetails } = video;
-              const minutes = parseIsoDuration(contentDetails.duration);
-              return jsonResponse({
-                ok: true,
-                metadata: {
-                  title: snippet.title,
-                  description: snippet.description?.slice(0, 600) ?? '',
-                  authors: [snippet.channelTitle],
-                  year: new Date(snippet.publishedAt).getFullYear(),
-                  keywords: (snippet.tags ?? []).slice(0, 5),
-                  thematicAreas: [],
-                  resourceType: 'Video',
-                  extension: 'MP4',
-                  format: 'Video',
-                  estimatedStudyMinutes: minutes,
-                } satisfies MetadataAssistResult,
-              });
-            }
-          }
-        } catch {
-          // fall through to OpenAI
-        }
-      }
-    }
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini devolvió respuesta vacía');
 
-    // ── OpenAI fallback (all types) ───────────────────────────────────────────
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) return errorResponse(500, 'Servicio de IA no disponible');
+  return JSON.parse(text) as MetadataAssistResult;
+}
 
-    const openai = new OpenAI({ apiKey });
-
-    const sourceDescription =
-      sourceType === 'youtube'
-        ? `Video de YouTube: ${url}`
-        : sourceType === 'iframe'
-          ? `Recurso con código embed/iframe`
-          : sourceType === 'file'
-            ? `Archivo en: ${url}`
-            : `Enlace web: ${url}`;
-
-    const prompt = `Eres un experto en catalogación de recursos educativos digitales para repositorios institucionales universitarios en América Latina.
+const METADATA_PROMPT = (sourceDescription: string, existingTitle?: string) =>
+  `Eres un experto en catalogación de recursos educativos digitales para repositorios institucionales universitarios en América Latina.
 
 Dado el siguiente recurso: ${sourceDescription}
 ${existingTitle ? `Título conocido: "${existingTitle}"` : ''}
@@ -138,18 +97,98 @@ Responde SOLO con JSON válido con esta estructura exacta:
 Los valores válidos para resourceType son: Artículo, Paper, Video, Guía, Dataset, Simulación, Presentación, Otro.
 Los valores válidos para format son: PDF, Video, Presentación, Documento, Imagen, Enlace externo.`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      max_tokens: 700,
-      temperature: 0.3,
-    });
+export default async function handler(request: Request) {
+  try {
+    const user = await getSessionUser(request);
+    if (!user) return errorResponse(401, 'No autorizado');
+    if (request.method !== 'POST') return errorResponse(405, 'Método no permitido');
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) return errorResponse(500, 'El asistente no devolvió resultado');
+    let body: MetadataAssistRequest;
+    try {
+      body = (await request.json()) as MetadataAssistRequest;
+    } catch {
+      return errorResponse(400, 'Cuerpo JSON inválido');
+    }
 
-    const result = JSON.parse(content) as MetadataAssistResult;
+    const { url, sourceType, existingTitle } = body;
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+
+    // ── YouTube Data API v3 ─────────────────────────────────────────────────
+    if (sourceType === 'youtube' && url) {
+      const ytKey = process.env.YOUTUBE_API_KEY?.trim();
+      const videoId = extractYouTubeId(url);
+
+      if (ytKey && videoId) {
+        try {
+          const ytResp = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${ytKey}`,
+          );
+          if (ytResp.ok) {
+            const ytData = await ytResp.json() as {
+              items?: Array<{
+                snippet: {
+                  title: string;
+                  description: string;
+                  channelTitle: string;
+                  publishedAt: string;
+                  tags?: string[];
+                };
+                contentDetails: { duration: string };
+              }>;
+            };
+            const video = ytData.items?.[0];
+            if (video) {
+              const { snippet, contentDetails } = video;
+              const minutes = parseIsoDuration(contentDetails.duration);
+              return jsonResponse({
+                ok: true,
+                metadata: {
+                  title: snippet.title,
+                  description: snippet.description?.slice(0, 600) ?? '',
+                  authors: [snippet.channelTitle],
+                  year: new Date(snippet.publishedAt).getFullYear(),
+                  keywords: (snippet.tags ?? []).slice(0, 5),
+                  thematicAreas: [],
+                  resourceType: 'Video',
+                  extension: 'MP4',
+                  format: 'Video',
+                  estimatedStudyMinutes: minutes,
+                } satisfies MetadataAssistResult,
+              });
+            }
+          }
+        } catch {
+          // fall through to Gemini
+        }
+      }
+
+      // YouTube without API key or failed: use Gemini with the URL
+      if (geminiKey) {
+        try {
+          const result = await callGemini(
+            METADATA_PROMPT(`Video de YouTube: ${url}`, existingTitle),
+            geminiKey,
+          );
+          return jsonResponse({ ok: true, metadata: result });
+        } catch {
+          // fall through to error
+        }
+      }
+
+      return errorResponse(500, 'Servicio de IA no disponible. Configura YOUTUBE_API_KEY o GEMINI_API_KEY.');
+    }
+
+    // ── Gemini for all other source types ──────────────────────────────────
+    if (!geminiKey) return errorResponse(500, 'Servicio de IA no disponible');
+
+    const sourceDescription =
+      sourceType === 'iframe'
+        ? 'Recurso con código embed/iframe'
+        : sourceType === 'file'
+          ? `Archivo subido: ${url ?? 'archivo'}`
+          : `Enlace web: ${url}`;
+
+    const result = await callGemini(METADATA_PROMPT(sourceDescription, existingTitle), geminiKey);
     return jsonResponse({ ok: true, metadata: result });
   } catch (err) {
     console.error('[MetadataAssist] Error:', err);
