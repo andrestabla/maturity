@@ -1,5 +1,6 @@
 import { errorResponse, jsonResponse } from '../../lib/http.js';
 import { getSessionUser } from '../../lib/session.js';
+import OpenAI from 'openai';
 
 export const config = {
   runtime: 'edge',
@@ -37,38 +38,6 @@ function extractYouTubeId(url: string): string | null {
   return url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] ?? null;
 }
 
-async function callGemini(prompt: string, apiKey: string): Promise<MetadataAssistResult> {
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.3,
-          maxOutputTokens: 800,
-        },
-      }),
-    },
-  );
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => 'unknown error');
-    throw new Error(`Gemini API error ${resp.status}: ${errText}`);
-  }
-
-  const data = await resp.json() as {
-    candidates?: Array<{ content: { parts: Array<{ text: string }> } }>;
-  };
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini devolvió respuesta vacía');
-
-  return JSON.parse(text) as MetadataAssistResult;
-}
-
 const METADATA_PROMPT = (sourceDescription: string, existingTitle?: string) =>
   `Eres un experto en catalogación de recursos educativos digitales para repositorios institucionales universitarios en América Latina.
 
@@ -76,9 +45,9 @@ Dado el siguiente recurso: ${sourceDescription}
 ${existingTitle ? `Título conocido: "${existingTitle}"` : ''}
 
 Genera metadatos académicos estructurados para este recurso. Infiere el contenido desde la URL o tipo de fuente:
-- Para YouTube: infiere tema académico, tiempo estimado y área disciplinar.
 - Para PDFs/documentos: infiere tipo, extensión y áreas temáticas.
 - Para enlaces web: infiere tipo de recurso y áreas temáticas.
+- Para recursos embed/iframe: infiere tipo interactivo y áreas temáticas.
 
 Responde SOLO con JSON válido con esta estructura exacta:
 {
@@ -88,9 +57,9 @@ Responde SOLO con JSON válido con esta estructura exacta:
   "year": 2024,
   "keywords": ["palabra1", "palabra2", "palabra3", "palabra4", "palabra5"],
   "thematicAreas": ["Área temática 1", "Área temática 2"],
-  "resourceType": "Video",
-  "extension": "MP4",
-  "format": "Video",
+  "resourceType": "Artículo",
+  "extension": "PDF",
+  "format": "Enlace externo",
   "estimatedStudyMinutes": 30
 }
 
@@ -111,7 +80,6 @@ export default async function handler(request: Request) {
     }
 
     const { url, sourceType, existingTitle } = body;
-    const geminiKey = process.env.GEMINI_API_KEY?.trim();
 
     // ── YouTube Data API v3 ─────────────────────────────────────────────────
     if (sourceType === 'youtube' && url) {
@@ -158,38 +126,52 @@ export default async function handler(request: Request) {
             }
           }
         } catch {
-          // fall through to Gemini
+          // fall through to OpenAI
         }
       }
 
-      // YouTube without API key or failed: use Gemini with the URL
-      if (geminiKey) {
-        try {
-          const result = await callGemini(
-            METADATA_PROMPT(`Video de YouTube: ${url}`, existingTitle),
-            geminiKey,
-          );
-          return jsonResponse({ ok: true, metadata: result });
-        } catch {
-          // fall through to error
-        }
-      }
+      // YouTube without key or failed → OpenAI fallback
+      const apiKey = process.env.OPENAI_API_KEY?.trim();
+      if (!apiKey) return errorResponse(500, 'Servicio de IA no disponible. Configura YOUTUBE_API_KEY o OPENAI_API_KEY.');
 
-      return errorResponse(500, 'Servicio de IA no disponible. Configura YOUTUBE_API_KEY o GEMINI_API_KEY.');
+      const openai = new OpenAI({ apiKey });
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: METADATA_PROMPT(`Video de YouTube: ${url}`, existingTitle) }],
+        response_format: { type: 'json_object' },
+        max_tokens: 700,
+        temperature: 0.3,
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (!content) return errorResponse(500, 'El asistente no devolvió resultado');
+      return jsonResponse({ ok: true, metadata: JSON.parse(content) as MetadataAssistResult });
     }
 
-    // ── Gemini for all other source types ──────────────────────────────────
-    if (!geminiKey) return errorResponse(500, 'Servicio de IA no disponible');
+    // ── OpenAI for link, iframe, file ──────────────────────────────────────
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) return errorResponse(500, 'Servicio de IA no disponible');
+
+    const openai = new OpenAI({ apiKey });
 
     const sourceDescription =
       sourceType === 'iframe'
-        ? 'Recurso con código embed/iframe'
+        ? `Recurso con código embed/iframe`
         : sourceType === 'file'
           ? `Archivo subido: ${url ?? 'archivo'}`
           : `Enlace web: ${url}`;
 
-    const result = await callGemini(METADATA_PROMPT(sourceDescription, existingTitle), geminiKey);
-    return jsonResponse({ ok: true, metadata: result });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: METADATA_PROMPT(sourceDescription, existingTitle) }],
+      response_format: { type: 'json_object' },
+      max_tokens: 700,
+      temperature: 0.3,
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (!content) return errorResponse(500, 'El asistente no devolvió resultado');
+
+    return jsonResponse({ ok: true, metadata: JSON.parse(content) as MetadataAssistResult });
   } catch (err) {
     console.error('[MetadataAssist] Error:', err);
     return errorResponse(500, err instanceof Error ? err.message : 'Error interno');
