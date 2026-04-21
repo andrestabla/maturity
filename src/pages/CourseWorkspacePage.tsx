@@ -7517,14 +7517,12 @@ export function CourseWorkspacePage({
   }
 
   async function handleClearArchitecture() {
-    const architectureProducts = (currentCourse.products ?? []).filter(
-      (product) => product.stage === 'arquitectura',
-    );
+    const architectureProducts = currentCourse.products ?? [];
 
     if (architectureProducts.length === 0) {
       void showAlert({
         title: 'Arquitectura vacía',
-        message: 'No hay productos de arquitectura para eliminar.',
+        message: 'No hay productos para eliminar.',
         tone: 'warning',
       });
       return;
@@ -7532,8 +7530,7 @@ export function CourseWorkspacePage({
 
     const confirmed = await showConfirm({
       title: 'Limpiar arquitectura',
-      message:
-        'Si continúas, se eliminarán todos los productos creados en Arquitectura para este curso. Esta acción limpia introducción, unidades y cierre.',
+      message: `Se eliminarán los ${architectureProducts.length} producto(s) del curso (introducción, unidades y cierre). Esta acción no se puede deshacer.`,
       tone: 'warning',
       confirmLabel: 'Sí, borrar todo',
       cancelLabel: 'Cancelar',
