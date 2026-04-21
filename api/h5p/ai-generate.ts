@@ -93,6 +93,10 @@ export type AIGeneratedContent =
   | SummaryContent
   | SingleChoiceContent;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // System prompts per type
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,13 +172,23 @@ export default async function handler(request: Request) {
     let contentJson: AIGeneratedContent;
 
     try {
-      contentJson = JSON.parse(raw) as AIGeneratedContent;
+      const parsed = JSON.parse(raw) as unknown;
+
+      if (!isRecord(parsed)) {
+        return errorResponse(502, 'La IA devolvió una estructura inválida. Intenta de nuevo.');
+      }
+
+      const normalized =
+        typeof parsed.type === 'string'
+          ? parsed
+          : {
+              ...parsed,
+              type: h5pType,
+            };
+
+      contentJson = normalized as unknown as AIGeneratedContent;
     } catch {
       return errorResponse(502, 'La IA devolvió un JSON inválido. Intenta de nuevo.');
-    }
-
-    if (!contentJson.type) {
-      (contentJson as Record<string, unknown>).type = h5pType;
     }
 
     return Response.json({
