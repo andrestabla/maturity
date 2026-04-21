@@ -496,200 +496,147 @@ export function LibraryPage({ role, viewer, appData, refreshAppData }: LibraryPa
     </div>
   );
 
-  return (
-    <div className="library-page pb-32" style={{ background: '#f8fafc', minHeight: '100vh' }}>
+  const searchStage = (
+    <div className={`library-search-stage ${hasSearched ? 'library-search-stage--compact' : ''}`}>
+      <div className="library-search-stage__topline">
+        <Library size={22} />
+        <span className="library-search-stage__eyebrow">
+          Biblioteca Inteligente
+        </span>
+      </div>
 
-      {/* ══════════════════════════════════════════════════════════════════
-          LANDING STATE — centered hero, shown before first search
-      ══════════════════════════════════════════════════════════════════ */}
-      {!hasSearched && (
-        <div className="library-search-stage">
-          <div className="library-search-stage__topline">
-            <Library size={22} />
-            <span className="library-search-stage__eyebrow">
-              Biblioteca Inteligente
-            </span>
-          </div>
-          
-          <div className="library-search-stage__heading">
-            <h1>Barra de Búsqueda Semántica</h1>
-            <p>Acceso directo a recursos académicos, didácticos e institucionales curados con IA.</p>
-          </div>
+      <div className="library-search-stage__heading">
+        <h1>{hasSearched ? 'Exploración Semántica de Biblioteca' : 'Barra de Búsqueda Semántica'}</h1>
+        <p>
+          {hasSearched
+            ? 'Mantén una experiencia continua para explorar recursos académicos, didácticos e institucionales curados con IA.'
+            : 'Acceso directo a recursos académicos, didácticos e institucionales curados con IA.'}
+        </p>
+      </div>
 
-          <form
-            onSubmit={handleSearch}
-            className="library-search-shell"
-          >
-            <div className="library-search-shell__field">
-              <Search size={20} />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="¿Qué concepto necesitas dominar hoy?"
-                autoComplete="off"
-              />
-            </div>
-            
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`library-search-shell__toggle ${showFilters || hasActiveFilters ? 'is-active' : ''}`}
-            >
-              <SlidersHorizontal size={18} />
-              <span>Filtros</span>
-            </button>
+      <form
+        onSubmit={handleSearch}
+        className="library-search-shell"
+      >
+        <div className="library-search-shell__field">
+          <Search size={20} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="¿Qué concepto necesitas dominar hoy?"
+            autoComplete="off"
+          />
+        </div>
 
-            <button
-              type="submit"
-              disabled={isSearching}
-              className="library-search-shell__submit"
-              style={{ background: isSearching ? '#94a3b8' : 'var(--library-teal)', color: 'white' }}
-            >
-              {isSearching
-                ? <Loader2 size={20} className="animate-spin" />
-                : <span>Buscar Recursos</span>}
-            </button>
-            {filterPanel}
-          </form>
+        <button
+          type="button"
+          onClick={() => setShowFilters(!showFilters)}
+          className={`library-search-shell__toggle ${showFilters || hasActiveFilters ? 'is-active' : ''}`}
+        >
+          <SlidersHorizontal size={18} />
+          <span>Filtros</span>
+        </button>
 
-          {/* Group tabs */}
-          <div className="library-search-stage__context">
-            {groupTabs}
-          </div>
+        <button
+          type="submit"
+          disabled={isSearching}
+          className="library-search-shell__submit"
+          style={{ background: isSearching ? '#94a3b8' : 'var(--library-teal)', color: 'white' }}
+        >
+          {isSearching
+            ? <Loader2 size={20} className="animate-spin" />
+            : <span>Buscar Recursos</span>}
+        </button>
+        {filterPanel}
+      </form>
 
-          {/* Empty state */}
-          <div className="w-full max-w-xl text-center py-12">
-            <div
-              className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6"
-              style={{ background: `${activeGroupCfg.color}10` }}
-            >
-              <activeGroupCfg.icon size={36} style={{ color: activeGroupCfg.color, opacity: 0.7 }} />
-            </div>
-            <h2 className="text-2xl font-bold font-display text-ink mb-3">
-              ¿Qué quieres explorar hoy?
-            </h2>
-            <p className="text-muted text-base leading-relaxed">
-              Escribe un concepto en la barra de búsqueda para descubrir{' '}
-              {activeGroupCfg.description.toLowerCase()}
-            </p>
-
-            {/* Add resource button for admin/gestor in Institucional tab */}
-            {isAdminOrGestor && activeGroup === 'Institucional' && (
+      <div className="library-search-stage__context">
+        <div className="library-search-stage__context-row">
+          {groupTabs}
+          {hasSearched && (
+            <div className="library-search-stage__actions">
+              {isAdminOrGestor && activeGroup === 'Institucional' && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="library-search-stage__utility"
+                  type="button"
+                >
+                  <Plus size={14} />
+                  <span>Agregar recurso</span>
+                </button>
+              )}
+              {filteredResults.length > 0 && (
+                <span className="library-search-stage__badge">
+                  {filteredResults.length}
+                  {filteredResults.length < results.length ? ` / ${results.length}` : ''} resultados
+                </span>
+              )}
               <button
-                onClick={() => setShowAddModal(true)}
-                className="mt-8 inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-95"
-                style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
+                type="button"
+                onClick={() => {
+                  if (hasSearched) {
+                    void performSearch(query, activeGroup, filters);
+                    return;
+                  }
+                  setHasSearched(false);
+                  setResults([]);
+                  setQuery('');
+                }}
+                className="library-search-stage__utility"
+                title={hasSearched ? 'Actualizar resultados' : 'Limpiar búsqueda'}
               >
-                <Plus size={16} />
-                Agregar Recurso al Repositorio
+                <RotateCcw size={14} />
+                <span>{hasSearched ? 'Actualizar' : 'Reiniciar'}</span>
               </button>
-            )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!hasSearched && (
+        <div className="w-full max-w-xl text-center py-12">
+          <div
+            className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6"
+            style={{ background: `${activeGroupCfg.color}10` }}
+          >
+            <activeGroupCfg.icon size={36} style={{ color: activeGroupCfg.color, opacity: 0.7 }} />
           </div>
+          <h2 className="text-2xl font-bold font-display text-ink mb-3">
+            ¿Qué quieres explorar hoy?
+          </h2>
+          <p className="text-muted text-base leading-relaxed">
+            Escribe un concepto en la barra de búsqueda para descubrir{' '}
+            {activeGroupCfg.description.toLowerCase()}
+          </p>
+
+          {isAdminOrGestor && activeGroup === 'Institucional' && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="mt-8 inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-95"
+              style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
+            >
+              <Plus size={16} />
+              Agregar Recurso al Repositorio
+            </button>
+          )}
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <div className="library-page pb-32" style={{ background: '#f8fafc', minHeight: '100vh' }}>
+      {searchStage}
 
       {/* ══════════════════════════════════════════════════════════════════
           RESULTS STATE — compact header + 3-col grid
       ══════════════════════════════════════════════════════════════════ */}
       {hasSearched && (
         <>
-          {/* ── Compact header ─────────────────────────────────────────── */}
-          <div className="bg-white border-b border-line sticky top-0 z-30 shadow-sm">
-            <div className="max-w-6xl mx-auto px-6 py-3 space-y-3">
-
-              {/* Row 1: title + search bar + filters button */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => { setHasSearched(false); setResults([]); setQuery(''); }}
-                  className="flex-shrink-0 text-base font-bold text-ink font-display whitespace-nowrap hover:text-teal-600 transition-colors"
-                  title="Volver a inicio"
-                >
-                  Biblioteca Inteligente
-                </button>
-
-                <form
-                  onSubmit={handleSearch}
-                  className="relative flex-1"
-                >
-                  <div
-                    className="flex items-center bg-white border-2 rounded-xl transition-all"
-                    style={{ borderColor: showFilters || hasActiveFilters ? 'var(--library-teal)' : '#e2e8f0' }}
-                  >
-                    <input
-                      type="text"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="¿Qué concepto necesitas dominar hoy?"
-                      className="flex-1 bg-transparent border-0 focus:ring-0 text-sm text-ink placeholder:text-slate-300 font-medium py-2.5 pl-4"
-                      autoComplete="off"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSearching}
-                      className="flex items-center justify-center w-9 h-9 mr-1 rounded-lg text-white transition-all"
-                      style={{ backgroundColor: isSearching ? '#94a3b8' : 'var(--library-teal)' }}
-                    >
-                      {isSearching
-                        ? <Loader2 size={14} className="animate-spin" />
-                        : <Search size={14} />}
-                    </button>
-                  </div>
-                  {filterPanel}
-                </form>
-
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${
-                    showFilters || hasActiveFilters
-                      ? 'text-white border-teal-600'
-                      : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                  }`}
-                  style={showFilters || hasActiveFilters ? { backgroundColor: 'var(--library-teal)', borderColor: 'var(--library-teal)' } : {}}
-                >
-                  <SlidersHorizontal size={14} />
-                  <span>Filtros</span>
-                  {hasActiveFilters && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                </button>
-              </div>
-
-              {/* Row 2: group tabs + result count */}
-              <div className="flex items-center gap-2">
-                {groupTabs}
-                <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-slate-200">
-                  {isAdminOrGestor && activeGroup === 'Institucional' && (
-                    <button
-                      onClick={() => setShowAddModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
-                      style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)' }}
-                    >
-                      <Plus size={13} />
-                      <span>Agregar</span>
-                    </button>
-                  )}
-                  {filteredResults.length > 0 && (
-                    <>
-                      <span className="text-xs font-bold text-slate-400">
-                        {filteredResults.length}{filteredResults.length < results.length ? `/${results.length}` : ''} resultados
-                      </span>
-                      <button
-                        onClick={() => void performSearch(query, activeGroup, filters)}
-                        className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-ink rounded-lg transition-colors"
-                        title="Actualizar"
-                      >
-                        <RotateCcw size={13} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* ── Provider status pills ───────────────────────────────────── */}
           {searchMeta.providerStates && searchMeta.providerStates.length > 0 && (
-            <div className="px-6 py-2 max-w-6xl mx-auto">
+            <div className="px-6 py-4 max-w-6xl mx-auto">
               <div className="flex flex-wrap gap-2">
                 {searchMeta.providerStates.map((ps) => {
                   const color = PROVIDER_COLORS[ps.provider] ?? '#6b7280';

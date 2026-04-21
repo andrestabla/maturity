@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   BookOpen,
@@ -129,6 +129,8 @@ export function LibraryPreviewModal({
   const [addSuccess, setAddSuccess] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [aiSummary, setAiSummary] = useState('');
+  const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
 
   const isAdminOrGestor = userRole === 'Administrador' || userRole === 'Gestor LMS';
   const isInstitutional = asset?.provider === 'institutional';
@@ -137,7 +139,51 @@ export function LibraryPreviewModal({
   const providerCfg = asset
     ? (PROVIDER_LABELS[asset.provider] ?? { label: asset.provider, color: '#6b7280' })
     : { label: '', color: '#6b7280' };
-  const aiSummary = asset ? buildAiSummary(asset) : '';
+  
+  useEffect(() => {
+    if (!asset) {
+      setAiSummary('');
+      setIsAiSummaryLoading(false);
+      return;
+    }
+
+    const fallbackSummary = buildAiSummary(asset);
+    setAiSummary(fallbackSummary);
+    setIsAiSummaryLoading(true);
+
+    const controller = new AbortController();
+
+    void fetch('/api/library/summary-assist', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ asset }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Summary assist failed with status ${response.status}`);
+        }
+
+        const data = await response.json() as { summary?: string };
+        const nextSummary = data.summary?.trim();
+        if (nextSummary) {
+          setAiSummary(nextSummary);
+        }
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        console.error('[LibraryPreviewModal] summary assist failed:', error);
+      })
+      .finally(() => {
+        setIsAiSummaryLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [asset]);
 
   const panelWidth = asset?.previewKind === 'pdf' ? '2xl' : 'lg';
 
@@ -392,10 +438,10 @@ export function LibraryPreviewModal({
                   </span>
                 </div>
                 <span style={{ fontSize: 9, fontWeight: 700, background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 999, color: 'rgba(255,255,255,0.8)' }}>
-                  Chispa/IA
+                  {isAiSummaryLoading ? 'Generando...' : 'Chispa/IA'}
                 </span>
               </div>
-              <p style={{ fontSize: 14, lineHeight: 1.65, color: 'rgba(255,255,255,0.95)', marginBottom: 20 }}>
+              <p style={{ fontSize: 14, lineHeight: 1.7, color: 'rgba(255,255,255,0.95)', marginBottom: 20, whiteSpace: 'pre-wrap' }}>
                 {aiSummary}
               </p>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: 16 }}>
