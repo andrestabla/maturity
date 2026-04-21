@@ -141,6 +141,16 @@ export function LibraryPreviewModal({
 
   const meta = asset?.metadata ?? {};
 
+  const metaEmbedCode = typeof meta.embedCode === 'string' ? meta.embedCode : null;
+  const metaFormat = typeof meta.format === 'string' ? meta.format : null;
+  const metaExtension = typeof meta.extension === 'string' ? meta.extension : null;
+  const metaMinutes = typeof meta.estimatedStudyMinutes === 'number' && meta.estimatedStudyMinutes > 0
+    ? meta.estimatedStudyMinutes : null;
+  const metaFaculty = typeof meta.faculty === 'string' ? meta.faculty : null;
+  const metaProgram = typeof meta.program === 'string' ? meta.program : null;
+  const metaThematicAreas = Array.isArray(meta.thematicAreas) ? (meta.thematicAreas as string[]) : null;
+  const metaKeywords = Array.isArray(meta.keywords) ? (meta.keywords as string[]) : null;
+
   function copyAPA() {
     if (!asset) return;
     void navigator.clipboard.writeText(generateAPA7(asset)).then(() => {
@@ -310,10 +320,10 @@ export function LibraryPreviewModal({
             </div>
           )}
 
-          {asset.previewKind !== 'video' && asset.previewKind !== 'pdf' && meta.embedCode && (
+          {asset.previewKind !== 'video' && asset.previewKind !== 'pdf' && metaEmbedCode && (
             <div
               style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
-              dangerouslySetInnerHTML={{ __html: String(meta.embedCode) }}
+              dangerouslySetInnerHTML={{ __html: metaEmbedCode }}
             />
           )}
 
@@ -409,20 +419,20 @@ export function LibraryPreviewModal({
               {asset.resourceType && (
                 <MetaRow label="Tipo">{asset.resourceType}</MetaRow>
               )}
-              {meta.format && (
-                <MetaRow label="Formato">{String(meta.format)}</MetaRow>
+              {metaFormat && (
+                <MetaRow label="Formato">{metaFormat}</MetaRow>
               )}
-              {meta.extension && (
-                <MetaRow label="Extensión">{String(meta.extension).toUpperCase()}</MetaRow>
+              {metaExtension && (
+                <MetaRow label="Extensión">{metaExtension.toUpperCase()}</MetaRow>
               )}
-              {meta.estimatedStudyMinutes && (
-                <MetaRow label="Tiempo estimado">{String(meta.estimatedStudyMinutes)} min</MetaRow>
+              {metaMinutes && (
+                <MetaRow label="Tiempo estimado">{metaMinutes} min</MetaRow>
               )}
-              {meta.faculty && (
-                <MetaRow label="Facultad">{String(meta.faculty)}</MetaRow>
+              {metaFaculty && (
+                <MetaRow label="Facultad">{metaFaculty}</MetaRow>
               )}
-              {meta.program && (
-                <MetaRow label="Programa">{String(meta.program)}</MetaRow>
+              {metaProgram && (
+                <MetaRow label="Programa">{metaProgram}</MetaRow>
               )}
               {asset.language && (
                 <MetaRow label="Idioma">{asset.language.toUpperCase()}</MetaRow>
@@ -446,13 +456,13 @@ export function LibraryPreviewModal({
             )}
 
             {/* Thematic areas */}
-            {Array.isArray(meta.thematicAreas) && (meta.thematicAreas as string[]).length > 0 && (
+            {metaThematicAreas && metaThematicAreas.length > 0 && (
               <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f8fafc' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                   Áreas temáticas
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {(meta.thematicAreas as string[]).map((area) => (
+                  {metaThematicAreas.map((area) => (
                     <span key={area} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
                       {area}
                     </span>
@@ -462,13 +472,13 @@ export function LibraryPreviewModal({
             )}
 
             {/* Keywords */}
-            {Array.isArray(meta.keywords) && (meta.keywords as string[]).length > 0 && (
+            {metaKeywords && metaKeywords.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                   Palabras clave
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {(meta.keywords as string[]).map((kw) => (
+                  {metaKeywords.map((kw) => (
                     <span key={kw} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: '#f0fdfa', color: '#0d9488', border: '1px solid #99f6e4' }}>
                       {kw}
                     </span>
