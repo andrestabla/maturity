@@ -7545,30 +7545,46 @@ export function CourseWorkspacePage({
     setIsProductSaving('architecture:clear');
 
     try {
-      for (const product of architectureProducts) {
-        const response = await fetch('/api/course-products', {
-          method: 'DELETE',
-          credentials: 'same-origin',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            courseSlug: currentCourse.slug,
-            id: product.id,
-          }),
-        });
+      const response = await fetch('/api/course-products', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseSlug: currentCourse.slug,
+          clearAll: true,
+        }),
+      });
 
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; deletedCount?: number }
+        | null;
 
-        if (!response.ok) {
-          throw new Error(payload?.error ?? `No fue posible eliminar "${product.title}".`);
-        }
+      if (!response.ok) {
+        throw new Error(payload?.error ?? 'No fue posible limpiar la arquitectura.');
+      }
+
+      setProductDrafts({});
+      setArchitecturePreviewProductId(null);
+      setEditingArchitectureProductId(null);
+      setPlanningProductId(null);
+      if (writingProductQueryId) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('product');
+        const nextPath = buildCourseSectionPath(currentCourse.slug, 'arquitectura');
+        navigate(
+          nextParams.toString()
+            ? `${nextPath}?${nextParams.toString()}`
+            : nextPath,
+          { replace: true },
+        );
       }
 
       refreshAppData();
       void showAlert({
         title: 'Arquitectura limpiada',
-        message: `Se eliminaron ${architectureProducts.length} productos de la arquitectura del curso.`,
+        message: `Se eliminaron ${payload?.deletedCount ?? architectureProducts.length} productos de la arquitectura del curso.`,
         tone: 'success',
       });
     } catch (error) {

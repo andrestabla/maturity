@@ -7114,6 +7114,40 @@ export async function deleteCourseProductRecord(courseSlug: string, productId: s
   return true;
 }
 
+export async function deleteAllCourseProductRecords(courseSlug: string) {
+  await ensureInitialized();
+
+  const course = await readCourseBySlug(courseSlug);
+
+  if (!course) {
+    return null;
+  }
+
+  const deletedCount = course.products.length;
+
+  if (deletedCount === 0) {
+    return {
+      deletedCount: 0,
+    };
+  }
+
+  const nextCourse = appendAuditEntry(
+    {
+      ...course,
+      products: [],
+    },
+    'Arquitectura limpiada',
+    `Se retiraron ${deletedCount} producto(s) del expediente editable del curso.`,
+    'production',
+  );
+
+  await persistCourse(nextCourse);
+
+  return {
+    deletedCount,
+  };
+}
+
 export async function updateCourseStageNoteRecord(
   courseSlug: string,
   key: CourseStageNoteKey,

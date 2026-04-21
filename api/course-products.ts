@@ -8,6 +8,7 @@ import { errorResponse, jsonResponse, readJson } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 import {
   createCourseProductRecord,
+  deleteAllCourseProductRecords,
   deleteCourseProductRecord,
   findCourseProductById,
   updateCourseProductRecord,
@@ -30,6 +31,7 @@ interface ProductUpdatePayload extends Partial<CourseProductMutationInput> {
 interface ProductDeletePayload {
   courseSlug?: string;
   id?: string;
+  clearAll?: boolean;
 }
 
 export default async function handler(request: Request) {
@@ -106,7 +108,21 @@ export default async function handler(request: Request) {
 
     const payload = await readJson<ProductDeletePayload>(request);
 
-    if (!payload.courseSlug || !payload.id) {
+    if (!payload.courseSlug) {
+      return errorResponse(400, 'Course slug is required');
+    }
+
+    if (payload.clearAll) {
+      const result = await deleteAllCourseProductRecords(payload.courseSlug);
+
+      if (!result) {
+        return errorResponse(404, 'Course not found');
+      }
+
+      return jsonResponse({ ok: true, deletedCount: result.deletedCount });
+    }
+
+    if (!payload.id) {
       return errorResponse(400, 'Course slug and product id are required');
     }
 
