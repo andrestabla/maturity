@@ -44,31 +44,6 @@ const PROVIDER_LABELS: Record<string, { label: string; color: string }> = {
   institutional: { label: 'Institucional', color: '#4f46e5' },
 };
 
-function ScoreRing({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  const r = 18;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - Math.min(score, 1));
-  const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#ca8a04' : '#dc2626';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
-        <svg width="48" height="48" style={{ transform: 'rotate(-90deg)', position: 'absolute', inset: 0 }}>
-          <circle cx="24" cy="24" r={r} fill="none" stroke="#e2e8f0" strokeWidth="3" />
-          <circle cx="24" cy="24" r={r} fill="none" stroke={color} strokeWidth="3"
-            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 11, fontWeight: 900, color }}>{pct}%</span>
-        </div>
-      </div>
-      <div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Puntuación</div>
-        <div style={{ fontSize: 12, fontWeight: 700, color }}>de Madurez</div>
-      </div>
-    </div>
-  );
-}
 
 function getCompatMetrics(score: number) {
   const s = Math.min(score, 0.99);
@@ -338,7 +313,7 @@ export function LibraryPreviewModal({
           {asset.previewKind !== 'video' && asset.previewKind !== 'pdf' && meta.embedCode && (
             <div
               style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}
-              dangerouslySetInnerHTML={{ __html: meta.embedCode as string }}
+              dangerouslySetInnerHTML={{ __html: String(meta.embedCode) }}
             />
           )}
 
@@ -435,19 +410,19 @@ export function LibraryPreviewModal({
                 <MetaRow label="Tipo">{asset.resourceType}</MetaRow>
               )}
               {meta.format && (
-                <MetaRow label="Formato">{meta.format as string}</MetaRow>
+                <MetaRow label="Formato">{String(meta.format)}</MetaRow>
               )}
               {meta.extension && (
-                <MetaRow label="Extensión">{(meta.extension as string).toUpperCase()}</MetaRow>
+                <MetaRow label="Extensión">{String(meta.extension).toUpperCase()}</MetaRow>
               )}
               {meta.estimatedStudyMinutes && (
-                <MetaRow label="Tiempo estimado">{meta.estimatedStudyMinutes as number} min</MetaRow>
+                <MetaRow label="Tiempo estimado">{String(meta.estimatedStudyMinutes)} min</MetaRow>
               )}
               {meta.faculty && (
-                <MetaRow label="Facultad">{meta.faculty as string}</MetaRow>
+                <MetaRow label="Facultad">{String(meta.faculty)}</MetaRow>
               )}
               {meta.program && (
-                <MetaRow label="Programa">{meta.program as string}</MetaRow>
+                <MetaRow label="Programa">{String(meta.program)}</MetaRow>
               )}
               {asset.language && (
                 <MetaRow label="Idioma">{asset.language.toUpperCase()}</MetaRow>
