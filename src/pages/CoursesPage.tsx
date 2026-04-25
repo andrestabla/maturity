@@ -9,7 +9,6 @@ import {
   List,
   Plus,
   Search,
-  ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SidePanel } from '../components/SidePanel.js';
@@ -1106,250 +1105,242 @@ export function CoursesPage({
           {isComposerOpen ? (
             <SidePanel isOpen={true}
               title="Crear curso"
+              sideLabel="Curso"
+              sideDescription="Nuevo"
               width="xl"
               onClose={() => setIsComposerOpen(false)}
-            >
-              <form onSubmit={handleCreateCourse}>
-                <div className="form-grid">
-                  <div className="form-section-header field--full">
-                    <h5>Identidad del curso</h5>
-                  </div>
-                  <label className="field">
-                    <span>Título</span>
-                    <div className="field__control">
-                      <input
-                        value={courseForm.title}
-                        onChange={(event) => updateCourseField('title', event.target.value)}
-                        placeholder="Nombre del curso"
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field field--readonly">
-                    <span>ID / código (Automático)</span>
-                    <div className="field__control">
-                      <input
-                        value={courseForm.code}
-                        readOnly
-                        placeholder="CUR-INST-FAC-PROG-..."
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <div className="form-section-header field--full">
-                    <h5>Estructura institucional y ubicación</h5>
-                  </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="form-group">
-                  <label className="form-label">Institución</label>
-                  <div className="modern-select-wrapper">
-                    <select
-                      className="modern-select"
-                      value={courseForm.institution}
-                      onChange={(event) => updateCourseField('institution', event.target.value)}
-                      required
-                    >
-                      {composerInstitutionOptions.map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="modern-select-icon" size={18} />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Facultad</label>
-                  <div className="modern-select-wrapper">
-                    <select
-                      className="modern-select"
-                      value={courseForm.faculty}
-                      onChange={(event) => updateCourseField('faculty', event.target.value)}
-                      required
-                    >
-                      {composerFacultyOptions.map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="modern-select-icon" size={18} />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Programa</label>
-                  <div className="modern-select-wrapper">
-                    <select
-                      className="modern-select"
-                      value={courseForm.program}
-                      onChange={(event) => updateCourseField('program', event.target.value)}
-                      required
-                    >
-                      {composerProgramOptions.map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="modern-select-icon" size={18} />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label flex items-center justify-between">
-                    <span>Créditos</span>
-                    <span className="text-[10px] font-bold text-ocean">ECTS / Institucional</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      className="modern-input"
-                      value={courseForm.credits || ''}
-                      onChange={(event) => updateCourseField('credits', Number(event.target.value))}
-                      placeholder="Ej: 3"
-                    />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted/30">pts</div>
-                  </div>
-                </div>
-              </div>
-
-                  <label className="field">
-                    <span>Periodo académico</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.academicPeriod}
-                        onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
-                      >
-                        <option value="">Sin definir</option>
-                        {composerPeriodOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Tipología de curso</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.courseType}
-                        onChange={(event) => updateCourseField('courseType', event.target.value)}
-                        required
-                      >
-                        {composerCourseTypeOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Modalidad</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.modality}
-                        onChange={(event) => updateCourseField('modality', event.target.value)}
-                        required
-                      >
-                        <option value="presencial">Presencial</option>
-                        <option value="virtual">Virtual</option>
-                        <option value="híbrido">Híbrido</option>
-                        <option value="MOOC">MOOC</option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <div className="form-section-header field--full">
-                    <h5>Configuración operativa</h5>
-                  </div>
-
-                  <label className="field">
-                    <span>Créditos</span>
-                    <div className="field__control">
-                      <input
-                        type="number"
-                        min={1}
-                        max={12}
-                        value={courseForm.credits}
-                        onChange={(event) =>
-                           updateCourseField('credits', Number.parseInt(event.target.value, 10) || 1)
-                        }
-                        required
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Etapa inicial</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.stageId}
-                        onChange={(event) => updateCourseField('stageId', event.target.value)}
-                      >
-                        {appData.stages.map((stage) => (
-                          <option key={stage.id} value={stage.id}>
-                            {stage.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </label>
-
-                  <label className="field">
-                    <span>Estado</span>
-                    <div className="field__control">
-                      <select
-                        value={courseForm.status}
-                        onChange={(event) =>
-                          updateCourseField('status', event.target.value as CourseStatus)
-                        }
-                      >
-                        {statusFilters
-                          .filter((item) => item !== 'Todos')
-                          .map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </label>
-
-                  <label className="field field--full">
-                    <span>Próximo hito</span>
-                    <div className="field__control">
-                      <input
-                        value={courseForm.nextMilestone}
-                        onChange={(event) => updateCourseField('nextMilestone', event.target.value)}
-                        placeholder="Aprobación de arquitectura · 12 abr 2026"
-                      />
-                    </div>
-                  </label>
-
-                  <label className="field field--full">
-                    <span>Resumen</span>
-                    <div className="field__control field__control--textarea">
-                      <textarea
-                        value={courseForm.summary}
-                        onChange={(event) => updateCourseField('summary', event.target.value)}
-                        placeholder="Describe el enfoque del curso y su intención formativa."
-                        rows={4}
-                      />
-                    </div>
-                  </label>
-                </div>
-
-                <div className="action-row">
-                  <button type="submit" className="cta-button" disabled={isSaving}>
+              footer={(
+                <div className="course-composer-actions">
+                  <button type="submit" form="course-create-form" className="cta-button" disabled={isSaving}>
                     <span>{isSaving ? 'Creando…' : 'Crear curso'}</span>
                   </button>
                   <button type="button" className="filter-chip" onClick={() => setIsComposerOpen(false)}>
                     <span>Cancelar</span>
                   </button>
                 </div>
+              )}
+            >
+              <form id="course-create-form" className="course-composer-form" onSubmit={handleCreateCourse}>
+                <section className="course-composer-section">
+                  <div className="form-section-header">
+                    <h5>Identidad del curso</h5>
+                  </div>
+                  <div className="course-composer-grid course-composer-grid--identity">
+                    <label className="field">
+                      <span>Título</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.title}
+                          onChange={(event) => updateCourseField('title', event.target.value)}
+                          placeholder="Nombre del curso"
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--readonly">
+                      <span>ID / código (automático)</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.code}
+                          readOnly
+                          placeholder="CUR-INST-FAC-PROG-..."
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </section>
+
+                <section className="course-composer-section">
+                  <div className="form-section-header">
+                    <h5>Estructura institucional y ubicación</h5>
+                  </div>
+                  <div className="course-composer-grid">
+                    <label className="field">
+                      <span>Institución</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.institution}
+                          onChange={(event) => updateCourseField('institution', event.target.value)}
+                          required
+                        >
+                          {composerInstitutionOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Facultad</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.faculty}
+                          onChange={(event) => updateCourseField('faculty', event.target.value)}
+                          required
+                        >
+                          {composerFacultyOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Programa</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.program}
+                          onChange={(event) => updateCourseField('program', event.target.value)}
+                          required
+                        >
+                          {composerProgramOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Periodo académico</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.academicPeriod}
+                          onChange={(event) => updateCourseField('academicPeriod', event.target.value)}
+                        >
+                          <option value="">Sin definir</option>
+                          {composerPeriodOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Tipología de curso</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.courseType}
+                          onChange={(event) => updateCourseField('courseType', event.target.value)}
+                          required
+                        >
+                          {composerCourseTypeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Modalidad</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.modality}
+                          onChange={(event) => updateCourseField('modality', event.target.value)}
+                          required
+                        >
+                          <option value="presencial">Presencial</option>
+                          <option value="virtual">Virtual</option>
+                          <option value="híbrido">Híbrido</option>
+                          <option value="MOOC">MOOC</option>
+                        </select>
+                      </div>
+                    </label>
+                  </div>
+                </section>
+
+                <section className="course-composer-section">
+                  <div className="form-section-header">
+                    <h5>Configuración operativa</h5>
+                  </div>
+                  <div className="course-composer-grid">
+                    <label className="field">
+                      <span>Créditos</span>
+                      <div className="field__control">
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          value={courseForm.credits}
+                          onChange={(event) =>
+                            updateCourseField('credits', Number.parseInt(event.target.value, 10) || 1)
+                          }
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Etapa inicial</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.stageId}
+                          onChange={(event) => updateCourseField('stageId', event.target.value)}
+                        >
+                          {appData.stages.map((stage) => (
+                            <option key={stage.id} value={stage.id}>
+                              {stage.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field">
+                      <span>Estado</span>
+                      <div className="field__control">
+                        <select
+                          value={courseForm.status}
+                          onChange={(event) =>
+                            updateCourseField('status', event.target.value as CourseStatus)
+                          }
+                        >
+                          {statusFilters
+                            .filter((item) => item !== 'Todos')
+                            .map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Próximo hito</span>
+                      <div className="field__control">
+                        <input
+                          value={courseForm.nextMilestone}
+                          onChange={(event) => updateCourseField('nextMilestone', event.target.value)}
+                          placeholder="Aprobación de arquitectura · 12 abr 2026"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="field field--full">
+                      <span>Resumen</span>
+                      <div className="field__control field__control--textarea">
+                        <textarea
+                          value={courseForm.summary}
+                          onChange={(event) => updateCourseField('summary', event.target.value)}
+                          placeholder="Describe el enfoque del curso y su intención formativa."
+                          rows={5}
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </section>
               </form>
             </SidePanel>
 
