@@ -136,7 +136,7 @@ export default async function handler(request: Request | any, response?: any) {
       - resultadosAprendizaje: string[] (uno por campo independiente)
       - unidades: { tituloUnidad: string; tematicas: string[] }[] (módulos y sus temáticas separadas)
       - metodologia: string
-      - evaluacion: string[] (discriminada en ítems separados)
+      - evaluacion: { nombre: string; porcentaje: string }[] (una fila por ítem; conserva la estructura de tabla del documento — si un ítem no tiene porcentaje asigna porcentaje: "")
       - bibliografia: string[] (ítems separados por campos)`;
 
       notify({ progress: 75, step: 'Sintetizando unidades y estructurando curso...' });

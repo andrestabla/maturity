@@ -2588,7 +2588,9 @@ export function CourseWorkspacePage({
           resultadosAprendizaje: Array.isArray(course.metadata.learningOutcomes) ? course.metadata.learningOutcomes : [],
           unidades: Array.isArray(course.metadata.units) ? course.metadata.units : [],
           metodologia: course.metadata.methodology || '',
-          evaluacion: Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : [],
+          evaluacion: (Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : []).map((item: any) =>
+            typeof item === 'string' ? { nombre: item, porcentaje: '' } : item
+          ),
           bibliografia: Array.isArray(course.metadata.bibliography) ? course.metadata.bibliography : [],
         });
       }
@@ -13973,7 +13975,10 @@ export function CourseWorkspacePage({
                     topics: (analysisResult.unidades || []).map((u: any) => u.tituloUnidad).filter(Boolean),
                     units: analysisResult.unidades || [],
                     methodology: analysisResult.metodologia || '',
-                    evaluation: analysisResult.evaluacion || [],
+                    evaluation: (analysisResult.evaluacion || []).map((item: any) =>
+                      typeof item === 'string' ? item
+                      : item.porcentaje ? `${item.nombre} (${item.porcentaje})` : item.nombre
+                    ).filter(Boolean),
                     bibliography: analysisResult.bibliografia || [],
                   };
 
@@ -14167,6 +14172,89 @@ export function CourseWorkspacePage({
                   <article className="detail-section">
                     <div className="section-heading mb-6 border-b border-line pb-4">
                       <div className="flex items-center gap-3">
+                        <div className="p-2 bg-ocean/10 text-ocean rounded-lg">
+                          <Layers size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Unidades / Módulos</h3>
+                      </div>
+                    </div>
+                    <div className="grid gap-6">
+                      {Array.isArray(analysisResult.unidades) && analysisResult.unidades.map((unit: any, uIdx: number) => (
+                        <div key={uIdx} className="border border-line rounded-xl p-4 group relative">
+                          <div className="flex gap-2 items-center mb-3">
+                            <input
+                              className="modern-input flex-1 font-medium"
+                              placeholder={`Unidad ${uIdx + 1}`}
+                              value={unit.tituloUnidad || ''}
+                              onChange={(e) => {
+                                const arr = [...analysisResult.unidades];
+                                arr[uIdx] = { ...arr[uIdx], tituloUnidad: e.target.value };
+                                setAnalysisResult({ ...analysisResult, unidades: arr });
+                              }}
+                            />
+                            <button
+                              className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                              onClick={() => {
+                                const arr = [...analysisResult.unidades];
+                                arr.splice(uIdx, 1);
+                                setAnalysisResult({ ...analysisResult, unidades: arr });
+                              }}
+                            ><Trash2 size={16} /></button>
+                          </div>
+                          <div className="grid gap-1 pl-2">
+                            {Array.isArray(unit.tematicas) && unit.tematicas.map((tema: string, tIdx: number) => (
+                              <div key={tIdx} className="flex gap-2 items-center group/tema">
+                                <span className="text-muted text-sm w-4 shrink-0">{tIdx + 1}.</span>
+                                <input
+                                  className="modern-input flex-1 py-1.5 text-sm"
+                                  value={tema}
+                                  onChange={(e) => {
+                                    const arr = [...analysisResult.unidades];
+                                    const temas = [...(arr[uIdx].tematicas || [])];
+                                    temas[tIdx] = e.target.value;
+                                    arr[uIdx] = { ...arr[uIdx], tematicas: temas };
+                                    setAnalysisResult({ ...analysisResult, unidades: arr });
+                                  }}
+                                />
+                                <button
+                                  className="text-red-500 opacity-0 group-hover/tema:opacity-100 transition-opacity"
+                                  onClick={() => {
+                                    const arr = [...analysisResult.unidades];
+                                    const temas = [...(arr[uIdx].tematicas || [])];
+                                    temas.splice(tIdx, 1);
+                                    arr[uIdx] = { ...arr[uIdx], tematicas: temas };
+                                    setAnalysisResult({ ...analysisResult, unidades: arr });
+                                  }}
+                                ><Trash2 size={14} /></button>
+                              </div>
+                            ))}
+                            <button
+                              className="filter-chip w-fit mt-1 border-dashed text-sm"
+                              onClick={() => {
+                                const arr = [...analysisResult.unidades];
+                                arr[uIdx] = { ...arr[uIdx], tematicas: [...(arr[uIdx].tematicas || []), ''] };
+                                setAnalysisResult({ ...analysisResult, unidades: arr });
+                              }}
+                            >
+                              <Plus size={14} className="mr-1" />
+                              <span>Agregar temática</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        className="filter-chip w-fit border-dashed"
+                        onClick={() => setAnalysisResult({ ...analysisResult, unidades: [...(analysisResult.unidades || []), { tituloUnidad: '', tematicas: [] }] })}
+                      >
+                        <Plus size={16} className="mr-2" />
+                        <span>Agregar unidad</span>
+                      </button>
+                    </div>
+                  </article>
+
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
                         <div className="p-2 bg-gold/10 text-gold rounded-lg">
                           <ClipboardCheck size={20} />
                         </div>
@@ -14176,42 +14264,57 @@ export function CourseWorkspacePage({
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                       <div className="form-group">
                         <label className="form-label">Estrategia Metodológica</label>
-                        <textarea 
-                          rows={6} 
+                        <textarea
+                          rows={6}
                           className="modern-textarea"
-                          value={analysisResult.metodologia || ''} 
-                          onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })} 
+                          value={analysisResult.metodologia || ''}
+                          onChange={(e) => setAnalysisResult({ ...analysisResult, metodologia: e.target.value })}
                         />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Esquema de Evaluación</label>
-                        <div className="grid gap-2">
-                            {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
-                              <div key={idx} className="flex gap-2 items-center group">
-                                <input
-                                  className="modern-input flex-1 py-2"
-                                  value={ev}
-                                  onChange={(e) => {
-                                    const arr = [...analysisResult.evaluacion];
-                                    arr[idx] = e.target.value;
-                                    setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                  }}
-                                />
-                                <button className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
+                        <div className="grid gap-1">
+                          <div className="grid grid-cols-[1fr_100px_32px] gap-2 px-1 mb-1">
+                            <span className="text-xs text-muted font-medium uppercase tracking-wide">Ítem</span>
+                            <span className="text-xs text-muted font-medium uppercase tracking-wide">Porcentaje</span>
+                            <span />
+                          </div>
+                          {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: any, idx: number) => (
+                            <div key={idx} className="grid grid-cols-[1fr_100px_32px] gap-2 items-center group">
+                              <input
+                                className="modern-input py-2"
+                                value={typeof ev === 'string' ? ev : ev.nombre || ''}
+                                onChange={(e) => {
                                   const arr = [...analysisResult.evaluacion];
-                                  arr.splice(idx, 1);
+                                  arr[idx] = { ...(typeof arr[idx] === 'string' ? { nombre: arr[idx], porcentaje: '' } : arr[idx]), nombre: e.target.value };
                                   setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                }}><Trash2 size={16} /></button>
-                              </div>
-                            ))}
-                            <button
-                              className="filter-chip w-fit mt-2 border-dashed"
-                              onClick={() => setAnalysisResult({ ...analysisResult, evaluacion: [...(analysisResult.evaluacion || []), ''] })}
-                            >
-                              <Plus size={16} className="mr-2" />
-                              <span>Agregar ítem</span>
-                            </button>
-                         </div>
+                                }}
+                              />
+                              <input
+                                className="modern-input py-2 text-center"
+                                placeholder="—"
+                                value={typeof ev === 'string' ? '' : ev.porcentaje || ''}
+                                onChange={(e) => {
+                                  const arr = [...analysisResult.evaluacion];
+                                  arr[idx] = { ...(typeof arr[idx] === 'string' ? { nombre: arr[idx], porcentaje: '' } : arr[idx]), porcentaje: e.target.value };
+                                  setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                                }}
+                              />
+                              <button className="text-red-500 opacity-0 group-hover:opacity-100 flex items-center justify-center" onClick={() => {
+                                const arr = [...analysisResult.evaluacion];
+                                arr.splice(idx, 1);
+                                setAnalysisResult({ ...analysisResult, evaluacion: arr });
+                              }}><Trash2 size={15} /></button>
+                            </div>
+                          ))}
+                          <button
+                            className="filter-chip w-fit mt-2 border-dashed"
+                            onClick={() => setAnalysisResult({ ...analysisResult, evaluacion: [...(analysisResult.evaluacion || []), { nombre: '', porcentaje: '' }] })}
+                          >
+                            <Plus size={16} className="mr-2" />
+                            <span>Agregar ítem</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </article>
