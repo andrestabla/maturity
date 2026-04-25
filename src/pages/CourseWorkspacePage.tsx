@@ -14188,14 +14188,14 @@ export function CourseWorkspacePage({
                         <div className="grid gap-2">
                             {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: string, idx: number) => (
                               <div key={idx} className="flex gap-2 items-center group">
-                                <input 
-                                  className="modern-input flex-1 py-2" 
-                                  value={ev} 
+                                <input
+                                  className="modern-input flex-1 py-2"
+                                  value={ev}
                                   onChange={(e) => {
                                     const arr = [...analysisResult.evaluacion];
                                     arr[idx] = e.target.value;
                                     setAnalysisResult({ ...analysisResult, evaluacion: arr });
-                                  }} 
+                                  }}
                                 />
                                 <button className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
                                   const arr = [...analysisResult.evaluacion];
@@ -14204,7 +14204,55 @@ export function CourseWorkspacePage({
                                 }}><Trash2 size={16} /></button>
                               </div>
                             ))}
+                            <button
+                              className="filter-chip w-fit mt-2 border-dashed"
+                              onClick={() => setAnalysisResult({ ...analysisResult, evaluacion: [...(analysisResult.evaluacion || []), ''] })}
+                            >
+                              <Plus size={16} className="mr-2" />
+                              <span>Agregar ítem</span>
+                            </button>
                          </div>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="detail-section">
+                    <div className="section-heading mb-6 border-b border-line pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gold/10 text-gold rounded-lg">
+                          <BookOpen size={20} />
+                        </div>
+                        <h3 className="text-xl font-semibold tracking-tight">Bibliografía</h3>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Recursos bibliográficos</label>
+                      <div className="grid gap-2">
+                        {Array.isArray(analysisResult.bibliografia) && analysisResult.bibliografia.map((ref: string, idx: number) => (
+                          <div key={idx} className="flex gap-2 items-center group">
+                            <input
+                              className="modern-input flex-1 py-2"
+                              value={ref}
+                              onChange={(e) => {
+                                const arr = [...analysisResult.bibliografia];
+                                arr[idx] = e.target.value;
+                                setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                              }}
+                            />
+                            <button className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
+                              const arr = [...analysisResult.bibliografia];
+                              arr.splice(idx, 1);
+                              setAnalysisResult({ ...analysisResult, bibliografia: arr });
+                            }}><Trash2 size={16} /></button>
+                          </div>
+                        ))}
+                        <button
+                          className="filter-chip w-fit mt-2 border-dashed"
+                          onClick={() => setAnalysisResult({ ...analysisResult, bibliografia: [...(analysisResult.bibliografia || []), ''] })}
+                        >
+                          <Plus size={16} className="mr-2" />
+                          <span>Agregar recurso</span>
+                        </button>
                       </div>
                     </div>
                   </article>
