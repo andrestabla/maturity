@@ -83,12 +83,14 @@ export function ModalFrame({
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
-      root.classList.remove('modal-active');
       const depth = Number(root.dataset.modalDepth ?? '1') - 1;
       if (depth <= 0) {
         delete root.dataset.modalDepth;
         root.classList.remove('has-modal-open');
+        root.classList.remove('modal-active');
+        if (!document.querySelector('.side-sheet-root')) {
+          document.body.style.overflow = 'unset';
+        }
         return;
       }
       root.dataset.modalDepth = String(depth);

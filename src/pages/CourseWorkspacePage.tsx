@@ -6318,10 +6318,10 @@ export function CourseWorkspacePage({
 
   async function handleCourseDelete() {
     const confirmed = await showConfirm({
-      title: `Eliminar ${currentCourse.title}`,
-      message: `Vas a eliminar el curso "${currentCourse.title}" y sus tareas asociadas. Esta acción no se puede deshacer.`,
-      tone: 'warning',
-      confirmLabel: 'Eliminar curso',
+      title: '¿Eliminar este curso?',
+      message: `Vas a eliminar "${currentCourse.title}". Esta acción es irreversible: se borrarán todos los archivos cargados y todos los datos asociados del curso en la base de datos.`,
+      tone: 'error',
+      confirmLabel: 'Sí, eliminar curso',
       cancelLabel: 'Cancelar',
     });
 

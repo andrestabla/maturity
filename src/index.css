@@ -9273,7 +9273,7 @@ body::after {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 320;
+  z-index: 2200;
   display: grid;
   place-items: center;
   padding: max(24px, env(safe-area-inset-top))
