@@ -14273,16 +14273,16 @@ export function CourseWorkspacePage({
                       </div>
                       <div className="form-group">
                         <label className="form-label">Esquema de Evaluación</label>
-                        <div className="grid gap-1">
-                          <div className="grid grid-cols-[1fr_100px_32px] gap-2 px-1 mb-1">
-                            <span className="text-xs text-muted font-medium uppercase tracking-wide">Ítem</span>
-                            <span className="text-xs text-muted font-medium uppercase tracking-wide">Porcentaje</span>
-                            <span />
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-2 px-1 mb-1">
+                            <span className="flex-1 text-xs text-muted font-medium uppercase tracking-wide">Ítem</span>
+                            <span className="w-24 text-xs text-muted font-medium uppercase tracking-wide">Porcentaje</span>
+                            <span className="w-8" />
                           </div>
                           {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: any, idx: number) => (
-                            <div key={idx} className="grid grid-cols-[1fr_100px_32px] gap-2 items-center group">
+                            <div key={idx} className="flex gap-2 items-center group">
                               <input
-                                className="modern-input py-2"
+                                className="modern-input py-2 flex-1"
                                 value={typeof ev === 'string' ? ev : ev.nombre || ''}
                                 onChange={(e) => {
                                   const arr = [...analysisResult.evaluacion];
@@ -14291,7 +14291,7 @@ export function CourseWorkspacePage({
                                 }}
                               />
                               <input
-                                className="modern-input py-2 text-center"
+                                className="modern-input py-2 w-24 text-center"
                                 placeholder="—"
                                 value={typeof ev === 'string' ? '' : ev.porcentaje || ''}
                                 onChange={(e) => {
@@ -14300,7 +14300,7 @@ export function CourseWorkspacePage({
                                   setAnalysisResult({ ...analysisResult, evaluacion: arr });
                                 }}
                               />
-                              <button className="text-red-500 opacity-0 group-hover:opacity-100 flex items-center justify-center" onClick={() => {
+                              <button className="w-8 flex items-center justify-center text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
                                 const arr = [...analysisResult.evaluacion];
                                 arr.splice(idx, 1);
                                 setAnalysisResult({ ...analysisResult, evaluacion: arr });
