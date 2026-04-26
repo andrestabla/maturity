@@ -5,9 +5,11 @@ import {
   Building2,
   Cable,
   Clock3,
+  Copy,
   Eye,
   KeyRound,
   Logs,
+  MoveRight,
   PencilLine,
   Plus,
   RefreshCcw,
@@ -1352,6 +1354,43 @@ export function TeamPage({
           ? { ...s, products: s.products.map((p, pi) => pi === productIdx ? { ...p, [field]: value } : p) }
           : s,
       );
+      return { ...d, sections };
+    });
+  }
+
+  function duplicateTemplateSection(sectionIdx: number) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const original = d.sections[sectionIdx];
+      const copy = { ...original, name: `${original.name} (copia)`, products: original.products.map((p) => ({ ...p })) };
+      const sections = [...d.sections.slice(0, sectionIdx + 1), copy, ...d.sections.slice(sectionIdx + 1)];
+      return { ...d, sections };
+    });
+  }
+
+  function duplicateTemplateProduct(sectionIdx: number, productIdx: number) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const original = d.sections[sectionIdx].products[productIdx];
+      const copy = { ...original };
+      const sections = d.sections.map((s, i) => {
+        if (i !== sectionIdx) return s;
+        const products = [...s.products.slice(0, productIdx + 1), copy, ...s.products.slice(productIdx + 1)];
+        return { ...s, products };
+      });
+      return { ...d, sections };
+    });
+  }
+
+  function moveTemplateProduct(fromSection: number, productIdx: number, toSection: number) {
+    setTemplateDraft((d) => {
+      if (!d || fromSection === toSection) return d;
+      const product = d.sections[fromSection].products[productIdx];
+      const sections = d.sections.map((s, i) => {
+        if (i === fromSection) return { ...s, products: s.products.filter((_, pi) => pi !== productIdx) };
+        if (i === toSection) return { ...s, products: [...s.products, { ...product }] };
+        return s;
+      });
       return { ...d, sections };
     });
   }
@@ -3332,6 +3371,7 @@ export function TeamPage({
 
                 {templateDraft.sections.map((section, sIdx) => (
                   <div key={sIdx} className="surface section-card section-card--compact" style={{ marginBottom: '1rem' }}>
+                    {/* Section header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <div className="field__control" style={{ flex: 1 }}>
                         <input
@@ -3340,15 +3380,20 @@ export function TeamPage({
                           placeholder="Nombre de sección (Ej. Introducción, Unidad 1)"
                         />
                       </div>
+                      <button type="button" className="filter-chip" title="Duplicar sección" onClick={() => duplicateTemplateSection(sIdx)}>
+                        <Copy size={13} />
+                        <span>Duplicar</span>
+                      </button>
                       <button type="button" className="filter-chip" onClick={() => removeTemplateSection(sIdx)}>
                         <Trash2 size={13} />
                         <span>Quitar</span>
                       </button>
                     </div>
 
-                    <div className="list-stack" style={{ marginBottom: '0.5rem' }}>
+                    {/* Products list */}
+                    <div style={{ marginBottom: '0.5rem' }}>
                       {section.products.map((product, pIdx) => (
-                        <div key={pIdx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--surface-2, #f8f9fa)', borderRadius: '6px', marginBottom: '0.375rem' }}>
+                        <div key={pIdx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', padding: '0.625rem', background: 'var(--surface-2, #f8f9fa)', borderRadius: '6px', marginBottom: '0.375rem' }}>
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                             <div className="field__control">
                               <input
@@ -3377,9 +3422,37 @@ export function TeamPage({
                               </div>
                             </div>
                           </div>
-                          <button type="button" className="filter-chip" style={{ flexShrink: 0, marginTop: '2px' }} onClick={() => removeTemplateProduct(sIdx, pIdx)}>
-                            <Trash2 size={13} />
-                          </button>
+                          {/* Product actions */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flexShrink: 0, marginTop: '2px' }}>
+                            <button type="button" className="filter-chip" title="Duplicar producto" onClick={() => duplicateTemplateProduct(sIdx, pIdx)}>
+                              <Copy size={12} />
+                            </button>
+                            {templateDraft.sections.length > 1 && (
+                              <div className="field__control" style={{ width: 'auto' }}>
+                                <select
+                                  value=""
+                                  title="Mover a sección"
+                                  onChange={(e) => {
+                                    const target = parseInt(e.target.value, 10);
+                                    if (!isNaN(target)) moveTemplateProduct(sIdx, pIdx, target);
+                                  }}
+                                  style={{ fontSize: '0.7rem', padding: '0.2rem 0.3rem', cursor: 'pointer' }}
+                                >
+                                  <option value="" disabled>Mover a...</option>
+                                  {templateDraft.sections.map((s, tIdx) =>
+                                    tIdx !== sIdx ? (
+                                      <option key={tIdx} value={tIdx}>
+                                        {s.name || `Sección ${tIdx + 1}`}
+                                      </option>
+                                    ) : null,
+                                  )}
+                                </select>
+                              </div>
+                            )}
+                            <button type="button" className="filter-chip" onClick={() => removeTemplateProduct(sIdx, pIdx)}>
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
