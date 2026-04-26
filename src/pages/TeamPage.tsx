@@ -3032,6 +3032,34 @@ export function TeamPage({
                     </span>
                   </button>
 
+                  {showGuidelineDuplicates && duplicateIndices.size > 0 && (
+                    <button
+                      type="button"
+                      className="filter-chip"
+                      style={{ color: 'var(--color-error, #dc2626)', borderColor: 'var(--color-error, #dc2626)' }}
+                      onClick={() => {
+                        // Group duplicateColorMap entries by colorGroupIdx
+                        const groupMap = new Map<number, number[]>();
+                        for (const [idx, colorIdx] of duplicateColorMap.entries()) {
+                          if (!groupMap.has(colorIdx)) groupMap.set(colorIdx, []);
+                          groupMap.get(colorIdx)!.push(idx);
+                        }
+                        // Keep the minimum index of each group, remove the rest
+                        const toRemove = new Set<number>();
+                        for (const indices of groupMap.values()) {
+                          const sorted = [...indices].sort((a, b) => a - b);
+                          for (let k = 1; k < sorted.length; k++) toRemove.add(sorted[k]);
+                        }
+                        const filtered = values.filter((_, i) => !toRemove.has(i)).filter(Boolean);
+                        updateStructureDraftField(key, filtered);
+                        setShowGuidelineDuplicates(false);
+                        setDuplicatePairs([]);
+                      }}
+                    >
+                      <span>Eliminar duplicados</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     className="filter-chip filter-chip--active"

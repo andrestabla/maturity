@@ -2353,6 +2353,9 @@ export function CourseWorkspacePage({
   const [isGeneratingArchitecture, setIsGeneratingArchitecture] = useState(false);
   const [architectureStep, setArchitectureStep] = useState('');
   const [architectureProgress, setArchitectureProgress] = useState(0);
+  const [architectureLog, setArchitectureLog] = useState<string[]>([]);
+  const [architectureProductsCreated, setArchitectureProductsCreated] = useState(0);
+  const [architectureProductsTotal, setArchitectureProductsTotal] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
@@ -6807,6 +6810,13 @@ export function CourseWorkspacePage({
     setIsGeneratingArchitecture(true);
     setArchitectureProgress(5);
     setArchitectureStep('Iniciando diseño instruccional...');
+    setArchitectureLog([]);
+    setArchitectureProductsCreated(0);
+    setArchitectureProductsTotal(0);
+
+    // Local trackers — updated synchronously inside the async streaming loop
+    let _currentStep = 'Iniciando diseño instruccional...';
+    const _stepLog: string[] = [];
 
     try {
       const response = await fetch('/api/generate-architecture', {
@@ -6893,7 +6903,12 @@ export function CourseWorkspacePage({
           setArchitectureProgress(payload.progress);
         }
 
-        if (payload.step) {
+        if (payload.step && payload.step !== _currentStep) {
+          if (_currentStep) {
+            _stepLog.push(_currentStep);
+            setArchitectureLog([..._stepLog]);
+          }
+          _currentStep = payload.step;
           setArchitectureStep(payload.step);
         }
 
@@ -6937,6 +6952,17 @@ export function CourseWorkspacePage({
 
           generatedCount = allSuggested.length;
 
+          // Push the last streaming step to log before switching to creation phase
+          if (_currentStep) {
+            _stepLog.push(_currentStep);
+            setArchitectureLog([..._stepLog]);
+          }
+          _currentStep = 'Integrando productos a la arquitectura...';
+          setArchitectureStep(_currentStep);
+          setArchitectureProductsTotal(allSuggested.length);
+          setArchitectureProductsCreated(0);
+
+          let _created = 0;
           for (const item of allSuggested) {
             const title = String(item.title ?? '').trim();
             if (!title) {
@@ -6966,6 +6992,10 @@ export function CourseWorkspacePage({
                 throw new Error(payload?.error ?? 'No fue posible guardar uno de los productos sugeridos.');
               }
             });
+
+            _created++;
+            setArchitectureProductsCreated(_created);
+            setArchitectureProgress(90 + Math.round((_created / allSuggested.length) * 9));
           }
         }
       };
@@ -7005,6 +7035,9 @@ export function CourseWorkspacePage({
       setIsGeneratingArchitecture(false);
       setArchitectureStep('');
       setArchitectureProgress(0);
+      setArchitectureLog([]);
+      setArchitectureProductsCreated(0);
+      setArchitectureProductsTotal(0);
     }
   }
 
@@ -11831,37 +11864,70 @@ export function CourseWorkspacePage({
 
         {isGeneratingArchitecture && (
           <div className="architecture-overlay animate-in fade-in duration-500">
-             <div className="extraction-status-card surface shadow-2xl p-10 rounded-3xl flex flex-col items-center gap-8 max-w-md w-full">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full border-4 border-panel flex items-center justify-center">
-                     <Sparkles size={40} className="text-ocean animate-pulse" />
+            <div className="extraction-status-card surface shadow-2xl rounded-3xl flex flex-col items-center gap-0 max-w-md w-full overflow-hidden">
+              {/* Header */}
+              <div className="w-full flex flex-col items-center gap-6 px-10 pt-10 pb-6">
+                {/* Progress ring */}
+                <div className="relative flex-shrink-0">
+                  <div className="w-20 h-20 rounded-full border-4 border-panel flex items-center justify-center">
+                    <Sparkles size={32} className="text-ocean animate-pulse" />
                   </div>
-                  <svg className="absolute top-0 left-0 w-24 h-24 -rotate-90">
+                  <svg className="absolute top-0 left-0 w-20 h-20 -rotate-90">
                     <circle
-                      cx="48"
-                      cy="48"
-                      r="44"
+                      cx="40"
+                      cy="40"
+                      r="36"
                       fill="none"
                       stroke="var(--ocean)"
-                      strokeWidth="6"
-                      strokeDasharray="276.46"
-                      strokeDashoffset={276.46 - (276.46 * architectureProgress) / 100}
+                      strokeWidth="5"
+                      strokeDasharray="226.19"
+                      strokeDashoffset={226.19 - (226.19 * architectureProgress) / 100}
                       className="transition-all duration-700 ease-out"
                     />
                   </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-ocean">
+                    {architectureProgress}%
+                  </span>
                 </div>
-                <div className="text-center">
-                  <span className="eyebrow block mb-2">Diseño Arquitectónico IA</span>
-                  <h3 className="text-xl font-bold text-secondary mb-3">{architectureStep}</h3>
-                  <p className="text-sm text-muted">Sincronizando productos con lineamientos pedagógicos institucionales.</p>
+
+                {/* Current step */}
+                <div className="text-center w-full">
+                  <span className="eyebrow block mb-1">Diseño Arquitectónico IA</span>
+                  <p className="text-sm font-semibold text-secondary leading-snug flex items-center justify-center gap-2">
+                    <span className="relative flex h-2 w-2 flex-shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ocean opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-ocean" />
+                    </span>
+                    {architectureStep}
+                  </p>
+                  {architectureProductsTotal > 0 && (
+                    <p className="text-xs text-muted mt-1">
+                      Producto {architectureProductsCreated} de {architectureProductsTotal}
+                    </p>
+                  )}
                 </div>
-                <div className="w-full bg-panel rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="bg-ocean h-full transition-all duration-700" 
+
+                {/* Progress bar */}
+                <div className="w-full bg-panel rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-ocean h-full transition-all duration-700"
                     style={{ width: `${architectureProgress}%` }}
                   />
                 </div>
-             </div>
+              </div>
+
+              {/* Step log */}
+              {architectureLog.length > 0 && (
+                <div className="w-full border-t border-line px-10 py-5 flex flex-col gap-2 max-h-36 overflow-y-auto">
+                  {[...architectureLog].reverse().map((entry, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-muted animate-in fade-in slide-in-from-bottom-1 duration-300">
+                      <CheckCircle2 size={13} className="text-ocean flex-shrink-0 mt-0.5" />
+                      <span>{entry}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
