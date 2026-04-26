@@ -697,6 +697,15 @@ export interface CourseArchitectureTemplateMutationInput {
   sections: CourseTemplateSection[];
 }
 
+export interface InstitutionDocument {
+  id: string;
+  institutionId: string;
+  r2Key: string;
+  name: string;
+  contentType: string;
+  uploadedAt: string;
+}
+
 export interface GuidelinesProductoTipo {
   tipo: string;
   caracteristicas: string[];

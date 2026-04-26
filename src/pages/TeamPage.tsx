@@ -40,6 +40,7 @@ import type {
   ExperienceSettings,
   GuidelinesStructured,
   GuidelinesProductoTipo,
+  InstitutionDocument,
   InstitutionSettings,
   InstitutionStructure,
   PasswordChangeInput,
@@ -460,6 +461,10 @@ export function TeamPage({
   const [glNewTipo, setGlNewTipo] = useState('');
   const [glNewCharInputs, setGlNewCharInputs] = useState<Record<number, string>>({});
   const [glSuggestingSection, setGlSuggestingSection] = useState<string | null>(null);
+  // Institution document library
+  const institutionDocsFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [institutionDocuments, setInstitutionDocuments] = useState<InstitutionDocument[]>([]);
+  const [isUploadingInstitutionDoc, setIsUploadingInstitutionDoc] = useState(false);
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -593,6 +598,16 @@ export function TeamPage({
         .then((r) => r.json())
         .then((payload: { structured?: GuidelinesStructured | null }) => {
           if (payload.structured) setGuidelinesDraft(payload.structured);
+        })
+        .catch(() => {});
+      // Load institution documents
+      setInstitutionDocuments([]);
+      fetch(`/api/institution-documents?institutionId=${selectedInstitutionStructure.id}`, {
+        credentials: 'same-origin',
+      })
+        .then((r) => r.json())
+        .then((payload: { documents?: InstitutionDocument[] }) => {
+          setInstitutionDocuments(payload.documents ?? []);
         })
         .catch(() => {});
       return;
@@ -1335,7 +1350,7 @@ export function TeamPage({
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ institutionName, section, productTipo }),
+        body: JSON.stringify({ institutionName, institutionId: editingStructureId, section, productTipo }),
       });
       if (!res.ok) return;
       const data = await res.json() as Record<string, unknown>;
@@ -1379,6 +1394,58 @@ export function TeamPage({
     } catch { /* non-fatal */ } finally {
       setGlSuggestingSection(null);
     }
+  }
+
+  async function handleInstitutionDocUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !editingStructureId) return;
+    if (institutionDocuments.length >= 5) {
+      void showAlert({ tone: 'warning', title: 'Límite alcanzado', message: 'Máximo 5 documentos por institución.' });
+      return;
+    }
+    setIsUploadingInstitutionDoc(true);
+    try {
+      // Step 1: Upload file to R2
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('scope', 'general');
+      formData.append('folder', `institutions/${editingStructureId}/docs`);
+      const uploadRes = await fetch('/api/uploads', { method: 'POST', credentials: 'same-origin', body: formData });
+      if (!uploadRes.ok) throw new Error('Error al subir el archivo.');
+      const { key } = (await uploadRes.json()) as { key: string };
+
+      // Step 2: Register + extract text
+      const regRes = await fetch(`/api/institution-documents?institutionId=${editingStructureId}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ r2Key: key, name: file.name, contentType: file.type }),
+      });
+      if (!regRes.ok) {
+        const err = (await regRes.json().catch(() => ({}) as Record<string, string>)) as { error?: string };
+        throw new Error(err.error ?? 'Error al registrar el documento.');
+      }
+      const { document: doc } = (await regRes.json()) as { document: InstitutionDocument };
+      setInstitutionDocuments((prev) => [...prev, doc]);
+    } catch (error) {
+      void showAlert({ tone: 'error', title: 'Error', message: error instanceof Error ? error.message : 'No se pudo cargar el documento.' });
+    } finally {
+      setIsUploadingInstitutionDoc(false);
+      if (institutionDocsFileInputRef.current) institutionDocsFileInputRef.current.value = '';
+    }
+  }
+
+  async function handleDeleteInstitutionDoc(docId: string) {
+    const confirmed = await showConfirm({
+      title: 'Eliminar documento',
+      message: '¿Eliminar este documento de referencia permanentemente?',
+      confirmLabel: 'Eliminar',
+      cancelLabel: 'Cancelar',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    await fetch(`/api/institution-documents?id=${docId}`, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+    setInstitutionDocuments((prev) => prev.filter((d) => d.id !== docId));
   }
 
   function openNewTemplateEditor() {
@@ -2993,6 +3060,44 @@ export function TeamPage({
           <p className="help-text" style={{ marginBottom: 12 }}>
             Organiza los lineamientos institucionales por sección. El asistente IA puede completar esto automáticamente.
           </p>
+
+          {/* Document library */}
+          <div className="info-box" style={{ marginBottom: 16, background: 'var(--panel)' }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <strong>Documentos de referencia</strong>
+              <span className="eyebrow">{institutionDocuments.length} / 5</span>
+            </div>
+            <p className="help-text" style={{ marginBottom: 8 }}>
+              Carga hasta 5 documentos institucionales (PDF, DOCX, XLSX). El asistente IA los usará como fuente al sugerir lineamientos por sección.
+            </p>
+            {institutionDocuments.length > 0 && (
+              <div className="flex flex-wrap gap-2" style={{ marginBottom: 8 }}>
+                {institutionDocuments.map((doc) => (
+                  <span key={doc.id} className="filter-chip filter-chip--active" style={{ cursor: 'default', maxWidth: 240 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }} title={doc.name}>
+                      {doc.name}
+                    </span>
+                    <button
+                      type="button"
+                      style={{ marginLeft: 4, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}
+                      onClick={() => void handleDeleteInstitutionDoc(doc.id)}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="filter-chip"
+              disabled={isUploadingInstitutionDoc || institutionDocuments.length >= 5}
+              onClick={() => institutionDocsFileInputRef.current?.click()}
+            >
+              {isUploadingInstitutionDoc
+                ? <RefreshCcw size={13} className="animate-spin" />
+                : <FileUp size={13} />}
+              <span>{isUploadingInstitutionDoc ? 'Procesando documento...' : '+ Cargar documento'}</span>
+            </button>
+          </div>
 
           {/* 1. Estructura */}
           <div className="info-box info-box--ai" style={{ marginBottom: 12 }}>
@@ -6158,6 +6263,14 @@ export function TeamPage({
         className="hidden"
         accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
         onChange={handleGuidelinesExtract}
+      />
+
+      <input
+        ref={institutionDocsFileInputRef}
+        type="file"
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+        onChange={handleInstitutionDocUpload}
       />
 
       {isExtractingGuidelines && (

@@ -34,6 +34,7 @@ import type {
   LearningModule,
   LearningModuleMutationInput,
   GuidelinesStructured,
+  InstitutionDocument,
   InstitutionSettings,
   InstitutionStructure,
   LibraryAsset,
@@ -3983,6 +3984,18 @@ async function ensureSchema() {
         guideline TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,
         UNIQUE (institution_id, guideline)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_documents (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        r2_key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+        extracted_text TEXT,
+        uploaded_at TEXT NOT NULL
       )
     `;
 
@@ -8503,6 +8516,62 @@ function normalizeInstitutionCourseTemplate(row: {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export async function getInstitutionDocuments(institutionId: string): Promise<InstitutionDocument[]> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT id, institution_id AS "institutionId", r2_key AS "r2Key", name, content_type AS "contentType", uploaded_at AS "uploadedAt"
+    FROM maturity_institution_documents
+    WHERE institution_id = ${institutionId}
+    ORDER BY uploaded_at ASC
+  `) as InstitutionDocument[];
+  return rows;
+}
+
+export async function getInstitutionDocumentsWithText(institutionId: string): Promise<Array<{ id: string; name: string; extractedText: string | null }>> {
+  await ensureInitialized();
+  const sql = getSql();
+  return (await sql`
+    SELECT id, name, extracted_text AS "extractedText"
+    FROM maturity_institution_documents
+    WHERE institution_id = ${institutionId}
+    ORDER BY uploaded_at ASC
+  `) as Array<{ id: string; name: string; extractedText: string | null }>;
+}
+
+export async function addInstitutionDocument(
+  institutionId: string,
+  doc: { r2Key: string; name: string; contentType: string; extractedText?: string },
+): Promise<InstitutionDocument> {
+  await ensureInitialized();
+  const sql = getSql();
+  const id = `doc-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  const uploadedAt = new Date().toISOString();
+  await sql`
+    INSERT INTO maturity_institution_documents (id, institution_id, r2_key, name, content_type, extracted_text, uploaded_at)
+    VALUES (${id}, ${institutionId}, ${doc.r2Key}, ${doc.name}, ${doc.contentType}, ${doc.extractedText ?? null}, ${uploadedAt})
+  `;
+  return { id, institutionId, r2Key: doc.r2Key, name: doc.name, contentType: doc.contentType, uploadedAt };
+}
+
+export async function deleteInstitutionDocument(docId: string): Promise<{ r2Key: string } | null> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    DELETE FROM maturity_institution_documents WHERE id = ${docId} RETURNING r2_key AS "r2Key"
+  `) as Array<{ r2Key: string }>;
+  return rows[0] ?? null;
+}
+
+export async function countInstitutionDocuments(institutionId: string): Promise<number> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT COUNT(*)::int AS count FROM maturity_institution_documents WHERE institution_id = ${institutionId}
+  `) as Array<{ count: number }>;
+  return rows[0]?.count ?? 0;
 }
 
 export async function getGuidelinesStructuredForInstitution(institutionId: string): Promise<GuidelinesStructured | null> {

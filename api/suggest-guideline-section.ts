@@ -2,6 +2,7 @@ import { getIntegrationConfig } from '../lib/admin-center.js';
 import { errorResponse, jsonResponse } from '../lib/http.js';
 import { getSessionUser } from '../lib/session.js';
 import { canManageCourses } from '../lib/permissions.js';
+import { getInstitutionDocumentsWithText } from '../lib/store.js';
 import OpenAI from 'openai';
 
 export const config = {
@@ -12,6 +13,7 @@ type SectionKey = 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'produ
 
 interface Payload {
   institutionName: string;
+  institutionId?: string; // used to fetch stored document texts
   section: SectionKey;
   productTipo?: string;   // only for 'producto' section
   context?: string;       // optional extra text pasted by user
@@ -42,7 +44,22 @@ export default async function handler(request: Request | any, response?: any) {
   if (!apiKey) return fail(500, 'OPENAI_API_KEY no configurada.');
 
   const openai = new OpenAI({ apiKey });
-  const ctx = body.context ? `\n\nContexto adicional del documento:\n${body.context.slice(0, 3000)}` : '';
+
+  // Build context from stored institution documents (pre-extracted text)
+  let docContext = '';
+  if (body.institutionId) {
+    try {
+      const docs = await getInstitutionDocumentsWithText(body.institutionId);
+      const parts = docs
+        .filter((d) => d.extractedText)
+        .map((d, i) => `[Documento ${i + 1}: ${d.name}]\n${(d.extractedText ?? '').slice(0, 8000)}`);
+      if (parts.length > 0) {
+        docContext = `\n\nDOCUMENTOS DE LINEAMIENTOS INSTITUCIONALES:\n${parts.join('\n\n---\n\n').slice(0, 24000)}`;
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  const ctx = docContext || (body.context ? `\n\nContexto adicional:\n${body.context.slice(0, 3000)}` : '');
 
   const sectionPrompts: Record<SectionKey, { system: string; user: string; schema: string }> = {
     estructura: {
