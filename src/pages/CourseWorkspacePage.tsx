@@ -38,6 +38,7 @@ import {
   Download,
   ExternalLink,
   Gamepad2,
+  LayoutTemplate,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -53,6 +54,7 @@ import type {
   AppData,
   AuthUser,
   Course,
+  CourseArchitectureTemplate,
   CourseMetadataMutationInput,
   CourseProduct,
   CourseProductMutationInput,
@@ -2352,6 +2354,10 @@ export function CourseWorkspacePage({
   const [architectureStep, setArchitectureStep] = useState('');
   const [architectureProgress, setArchitectureProgress] = useState(0);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
   const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isValidationDetailModalOpen, setIsValidationDetailModalOpen] = useState(false);
@@ -6714,6 +6720,74 @@ export function CourseWorkspacePage({
       setProductError(error instanceof Error ? error.message : 'No fue posible crear el producto.');
     } finally {
       setIsProductSaving(null);
+    }
+  }
+
+  async function openTemplatePicker() {
+    if (!currentCourse) return;
+    const institutionStructureId = currentCourse.institutionStructureId;
+    if (!institutionStructureId) return;
+    setIsTemplatePickerOpen(true);
+    setIsLoadingTemplates(true);
+    try {
+      const res = await fetch(`/api/institution-templates?institutionId=${encodeURIComponent(institutionStructureId)}`, { credentials: 'same-origin' });
+      const payload = (await res.json()) as { templates?: CourseArchitectureTemplate[] };
+      setInstitutionTemplates(payload.templates ?? []);
+    } catch {
+      setInstitutionTemplates([]);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  }
+
+  async function handleApplyTemplate(template: CourseArchitectureTemplate) {
+    if (!currentCourse || isApplyingTemplate) return;
+
+    const hasProducts = architectureProducts.length > 0;
+    if (hasProducts) {
+      const confirmed = await showConfirm({
+        title: 'Aplicar plantilla',
+        message: 'La arquitectura actual ya tiene productos. Aplicar la plantilla agregará los productos de la plantilla sin eliminar los existentes. ¿Continuar?',
+        confirmLabel: 'Sí, agregar',
+        tone: 'warning',
+      });
+      if (!confirmed) return;
+    }
+
+    setIsApplyingTemplate(true);
+    setIsTemplatePickerOpen(false);
+
+    try {
+      for (const section of template.sections) {
+        for (const product of section.products) {
+          await fetch('/api/course-products', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              courseSlug: currentCourse.slug,
+              title: product.title,
+              summary: product.summary || '',
+              format: product.format,
+              stage: 'arquitectura',
+              owner: userRole,
+              status: 'Borrador',
+              body: '',
+              tags: [],
+              version: '1.0',
+              section: section.name,
+              phasePlan: [],
+              architectureSections: [],
+            }),
+          });
+        }
+      }
+      refreshAppData();
+    } catch {
+      // silently refresh whatever was created
+      refreshAppData();
+    } finally {
+      setIsApplyingTemplate(false);
     }
   }
 
@@ -11172,19 +11246,35 @@ export function CourseWorkspacePage({
              ) : null}
 
              {canOperateArchitecture ? (
-               <button 
-                 type="button"
-                 className="cta-button shadow-lg shadow-ocean/20" 
-                 onClick={() => void handleGenerateArchitecture()}
-                 disabled={isGeneratingArchitecture}
-               >
-                 {isGeneratingArchitecture ? (
-                   <RefreshCcw size={16} className="animate-spin" />
-                 ) : (
-                   <Sparkles size={16} />
-                 )}
-                 <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
-               </button>
+               <>
+                 <button
+                   type="button"
+                   className="ghost-button"
+                   onClick={() => void openTemplatePicker()}
+                   disabled={isApplyingTemplate}
+                 >
+                   {isApplyingTemplate ? (
+                     <RefreshCcw size={16} className="animate-spin" />
+                   ) : (
+                     <LayoutTemplate size={16} />
+                   )}
+                   <span>{isApplyingTemplate ? 'Aplicando...' : 'Crear desde plantilla'}</span>
+                 </button>
+
+                 <button
+                   type="button"
+                   className="cta-button shadow-lg shadow-ocean/20"
+                   onClick={() => void handleGenerateArchitecture()}
+                   disabled={isGeneratingArchitecture}
+                 >
+                   {isGeneratingArchitecture ? (
+                     <RefreshCcw size={16} className="animate-spin" />
+                   ) : (
+                     <Sparkles size={16} />
+                   )}
+                   <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
+                 </button>
+               </>
              ) : null}
 
              {canDeleteCourseProducts(userRole) ? (
@@ -11310,6 +11400,61 @@ export function CourseWorkspacePage({
                   </div>
                 )}
               </div>
+            </div>
+          </SidePanel>
+        ) : null}
+
+        {isTemplatePickerOpen ? (
+          <SidePanel
+            isOpen={true}
+            title="Crear desde plantilla"
+            description="Selecciona una plantilla para agregar sus secciones y productos a la arquitectura de este curso."
+            sideLabel="Plantilla"
+            sideDescription="ARQUITECTURA"
+            width="xl"
+            onClose={() => setIsTemplatePickerOpen(false)}
+          >
+            <div className="page-stack">
+              {isLoadingTemplates ? (
+                <div className="empty-block">Cargando plantillas...</div>
+              ) : institutionTemplates.length === 0 ? (
+                <div className="empty-block">
+                  Esta institución aún no tiene plantillas de arquitectura. Créalas desde Gobierno {'>'} Institución.
+                </div>
+              ) : (
+                <div className="list-stack">
+                  {institutionTemplates.map((template) => (
+                    <div key={template.id} className="list-item" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <strong style={{ display: 'block', marginBottom: '0.25rem' }}>{template.name}</strong>
+                        {template.description && (
+                          <p className="text-sm text-muted" style={{ marginBottom: '0.25rem' }}>{template.description}</p>
+                        )}
+                        <p className="text-sm text-muted">
+                          {template.sections.length} sección{template.sections.length !== 1 ? 'es' : ''}
+                          {' · '}
+                          {template.sections.reduce((acc, s) => acc + s.products.length, 0)} producto{template.sections.reduce((acc, s) => acc + s.products.length, 0) !== 1 ? 's' : ''}
+                        </p>
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                          {template.sections.map((s) => (
+                            <span key={s.name} className="badge" style={{ fontSize: '0.7rem' }}>{s.name} ({s.products.length})</span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="cta-button"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => void handleApplyTemplate(template)}
+                        disabled={isApplyingTemplate}
+                      >
+                        <LayoutTemplate size={15} />
+                        <span>Aplicar</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </SidePanel>
         ) : null}

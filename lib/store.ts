@@ -14,6 +14,8 @@ import type {
   AppData,
   AuthUser,
   Course,
+  CourseArchitectureTemplate,
+  CourseArchitectureTemplateMutationInput,
   HelpDeskTicket,
   HelpDeskTicketMutationInput,
   HelpDeskTicketStatus,
@@ -3954,6 +3956,18 @@ async function ensureSchema() {
         guideline TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,
         UNIQUE (institution_id, guideline)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS maturity_institution_course_templates (
+        id TEXT PRIMARY KEY,
+        institution_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        sections JSONB NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )
     `;
 
@@ -8428,4 +8442,76 @@ export async function getProductFormatTemplateByKey(formatKey: string): Promise<
   }
 
   return normalizeProductFormatTemplate(rows[0]);
+}
+
+// ─── Institution Course Templates ────────────────────────────────────────────
+
+function normalizeInstitutionCourseTemplate(row: {
+  id: string;
+  institution_id: string;
+  name: string;
+  description: string;
+  sections: unknown;
+  created_at: string;
+  updated_at: string;
+}): CourseArchitectureTemplate {
+  return {
+    id: row.id,
+    institutionId: row.institution_id,
+    name: row.name,
+    description: row.description ?? '',
+    sections: Array.isArray(row.sections) ? row.sections : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getInstitutionCourseTemplates(institutionId: string): Promise<CourseArchitectureTemplate[]> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT id, institution_id, name, description, sections, created_at, updated_at
+    FROM maturity_institution_course_templates
+    WHERE institution_id = ${institutionId}
+    ORDER BY name ASC
+  `) as Array<{ id: string; institution_id: string; name: string; description: string; sections: unknown; created_at: string; updated_at: string }>;
+  return rows.map(normalizeInstitutionCourseTemplate);
+}
+
+export async function createInstitutionCourseTemplateRecord(
+  institutionId: string,
+  input: CourseArchitectureTemplateMutationInput,
+): Promise<CourseArchitectureTemplate> {
+  await ensureInitialized();
+  const sql = getSql();
+  const id = `tpl-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  const now = new Date().toISOString();
+  await sql`
+    INSERT INTO maturity_institution_course_templates (id, institution_id, name, description, sections, created_at, updated_at)
+    VALUES (${id}, ${institutionId}, ${input.name.trim()}, ${input.description.trim()}, ${JSON.stringify(input.sections)}, ${now}, ${now})
+  `;
+  return { id, institutionId, name: input.name.trim(), description: input.description.trim(), sections: input.sections, createdAt: now, updatedAt: now };
+}
+
+export async function updateInstitutionCourseTemplateRecord(
+  id: string,
+  input: CourseArchitectureTemplateMutationInput,
+): Promise<CourseArchitectureTemplate | null> {
+  await ensureInitialized();
+  const sql = getSql();
+  const now = new Date().toISOString();
+  const rows = (await sql`
+    UPDATE maturity_institution_course_templates
+    SET name = ${input.name.trim()}, description = ${input.description.trim()}, sections = ${JSON.stringify(input.sections)}, updated_at = ${now}
+    WHERE id = ${id}
+    RETURNING id, institution_id, name, description, sections, created_at, updated_at
+  `) as Array<{ id: string; institution_id: string; name: string; description: string; sections: unknown; created_at: string; updated_at: string }>;
+  return rows.length > 0 ? normalizeInstitutionCourseTemplate(rows[0]) : null;
+}
+
+export async function deleteInstitutionCourseTemplateRecord(id: string): Promise<boolean> {
+  await ensureInitialized();
+  const sql = getSql();
+  await sql`DELETE FROM maturity_institution_course_templates WHERE id = ${id}`;
+  return true;
 }

@@ -33,6 +33,9 @@ import type {
   AppData,
   AuthUser,
   BrandingSettings,
+  CourseArchitectureTemplate,
+  CourseTemplateSection,
+  CourseTemplateProduct,
   ExperienceSettings,
   InstitutionSettings,
   InstitutionStructure,
@@ -435,6 +438,16 @@ export function TeamPage({
   const [extractionStep, setExtractionStep] = useState('');
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
+  const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState<{
+    name: string;
+    description: string;
+    sections: CourseTemplateSection[];
+  } | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
   const activeStructureRouteId =
     institutionStructureEditMatch?.params.structureId ??
@@ -589,6 +602,23 @@ export function TeamPage({
       adminData.integrations.find((item) => item.id === selectedIntegrationId) ?? null;
     setIntegrationDraft(createIntegrationDraft(integration));
   }, [adminData, selectedIntegrationId]);
+
+  useEffect(() => {
+    if (!selectedInstitutionStructure) {
+      setInstitutionTemplates([]);
+      return;
+    }
+    setIsLoadingTemplates(true);
+    fetch(`/api/institution-templates?institutionId=${encodeURIComponent(selectedInstitutionStructure.id)}`, {
+      credentials: 'same-origin',
+    })
+      .then((res) => res.json())
+      .then((payload: { templates?: CourseArchitectureTemplate[] }) => {
+        setInstitutionTemplates(payload.templates ?? []);
+      })
+      .catch(() => setInstitutionTemplates([]))
+      .finally(() => setIsLoadingTemplates(false));
+  }, [selectedInstitutionStructure?.id]);
 
   useEffect(() => {
     const nextMessage = adminError
@@ -1258,6 +1288,121 @@ export function TeamPage({
     await persistInstitutionSettings(nextInstitution, {
       onSuccess: () => navigate(buildInstitutionStructurePath(normalizedStructure.id)),
     });
+  }
+
+  function openNewTemplateEditor() {
+    setEditingTemplateId(null);
+    setTemplateDraft({ name: '', description: '', sections: [{ name: 'Introducción', products: [] }] });
+    setIsTemplateEditorOpen(true);
+  }
+
+  function openEditTemplateEditor(template: CourseArchitectureTemplate) {
+    setEditingTemplateId(template.id);
+    setTemplateDraft({ name: template.name, description: template.description, sections: template.sections.map((s) => ({ ...s, products: s.products.map((p) => ({ ...p })) })) });
+    setIsTemplateEditorOpen(true);
+  }
+
+  function closeTemplateEditor() {
+    setIsTemplateEditorOpen(false);
+    setTemplateDraft(null);
+    setEditingTemplateId(null);
+  }
+
+  function addTemplateSection() {
+    setTemplateDraft((d) => d ? { ...d, sections: [...d.sections, { name: '', products: [] }] } : d);
+  }
+
+  function removeTemplateSection(sectionIdx: number) {
+    setTemplateDraft((d) => d ? { ...d, sections: d.sections.filter((_, i) => i !== sectionIdx) } : d);
+  }
+
+  function updateTemplateSectionName(sectionIdx: number, name: string) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const sections = d.sections.map((s, i) => i === sectionIdx ? { ...s, name } : s);
+      return { ...d, sections };
+    });
+  }
+
+  function addTemplateProduct(sectionIdx: number) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const sections = d.sections.map((s, i) =>
+        i === sectionIdx ? { ...s, products: [...s.products, { title: '', format: 'Documento', summary: '' }] } : s,
+      );
+      return { ...d, sections };
+    });
+  }
+
+  function removeTemplateProduct(sectionIdx: number, productIdx: number) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const sections = d.sections.map((s, i) =>
+        i === sectionIdx ? { ...s, products: s.products.filter((_, pi) => pi !== productIdx) } : s,
+      );
+      return { ...d, sections };
+    });
+  }
+
+  function updateTemplateProduct(sectionIdx: number, productIdx: number, field: keyof CourseTemplateProduct, value: string) {
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      const sections = d.sections.map((s, i) =>
+        i === sectionIdx
+          ? { ...s, products: s.products.map((p, pi) => pi === productIdx ? { ...p, [field]: value } : p) }
+          : s,
+      );
+      return { ...d, sections };
+    });
+  }
+
+  async function handleSaveTemplate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!templateDraft || !selectedInstitutionStructure) return;
+    setIsSavingTemplate(true);
+    try {
+      const url = editingTemplateId
+        ? `/api/institution-templates?id=${encodeURIComponent(editingTemplateId)}`
+        : `/api/institution-templates?institutionId=${encodeURIComponent(selectedInstitutionStructure.id)}`;
+      const method = editingTemplateId ? 'PATCH' : 'POST';
+      const response = await fetch(url, {
+        method,
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(templateDraft),
+      });
+      const payload = (await response.json()) as { template?: CourseArchitectureTemplate; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'No fue posible guardar la plantilla.');
+      if (payload.template) {
+        setInstitutionTemplates((current) =>
+          editingTemplateId
+            ? current.map((t) => t.id === editingTemplateId ? payload.template! : t)
+            : [...current, payload.template!],
+        );
+      }
+      closeTemplateEditor();
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'No fue posible guardar la plantilla.');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }
+
+  async function handleDeleteTemplate(template: CourseArchitectureTemplate) {
+    const confirmed = await showConfirm({
+      title: 'Eliminar plantilla',
+      message: `¿Eliminar la plantilla "${template.name}"? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'error',
+    });
+    if (!confirmed) return;
+    await fetch(`/api/institution-templates`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: template.id }),
+    });
+    setInstitutionTemplates((current) => current.filter((t) => t.id !== template.id));
   }
 
   async function handleSaveBranding(event: React.FormEvent<HTMLFormElement>) {
@@ -3091,7 +3236,176 @@ export function TeamPage({
                   </button>
                 </div>
               </section>
+
+              <section className="surface section-card section-card--compact">
+                <div className="section-heading">
+                  <div>
+                    <span className="eyebrow">Plantillas de arquitectura</span>
+                    <h3>Estructuras reutilizables de curso</h3>
+                  </div>
+                </div>
+                <p className="section-lead">
+                  Define plantillas con secciones y productos predefinidos que los coordinadores podrán aplicar al crear la arquitectura de un curso.
+                </p>
+
+                {isLoadingTemplates ? (
+                  <p className="text-sm text-muted">Cargando plantillas...</p>
+                ) : institutionTemplates.length === 0 ? (
+                  <p className="text-sm text-muted">No hay plantillas creadas para esta institución.</p>
+                ) : (
+                  <div className="list-stack" style={{ marginBottom: '1rem' }}>
+                    {institutionTemplates.map((template) => (
+                      <div key={template.id} className="list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <strong style={{ display: 'block' }}>{template.name}</strong>
+                          {template.description && <p className="text-sm text-muted" style={{ marginTop: '2px' }}>{template.description}</p>}
+                          <p className="text-sm text-muted" style={{ marginTop: '2px' }}>
+                            {template.sections.length} sección{template.sections.length !== 1 ? 'es' : ''} ·{' '}
+                            {template.sections.reduce((acc, s) => acc + s.products.length, 0)} producto{template.sections.reduce((acc, s) => acc + s.products.length, 0) !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="action-row" style={{ margin: 0, flexShrink: 0 }}>
+                          <button type="button" className="filter-chip" onClick={() => openEditTemplateEditor(template)}>
+                            <PencilLine size={13} />
+                            <span>Editar</span>
+                          </button>
+                          <button type="button" className="filter-chip" onClick={() => void handleDeleteTemplate(template)}>
+                            <Trash2 size={13} />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button type="button" className="filter-chip" onClick={openNewTemplateEditor}>
+                  <Plus size={14} />
+                  <span>Nueva plantilla</span>
+                </button>
+              </section>
             </div>
+          </SidePanel>
+        ) : null}
+
+        {isTemplateEditorOpen && templateDraft && selectedInstitutionStructure ? (
+          <SidePanel
+            isOpen={true}
+            title={editingTemplateId ? 'Editar plantilla' : 'Nueva plantilla de arquitectura'}
+            description="Define las secciones y productos que conforman esta plantilla reutilizable."
+            width="xl"
+            onClose={closeTemplateEditor}
+          >
+            <form className="editor-card" onSubmit={(e) => void handleSaveTemplate(e)}>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Nombre de la plantilla</span>
+                  <div className="field__control">
+                    <input
+                      value={templateDraft.name}
+                      onChange={(e) => setTemplateDraft((d) => d ? { ...d, name: e.target.value } : d)}
+                      placeholder="Ej. Curso estándar 3 créditos"
+                      required
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Descripción</span>
+                  <div className="field__control">
+                    <input
+                      value={templateDraft.description}
+                      onChange={(e) => setTemplateDraft((d) => d ? { ...d, description: e.target.value } : d)}
+                      placeholder="Contexto o uso recomendado (opcional)"
+                    />
+                  </div>
+                </label>
+              </div>
+
+              <div style={{ marginTop: '1.5rem' }}>
+                <div className="section-heading" style={{ marginBottom: '0.75rem' }}>
+                  <strong>Secciones y productos</strong>
+                  <button type="button" className="filter-chip" onClick={addTemplateSection}>
+                    <Plus size={13} />
+                    <span>Agregar sección</span>
+                  </button>
+                </div>
+
+                {templateDraft.sections.map((section, sIdx) => (
+                  <div key={sIdx} className="surface section-card section-card--compact" style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <div className="field__control" style={{ flex: 1 }}>
+                        <input
+                          value={section.name}
+                          onChange={(e) => updateTemplateSectionName(sIdx, e.target.value)}
+                          placeholder="Nombre de sección (Ej. Introducción, Unidad 1)"
+                          required
+                        />
+                      </div>
+                      <button type="button" className="filter-chip" onClick={() => removeTemplateSection(sIdx)}>
+                        <Trash2 size={13} />
+                        <span>Quitar</span>
+                      </button>
+                    </div>
+
+                    <div className="list-stack" style={{ marginBottom: '0.5rem' }}>
+                      {section.products.map((product, pIdx) => (
+                        <div key={pIdx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', padding: '0.5rem', background: 'var(--surface-2, #f8f9fa)', borderRadius: '6px', marginBottom: '0.375rem' }}>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                            <div className="field__control">
+                              <input
+                                value={product.title}
+                                onChange={(e) => updateTemplateProduct(sIdx, pIdx, 'title', e.target.value)}
+                                placeholder="Título del producto"
+                                required
+                              />
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.375rem' }}>
+                              <div className="field__control" style={{ width: '9rem', flexShrink: 0 }}>
+                                <select
+                                  value={product.format}
+                                  onChange={(e) => updateTemplateProduct(sIdx, pIdx, 'format', e.target.value)}
+                                >
+                                  {['Video', 'Documento', 'Actividad', 'Evaluación', 'RED', 'Cuestionario', 'Foro', 'Tarea'].map((f) => (
+                                    <option key={f}>{f}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="field__control" style={{ flex: 1 }}>
+                                <input
+                                  value={product.summary}
+                                  onChange={(e) => updateTemplateProduct(sIdx, pIdx, 'summary', e.target.value)}
+                                  placeholder="Descripción breve (opcional)"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <button type="button" className="filter-chip" style={{ flexShrink: 0, marginTop: '2px' }} onClick={() => removeTemplateProduct(sIdx, pIdx)}>
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button type="button" className="filter-chip" onClick={() => addTemplateProduct(sIdx)}>
+                      <Plus size={13} />
+                      <span>Agregar producto</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {settingsError ? <p className="form-error">{settingsError}</p> : null}
+
+              <div className="action-row" style={{ marginTop: '1.5rem' }}>
+                <button type="submit" className="cta-button" disabled={isSavingTemplate}>
+                  <span>{isSavingTemplate ? 'Guardando...' : 'Guardar plantilla'}</span>
+                </button>
+                <button type="button" className="ghost-button" onClick={closeTemplateEditor}>
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            </form>
           </SidePanel>
         ) : null}
 

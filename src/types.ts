@@ -670,6 +670,33 @@ export interface UserProfileUpdateInput {
   bio: string;
 }
 
+export interface CourseTemplateProduct {
+  title: string;
+  format: string;
+  summary: string;
+}
+
+export interface CourseTemplateSection {
+  name: string;
+  products: CourseTemplateProduct[];
+}
+
+export interface CourseArchitectureTemplate {
+  id: string;
+  institutionId: string;
+  name: string;
+  description: string;
+  sections: CourseTemplateSection[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseArchitectureTemplateMutationInput {
+  name: string;
+  description: string;
+  sections: CourseTemplateSection[];
+}
+
 export interface InstitutionStructure {
   id: string;
   institution: string;
