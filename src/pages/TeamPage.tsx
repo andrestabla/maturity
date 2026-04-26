@@ -449,6 +449,8 @@ export function TeamPage({
     sections: CourseTemplateSection[];
   } | null>(null);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [isGeneratingDescriptions, setIsGeneratingDescriptions] = useState(false);
+  const [generatingDescriptionKey, setGeneratingDescriptionKey] = useState<string | null>(null);
 
   const activeStructureRouteId =
     institutionStructureEditMatch?.params.structureId ??
@@ -1392,6 +1394,87 @@ export function TeamPage({
       });
       return { ...d, sections };
     });
+  }
+
+  async function generateAllDescriptions() {
+    if (!templateDraft || !selectedInstitutionStructure || isGeneratingDescriptions) return;
+
+    const targets: Array<{ sIdx: number; pIdx: number; title: string; format: string; section: string }> = [];
+    templateDraft.sections.forEach((section, sIdx) => {
+      section.products.forEach((product, pIdx) => {
+        if (!product.summary.trim()) {
+          targets.push({ sIdx, pIdx, title: product.title || `Producto ${pIdx + 1}`, format: product.format, section: section.name || `Sección ${sIdx + 1}` });
+        }
+      });
+    });
+
+    if (targets.length === 0) return;
+
+    setIsGeneratingDescriptions(true);
+    try {
+      const response = await fetch('/api/generate-product-descriptions', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          institutionId: selectedInstitutionStructure.id,
+          products: targets.map((t) => ({ title: t.title, format: t.format, section: t.section })),
+        }),
+      });
+      const payload = (await response.json()) as { descriptions?: string[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Error al generar descripciones.');
+
+      const descriptions = payload.descriptions ?? [];
+      setTemplateDraft((d) => {
+        if (!d) return d;
+        const sections = d.sections.map((s, si) => ({
+          ...s,
+          products: s.products.map((p, pi) => {
+            const idx = targets.findIndex((t) => t.sIdx === si && t.pIdx === pi);
+            return idx >= 0 && descriptions[idx] ? { ...p, summary: descriptions[idx] } : p;
+          }),
+        }));
+        return { ...d, sections };
+      });
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Error al generar descripciones.');
+    } finally {
+      setIsGeneratingDescriptions(false);
+    }
+  }
+
+  async function generateOneDescription(sIdx: number, pIdx: number) {
+    if (!templateDraft || !selectedInstitutionStructure) return;
+    const key = `${sIdx}-${pIdx}`;
+    if (generatingDescriptionKey === key) return;
+
+    const section = templateDraft.sections[sIdx];
+    const product = section?.products[pIdx];
+    if (!product) return;
+
+    setGeneratingDescriptionKey(key);
+    try {
+      const response = await fetch('/api/generate-product-descriptions', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          institutionId: selectedInstitutionStructure.id,
+          products: [{ title: product.title || `Producto ${pIdx + 1}`, format: product.format, section: section.name || `Sección ${sIdx + 1}` }],
+        }),
+      });
+      const payload = (await response.json()) as { descriptions?: string[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Error al generar descripción.');
+
+      const description = payload.descriptions?.[0];
+      if (description) {
+        updateTemplateProduct(sIdx, pIdx, 'summary', description);
+      }
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Error al generar descripción.');
+    } finally {
+      setGeneratingDescriptionKey(null);
+    }
   }
 
   async function handleSaveTemplate(event: React.FormEvent<HTMLFormElement>) {
@@ -3362,10 +3445,21 @@ export function TeamPage({
               <div style={{ marginTop: '1.5rem' }}>
                 <div className="section-heading" style={{ marginBottom: '0.75rem' }}>
                   <strong>Secciones y productos</strong>
-                  <button type="button" className="filter-chip" onClick={addTemplateSection}>
-                    <Plus size={13} />
-                    <span>Agregar sección</span>
-                  </button>
+                  <div className="action-row" style={{ margin: 0 }}>
+                    <button
+                      type="button"
+                      className="filter-chip filter-chip--active"
+                      onClick={() => void generateAllDescriptions()}
+                      disabled={isGeneratingDescriptions}
+                    >
+                      {isGeneratingDescriptions ? <RefreshCcw size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      <span>{isGeneratingDescriptions ? 'Generando...' : 'Completar con IA'}</span>
+                    </button>
+                    <button type="button" className="filter-chip" onClick={addTemplateSection}>
+                      <Plus size={13} />
+                      <span>Agregar sección</span>
+                    </button>
+                  </div>
                 </div>
 
                 {templateDraft.sections.map((section, sIdx) => (
@@ -3419,6 +3513,18 @@ export function TeamPage({
                                   placeholder="Descripción breve (opcional)"
                                 />
                               </div>
+                              <button
+                                type="button"
+                                className="filter-chip"
+                                title="Completar con IA"
+                                style={{ flexShrink: 0 }}
+                                disabled={generatingDescriptionKey === `${sIdx}-${pIdx}`}
+                                onClick={() => void generateOneDescription(sIdx, pIdx)}
+                              >
+                                {generatingDescriptionKey === `${sIdx}-${pIdx}`
+                                  ? <RefreshCcw size={12} className="animate-spin" />
+                                  : <Sparkles size={12} />}
+                              </button>
                             </div>
                           </div>
                           {/* Product actions */}

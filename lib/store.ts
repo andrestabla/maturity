@@ -8466,6 +8466,17 @@ function normalizeInstitutionCourseTemplate(row: {
   };
 }
 
+export async function getGuidelinesForInstitution(institutionId: string): Promise<string[]> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT guideline FROM maturity_institution_guidelines
+    WHERE institution_id = ${institutionId}
+    ORDER BY sort_order ASC, guideline ASC
+  `) as Array<{ guideline: string }>;
+  return rows.map((r) => r.guideline);
+}
+
 export async function getInstitutionCourseTemplates(institutionId: string): Promise<CourseArchitectureTemplate[]> {
   await ensureInitialized();
   const sql = getSql();
