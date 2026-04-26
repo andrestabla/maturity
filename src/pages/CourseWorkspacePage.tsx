@@ -2002,10 +2002,10 @@ function getCanonicalProductInstructionsHtml(
     return bodyHtml;
   }
 
-  const title = sanitizeRichHtml(product.title ?? '').trim() || 'este producto';
-  const section = sanitizeRichHtml(product.section ?? '').trim() || 'la sección asignada';
+  const title = stripHtmlToText(product.title ?? '').trim() || 'este producto';
+  const section = stripHtmlToText(product.section ?? '').trim() || 'la sección asignada';
   const summary = stripHtmlToText(product.summary ?? '').trim();
-  const format = sanitizeRichHtml(product.format ?? '').trim();
+  const format = stripHtmlToText(product.format ?? '').trim();
 
   return sanitizeRichHtml(
     [
