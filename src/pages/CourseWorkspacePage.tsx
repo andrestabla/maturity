@@ -14087,26 +14087,20 @@ export function CourseWorkspacePage({
                       )
                     }));
 
-                    // 2. Persist to API
-                    const [resCourse, resMeta] = await Promise.all([
-                      fetch(`/api/courses?slug=${encodeURIComponent(currentCourse.slug)}`, {
-                        method: 'PATCH',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify({
-                          faculty: analysisResult.facultad,
-                          program: analysisResult.programa,
-                          credits: Number(analysisResult.creditos),
-                          summary: analysisResult.descripcionCurso
-                        })
-                      }),
-                      fetch(`/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`, {
-                        method: 'PATCH',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify(metadataUpdate)
+                    // 2. Persist to API — course-metadata accepts faculty/program/credits/summary as optional fields
+                    const resMeta = await fetch(`/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`, {
+                      method: 'PATCH',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({
+                        ...metadataUpdate,
+                        faculty: analysisResult.facultad || currentCourse.faculty,
+                        program: analysisResult.programa || currentCourse.program,
+                        credits: Number(analysisResult.creditos) || currentCourse.credits,
+                        summary: analysisResult.descripcionCurso || currentCourse.summary,
                       })
-                    ]);
+                    });
 
-                    if (!resCourse.ok || !resMeta.ok) throw new Error('Error al sincronizar con el servidor.');
+                    if (!resMeta.ok) throw new Error('Error al sincronizar con el servidor.');
 
                     refreshAppData();
                     setIsVerifyingAnalysis(false);
