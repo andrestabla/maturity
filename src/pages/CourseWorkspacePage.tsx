@@ -14275,14 +14275,15 @@ export function CourseWorkspacePage({
                         <label className="form-label">Esquema de Evaluación</label>
                         <div className="flex flex-col gap-1">
                           <div className="flex gap-2 px-1 mb-1">
-                            <span className="flex-1 text-xs text-muted font-medium uppercase tracking-wide">Ítem</span>
-                            <span className="w-24 text-xs text-muted font-medium uppercase tracking-wide">Porcentaje</span>
-                            <span className="w-8" />
+                            <span className="text-xs text-muted font-medium uppercase tracking-wide" style={{ flex: '1 1 0%' }}>Ítem</span>
+                            <span className="text-xs text-muted font-medium uppercase tracking-wide" style={{ width: '6rem', flexShrink: 0 }}>Porcentaje</span>
+                            <span style={{ width: '2rem', flexShrink: 0 }} />
                           </div>
                           {Array.isArray(analysisResult.evaluacion) && analysisResult.evaluacion.map((ev: any, idx: number) => (
                             <div key={idx} className="flex gap-2 items-center group">
                               <input
-                                className="modern-input py-2 flex-1"
+                                className="modern-input py-2"
+                                style={{ width: 'auto', flex: '1 1 0%' }}
                                 value={typeof ev === 'string' ? ev : ev.nombre || ''}
                                 onChange={(e) => {
                                   const arr = [...analysisResult.evaluacion];
@@ -14291,7 +14292,8 @@ export function CourseWorkspacePage({
                                 }}
                               />
                               <input
-                                className="modern-input py-2 w-24 text-center"
+                                className="modern-input py-2 text-center"
+                                style={{ width: '6rem', flexShrink: 0 }}
                                 placeholder="—"
                                 value={typeof ev === 'string' ? '' : ev.porcentaje || ''}
                                 onChange={(e) => {
@@ -14300,7 +14302,7 @@ export function CourseWorkspacePage({
                                   setAnalysisResult({ ...analysisResult, evaluacion: arr });
                                 }}
                               />
-                              <button className="w-8 flex items-center justify-center text-red-500 opacity-0 group-hover:opacity-100" onClick={() => {
+                              <button className="flex items-center justify-center text-red-500 opacity-0 group-hover:opacity-100" style={{ width: '2rem', flexShrink: 0 }} onClick={() => {
                                 const arr = [...analysisResult.evaluacion];
                                 arr.splice(idx, 1);
                                 setAnalysisResult({ ...analysisResult, evaluacion: arr });
