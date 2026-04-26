@@ -1035,28 +1035,6 @@ export function TeamPage({
     });
   }
 
-  async function persistExtractedGuidelines(extracted: string[]) {
-    if (!institutionDraft || !structureDraft || !editingStructureId) {
-      return false;
-    }
-
-    const mergedDraft = normalizeStructureDraft({
-      ...structureDraft,
-      pedagogicalGuidelines: uniqueGuidelineValues([
-        ...structureDraft.pedagogicalGuidelines.filter(Boolean),
-        ...extracted,
-      ]),
-    });
-
-    const nextStructures = institutionDraft.structures.map((structure) =>
-      structure.id === editingStructureId ? mergedDraft : structure,
-    );
-    const nextInstitution = syncInstitutionSettingsStructures(institutionDraft, nextStructures);
-    const savedInstitution = await persistInstitutionSettings(nextInstitution);
-
-    return Boolean(savedInstitution);
-  }
-
   async function handleDeleteStructure(structure: InstitutionStructure) {
     if (!institutionDraft) {
       return;
@@ -4148,8 +4126,8 @@ export function TeamPage({
               {settingsError ? <p className="form-error">{settingsError}</p> : null}
 
               <div className="action-row">
-                <button type="submit" className="cta-button" disabled={isSavingInstitution}>
-                  <span>{isSavingInstitution ? 'Guardando…' : 'Guardar estructura'}</span>
+                <button type="submit" className="cta-button" disabled={isSavingInstitution || isSavingGuidelinesStructured}>
+                  <span>{isSavingInstitution || isSavingGuidelinesStructured ? 'Guardando…' : 'Guardar estructura'}</span>
                 </button>
 
                 <button type="button" className="filter-chip" onClick={closeInstitutionOverlay}>
