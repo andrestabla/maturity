@@ -33,6 +33,7 @@ import type {
   DeliverableMutationInput,
   LearningModule,
   LearningModuleMutationInput,
+  GuidelinesStructured,
   InstitutionSettings,
   InstitutionStructure,
   LibraryAsset,
@@ -431,6 +432,24 @@ function uniqueValues(values: string[]) {
   );
 }
 
+function flattenGuidelinesStructured(g: GuidelinesStructured): string[] {
+  const lines: string[] = [];
+  const e = g.estructura;
+  if (e.creditos1) lines.push(`Curso de 1 crédito: ${e.creditos1}`);
+  if (e.creditos2) lines.push(`Curso de 2 créditos: ${e.creditos2}`);
+  if (e.creditos3) lines.push(`Curso de 3 créditos: ${e.creditos3}`);
+  if (e.creditos4) lines.push(`Curso de 4 créditos: ${e.creditos4}`);
+  for (const p of g.introduccion.productos) lines.push(`Introducción incluye: ${p}`);
+  if (g.cierre.existe) {
+    for (const p of g.cierre.productos) lines.push(`Cierre incluye: ${p}`);
+  }
+  for (const p of g.unidades.productos) lines.push(`Cada unidad incluye: ${p}`);
+  for (const pt of g.productos) {
+    for (const c of pt.caracteristicas) lines.push(`${pt.tipo}: ${c}`);
+  }
+  return lines.filter(Boolean);
+}
+
 function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionStructure {
   return {
     id: buildInstitutionStructureId(input.institution, input.id),
@@ -440,6 +459,7 @@ function sanitizeInstitutionStructure(input: InstitutionStructure): InstitutionS
     academicPeriods: uniqueValues(input.academicPeriods),
     courseTypes: uniqueValues(input.courseTypes),
     pedagogicalGuidelines: uniqueValues(input.pedagogicalGuidelines),
+    guidelinesStructured: input.guidelinesStructured,
     allowAutoProvisioning: Boolean(input.allowAutoProvisioning),
   };
 }
@@ -2396,13 +2416,15 @@ async function readInstitutionStructuresRecord() {
     SELECT
       id,
       name,
-      allow_auto_provisioning AS "allowAutoProvisioning"
+      allow_auto_provisioning AS "allowAutoProvisioning",
+      guidelines_structured AS "guidelinesStructured"
     FROM maturity_institutions
     ORDER BY name ASC
   `) as Array<{
     id: string;
     name: string;
     allowAutoProvisioning: boolean;
+    guidelinesStructured: GuidelinesStructured | null;
   }>;
 
   if (institutions.length === 0) {
@@ -2455,9 +2477,14 @@ async function readInstitutionStructuresRecord() {
       courseTypes: courseTypes
         .filter((item) => item.institutionId === institution.id)
         .map((item) => item.name),
-      pedagogicalGuidelines: guidelines
-        .filter((item) => item.institutionId === institution.id)
-        .map((item) => item.guideline),
+      pedagogicalGuidelines: (() => {
+        const structured = institution.guidelinesStructured;
+        if (structured) return flattenGuidelinesStructured(structured);
+        return guidelines
+          .filter((item) => item.institutionId === institution.id)
+          .map((item) => item.guideline);
+      })(),
+      guidelinesStructured: institution.guidelinesStructured ?? undefined,
       allowAutoProvisioning: institution.allowAutoProvisioning,
     }),
   );
@@ -4426,6 +4453,18 @@ async function ensureSchema() {
           ALTER TABLE maturity_institution_guidelines
           ADD CONSTRAINT maturity_guidelines_institution_fk
           FOREIGN KEY (institution_id) REFERENCES maturity_institutions(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'maturity_institutions' AND column_name = 'guidelines_structured'
+        ) THEN
+          ALTER TABLE maturity_institutions ADD COLUMN guidelines_structured JSONB;
         END IF;
       END $$;
     `;
@@ -8466,9 +8505,38 @@ function normalizeInstitutionCourseTemplate(row: {
   };
 }
 
+export async function getGuidelinesStructuredForInstitution(institutionId: string): Promise<GuidelinesStructured | null> {
+  await ensureInitialized();
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT guidelines_structured AS "guidelinesStructured"
+    FROM maturity_institutions
+    WHERE id = ${institutionId}
+  `) as Array<{ guidelinesStructured: GuidelinesStructured | null }>;
+  return rows[0]?.guidelinesStructured ?? null;
+}
+
+export async function saveGuidelinesStructuredForInstitution(institutionId: string, data: GuidelinesStructured): Promise<void> {
+  await ensureInitialized();
+  const sql = getSql();
+  await sql`
+    UPDATE maturity_institutions
+    SET guidelines_structured = ${JSON.stringify(data)}::jsonb
+    WHERE id = ${institutionId}
+  `;
+}
+
 export async function getGuidelinesForInstitution(institutionId: string): Promise<string[]> {
   await ensureInitialized();
   const sql = getSql();
+  // Prefer structured guidelines when available
+  const structuredRows = (await sql`
+    SELECT guidelines_structured AS "guidelinesStructured"
+    FROM maturity_institutions
+    WHERE id = ${institutionId}
+  `) as Array<{ guidelinesStructured: GuidelinesStructured | null }>;
+  const structured = structuredRows[0]?.guidelinesStructured;
+  if (structured) return flattenGuidelinesStructured(structured);
   const rows = (await sql`
     SELECT guideline FROM maturity_institution_guidelines
     WHERE institution_id = ${institutionId}

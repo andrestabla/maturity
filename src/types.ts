@@ -697,6 +697,24 @@ export interface CourseArchitectureTemplateMutationInput {
   sections: CourseTemplateSection[];
 }
 
+export interface GuidelinesProductoTipo {
+  tipo: string;
+  caracteristicas: string[];
+}
+
+export interface GuidelinesStructured {
+  estructura: {
+    creditos1: string;
+    creditos2: string;
+    creditos3: string;
+    creditos4: string;
+  };
+  introduccion: { productos: string[] };
+  cierre: { existe: boolean; productos: string[] };
+  unidades: { productos: string[] };
+  productos: GuidelinesProductoTipo[];
+}
+
 export interface InstitutionStructure {
   id: string;
   institution: string;
@@ -705,6 +723,7 @@ export interface InstitutionStructure {
   academicPeriods: string[];
   courseTypes: string[];
   pedagogicalGuidelines: string[];
+  guidelinesStructured?: GuidelinesStructured;
   allowAutoProvisioning: boolean;
 }
 

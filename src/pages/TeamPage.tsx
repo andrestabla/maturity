@@ -38,6 +38,8 @@ import type {
   CourseTemplateSection,
   CourseTemplateProduct,
   ExperienceSettings,
+  GuidelinesStructured,
+  GuidelinesProductoTipo,
   InstitutionSettings,
   InstitutionStructure,
   PasswordChangeInput,
@@ -178,6 +180,14 @@ function uniqueGuidelineValues(values: string[]) {
 
   return result.sort((left, right) => left.localeCompare(right, 'es'));
 }
+
+const defaultGuidelinesStructured: GuidelinesStructured = {
+  estructura: { creditos1: '', creditos2: '', creditos3: '', creditos4: '' },
+  introduccion: { productos: [] },
+  cierre: { existe: false, productos: [] },
+  unidades: { productos: [] },
+  productos: [],
+};
 
 function normalizeStructureDraft(structure: InstitutionStructure): InstitutionStructure {
   return {
@@ -441,6 +451,14 @@ export function TeamPage({
   const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
   const [duplicatePairs, setDuplicatePairs] = useState<[number, number][]>([]);
   const [isDetectingDuplicates, setIsDetectingDuplicates] = useState(false);
+  // Structured guidelines state
+  const [guidelinesDraft, setGuidelinesDraft] = useState<GuidelinesStructured | null>(null);
+  const [isSavingGuidelinesStructured, setIsSavingGuidelinesStructured] = useState(false);
+  const [glNewIntroProduct, setGlNewIntroProduct] = useState('');
+  const [glNewCierreProduct, setGlNewCierreProduct] = useState('');
+  const [glNewUnidadProduct, setGlNewUnidadProduct] = useState('');
+  const [glNewTipo, setGlNewTipo] = useState('');
+  const [glNewCharInputs, setGlNewCharInputs] = useState<Record<number, string>>({});
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -566,6 +584,16 @@ export function TeamPage({
     if (isInstitutionStructureEditRoute && selectedInstitutionStructure) {
       setStructureDraft(buildStructureDraft(institutionDraft, selectedInstitutionStructure));
       setEditingStructureId(selectedInstitutionStructure.id);
+      // Load structured guidelines
+      setGuidelinesDraft(selectedInstitutionStructure.guidelinesStructured ?? null);
+      fetch(`/api/institution-guidelines-structured?institutionId=${selectedInstitutionStructure.id}`, {
+        credentials: 'same-origin',
+      })
+        .then((r) => r.json())
+        .then((payload: { structured?: GuidelinesStructured | null }) => {
+          if (payload.structured) setGuidelinesDraft(payload.structured);
+        })
+        .catch(() => {});
       return;
     }
 
@@ -1290,9 +1318,28 @@ export function TeamPage({
       : [...institutionDraft.structures, normalizedStructure];
 
     const nextInstitution = syncInstitutionSettingsStructures(institutionDraft, nextStructures);
-    await persistInstitutionSettings(nextInstitution, {
-      onSuccess: () => navigate(buildInstitutionStructurePath(normalizedStructure.id)),
-    });
+
+    // Save structured guidelines in parallel if available
+    const structuredSavePromise = (() => {
+      const effectiveId = editingStructureId ?? normalizedStructure.id;
+      if (guidelinesDraft && effectiveId) {
+        setIsSavingGuidelinesStructured(true);
+        return fetch(`/api/institution-guidelines-structured?institutionId=${effectiveId}`, {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ structured: guidelinesDraft }),
+        }).finally(() => setIsSavingGuidelinesStructured(false));
+      }
+      return Promise.resolve();
+    })();
+
+    await Promise.all([
+      persistInstitutionSettings(nextInstitution, {
+        onSuccess: () => navigate(buildInstitutionStructurePath(normalizedStructure.id)),
+      }),
+      structuredSavePromise,
+    ]);
   }
 
   function openNewTemplateEditor() {
@@ -1804,25 +1851,26 @@ export function TeamPage({
             if (payload.step) setExtractionStep(payload.step);
 
             if (payload.complete && payload.data) {
-              const extracted = payload.data as string[];
-              setStructureDraft(current => {
-                if (!current) return current;
-                const existing = current.pedagogicalGuidelines.filter(Boolean);
-                const next = uniqueGuidelineValues([...existing, ...extracted]);
-                return {
-                  ...current,
-                  pedagogicalGuidelines: next.length > 0 ? next : ['']
-                  };
-              });
+              const extracted = payload.data as GuidelinesStructured;
+              setGuidelinesDraft(extracted);
 
-              const didPersist = await persistExtractedGuidelines(extracted);
+              // Auto-save the structured guidelines
+              if (editingStructureId) {
+                try {
+                  await fetch(`/api/institution-guidelines-structured?institutionId=${editingStructureId}`, {
+                    method: 'PUT',
+                    credentials: 'same-origin',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ structured: extracted }),
+                  });
+                } catch (e) { /* non-fatal */ }
+              }
 
+              const productCount = extracted.productos?.length ?? 0;
               void showAlert({
                 tone: 'success',
                 title: 'Lineamientos extraídos',
-                message: didPersist
-                  ? `Se identificaron ${extracted.length} reglas pedagógicas y quedaron guardadas en la estructura institucional.`
-                  : `Se identificaron ${extracted.length} reglas pedagógicas y quedaron cargadas en el editor. Guarda la estructura para persistirlas.`
+                message: `Se identificaron ${productCount} tipos de producto con sus características, organizados en secciones.`,
               });
             }
 
@@ -1841,25 +1889,25 @@ export function TeamPage({
               if (payload.step) setExtractionStep(payload.step);
 
               if (payload.complete && payload.data) {
-                const extracted = payload.data as string[];
-                setStructureDraft(current => {
-                  if (!current) return current;
-                  const existing = current.pedagogicalGuidelines.filter(Boolean);
-                  const next = uniqueGuidelineValues([...existing, ...extracted]);
-                  return {
-                    ...current,
-                    pedagogicalGuidelines: next.length > 0 ? next : ['']
-                    };
-                });
+                const extracted = payload.data as GuidelinesStructured;
+                setGuidelinesDraft(extracted);
 
-                const didPersist = await persistExtractedGuidelines(extracted);
+                if (editingStructureId) {
+                  try {
+                    await fetch(`/api/institution-guidelines-structured?institutionId=${editingStructureId}`, {
+                      method: 'PUT',
+                      credentials: 'same-origin',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ structured: extracted }),
+                    });
+                  } catch (e) { /* non-fatal */ }
+                }
 
+                const productCount = extracted.productos?.length ?? 0;
                 void showAlert({
                   tone: 'success',
                   title: 'Lineamientos extraídos',
-                  message: didPersist
-                    ? `Se identificaron ${extracted.length} reglas pedagógicas y quedaron guardadas en la estructura institucional.`
-                    : `Se identificaron ${extracted.length} reglas pedagógicas y quedaron cargadas en el editor. Guarda la estructura para persistirlas.`
+                  message: `Se identificaron ${productCount} tipos de producto con sus características, organizados en secciones.`,
                 });
               }
 
@@ -2859,6 +2907,279 @@ export function TeamPage({
       ? buildInstitutionStructurePath(structureDraftId)
       : buildInstitutionStructurePath('estructura');
 
+    function renderGuidelinesStructuredEditor() {
+      const draft = guidelinesDraft ?? defaultGuidelinesStructured;
+      const set = (updater: (prev: GuidelinesStructured) => GuidelinesStructured) =>
+        setGuidelinesDraft((prev) => updater(prev ?? defaultGuidelinesStructured));
+
+      // Helper: tag-chip list for product names
+      const renderProductChips = (
+        products: string[],
+        onRemove: (i: number) => void,
+        newVal: string,
+        setNewVal: (v: string) => void,
+        onAdd: () => void,
+        placeholder: string,
+      ) => (
+        <div className="flex flex-wrap gap-2 items-center">
+          {products.map((p, i) => (
+            <span
+              key={i}
+              className="filter-chip filter-chip--active"
+              style={{ cursor: 'default' }}
+            >
+              {p}
+              <button
+                type="button"
+                style={{ marginLeft: 4, fontWeight: 700, lineHeight: 1 }}
+                onClick={() => onRemove(i)}
+              >×</button>
+            </span>
+          ))}
+          <input
+            className="field-input"
+            style={{ width: 200, display: 'inline-block' }}
+            placeholder={placeholder}
+            value={newVal}
+            onChange={(e) => setNewVal(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }}
+          />
+          <button type="button" className="filter-chip" onClick={onAdd}>+ Agregar</button>
+        </div>
+      );
+
+      return (
+        <div className="field field--full" style={{ marginTop: 8 }}>
+          <span>Lineamientos pedagógicos estructurados</span>
+          <p className="help-text" style={{ marginBottom: 12 }}>
+            Organiza los lineamientos institucionales por sección. El asistente IA puede completar esto automáticamente.
+          </p>
+
+          {/* 1. Estructura */}
+          <div className="info-box info-box--ai" style={{ marginBottom: 12 }}>
+            <strong style={{ display: 'block', marginBottom: 8 }}>1. Estructura del curso por créditos</strong>
+            {(['creditos1', 'creditos2', 'creditos3', 'creditos4'] as const).map((key, i) => (
+              <label key={key} className="field" style={{ marginBottom: 6 }}>
+                <span style={{ minWidth: 120 }}>{i + 1} crédito{i > 0 ? 's' : ''}</span>
+                <input
+                  className="field-input"
+                  placeholder={`Ej. ${i + 2} unidades y ${(i + 1) * 5} encuentros sincrónicos`}
+                  value={draft.estructura[key]}
+                  onChange={(e) => set((prev) => ({ ...prev, estructura: { ...prev.estructura, [key]: e.target.value } }))}
+                />
+              </label>
+            ))}
+          </div>
+
+          {/* 2. Introducción */}
+          <div className="info-box" style={{ marginBottom: 12 }}>
+            <strong style={{ display: 'block', marginBottom: 8 }}>2. Sección de Introducción — productos</strong>
+            {renderProductChips(
+              draft.introduccion.productos,
+              (i) => set((prev) => ({ ...prev, introduccion: { productos: prev.introduccion.productos.filter((_, idx) => idx !== i) } })),
+              glNewIntroProduct,
+              setGlNewIntroProduct,
+              () => {
+                const v = glNewIntroProduct.trim();
+                if (!v) return;
+                set((prev) => ({ ...prev, introduccion: { productos: [...prev.introduccion.productos, v] } }));
+                setGlNewIntroProduct('');
+              },
+              'Ej. Video de bienvenida',
+            )}
+          </div>
+
+          {/* 3. Cierre */}
+          <div className="info-box" style={{ marginBottom: 12 }}>
+            <strong style={{ display: 'block', marginBottom: 8 }}>3. Sección de Cierre</strong>
+            <label className="field" style={{ marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                checked={draft.cierre.existe}
+                onChange={(e) => set((prev) => ({ ...prev, cierre: { ...prev.cierre, existe: e.target.checked } }))}
+              />
+              <span style={{ marginLeft: 6 }}>El curso tiene sección de Cierre</span>
+            </label>
+            {draft.cierre.existe && renderProductChips(
+              draft.cierre.productos,
+              (i) => set((prev) => ({ ...prev, cierre: { ...prev.cierre, productos: prev.cierre.productos.filter((_, idx) => idx !== i) } })),
+              glNewCierreProduct,
+              setGlNewCierreProduct,
+              () => {
+                const v = glNewCierreProduct.trim();
+                if (!v) return;
+                set((prev) => ({ ...prev, cierre: { ...prev.cierre, productos: [...prev.cierre.productos, v] } }));
+                setGlNewCierreProduct('');
+              },
+              'Ej. Evaluación de cierre',
+            )}
+          </div>
+
+          {/* 4. Unidades */}
+          <div className="info-box" style={{ marginBottom: 12 }}>
+            <strong style={{ display: 'block', marginBottom: 8 }}>4. Unidades — productos por unidad</strong>
+            {renderProductChips(
+              draft.unidades.productos,
+              (i) => set((prev) => ({ ...prev, unidades: { productos: prev.unidades.productos.filter((_, idx) => idx !== i) } })),
+              glNewUnidadProduct,
+              setGlNewUnidadProduct,
+              () => {
+                const v = glNewUnidadProduct.trim();
+                if (!v) return;
+                set((prev) => ({ ...prev, unidades: { productos: [...prev.unidades.productos, v] } }));
+                setGlNewUnidadProduct('');
+              },
+              'Ej. Actividad de aprendizaje',
+            )}
+          </div>
+
+          {/* 5. Productos */}
+          <div className="info-box" style={{ marginBottom: 12 }}>
+            <strong style={{ display: 'block', marginBottom: 10 }}>5. Características por tipo de producto</strong>
+            {draft.productos.map((pt: GuidelinesProductoTipo, tipoIdx: number) => (
+              <div key={tipoIdx} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                  <input
+                    className="field-input"
+                    style={{ flex: 1 }}
+                    placeholder="Nombre del tipo de producto"
+                    value={pt.tipo}
+                    onChange={(e) => set((prev) => {
+                      const productos = prev.productos.map((p, i) => i === tipoIdx ? { ...p, tipo: e.target.value } : p);
+                      return { ...prev, productos };
+                    })}
+                  />
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    style={{ color: 'var(--color-error, #dc2626)', borderColor: 'var(--color-error, #dc2626)', flexShrink: 0 }}
+                    onClick={() => set((prev) => ({ ...prev, productos: prev.productos.filter((_, i) => i !== tipoIdx) }))}
+                  >× Eliminar tipo</button>
+                </div>
+                <div style={{ paddingLeft: 8 }}>
+                  {pt.caracteristicas.map((c: string, cIdx: number) => (
+                    <div key={cIdx} className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+                      <span style={{ color: 'var(--text-muted)', marginRight: 2 }}>·</span>
+                      <input
+                        className="field-input"
+                        style={{ flex: 1 }}
+                        value={c}
+                        onChange={(e) => set((prev) => {
+                          const productos = prev.productos.map((p, i) =>
+                            i === tipoIdx
+                              ? { ...p, caracteristicas: p.caracteristicas.map((ch, ci) => ci === cIdx ? e.target.value : ch) }
+                              : p
+                          );
+                          return { ...prev, productos };
+                        })}
+                      />
+                      <button
+                        type="button"
+                        className="filter-chip"
+                        style={{ flexShrink: 0 }}
+                        onClick={() => set((prev) => {
+                          const productos = prev.productos.map((p, i) =>
+                            i === tipoIdx ? { ...p, caracteristicas: p.caracteristicas.filter((_, ci) => ci !== cIdx) } : p
+                          );
+                          return { ...prev, productos };
+                        })}
+                      >×</button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+                    <input
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      placeholder="Nueva característica..."
+                      value={glNewCharInputs[tipoIdx] ?? ''}
+                      onChange={(e) => setGlNewCharInputs((prev) => ({ ...prev, [tipoIdx]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const v = (glNewCharInputs[tipoIdx] ?? '').trim();
+                          if (!v) return;
+                          set((prev) => {
+                            const productos = prev.productos.map((p, i) =>
+                              i === tipoIdx ? { ...p, caracteristicas: [...p.caracteristicas, v] } : p
+                            );
+                            return { ...prev, productos };
+                          });
+                          setGlNewCharInputs((prev) => ({ ...prev, [tipoIdx]: '' }));
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="filter-chip"
+                      onClick={() => {
+                        const v = (glNewCharInputs[tipoIdx] ?? '').trim();
+                        if (!v) return;
+                        set((prev) => {
+                          const productos = prev.productos.map((p, i) =>
+                            i === tipoIdx ? { ...p, caracteristicas: [...p.caracteristicas, v] } : p
+                          );
+                          return { ...prev, productos };
+                        });
+                        setGlNewCharInputs((prev) => ({ ...prev, [tipoIdx]: '' }));
+                      }}
+                    >+ Agregar</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+              <input
+                className="field-input"
+                style={{ flex: 1 }}
+                placeholder="Nombre del nuevo tipo de producto..."
+                value={glNewTipo}
+                onChange={(e) => setGlNewTipo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const v = glNewTipo.trim();
+                    if (!v) return;
+                    set((prev) => ({ ...prev, productos: [...prev.productos, { tipo: v, caracteristicas: [] }] }));
+                    setGlNewTipo('');
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="filter-chip"
+                onClick={() => {
+                  const v = glNewTipo.trim();
+                  if (!v) return;
+                  set((prev) => ({ ...prev, productos: [...prev.productos, { tipo: v, caracteristicas: [] }] }));
+                  setGlNewTipo('');
+                }}
+              >+ Agregar tipo</button>
+            </div>
+          </div>
+
+          {/* Extract button */}
+          <div className="action-row" style={{ marginTop: 0 }}>
+            <button
+              type="button"
+              className="filter-chip filter-chip--active"
+              onClick={() => guidelinesFileInputRef.current?.click()}
+              disabled={isExtractingGuidelines}
+            >
+              {isExtractingGuidelines ? (
+                <RefreshCcw size={14} className="animate-spin" />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <FileUp size={14} />
+                  <Sparkles size={14} />
+                </div>
+              )}
+              <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     function renderStructureListEditor(
       key: keyof Pick<
         InstitutionStructure,
@@ -3430,18 +3751,50 @@ export function TeamPage({
 
                 <div className="field field--full">
                   <span>Lineamientos pedagógicos</span>
-                  <div className="list-stack rich-copy rich-copy--structured rich-copy--guidelines">
-                    {selectedInstitutionStructure.pedagogicalGuidelines.length > 0 ? (
-                      selectedInstitutionStructure.pedagogicalGuidelines.map((guideline, index) => (
-                        <div key={guideline} className="rich-copy__item">
-                          <strong className="rich-copy__label">{index + 1}.</strong>
-                          <span className="institution-structure-summary">{guideline}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="institution-structure-summary">Sin reglas pedagógicas registradas.</p>
-                    )}
-                  </div>
+                  {selectedInstitutionStructure.guidelinesStructured ? (() => {
+                    const g = selectedInstitutionStructure.guidelinesStructured!;
+                    const sections = [
+                      { label: 'Estructura', items: [g.estructura.creditos1, g.estructura.creditos2, g.estructura.creditos3, g.estructura.creditos4].filter(Boolean).map((v, i) => `${i + 1} crédito${i > 0 ? 's' : ''}: ${v}`) },
+                      { label: 'Introducción', items: g.introduccion.productos },
+                      ...(g.cierre.existe ? [{ label: 'Cierre', items: g.cierre.productos }] : []),
+                      { label: 'Unidades', items: g.unidades.productos },
+                    ];
+                    return (
+                      <div className="list-stack" style={{ gap: 10 }}>
+                        {sections.map((sec) => sec.items.length > 0 && (
+                          <div key={sec.label}>
+                            <p className="eyebrow" style={{ marginBottom: 4 }}>{sec.label}</p>
+                            {sec.items.map((item, i) => (
+                              <p key={i} className="institution-structure-summary" style={{ marginBottom: 2 }}>· {item}</p>
+                            ))}
+                          </div>
+                        ))}
+                        {g.productos.length > 0 && (
+                          <div>
+                            <p className="eyebrow" style={{ marginBottom: 4 }}>Productos ({g.productos.length} tipos)</p>
+                            {g.productos.map((pt) => (
+                              <p key={pt.tipo} className="institution-structure-summary" style={{ marginBottom: 2 }}>
+                                · <strong>{pt.tipo}</strong> — {pt.caracteristicas.length} característica{pt.caracteristicas.length !== 1 ? 's' : ''}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
+                    <div className="list-stack rich-copy rich-copy--structured rich-copy--guidelines">
+                      {selectedInstitutionStructure.pedagogicalGuidelines.length > 0 ? (
+                        selectedInstitutionStructure.pedagogicalGuidelines.map((guideline, index) => (
+                          <div key={guideline} className="rich-copy__item">
+                            <strong className="rich-copy__label">{index + 1}.</strong>
+                            <span className="institution-structure-summary">{guideline}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="institution-structure-summary">Sin lineamientos registrados.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {settingsError ? <p className="form-error">{settingsError}</p> : null}
@@ -3789,13 +4142,7 @@ export function TeamPage({
                   'Agregar tipología',
                 )}
 
-                {renderStructureListEditor(
-                  'pedagogicalGuidelines',
-                  'Lineamientos pedagógicos',
-                  'Ej. Toda unidad debe declarar su evidencia evaluativa',
-                  'Agregar regla',
-                  'Una regla por campo. Usa + para seguir construyendo la política pedagógica.',
-                )}
+                {renderGuidelinesStructuredEditor()}
               </div>
 
               {settingsError ? <p className="form-error">{settingsError}</p> : null}

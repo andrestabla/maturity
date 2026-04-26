@@ -33,36 +33,6 @@ function extractJsonObject(raw: string) {
   return withoutCodeFence;
 }
 
-function normalizeGuideline(rule: string) {
-  return rule
-    .replace(/^[\-\*\d\.\)\s]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function uniqueGuidelines(rules: string[]) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const rule of rules) {
-    const normalized = normalizeGuideline(rule);
-    const dedupeKey = normalized
-      .toLocaleLowerCase('es')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .trim();
-
-    if (!normalized || seen.has(dedupeKey)) {
-      continue;
-    }
-
-    seen.add(dedupeKey);
-    result.push(normalized);
-  }
-
-  return result;
-}
 
 export default async function handler(request: Request | any, response?: any) {
   const isNodeRes = response && typeof response.write === 'function';
@@ -149,36 +119,53 @@ export default async function handler(request: Request | any, response?: any) {
 
       await getIntegrationConfig('openai');
       const apiKey = process.env.OPENAI_API_KEY?.trim();
-      
+
       if (!apiKey) {
         throw new Error('No se encontró OPENAI_API_KEY en runtime para la extracción.');
       }
 
       const openai = new OpenAI({ apiKey });
 
-      const systemPrompt = `Eres un analista curricular experto en diseño instruccional, arquitectura de cursos y estandarización de productos académicos.
-Tu objetivo es extraer una lista EXHAUSTIVA, DETALLADA y NO REPETIDA de lineamientos pedagógicos y operativos para la producción de cursos.
+      const systemPrompt = `Eres un analista curricular experto en diseño instruccional. Analiza el documento de lineamientos pedagógicos institucionales y responde con un JSON estructurado.
 
-Prioriza especialmente reglas sobre:
-1. Productos obligatorios por curso.
-2. Productos obligatorios por unidad, introducción o cierre.
-3. Cantidades o variaciones según número de créditos académicos.
-4. Características exigidas de cada producto: formato, idioma, cantidad, obligatoriedad, propósito, relación con RAE o evaluación.
-5. Recursos curados, recursos propios, encuentros sincrónicos, cuestionarios, guías, rúbricas, cierres, presentaciones, sílabos, bibliografía y validaciones.
-6. Reglas de conteo, cobertura mínima y correspondencia entre créditos, unidades y productos.
+El JSON debe tener EXACTAMENTE esta estructura:
+{
+  "estructura": {
+    "creditos1": "descripción de la estructura de un curso de 1 crédito (unidades, sesiones síncronas, etc.)",
+    "creditos2": "descripción para 2 créditos",
+    "creditos3": "descripción para 3 créditos",
+    "creditos4": "descripción para 4 créditos"
+  },
+  "introduccion": {
+    "productos": ["nombre del producto 1", "nombre del producto 2"]
+  },
+  "cierre": {
+    "existe": true,
+    "productos": ["nombre del producto 1"]
+  },
+  "unidades": {
+    "productos": ["nombre del producto 1", "nombre del producto 2"]
+  },
+  "productos": [
+    {
+      "tipo": "Nombre del tipo de producto (ej. Video de bienvenida)",
+      "caracteristicas": [
+        "Característica específica 1",
+        "Característica específica 2"
+      ]
+    }
+  ]
+}
 
-Reglas de salida:
-1. Devuelve SOLO JSON válido con un campo "guidelines" que sea un arreglo de strings.
-2. Cada string debe ser una regla autónoma, clara, accionable y lo más específica posible.
-3. Separa reglas diferentes en strings distintos.
-4. Incluye explícitamente la condición cuando dependa de créditos académicos.
-5. No repitas reglas equivalentes ni reformules la misma idea.
-6. Omite nombres propios, firmas, fechas y texto administrativo irrelevante.
-7. Si el documento describe tablas o matrices, conviértelas en reglas explícitas.
-8. Conserva el detalle de productos y características, no resumas en exceso.
+INSTRUCCIONES:
+- estructura.creditos1/2/3/4: Describe cuántas unidades, sesiones síncronas u otros elementos estructurales tiene un curso con esa cantidad de créditos. Si no se especifica para ese número, usa "".
+- introduccion.productos: Lista de tipos de productos que componen la sección de inicio o introducción del curso (ej. "Video de bienvenida", "Sílabo", "Evaluación diagnóstica").
+- cierre.existe: true si el documento menciona sección de cierre/conclusión, false si no.
+- cierre.productos: Si existe cierre, lista sus productos. Si no, [].
+- unidades.productos: Tipos de productos que debe tener cada unidad o módulo.
+- productos: Por cada tipo de producto mencionado en el documento (de cualquier sección), crea un objeto con su nombre y lista de características, requisitos y criterios específicos. Sé exhaustivo: duración, idioma, formato, propósito pedagógico, relación con resultados de aprendizaje, criterios de evaluación, etc.
 
-Formato esperado:
-{ "guidelines": ["Regla 1", "Regla 2", "..."] }`;
+Devuelve SOLO el JSON. Sin texto adicional.`;
 
       const chatCompletion = await openai.chat.completions.create({
         model: 'gpt-4o',
@@ -187,24 +174,49 @@ Formato esperado:
           {
             role: 'user',
             content:
-              `Extrae del documento una lista exhaustiva de lineamientos para construir cursos. ` +
-              `Debes capturar con el mayor detalle posible todos los productos requeridos y sus características, ` +
-              `especialmente cuando cambian según el número de créditos académicos. ` +
-              `No omitas reglas sobre unidades, introducción, cierre, evaluaciones, recursos, bibliografía, encuentros sincrónicos, RAE, recursos en inglés o cantidades mínimas/máximas.\n\n` +
+              `Analiza este documento de lineamientos institucionales y responde con el JSON estructurado. ` +
+              `Sé exhaustivo, especialmente en las características de cada tipo de producto y en la correspondencia entre créditos y estructura del curso.\n\n` +
               extractedText.slice(0, 40000),
           },
         ],
         response_format: { type: 'json_object' },
       });
 
-      const rawResult = chatCompletion.choices[0].message.content || '{"guidelines":[]}';
+      const rawResult = chatCompletion.choices[0].message.content || '{}';
       const parsed = JSON.parse(extractJsonObject(rawResult));
-      const guidelines = uniqueGuidelines(Array.isArray(parsed?.guidelines) ? parsed.guidelines : []);
+
+      // Normalize to GuidelinesStructured shape
+      const structured = {
+        estructura: {
+          creditos1: String(parsed?.estructura?.creditos1 ?? ''),
+          creditos2: String(parsed?.estructura?.creditos2 ?? ''),
+          creditos3: String(parsed?.estructura?.creditos3 ?? ''),
+          creditos4: String(parsed?.estructura?.creditos4 ?? ''),
+        },
+        introduccion: {
+          productos: Array.isArray(parsed?.introduccion?.productos) ? parsed.introduccion.productos.map(String) : [],
+        },
+        cierre: {
+          existe: Boolean(parsed?.cierre?.existe),
+          productos: Array.isArray(parsed?.cierre?.productos) ? parsed.cierre.productos.map(String) : [],
+        },
+        unidades: {
+          productos: Array.isArray(parsed?.unidades?.productos) ? parsed.unidades.productos.map(String) : [],
+        },
+        productos: Array.isArray(parsed?.productos)
+          ? parsed.productos
+              .filter((p: any) => p && typeof p.tipo === 'string' && p.tipo.trim())
+              .map((p: any) => ({
+                tipo: String(p.tipo).trim(),
+                caracteristicas: Array.isArray(p.caracteristicas) ? p.caracteristicas.map(String) : [],
+              }))
+          : [],
+      };
 
       notify({
         progress: 100,
         step: '¡Lineamientos extraídos!',
-        data: guidelines,
+        data: structured,
         complete: true,
       });
 
