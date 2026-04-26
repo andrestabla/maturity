@@ -13260,14 +13260,53 @@ export function CourseWorkspacePage({
                       </div>
                     </div>
 
-                    <div className="field">
+                    <div className="field field--full">
                       <span>Metodología</span>
-                      <p>{currentCourse.metadata.methodology}</p>
+                      <p className="whitespace-pre-line leading-relaxed">{currentCourse.metadata.methodology}</p>
                     </div>
-                    <div className="field">
-                      <span>Evaluación</span>
-                      <p>{currentCourse.metadata.evaluation}</p>
+
+                    <div className="field field--full">
+                      <span>Esquema de Evaluación</span>
+                      <div className="mt-2 flex flex-col gap-1">
+                        {Array.isArray(currentCourse.metadata.evaluation) && currentCourse.metadata.evaluation.length > 0
+                          ? currentCourse.metadata.evaluation.map((item: any, idx: number) => (
+                              <p key={idx} className="text-sm">• {typeof item === 'string' ? item : item.porcentaje ? `${item.nombre} (${item.porcentaje})` : item.nombre}</p>
+                            ))
+                          : <p className="text-muted text-sm">Sin información de evaluación.</p>
+                        }
+                      </div>
                     </div>
+
+                    {Array.isArray(currentCourse.metadata.units) && currentCourse.metadata.units.length > 0 && (
+                      <div className="field field--full">
+                        <span>Unidades / Módulos</span>
+                        <div className="mt-2 flex flex-col gap-3">
+                          {currentCourse.metadata.units.map((unit: any, uIdx: number) => (
+                            <div key={uIdx}>
+                              <p className="text-sm font-semibold text-ink">{uIdx + 1}. {unit.tituloUnidad}</p>
+                              {Array.isArray(unit.tematicas) && unit.tematicas.length > 0 && (
+                                <div className="ml-4 mt-1 flex flex-col gap-0.5">
+                                  {unit.tematicas.map((tema: string, tIdx: number) => (
+                                    <p key={tIdx} className="text-sm text-muted">• {tema}</p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {Array.isArray(currentCourse.metadata.bibliography) && currentCourse.metadata.bibliography.length > 0 && (
+                      <div className="field field--full">
+                        <span>Bibliografía</span>
+                        <div className="mt-2 flex flex-col gap-1">
+                          {currentCourse.metadata.bibliography.map((ref: string, idx: number) => (
+                            <p key={idx} className="text-sm">• {ref}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </article>
 
