@@ -3113,15 +3113,24 @@ export function TeamPage({
                 <span>{glSuggestingSection === 'estructura' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
               </button>
             </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+              ¿Cuántas unidades o módulos tiene un curso de X créditos?
+            </p>
             {(['creditos1', 'creditos2', 'creditos3', 'creditos4'] as const).map((key, i) => (
               <label key={key} className="field" style={{ marginBottom: 6 }}>
                 <span style={{ minWidth: 120 }}>{i + 1} crédito{i > 0 ? 's' : ''}</span>
-                <input
-                  className="field-input"
-                  placeholder={`Ej. ${i + 2} unidades y ${(i + 1) * 5} encuentros sincrónicos`}
-                  value={draft.estructura[key]}
-                  onChange={(e) => set((prev) => ({ ...prev, estructura: { ...prev.estructura, [key]: e.target.value } }))}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <input
+                    className="field-input"
+                    type="number"
+                    min={1}
+                    style={{ width: 80, flex: 'none' }}
+                    placeholder="0"
+                    value={draft.estructura[key]}
+                    onChange={(e) => set((prev) => ({ ...prev, estructura: { ...prev.estructura, [key]: e.target.value } }))}
+                  />
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>unidad{draft.estructura[key] === '1' ? '' : 'es'}</span>
+                </div>
               </label>
             ))}
           </div>
@@ -3958,7 +3967,7 @@ export function TeamPage({
                       );
                     }
                     const estructuraSections = [
-                      { label: '1. Estructura', items: (['creditos1','creditos2','creditos3','creditos4'] as const).map((k, i) => g.estructura[k] ? `${i + 1} crédito${i > 0 ? 's' : ''}: ${g.estructura[k]}` : null).filter(Boolean) as string[] },
+                      { label: '1. Estructura', items: (['creditos1','creditos2','creditos3','creditos4'] as const).map((k, i) => g.estructura[k] ? `${i + 1} crédito${i > 0 ? 's' : ''}: ${g.estructura[k]} unidad${g.estructura[k] === '1' ? '' : 'es'}` : null).filter(Boolean) as string[] },
                       { label: '2. Introducción', items: g.introduccion.productos },
                       ...(g.cierre.existe ? [{ label: '3. Cierre', items: g.cierre.productos }] : [{ label: '3. Cierre', items: [] as string[] }]),
                       { label: '4. Unidades', items: g.unidades.productos },

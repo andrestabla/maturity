@@ -61,30 +61,34 @@ export default async function handler(request: Request | any, response?: any) {
 
   const ctx = docContext || (body.context ? `\n\nContexto adicional:\n${body.context.slice(0, 3000)}` : '');
 
+  const docPriority = docContext
+    ? 'INSTRUCCIÓN CRÍTICA: Basa tu respuesta EXCLUSIVAMENTE en los documentos institucionales proporcionados. Solo si el documento no menciona explícitamente el tema consultado, complementa con criterio general de diseño curricular para educación superior en Latinoamérica. Prioridad: documentos > conocimiento general.'
+    : '';
+
   const sectionPrompts: Record<SectionKey, { system: string; user: string; schema: string }> = {
     estructura: {
       system: 'Eres un experto en diseño curricular para educación superior en Latinoamérica.',
-      user: `Para la institución "${body.institutionName}", sugiere cuántas unidades/módulos y sesiones síncronas tiene un curso típico para cada cantidad de créditos académicos (1, 2, 3 y 4 créditos). Sé conciso y específico.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"creditos1":"...","creditos2":"...","creditos3":"...","creditos4":"..."}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", determina cuántas unidades o módulos tiene un curso para cada cantidad de créditos académicos (1, 2, 3 y 4 créditos). Responde SOLO con el número de unidades para cada caso, sin mencionar sesiones síncronas ni otra información.${ctx}\n\nResponde ÚNICAMENTE con JSON donde cada valor es únicamente el número de unidades (ej. "2"): {"creditos1":"...","creditos2":"...","creditos3":"...","creditos4":"..."}`,
       schema: 'json_object',
     },
     introduccion: {
       system: 'Eres un experto en diseño instruccional para educación superior en Latinoamérica.',
-      user: `Para la institución "${body.institutionName}", lista los productos educativos que típicamente componen la sección de Introducción o inicio de un curso virtual (ej. video de bienvenida, sílabo, evaluación diagnóstica, guía de aprendizaje, políticas del curso, etc.). Lista entre 4 y 8 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista los productos educativos que componen la sección de Introducción o inicio de un curso virtual (ej. video de bienvenida, sílabo, evaluación diagnóstica, guía de aprendizaje, políticas del curso, etc.). Lista entre 4 y 8 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
       schema: 'json_object',
     },
     cierre: {
       system: 'Eres un experto en diseño instruccional para educación superior en Latinoamérica.',
-      user: `Para la institución "${body.institutionName}", lista los productos educativos que típicamente componen la sección de Cierre o conclusión de un curso virtual (ej. evaluación final, cuestionario de salida, video de cierre, encuesta de satisfacción, etc.). Lista entre 3 y 6 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista los productos educativos que componen la sección de Cierre o conclusión de un curso virtual (ej. evaluación final, cuestionario de salida, video de cierre, encuesta de satisfacción, etc.). Lista entre 3 y 6 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
       schema: 'json_object',
     },
     unidades: {
       system: 'Eres un experto en diseño instruccional para educación superior en Latinoamérica.',
-      user: `Para la institución "${body.institutionName}", lista los productos educativos que típicamente componen cada unidad o módulo de un curso virtual (ej. video de contenido, actividad de aprendizaje, actividad evaluativa, cuestionario, recurso curado, guía de estudio, etc.). Lista entre 4 y 10 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista los productos educativos que componen cada unidad o módulo de un curso virtual (ej. video de contenido, actividad de aprendizaje, actividad evaluativa, cuestionario, recurso curado, guía de estudio, etc.). Lista entre 4 y 10 productos concretos.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"productos":["...","..."]}`,
       schema: 'json_object',
     },
     producto: {
       system: 'Eres un experto en diseño instruccional y producción de contenido educativo.',
-      user: `Para la institución "${body.institutionName}", lista las características, requisitos y criterios que debe cumplir el siguiente tipo de producto educativo: "${body.productTipo ?? 'Producto educativo'}". Incluye aspectos como duración, formato, propósito pedagógico, relación con resultados de aprendizaje, criterios de evaluación, etc. Lista entre 5 y 10 características concretas y accionables.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"caracteristicas":["...","..."]}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista las características, requisitos y criterios que debe cumplir el siguiente tipo de producto educativo: "${body.productTipo ?? 'Producto educativo'}". Incluye aspectos como duración, formato, propósito pedagógico, relación con resultados de aprendizaje, criterios de evaluación, etc. Lista entre 5 y 10 características concretas y accionables.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"caracteristicas":["...","..."]}`,
       schema: 'json_object',
     },
   };
