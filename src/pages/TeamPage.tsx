@@ -434,6 +434,7 @@ export function TeamPage({
   const [isExtractingGuidelines, setIsExtractingGuidelines] = useState(false);
   const [extractionStep, setExtractionStep] = useState('');
   const [extractionProgress, setExtractionProgress] = useState(0);
+  const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
 
   const activeStructureRouteId =
     institutionStructureEditMatch?.params.structureId ??
@@ -2606,31 +2607,58 @@ export function TeamPage({
 
       const values = structureDraft[key].length > 0 ? structureDraft[key] : [''];
 
+      const duplicateIndices = (() => {
+        if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Set<number>();
+        const normalize = (s: string) =>
+          s.toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        const seen = new Map<string, number>();
+        const dupes = new Set<number>();
+        values.forEach((v, i) => {
+          const k = normalize(v);
+          if (!k) return;
+          if (seen.has(k)) {
+            dupes.add(i);
+            dupes.add(seen.get(k)!);
+          } else {
+            seen.set(k, i);
+          }
+        });
+        return dupes;
+      })();
+
       return (
         <div className="field field--full">
           <span>{label}</span>
           {helpText ? <small className="field-help">{helpText}</small> : null}
 
           <div className="institution-list-editor">
-            {values.map((value, index) => (
-              <div key={`${key}-${index}`} className="institution-list-editor__row">
-                <div className="field__control">
-                  <input
-                    value={value}
-                    onChange={(event) => updateStructureDraftListField(key, index, event.target.value)}
-                    placeholder={placeholder}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  className="filter-chip"
-                  onClick={() => removeStructureDraftListField(key, index)}
+            {values.map((value, index) => {
+              const isDuplicate = duplicateIndices.has(index);
+              return (
+                <div
+                  key={`${key}-${index}`}
+                  className="institution-list-editor__row"
+                  style={isDuplicate ? { backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '6px', outline: '1.5px solid rgba(239,68,68,0.45)' } : undefined}
                 >
-                  <span>Quitar</span>
-                </button>
-              </div>
-            ))}
+                  <div className="field__control">
+                    <input
+                      value={value}
+                      onChange={(event) => updateStructureDraftListField(key, index, event.target.value)}
+                      placeholder={placeholder}
+                      style={isDuplicate ? { color: '#b91c1c' } : undefined}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    onClick={() => removeStructureDraftListField(key, index)}
+                  >
+                    <span>Quitar</span>
+                  </button>
+                </div>
+              );
+            })}
 
             <div className="action-row" style={{ marginTop: '0.5rem' }}>
               <button
@@ -2643,22 +2671,36 @@ export function TeamPage({
               </button>
 
               {key === 'pedagogicalGuidelines' && (
-                <button
-                  type="button"
-                  className="filter-chip filter-chip--active"
-                  onClick={() => guidelinesFileInputRef.current?.click()}
-                  disabled={isExtractingGuidelines}
-                >
-                  {isExtractingGuidelines ? (
-                    <RefreshCcw size={14} className="animate-spin" />
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <FileUp size={14} />
-                      <Sparkles size={14} />
-                    </div>
-                  )}
-                  <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={showGuidelineDuplicates ? 'filter-chip filter-chip--active' : 'filter-chip'}
+                    onClick={() => setShowGuidelineDuplicates((v) => !v)}
+                  >
+                    <span>
+                      {showGuidelineDuplicates
+                        ? `Duplicados: ${duplicateIndices.size > 0 ? duplicateIndices.size : 'ninguno'}`
+                        : 'Identificar duplicados'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="filter-chip filter-chip--active"
+                    onClick={() => guidelinesFileInputRef.current?.click()}
+                    disabled={isExtractingGuidelines}
+                  >
+                    {isExtractingGuidelines ? (
+                      <RefreshCcw size={14} className="animate-spin" />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <FileUp size={14} />
+                        <Sparkles size={14} />
+                      </div>
+                    )}
+                    <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
