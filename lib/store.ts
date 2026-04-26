@@ -1047,7 +1047,6 @@ function normalizeCourse(course: Course): Course {
     }),
     {} as Course['stageNotes'],
   );
-  const defaultProducts = buildDefaultCourseProducts(course);
   const normalizedProducts =
     sourceProducts.length > 0
       ? sourceProducts
@@ -1059,12 +1058,7 @@ function normalizeCourse(course: Course): Course {
             validationData: normalizeProductValidationData(product.validationData, product.stage),
           }))
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      : defaultProducts.map((product) => ({
-          ...product,
-          phasePlan: normalizeProductPhasePlan(product.phasePlan),
-          writingData: normalizeProductWritingData(product.writingData),
-          validationData: normalizeProductValidationData(product.validationData, product.stage),
-        }));
+      : [];
 
   const normalizedAuditLog =
     Array.isArray(course.auditLog) && course.auditLog.length > 0
