@@ -46,9 +46,6 @@ export default async function handler(request: Request) {
         return errorResponse(400, 'institutionId is required');
       }
       const payload = await readJson<CourseArchitectureTemplateMutationInput>(request);
-      if (!payload.name?.trim()) {
-        return errorResponse(400, 'Template name is required');
-      }
       const template = await createInstitutionCourseTemplateRecord(institutionId, payload);
       return jsonResponse({ template }, { status: 201 });
     }
@@ -58,9 +55,6 @@ export default async function handler(request: Request) {
         return errorResponse(400, 'Template id is required');
       }
       const payload = await readJson<CourseArchitectureTemplateMutationInput>(request);
-      if (!payload.name?.trim()) {
-        return errorResponse(400, 'Template name is required');
-      }
       const template = await updateInstitutionCourseTemplateRecord(templateId, payload);
       if (!template) {
         return errorResponse(404, 'Template not found');

@@ -3305,7 +3305,6 @@ export function TeamPage({
                       value={templateDraft.name}
                       onChange={(e) => setTemplateDraft((d) => d ? { ...d, name: e.target.value } : d)}
                       placeholder="Ej. Curso estándar 3 créditos"
-                      required
                     />
                   </div>
                 </label>
@@ -3339,7 +3338,6 @@ export function TeamPage({
                           value={section.name}
                           onChange={(e) => updateTemplateSectionName(sIdx, e.target.value)}
                           placeholder="Nombre de sección (Ej. Introducción, Unidad 1)"
-                          required
                         />
                       </div>
                       <button type="button" className="filter-chip" onClick={() => removeTemplateSection(sIdx)}>
@@ -3357,7 +3355,6 @@ export function TeamPage({
                                 value={product.title}
                                 onChange={(e) => updateTemplateProduct(sIdx, pIdx, 'title', e.target.value)}
                                 placeholder="Título del producto"
-                                required
                               />
                             </div>
                             <div style={{ display: 'flex', gap: '0.375rem' }}>

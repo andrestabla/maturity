@@ -8486,11 +8486,13 @@ export async function createInstitutionCourseTemplateRecord(
   const sql = getSql();
   const id = `tpl-${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`;
   const now = new Date().toISOString();
+  const name = input.name?.trim() || 'Plantilla sin nombre';
+  const description = input.description?.trim() || '';
   await sql`
     INSERT INTO maturity_institution_course_templates (id, institution_id, name, description, sections, created_at, updated_at)
-    VALUES (${id}, ${institutionId}, ${input.name.trim()}, ${input.description.trim()}, ${JSON.stringify(input.sections)}, ${now}, ${now})
+    VALUES (${id}, ${institutionId}, ${name}, ${description}, ${JSON.stringify(input.sections ?? [])}, ${now}, ${now})
   `;
-  return { id, institutionId, name: input.name.trim(), description: input.description.trim(), sections: input.sections, createdAt: now, updatedAt: now };
+  return { id, institutionId, name, description, sections: input.sections ?? [], createdAt: now, updatedAt: now };
 }
 
 export async function updateInstitutionCourseTemplateRecord(
@@ -8502,7 +8504,7 @@ export async function updateInstitutionCourseTemplateRecord(
   const now = new Date().toISOString();
   const rows = (await sql`
     UPDATE maturity_institution_course_templates
-    SET name = ${input.name.trim()}, description = ${input.description.trim()}, sections = ${JSON.stringify(input.sections)}, updated_at = ${now}
+    SET name = ${input.name?.trim() || 'Plantilla sin nombre'}, description = ${input.description?.trim() || ''}, sections = ${JSON.stringify(input.sections ?? [])}, updated_at = ${now}
     WHERE id = ${id}
     RETURNING id, institution_id, name, description, sections, created_at, updated_at
   `) as Array<{ id: string; institution_id: string; name: string; description: string; sections: unknown; created_at: string; updated_at: string }>;
