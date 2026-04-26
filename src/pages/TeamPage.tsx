@@ -1226,6 +1226,27 @@ export function TeamPage({
     }
 
     const normalizedStructure = normalizeStructureDraft(structureDraft);
+
+    if (editingStructureId) {
+      const currentStructure = institutionDraft.structures.find((s) => s.id === editingStructureId);
+      const currentCount = currentStructure?.pedagogicalGuidelines.length ?? 0;
+      const nextCount = normalizedStructure.pedagogicalGuidelines.length;
+
+      if (currentCount > 0 && nextCount < currentCount) {
+        const confirmed = await showConfirm({
+          title: 'Reducción de lineamientos pedagógicos',
+          message: `Vas a reducir los lineamientos de ${currentCount} a ${nextCount}. Los lineamientos que no estén en el formulario serán eliminados permanentemente. ¿Confirmas?`,
+          confirmLabel: 'Sí, guardar',
+          cancelLabel: 'Cancelar',
+          tone: 'warning',
+        });
+
+        if (!confirmed) {
+          return;
+        }
+      }
+    }
+
     const nextStructures = editingStructureId
       ? institutionDraft.structures.map((structure) =>
           structure.id === editingStructureId ? normalizedStructure : structure,
