@@ -9,7 +9,7 @@ export const config = {
   runtime: 'nodejs',
 };
 
-type SectionKey = 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'producto';
+type SectionKey = 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'producto' | 'productos';
 
 interface Payload {
   institutionName: string;
@@ -88,7 +88,12 @@ export default async function handler(request: Request | any, response?: any) {
     },
     producto: {
       system: 'Eres un experto en diseño instruccional y producción de contenido educativo.',
-      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista las características, requisitos y criterios que debe cumplir el siguiente tipo de producto educativo: "${body.productTipo ?? 'Producto educativo'}". Incluye aspectos como duración, formato, propósito pedagógico, relación con resultados de aprendizaje, criterios de evaluación, etc. Lista entre 5 y 10 características concretas y accionables.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"caracteristicas":["...","..."]}`,
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", describe las características, requisitos y criterios que debe cumplir el siguiente tipo de producto educativo: "${body.productTipo ?? 'Producto educativo'}". Incluye aspectos como duración, formato, propósito pedagógico, relación con resultados de aprendizaje, criterios de evaluación, etc. Lista entre 5 y 10 características. IMPORTANTE: cada característica debe ser una oración descriptiva completa y detallada (mínimo 15 palabras), no una frase corta ni una etiqueta.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"caracteristicas":["...","..."]}`,
+      schema: 'json_object',
+    },
+    productos: {
+      system: 'Eres un experto en diseño instruccional para educación superior en Latinoamérica.',
+      user: `${docPriority ? docPriority + '\n\n' : ''}Para la institución "${body.institutionName}", lista los tipos de productos educativos digitales que deben producirse para los cursos virtuales (ej. Video educativo, Cuestionario de autoevaluación, Recurso interactivo, Infografía, Podcast, Actividad evaluativa, etc.). Lista entre 5 y 10 tipos concretos, sin incluir sus características.${ctx}\n\nResponde ÚNICAMENTE con JSON: {"tipos":["...","..."]}`,
       schema: 'json_object',
     },
   };

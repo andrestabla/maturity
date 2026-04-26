@@ -1337,7 +1337,7 @@ export function TeamPage({
   }
 
   async function handleSuggestSection(
-    section: 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'producto',
+    section: 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'producto' | 'productos',
     productTipo?: string,
     productIdx?: number,
   ) {
@@ -1388,6 +1388,14 @@ export function TeamPage({
               : p
           );
           return { ...base, productos };
+        }
+        if (section === 'productos') {
+          const incoming = Array.isArray(data.tipos) ? (data.tipos as string[]) : [];
+          const existingNames = new Set(base.productos.map((p) => p.tipo.toLowerCase()));
+          const newTipos = incoming
+            .filter((t) => !existingNames.has(t.toLowerCase()))
+            .map((t) => ({ tipo: t, caracteristicas: [] }));
+          return { ...base, productos: [...base.productos, ...newTipos] };
         }
         return base;
       });
@@ -3232,7 +3240,18 @@ export function TeamPage({
 
           {/* 5. Productos */}
           <div className="info-box" style={{ marginBottom: 12 }}>
-            <strong style={{ display: 'block', marginBottom: 10 }}>5. Características por tipo de producto</strong>
+            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+              <strong>5. Características por tipo de producto</strong>
+              <button
+                type="button"
+                className="filter-chip"
+                disabled={glSuggestingSection === 'productos'}
+                onClick={() => void handleSuggestSection('productos')}
+              >
+                {glSuggestingSection === 'productos' ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                <span>{glSuggestingSection === 'productos' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
+              </button>
+            </div>
             {draft.productos.map((pt: GuidelinesProductoTipo, tipoIdx: number) => (
               <div key={tipoIdx} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
@@ -3264,11 +3283,12 @@ export function TeamPage({
                 </div>
                 <div style={{ paddingLeft: 8 }}>
                   {pt.caracteristicas.map((c: string, cIdx: number) => (
-                    <div key={cIdx} className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-                      <span style={{ color: 'var(--text-muted)', marginRight: 2 }}>·</span>
-                      <input
+                    <div key={cIdx} className="flex gap-2" style={{ marginBottom: 6, alignItems: 'flex-start' }}>
+                      <span style={{ color: 'var(--text-muted)', marginRight: 2, paddingTop: 6 }}>·</span>
+                      <textarea
                         className="field-input"
-                        style={{ flex: 1 }}
+                        style={{ flex: 1, resize: 'vertical', minHeight: 48, fontSize: 13, lineHeight: 1.5 }}
+                        rows={2}
                         value={c}
                         onChange={(e) => set((prev) => {
                           const productos = prev.productos.map((p, i) =>
@@ -3282,7 +3302,7 @@ export function TeamPage({
                       <button
                         type="button"
                         className="filter-chip"
-                        style={{ flexShrink: 0 }}
+                        style={{ flexShrink: 0, marginTop: 2 }}
                         onClick={() => set((prev) => {
                           const productos = prev.productos.map((p, i) =>
                             i === tipoIdx ? { ...p, caracteristicas: p.caracteristicas.filter((_, ci) => ci !== cIdx) } : p
@@ -3292,31 +3312,19 @@ export function TeamPage({
                       >×</button>
                     </div>
                   ))}
-                  <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
-                    <input
+                  <div className="flex gap-2" style={{ marginTop: 4, alignItems: 'flex-start' }}>
+                    <textarea
                       className="field-input"
-                      style={{ flex: 1 }}
-                      placeholder="Nueva característica..."
+                      style={{ flex: 1, resize: 'vertical', minHeight: 48, fontSize: 13, lineHeight: 1.5 }}
+                      rows={2}
+                      placeholder="Nueva característica descriptiva..."
                       value={glNewCharInputs[tipoIdx] ?? ''}
                       onChange={(e) => setGlNewCharInputs((prev) => ({ ...prev, [tipoIdx]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const v = (glNewCharInputs[tipoIdx] ?? '').trim();
-                          if (!v) return;
-                          set((prev) => {
-                            const productos = prev.productos.map((p, i) =>
-                              i === tipoIdx ? { ...p, caracteristicas: [...p.caracteristicas, v] } : p
-                            );
-                            return { ...prev, productos };
-                          });
-                          setGlNewCharInputs((prev) => ({ ...prev, [tipoIdx]: '' }));
-                        }
-                      }}
                     />
                     <button
                       type="button"
                       className="filter-chip"
+                      style={{ marginTop: 2 }}
                       onClick={() => {
                         const v = (glNewCharInputs[tipoIdx] ?? '').trim();
                         if (!v) return;
