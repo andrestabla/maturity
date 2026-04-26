@@ -50,37 +50,56 @@ export default async function handler(request: Request | any, response?: any) {
 
   const openai = new OpenAI({ apiKey });
 
-  const guidelinesText = guidelines.length > 0
-    ? guidelines.map((g) => `- ${g}`).join('\n')
-    : '- Seguir estándares generales de diseño instruccional.';
+  const numberedGuidelines = guidelines.length > 0
+    ? guidelines.map((g, i) => `[L${i + 1}] ${g}`).join('\n')
+    : '[L1] Seguir estándares generales de diseño instruccional.';
 
   const productsList = body.products
-    .map((p, i) => `${i + 1}. Título: "${p.title}" | Formato: ${p.format} | Sección: ${p.section}`)
+    .map((p, i) => `[P${i + 1}] Título: "${p.title}" | Formato: ${p.format} | Sección: "${p.section}"`)
     .join('\n');
 
-  const systemPrompt = `Eres un diseñador instruccional experto. Genera una descripción breve (máximo 2 oraciones, tono académico y claro) para cada producto de un curso virtual, respetando los lineamientos pedagógicos institucionales.
+  const systemPrompt = `Eres un diseñador instruccional experto con conocimiento profundo de los lineamientos pedagógicos de esta institución.
 
-LINEAMIENTOS INSTITUCIONALES:
-${guidelinesText}
+Tu proceso para cada producto es el siguiente:
 
-INSTRUCCIONES:
-- Responde ÚNICAMENTE con un objeto JSON: { "descriptions": ["desc1", "desc2", ...] }
-- El array debe tener exactamente el mismo número de elementos que los productos dados.
-- Cada descripción debe ser concisa, orientada al estudiante, y coherente con el formato y la sección del producto.
-- Si el título ya es descriptivo, refuerza el propósito pedagógico y el resultado esperado.`;
+PASO 1 — MAPEO: Identifica qué lineamientos [L#] mencionan, aluden o aplican directamente al producto (por su título, formato o función pedagógica). Considera sinónimos y relaciones implícitas.
+
+PASO 2 — SÍNTESIS: Con base en SOLO los lineamientos encontrados (no inventes), redacta una descripción fiel que:
+  - Refleje exactamente lo que los lineamientos establecen para ese tipo de producto.
+  - Use el lenguaje y los conceptos propios de los lineamientos (no parafrasees de forma genérica).
+  - Sea concisa: máximo 2-3 oraciones.
+  - Esté orientada al estudiante o al docente según el contexto del producto.
+  - Si ningún lineamiento aplica específicamente, describe el propósito pedagógico general del producto en el contexto del curso.
+
+FORMATO DE RESPUESTA:
+Responde ÚNICAMENTE con JSON válido:
+{
+  "results": [
+    {
+      "productIndex": 1,
+      "matchedGuidelines": ["L2", "L7"],
+      "description": "Descripción fiel al lineamiento..."
+    },
+    ...
+  ]
+}
+El array "results" debe tener exactamente un elemento por cada producto dado, en el mismo orden.`;
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o',
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Genera descripciones para estos ${body.products.length} producto(s):\n\n${productsList}` },
+      {
+        role: 'user',
+        content: `LINEAMIENTOS INSTITUCIONALES:\n${numberedGuidelines}\n\nPRODUCTOS A DESCRIBIR:\n${productsList}\n\nEjecuta el proceso PASO 1 → PASO 2 para cada producto y devuelve el JSON.`,
+      },
     ],
     response_format: { type: 'json_object' },
-    temperature: 0.4,
+    temperature: 0.2,
   });
 
   const raw = completion.choices[0].message.content ?? '{}';
-  let parsed: { descriptions?: string[] };
+  let parsed: { results?: Array<{ productIndex: number; matchedGuidelines: string[]; description: string }> };
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -89,10 +108,17 @@ INSTRUCCIONES:
       : errorResponse(500, 'La IA no devolvió un formato válido.');
   }
 
-  const descriptions = Array.isArray(parsed.descriptions) ? parsed.descriptions : [];
-
-  if (isNodeRes) {
-    return response.status(200).json({ descriptions });
+  // Build ordered descriptions array aligned to input order
+  const descriptions: string[] = new Array(body.products.length).fill('');
+  if (Array.isArray(parsed.results)) {
+    for (const entry of parsed.results) {
+      const idx = entry.productIndex - 1; // 1-based → 0-based
+      if (idx >= 0 && idx < body.products.length && entry.description) {
+        descriptions[idx] = entry.description;
+      }
+    }
   }
+
+  if (isNodeRes) return response.status(200).json({ descriptions });
   return jsonResponse({ descriptions });
 }
