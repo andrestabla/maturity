@@ -73,13 +73,10 @@ Responde ÚNICAMENTE con un objeto JSON: { "pairs": [[i, j], ...] }
     parsed = { pairs: [] };
   }
 
-  const pairs = Array.isArray(parsed.pairs) ? parsed.pairs : [];
+  const validPairs = (Array.isArray(parsed.pairs) ? parsed.pairs : [])
+    .filter((p) => Array.isArray(p) && p.length >= 2 && p.every((idx) => typeof idx === 'number' && idx >= 0 && idx < body.guidelines.length))
+    .map((p) => [p[0], p[1]] as [number, number]);
 
-  // Flatten pairs into a set of duplicate indices
-  const semanticDuplicates = Array.from(
-    new Set(pairs.flatMap((pair) => pair.filter((idx) => typeof idx === 'number' && idx >= 0 && idx < body.guidelines.length))),
-  );
-
-  if (isNodeRes) return response.status(200).json({ semanticDuplicates });
-  return jsonResponse({ semanticDuplicates });
+  if (isNodeRes) return response.status(200).json({ pairs: validPairs });
+  return jsonResponse({ pairs: validPairs });
 }

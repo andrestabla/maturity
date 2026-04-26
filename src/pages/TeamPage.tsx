@@ -439,7 +439,7 @@ export function TeamPage({
   const [extractionStep, setExtractionStep] = useState('');
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
-  const [semanticDuplicateIndices, setSemanticDuplicateIndices] = useState<Set<number>>(new Set());
+  const [duplicatePairs, setDuplicatePairs] = useState<[number, number][]>([]);
   const [isDetectingDuplicates, setIsDetectingDuplicates] = useState(false);
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
@@ -2875,31 +2875,61 @@ export function TeamPage({
 
       const values = structureDraft[key].length > 0 ? structureDraft[key] : [''];
 
-      const literalDuplicateIndices = (() => {
-        if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Set<number>();
+      // Build color group map via union-find on all pairs (literal + semantic)
+      const duplicateColorMap = (() => {
+        if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Map<number, number>();
+
+        // Literal pairs
         const normalize = (s: string) =>
           s.toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
         const seen = new Map<string, number>();
-        const dupes = new Set<number>();
+        const allPairs: [number, number][] = [];
         values.forEach((v, i) => {
           const k = normalize(v);
           if (!k) return;
-          if (seen.has(k)) {
-            dupes.add(i);
-            dupes.add(seen.get(k)!);
-          } else {
-            seen.set(k, i);
-          }
+          if (seen.has(k)) allPairs.push([seen.get(k)!, i]);
+          else seen.set(k, i);
         });
-        return dupes;
+
+        // Semantic pairs (remapped from filled-values indices to values indices)
+        const filledToOriginal: number[] = [];
+        values.forEach((v, i) => { if (v) filledToOriginal.push(i); });
+        for (const [fi, fj] of duplicatePairs) {
+          const oi = filledToOriginal[fi];
+          const oj = filledToOriginal[fj];
+          if (oi !== undefined && oj !== undefined) allPairs.push([oi, oj]);
+        }
+
+        if (allPairs.length === 0) return new Map<number, number>();
+
+        // Union-find
+        const parent = new Map<number, number>();
+        const find = (x: number): number => {
+          if (!parent.has(x)) parent.set(x, x);
+          if (parent.get(x) !== x) parent.set(x, find(parent.get(x)!));
+          return parent.get(x)!;
+        };
+        const union = (a: number, b: number) => {
+          parent.set(find(a), find(b));
+        };
+        for (const [a, b] of allPairs) union(a, b);
+
+        // Assign color index per root
+        const rootColor = new Map<number, number>();
+        let colorIdx = 0;
+        const colorMap = new Map<number, number>();
+        for (const [a, b] of allPairs) {
+          [a, b].forEach((i) => {
+            const root = find(i);
+            if (!rootColor.has(root)) rootColor.set(root, colorIdx++);
+            colorMap.set(i, rootColor.get(root)!);
+          });
+        }
+        return colorMap;
       })();
 
-      const duplicateIndices = (() => {
-        if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Set<number>();
-        const merged = new Set(literalDuplicateIndices);
-        semanticDuplicateIndices.forEach((i) => merged.add(i));
-        return merged;
-      })();
+      // Legacy set kept for total count display
+      const duplicateIndices = new Set(duplicateColorMap.keys());
 
       return (
         <div className="field field--full">
@@ -2908,19 +2938,34 @@ export function TeamPage({
 
           <div className="institution-list-editor">
             {values.map((value, index) => {
-              const isDuplicate = duplicateIndices.has(index);
+              const colorIdx = duplicateColorMap.get(index);
+              const isDuplicate = colorIdx !== undefined;
+
+              // Distinct pastel palettes per group index
+              const palettes = [
+                { bg: 'rgba(239,68,68,0.09)',   border: 'rgba(239,68,68,0.5)',   text: '#b91c1c' },   // red
+                { bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.55)',  text: '#15803d' },   // green
+                { bg: 'rgba(59,130,246,0.1)',   border: 'rgba(59,130,246,0.55)', text: '#1d4ed8' },   // blue
+                { bg: 'rgba(168,85,247,0.09)',  border: 'rgba(168,85,247,0.5)',  text: '#7e22ce' },   // purple
+                { bg: 'rgba(249,115,22,0.1)',   border: 'rgba(249,115,22,0.55)', text: '#c2410c' },   // orange
+                { bg: 'rgba(20,184,166,0.1)',   border: 'rgba(20,184,166,0.55)', text: '#0f766e' },   // teal
+                { bg: 'rgba(234,179,8,0.1)',    border: 'rgba(234,179,8,0.55)',  text: '#a16207' },   // yellow
+                { bg: 'rgba(236,72,153,0.09)',  border: 'rgba(236,72,153,0.5)',  text: '#be185d' },   // pink
+              ];
+              const palette = isDuplicate ? palettes[colorIdx % palettes.length] : null;
+
               return (
                 <div
                   key={`${key}-${index}`}
                   className="institution-list-editor__row"
-                  style={isDuplicate ? { backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '6px', outline: '1.5px solid rgba(239,68,68,0.45)' } : undefined}
+                  style={palette ? { backgroundColor: palette.bg, borderRadius: '6px', outline: `1.5px solid ${palette.border}` } : undefined}
                 >
                   <div className="field__control">
                     <input
                       value={value}
                       onChange={(event) => updateStructureDraftListField(key, index, event.target.value)}
                       placeholder={placeholder}
-                      style={isDuplicate ? { color: '#b91c1c' } : undefined}
+                      style={palette ? { color: palette.text } : undefined}
                     />
                   </div>
 
@@ -2954,7 +2999,7 @@ export function TeamPage({
                     onClick={() => {
                       if (showGuidelineDuplicates) {
                         setShowGuidelineDuplicates(false);
-                        setSemanticDuplicateIndices(new Set());
+                        setDuplicatePairs([]);
                         return;
                       }
                       setShowGuidelineDuplicates(true);
@@ -2968,16 +3013,10 @@ export function TeamPage({
                         body: JSON.stringify({ guidelines: filledValues }),
                       })
                         .then((res) => res.json())
-                        .then((payload: { semanticDuplicates?: number[] }) => {
-                          // remap indices: filledValues indices → original values indices
-                          const filledToOriginal: number[] = [];
-                          values.forEach((v, i) => { if (v) filledToOriginal.push(i); });
-                          const remapped = (payload.semanticDuplicates ?? [])
-                            .map((fi) => filledToOriginal[fi])
-                            .filter((i) => i !== undefined);
-                          setSemanticDuplicateIndices(new Set(remapped));
+                        .then((payload: { pairs?: [number, number][] }) => {
+                          setDuplicatePairs(payload.pairs ?? []);
                         })
-                        .catch(() => setSemanticDuplicateIndices(new Set()))
+                        .catch(() => setDuplicatePairs([]))
                         .finally(() => setIsDetectingDuplicates(false));
                     }}
                   >
