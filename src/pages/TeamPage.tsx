@@ -9,7 +9,6 @@ import {
   Eye,
   KeyRound,
   Logs,
-  MoveRight,
   PencilLine,
   Plus,
   RefreshCcw,
