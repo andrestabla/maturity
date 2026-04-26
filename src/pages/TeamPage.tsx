@@ -459,6 +459,7 @@ export function TeamPage({
   const [glNewUnidadProduct, setGlNewUnidadProduct] = useState('');
   const [glNewTipo, setGlNewTipo] = useState('');
   const [glNewCharInputs, setGlNewCharInputs] = useState<Record<number, string>>({});
+  const [glSuggestingSection, setGlSuggestingSection] = useState<string | null>(null);
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -1318,6 +1319,66 @@ export function TeamPage({
       }),
       structuredSavePromise,
     ]);
+  }
+
+  async function handleSuggestSection(
+    section: 'estructura' | 'introduccion' | 'cierre' | 'unidades' | 'producto',
+    productTipo?: string,
+    productIdx?: number,
+  ) {
+    const institutionName = structureDraft?.institution?.trim();
+    if (!institutionName) return;
+    const key = productIdx !== undefined ? `producto-${productIdx}` : section;
+    setGlSuggestingSection(key);
+    try {
+      const res = await fetch('/api/suggest-guideline-section', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ institutionName, section, productTipo }),
+      });
+      if (!res.ok) return;
+      const data = await res.json() as Record<string, unknown>;
+      setGuidelinesDraft((prev) => {
+        const base = prev ?? defaultGuidelinesStructured;
+        if (section === 'estructura') {
+          const e = data as { creditos1?: string; creditos2?: string; creditos3?: string; creditos4?: string };
+          return { ...base, estructura: {
+            creditos1: e.creditos1 || base.estructura.creditos1,
+            creditos2: e.creditos2 || base.estructura.creditos2,
+            creditos3: e.creditos3 || base.estructura.creditos3,
+            creditos4: e.creditos4 || base.estructura.creditos4,
+          }};
+        }
+        if (section === 'introduccion') {
+          const incoming = Array.isArray(data.productos) ? (data.productos as string[]) : [];
+          const merged = Array.from(new Set([...base.introduccion.productos, ...incoming]));
+          return { ...base, introduccion: { productos: merged } };
+        }
+        if (section === 'cierre') {
+          const incoming = Array.isArray(data.productos) ? (data.productos as string[]) : [];
+          const merged = Array.from(new Set([...base.cierre.productos, ...incoming]));
+          return { ...base, cierre: { ...base.cierre, existe: true, productos: merged } };
+        }
+        if (section === 'unidades') {
+          const incoming = Array.isArray(data.productos) ? (data.productos as string[]) : [];
+          const merged = Array.from(new Set([...base.unidades.productos, ...incoming]));
+          return { ...base, unidades: { productos: merged } };
+        }
+        if (section === 'producto' && productIdx !== undefined) {
+          const incoming = Array.isArray(data.caracteristicas) ? (data.caracteristicas as string[]) : [];
+          const productos = base.productos.map((p, i) =>
+            i === productIdx
+              ? { ...p, caracteristicas: Array.from(new Set([...p.caracteristicas, ...incoming])) }
+              : p
+          );
+          return { ...base, productos };
+        }
+        return base;
+      });
+    } catch { /* non-fatal */ } finally {
+      setGlSuggestingSection(null);
+    }
   }
 
   function openNewTemplateEditor() {
@@ -2935,7 +2996,18 @@ export function TeamPage({
 
           {/* 1. Estructura */}
           <div className="info-box info-box--ai" style={{ marginBottom: 12 }}>
-            <strong style={{ display: 'block', marginBottom: 8 }}>1. Estructura del curso por créditos</strong>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <strong>1. Estructura del curso por créditos</strong>
+              <button
+                type="button"
+                className="filter-chip"
+                disabled={glSuggestingSection === 'estructura'}
+                onClick={() => void handleSuggestSection('estructura')}
+              >
+                {glSuggestingSection === 'estructura' ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                <span>{glSuggestingSection === 'estructura' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
+              </button>
+            </div>
             {(['creditos1', 'creditos2', 'creditos3', 'creditos4'] as const).map((key, i) => (
               <label key={key} className="field" style={{ marginBottom: 6 }}>
                 <span style={{ minWidth: 120 }}>{i + 1} crédito{i > 0 ? 's' : ''}</span>
@@ -2951,7 +3023,18 @@ export function TeamPage({
 
           {/* 2. Introducción */}
           <div className="info-box" style={{ marginBottom: 12 }}>
-            <strong style={{ display: 'block', marginBottom: 8 }}>2. Sección de Introducción — productos</strong>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <strong>2. Sección de Introducción — productos</strong>
+              <button
+                type="button"
+                className="filter-chip"
+                disabled={glSuggestingSection === 'introduccion'}
+                onClick={() => void handleSuggestSection('introduccion')}
+              >
+                {glSuggestingSection === 'introduccion' ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                <span>{glSuggestingSection === 'introduccion' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
+              </button>
+            </div>
             {renderProductChips(
               draft.introduccion.productos,
               (i) => set((prev) => ({ ...prev, introduccion: { productos: prev.introduccion.productos.filter((_, idx) => idx !== i) } })),
@@ -2969,7 +3052,18 @@ export function TeamPage({
 
           {/* 3. Cierre */}
           <div className="info-box" style={{ marginBottom: 12 }}>
-            <strong style={{ display: 'block', marginBottom: 8 }}>3. Sección de Cierre</strong>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <strong>3. Sección de Cierre</strong>
+              <button
+                type="button"
+                className="filter-chip"
+                disabled={glSuggestingSection === 'cierre'}
+                onClick={() => void handleSuggestSection('cierre')}
+              >
+                {glSuggestingSection === 'cierre' ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                <span>{glSuggestingSection === 'cierre' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
+              </button>
+            </div>
             <label className="field" style={{ marginBottom: 8 }}>
               <input
                 type="checkbox"
@@ -2995,7 +3089,18 @@ export function TeamPage({
 
           {/* 4. Unidades */}
           <div className="info-box" style={{ marginBottom: 12 }}>
-            <strong style={{ display: 'block', marginBottom: 8 }}>4. Unidades — productos por unidad</strong>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <strong>4. Unidades — productos por unidad</strong>
+              <button
+                type="button"
+                className="filter-chip"
+                disabled={glSuggestingSection === 'unidades'}
+                onClick={() => void handleSuggestSection('unidades')}
+              >
+                {glSuggestingSection === 'unidades' ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                <span>{glSuggestingSection === 'unidades' ? 'Sugiriendo...' : 'Sugerir con IA'}</span>
+              </button>
+            </div>
             {renderProductChips(
               draft.unidades.productos,
               (i) => set((prev) => ({ ...prev, unidades: { productos: prev.unidades.productos.filter((_, idx) => idx !== i) } })),
@@ -3027,6 +3132,15 @@ export function TeamPage({
                       return { ...prev, productos };
                     })}
                   />
+                  <button
+                    type="button"
+                    className="filter-chip"
+                    disabled={glSuggestingSection === `producto-${tipoIdx}`}
+                    onClick={() => void handleSuggestSection('producto', pt.tipo, tipoIdx)}
+                  >
+                    {glSuggestingSection === `producto-${tipoIdx}` ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                    <span>{glSuggestingSection === `producto-${tipoIdx}` ? '...' : 'IA'}</span>
+                  </button>
                   <button
                     type="button"
                     className="filter-chip"
@@ -3729,50 +3843,48 @@ export function TeamPage({
 
                 <div className="field field--full">
                   <span>Lineamientos pedagógicos</span>
-                  {selectedInstitutionStructure.guidelinesStructured ? (() => {
-                    const g = selectedInstitutionStructure.guidelinesStructured!;
-                    const sections = [
-                      { label: 'Estructura', items: [g.estructura.creditos1, g.estructura.creditos2, g.estructura.creditos3, g.estructura.creditos4].filter(Boolean).map((v, i) => `${i + 1} crédito${i > 0 ? 's' : ''}: ${v}`) },
-                      { label: 'Introducción', items: g.introduccion.productos },
-                      ...(g.cierre.existe ? [{ label: 'Cierre', items: g.cierre.productos }] : []),
-                      { label: 'Unidades', items: g.unidades.productos },
+                  {(() => {
+                    const g = selectedInstitutionStructure.guidelinesStructured;
+                    if (!g) {
+                      return (
+                        <p className="institution-structure-summary" style={{ fontStyle: 'italic' }}>
+                          Sin lineamientos estructurados. Abre la edición para cargarlos con el asistente IA.
+                        </p>
+                      );
+                    }
+                    const estructuraSections = [
+                      { label: '1. Estructura', items: (['creditos1','creditos2','creditos3','creditos4'] as const).map((k, i) => g.estructura[k] ? `${i + 1} crédito${i > 0 ? 's' : ''}: ${g.estructura[k]}` : null).filter(Boolean) as string[] },
+                      { label: '2. Introducción', items: g.introduccion.productos },
+                      ...(g.cierre.existe ? [{ label: '3. Cierre', items: g.cierre.productos }] : [{ label: '3. Cierre', items: [] as string[] }]),
+                      { label: '4. Unidades', items: g.unidades.productos },
                     ];
                     return (
-                      <div className="list-stack" style={{ gap: 10 }}>
-                        {sections.map((sec) => sec.items.length > 0 && (
+                      <div className="list-stack" style={{ gap: 14 }}>
+                        {estructuraSections.map((sec) => (
                           <div key={sec.label}>
                             <p className="eyebrow" style={{ marginBottom: 4 }}>{sec.label}</p>
-                            {sec.items.map((item, i) => (
-                              <p key={i} className="institution-structure-summary" style={{ marginBottom: 2 }}>· {item}</p>
-                            ))}
+                            {sec.items.length > 0
+                              ? sec.items.map((item, i) => (
+                                  <p key={i} className="institution-structure-summary" style={{ marginBottom: 2 }}>· {item}</p>
+                                ))
+                              : <p className="institution-structure-summary" style={{ fontStyle: 'italic', opacity: 0.6 }}>Sin definir</p>
+                            }
                           </div>
                         ))}
-                        {g.productos.length > 0 && (
-                          <div>
-                            <p className="eyebrow" style={{ marginBottom: 4 }}>Productos ({g.productos.length} tipos)</p>
-                            {g.productos.map((pt) => (
-                              <p key={pt.tipo} className="institution-structure-summary" style={{ marginBottom: 2 }}>
-                                · <strong>{pt.tipo}</strong> — {pt.caracteristicas.length} característica{pt.caracteristicas.length !== 1 ? 's' : ''}
-                              </p>
-                            ))}
-                          </div>
-                        )}
+                        <div>
+                          <p className="eyebrow" style={{ marginBottom: 4 }}>5. Productos ({g.productos.length} tipos)</p>
+                          {g.productos.length > 0
+                            ? g.productos.map((pt) => (
+                                <p key={pt.tipo} className="institution-structure-summary" style={{ marginBottom: 2 }}>
+                                  · <strong>{pt.tipo}</strong> — {pt.caracteristicas.length} característica{pt.caracteristicas.length !== 1 ? 's' : ''}
+                                </p>
+                              ))
+                            : <p className="institution-structure-summary" style={{ fontStyle: 'italic', opacity: 0.6 }}>Sin tipos de producto definidos</p>
+                          }
+                        </div>
                       </div>
                     );
-                  })() : (
-                    <div className="list-stack rich-copy rich-copy--structured rich-copy--guidelines">
-                      {selectedInstitutionStructure.pedagogicalGuidelines.length > 0 ? (
-                        selectedInstitutionStructure.pedagogicalGuidelines.map((guideline, index) => (
-                          <div key={guideline} className="rich-copy__item">
-                            <strong className="rich-copy__label">{index + 1}.</strong>
-                            <span className="institution-structure-summary">{guideline}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="institution-structure-summary">Sin lineamientos registrados.</p>
-                      )}
-                    </div>
-                  )}
+                  })()}
                 </div>
 
                 {settingsError ? <p className="form-error">{settingsError}</p> : null}
