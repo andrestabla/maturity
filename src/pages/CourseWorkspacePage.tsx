@@ -1025,7 +1025,7 @@ function makeMetadataForm(course: Course): CourseMetadataMutationInput {
     topics: course.metadata.topics,
     units: Array.isArray(course.metadata.units) ? course.metadata.units : [],
     methodology: course.metadata.methodology,
-    evaluation: Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : typeof course.metadata.evaluation === 'string' ? [course.metadata.evaluation] : [],
+    evaluation: flattenEvaluation(Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : typeof course.metadata.evaluation === 'string' ? [course.metadata.evaluation] : []),
     bibliography: course.metadata.bibliography,
     targetCloseDate: course.metadata.targetCloseDate,
     currentVersion: course.metadata.currentVersion,
@@ -2212,6 +2212,41 @@ function getWritingActionLabel(product: CourseProduct) {
 
 
 
+type EvalItem = { nombre: string; porcentaje: string };
+
+/** Converts any evaluation storage format to structured { nombre, porcentaje }[].
+ *  Handles: old flat string[] where percentages are separate entries,
+ *  new serialized "nombre (porcentaje)" strings, and already-structured objects.
+ */
+function normalizeEvaluation(items: any[]): EvalItem[] {
+  const isPct = (s: string) => /^\d+(\.\d+)?\s*%$/.test(s.trim());
+  const out: EvalItem[] = [];
+  for (const item of items) {
+    if (item && typeof item === 'object') {
+      out.push({ nombre: item.nombre || '', porcentaje: item.porcentaje || '' });
+    } else if (typeof item === 'string') {
+      if (isPct(item) && out.length > 0) {
+        out[out.length - 1].porcentaje = item.trim();
+      } else {
+        const match = item.match(/^(.*?)\s*\((\d+(\.\d+)?\s*%)\)\s*$/);
+        if (match) {
+          out.push({ nombre: match[1].trim(), porcentaje: match[2].trim() });
+        } else {
+          out.push({ nombre: item, porcentaje: '' });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Flattens evaluation to string[] for text contexts (AI prompts, text areas). */
+function flattenEvaluation(items: any[]): string[] {
+  return normalizeEvaluation(items).map(({ nombre, porcentaje }) =>
+    porcentaje ? `${nombre} (${porcentaje})` : nombre
+  );
+}
+
 export function CourseWorkspacePage({
   role,
   userRole,
@@ -2588,9 +2623,7 @@ export function CourseWorkspacePage({
           resultadosAprendizaje: Array.isArray(course.metadata.learningOutcomes) ? course.metadata.learningOutcomes : [],
           unidades: Array.isArray(course.metadata.units) ? course.metadata.units : [],
           metodologia: course.metadata.methodology || '',
-          evaluacion: (Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : []).map((item: any) =>
-            typeof item === 'string' ? { nombre: item, porcentaje: '' } : item
-          ),
+          evaluacion: normalizeEvaluation(Array.isArray(course.metadata.evaluation) ? course.metadata.evaluation : []),
           bibliografia: Array.isArray(course.metadata.bibliography) ? course.metadata.bibliography : [],
         });
       }
@@ -3395,7 +3428,7 @@ export function CourseWorkspacePage({
           currentCourse.metadata.methodology,
           '',
           '# Evaluación',
-          currentCourse.metadata.evaluation,
+          ...flattenEvaluation(currentCourse.metadata.evaluation || []).map((item) => `- ${item}`),
           '',
           '# Bibliografía base',
           ...currentCourse.metadata.bibliography.map((item: string) => `- ${item}`),
@@ -5555,7 +5588,7 @@ export function CourseWorkspacePage({
       evaluation:
         extractPreviewItems(sections['Evaluación']?.join('\n') ?? '').length > 0
           ? extractPreviewItems(sections['Evaluación']?.join('\n') ?? '')
-          : Array.isArray(currentCourse.metadata.evaluation) ? currentCourse.metadata.evaluation : typeof currentCourse.metadata.evaluation === 'string' ? [currentCourse.metadata.evaluation] : [],
+          : flattenEvaluation(currentCourse.metadata.evaluation || []),
       bibliography:
         parsedBibliography.length > 0 ? parsedBibliography : currentCourse.metadata.bibliography,
     };
@@ -13276,18 +13309,12 @@ export function CourseWorkspacePage({
                             </tr>
                           </thead>
                           <tbody>
-                            {currentCourse.metadata.evaluation.map((item: any, idx: number) => {
-                              const raw = typeof item === 'string' ? item : item.porcentaje ? `${item.nombre} (${item.porcentaje})` : item.nombre;
-                              const match = raw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-                              const nombre = match ? match[1].trim() : raw;
-                              const porcentaje = match ? match[2].trim() : '';
-                              return (
-                                <tr key={idx} className="border-b border-line/50 last:border-0">
-                                  <td className="py-2 pr-4 font-medium text-ink">{nombre}</td>
-                                  <td className="py-2 text-right font-mono text-muted">{porcentaje || '—'}</td>
-                                </tr>
-                              );
-                            })}
+                            {normalizeEvaluation(currentCourse.metadata.evaluation).map(({ nombre, porcentaje }, idx) => (
+                              <tr key={idx} className="border-b border-line/50 last:border-0">
+                                <td className="py-2 pr-4 font-medium text-ink">{nombre}</td>
+                                <td className="py-2 text-right font-mono text-muted">{porcentaje || '—'}</td>
+                              </tr>
+                            ))}
                           </tbody>
                         </table>
                       ) : (
