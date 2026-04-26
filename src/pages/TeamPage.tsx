@@ -3507,10 +3507,22 @@ export function TeamPage({
                                 </select>
                               </div>
                               <div className="field__control" style={{ flex: 1 }}>
-                                <input
+                                <textarea
                                   value={product.summary}
-                                  onChange={(e) => updateTemplateProduct(sIdx, pIdx, 'summary', e.target.value)}
+                                  rows={1}
+                                  onChange={(e) => {
+                                    updateTemplateProduct(sIdx, pIdx, 'summary', e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                  }}
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.style.height = 'auto';
+                                      el.style.height = `${el.scrollHeight}px`;
+                                    }
+                                  }}
                                   placeholder="Descripción breve (opcional)"
+                                  style={{ resize: 'none', overflow: 'hidden', lineHeight: '1.4' }}
                                 />
                               </div>
                               <button
