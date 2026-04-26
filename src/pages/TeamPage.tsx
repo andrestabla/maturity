@@ -439,6 +439,8 @@ export function TeamPage({
   const [extractionStep, setExtractionStep] = useState('');
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
+  const [semanticDuplicateIndices, setSemanticDuplicateIndices] = useState<Set<number>>(new Set());
+  const [isDetectingDuplicates, setIsDetectingDuplicates] = useState(false);
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -2873,7 +2875,7 @@ export function TeamPage({
 
       const values = structureDraft[key].length > 0 ? structureDraft[key] : [''];
 
-      const duplicateIndices = (() => {
+      const literalDuplicateIndices = (() => {
         if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Set<number>();
         const normalize = (s: string) =>
           s.toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -2890,6 +2892,13 @@ export function TeamPage({
           }
         });
         return dupes;
+      })();
+
+      const duplicateIndices = (() => {
+        if (key !== 'pedagogicalGuidelines' || !showGuidelineDuplicates) return new Set<number>();
+        const merged = new Set(literalDuplicateIndices);
+        semanticDuplicateIndices.forEach((i) => merged.add(i));
+        return merged;
       })();
 
       return (
@@ -2941,12 +2950,46 @@ export function TeamPage({
                   <button
                     type="button"
                     className={showGuidelineDuplicates ? 'filter-chip filter-chip--active' : 'filter-chip'}
-                    onClick={() => setShowGuidelineDuplicates((v) => !v)}
+                    disabled={isDetectingDuplicates}
+                    onClick={() => {
+                      if (showGuidelineDuplicates) {
+                        setShowGuidelineDuplicates(false);
+                        setSemanticDuplicateIndices(new Set());
+                        return;
+                      }
+                      setShowGuidelineDuplicates(true);
+                      const filledValues = values.filter(Boolean);
+                      if (filledValues.length < 2) return;
+                      setIsDetectingDuplicates(true);
+                      fetch('/api/detect-duplicate-guidelines', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ guidelines: filledValues }),
+                      })
+                        .then((res) => res.json())
+                        .then((payload: { semanticDuplicates?: number[] }) => {
+                          // remap indices: filledValues indices → original values indices
+                          const filledToOriginal: number[] = [];
+                          values.forEach((v, i) => { if (v) filledToOriginal.push(i); });
+                          const remapped = (payload.semanticDuplicates ?? [])
+                            .map((fi) => filledToOriginal[fi])
+                            .filter((i) => i !== undefined);
+                          setSemanticDuplicateIndices(new Set(remapped));
+                        })
+                        .catch(() => setSemanticDuplicateIndices(new Set()))
+                        .finally(() => setIsDetectingDuplicates(false));
+                    }}
                   >
+                    {isDetectingDuplicates
+                      ? <RefreshCcw size={13} className="animate-spin" />
+                      : null}
                     <span>
-                      {showGuidelineDuplicates
-                        ? `Duplicados: ${duplicateIndices.size > 0 ? duplicateIndices.size : 'ninguno'}`
-                        : 'Identificar duplicados'}
+                      {isDetectingDuplicates
+                        ? 'Analizando...'
+                        : showGuidelineDuplicates
+                          ? `Duplicados: ${duplicateIndices.size > 0 ? duplicateIndices.size : 'ninguno'}`
+                          : 'Identificar duplicados'}
                     </span>
                   </button>
 
