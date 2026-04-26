@@ -86,6 +86,13 @@ export default async function handler(request: Request | any, response?: any) {
 
       const finalStructure = structure || settings.structures.find(s => s.institution === course.faculty || s.institution === course.program);
       const guidelines = finalStructure?.pedagogicalGuidelines || [];
+      const gs = (finalStructure as any)?.guidelinesStructured as {
+        estructura: { creditos1: string; creditos2: string; creditos3: string; creditos4: string };
+        introduccion: { productos: string[] };
+        cierre: { existe: boolean; productos: string[] };
+        unidades: { productos: string[] };
+        productos: { tipo: string; caracteristicas: string[] }[];
+      } | undefined;
 
       // Build section template reference for the AI prompt
       const sectionTemplateGuide = formatTemplates.length > 0
@@ -118,24 +125,56 @@ export default async function handler(request: Request | any, response?: any) {
               .join('\n')
           : '- El curso no tiene unidades extraídas; evita inventar más de una unidad.';
 
+      // Build structured guidelines block (prescriptive when available, flat fallback)
+      const structuredGuidelinesBlock = gs ? (() => {
+        const introList = gs.introduccion.productos.length > 0
+          ? gs.introduccion.productos.map(p => `    · ${p}`).join('\n')
+          : '    · (sin productos definidos — usar criterio instruccional)';
+        const cierreBlock = gs.cierre.existe && gs.cierre.productos.length > 0
+          ? `  Cierre — productos OBLIGATORIOS (crear EXACTAMENTE estos):\n${gs.cierre.productos.map(p => `    · ${p}`).join('\n')}`
+          : '  Cierre — no está definida sección de cierre para esta institución.';
+        const unidadList = gs.unidades.productos.length > 0
+          ? gs.unidades.productos.map(p => `    · ${p}`).join('\n')
+          : '    · (sin productos definidos — usar criterio instruccional)';
+        const productosBlock = gs.productos.length > 0
+          ? gs.productos.map(pt =>
+              `  Tipo "${pt.tipo}":\n${pt.caracteristicas.map(c => `    - ${c}`).join('\n')}`
+            ).join('\n')
+          : '  (sin tipos de producto especificados)';
+        return `
+      LINEAMIENTOS PEDAGÓGICOS INSTITUCIONALES — SEGUIR FIELMENTE:
+      INSTRUCCIÓN CRÍTICA: Esta institución tiene lineamientos estructurados. Debes respetarlos con precisión. NO INVENTAR productos que no estén en los lineamientos.
+
+      Introducción — productos OBLIGATORIOS (crear EXACTAMENTE estos):
+${introList}
+
+      ${cierreBlock}
+
+      Unidades — productos OBLIGATORIOS POR CADA UNIDAD (replicar en cada unidad):
+${unidadList}
+
+      Características por tipo de producto (aplica al generar las instrucciones):
+${productosBlock}`;
+      })()
+      : `      LINEAMIENTOS PEDAGÓGICOS (Asegúrate de que los productos cumplan esto):
+      ${guidelines.length > 0 ? guidelines.map(g => `- ${g}`).join('\n') : '- Seguir estándares generales de diseño instruccional.'}`;
+
       const systemPrompt = `Eres un Arquitecto Instruccional Senior. Tu objetivo es proponer la arquitectura de productos de un curso basado en su microcurrículo y los lineamientos pedagógicos de la institución.
-      
+
       ESTRUCTURA OBLIGATORIA DEL CURSO:
-      1. Sección "Introducción": Productos iniciales (ej. Video de bienvenida, Guía de aprendizaje).
-      2. Sección "Unidades": Productos por cada unidad/módulo extraído del microcurrículo.
-      3. Sección "Cierre": Productos finales (ej. Evaluación final, Video de cierre).
+      1. Sección "Introducción": Productos iniciales definidos por los lineamientos institucionales.
+      2. Sección "Unidades": Los productos definidos en lineamientos replicados en CADA unidad del microcurrículo.
+      3. Sección "Cierre": Productos de cierre definidos por los lineamientos institucionales.
 
       REGLAS CRÍTICAS DE DISTRIBUCIÓN:
       - NO pongas productos de bienvenida, encuadre, reglamento o diagnóstico dentro de las unidades.
       - NO pongas productos de cierre o evaluación final dentro de las unidades.
-      - La sección "introduccion" solo contiene productos de arranque del curso.
-      - La sección "cierre" solo contiene productos de cierre.
-      - La sección "unidades" debe incluir productos repartidos entre TODAS las unidades listadas abajo.
+      - La sección "introduccion" solo contiene los productos de introducción definidos en lineamientos.
+      - La sección "cierre" solo contiene los productos de cierre definidos en lineamientos.
+      - La sección "unidades" debe incluir los productos de unidad distribuidos entre TODAS las unidades listadas.
       - Si existen 3 unidades, debes incluir productos con section "Unidad 1", "Unidad 2" y "Unidad 3".
-      - Propón al menos 2 productos por unidad cuando el microcurrículo tenga unidades definidas.
 
-      LINEAMIENTOS PEDAGÓGICOS (Asegúrate de que los productos cumplan esto):
-      ${guidelines.length > 0 ? guidelines.map(g => `- ${g}`).join('\n') : '- Seguir estándares generales de diseño instruccional.'}
+${structuredGuidelinesBlock}
 
       DATOS DEL CURSO:
       Título: ${course.title}

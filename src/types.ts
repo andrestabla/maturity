@@ -722,6 +722,7 @@ export interface GuidelinesStructured {
   cierre: { existe: boolean; productos: string[] };
   unidades: { productos: string[] };
   productos: GuidelinesProductoTipo[];
+  updatedAt?: string;
 }
 
 export interface InstitutionStructure {

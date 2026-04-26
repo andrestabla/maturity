@@ -12007,16 +12007,40 @@ body::after {
   text-align: center;
 }
 
-.architecture-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(255,255,255,0.85);
-  backdrop-filter: blur(12px);
-  z-index: 1000;
+.arch-progress-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.arch-progress-banner__top {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
+  justify-content: space-between;
+  gap: 12px;
+}
+.arch-progress-banner__bar {
+  width: 100%;
+  height: 4px;
+  background: var(--panel, #f1f5f9);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.arch-progress-banner__fill {
+  height: 100%;
+  background: var(--ocean);
+  border-radius: 99px;
+  transition: width 0.7s ease-out;
+}
+.arch-progress-banner__log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .extraction-status-card {

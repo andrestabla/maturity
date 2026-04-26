@@ -1322,7 +1322,7 @@ export function TeamPage({
           method: 'PUT',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ structured: guidelinesDraft }),
+          body: JSON.stringify({ structured: { ...guidelinesDraft, updatedAt: new Date().toISOString() } }),
         }).finally(() => setIsSavingGuidelinesStructured(false));
       }
       return Promise.resolve();
@@ -3970,10 +3970,13 @@ export function TeamPage({
                     if (!g) {
                       return (
                         <p className="institution-structure-summary" style={{ fontStyle: 'italic' }}>
-                          Sin lineamientos estructurados. Abre la edición para cargarlos con el asistente IA.
+                          Sin lineamientos estructurados. Usa "Editar lineamientos" para cargarlos con el asistente IA.
                         </p>
                       );
                     }
+                    const updatedLabel = g.updatedAt
+                      ? `Actualizado el ${new Date(g.updatedAt).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                      : 'Configurados';
                     const estructuraSections = [
                       { label: '1. Estructura', items: (['creditos1','creditos2','creditos3','creditos4'] as const).map((k, i) => g.estructura[k] ? `${i + 1} crédito${i > 0 ? 's' : ''}: ${g.estructura[k]} unidad${g.estructura[k] === '1' ? '' : 'es'}` : null).filter(Boolean) as string[] },
                       { label: '2. Introducción', items: g.introduccion.productos },
@@ -3981,6 +3984,13 @@ export function TeamPage({
                       { label: '4. Unidades', items: g.unidades.productos },
                     ];
                     return (
+                      <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-success, #16a34a)', background: 'var(--color-success-light, #dcfce7)', borderRadius: 20, padding: '2px 10px', letterSpacing: '0.02em' }}>
+                          ✓ Lineamientos configurados
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{updatedLabel}</span>
+                      </div>
                       <div className="list-stack" style={{ gap: 14 }}>
                         {estructuraSections.map((sec) => (
                           <div key={sec.label}>
@@ -4005,6 +4015,7 @@ export function TeamPage({
                           }
                         </div>
                       </div>
+                      </div>
                     );
                   })()}
                 </div>
@@ -4018,7 +4029,7 @@ export function TeamPage({
                     onClick={() => openEditStructureComposer(selectedInstitutionStructure)}
                   >
                     <PencilLine size={16} />
-                    <span>Editar estructura</span>
+                    <span>Editar lineamientos</span>
                   </button>
 
                   <button

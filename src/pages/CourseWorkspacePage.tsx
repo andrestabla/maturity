@@ -11863,71 +11863,32 @@ export function CourseWorkspacePage({
         )}
 
         {isGeneratingArchitecture && (
-          <div className="architecture-overlay animate-in fade-in duration-500">
-            <div className="extraction-status-card surface shadow-2xl rounded-3xl flex flex-col items-center gap-0 max-w-md w-full overflow-hidden">
-              {/* Header */}
-              <div className="w-full flex flex-col items-center gap-6 px-10 pt-10 pb-6">
-                {/* Progress ring */}
-                <div className="relative flex-shrink-0">
-                  <div className="w-20 h-20 rounded-full border-4 border-panel flex items-center justify-center">
-                    <Sparkles size={32} className="text-ocean animate-pulse" />
-                  </div>
-                  <svg className="absolute top-0 left-0 w-20 h-20 -rotate-90">
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r="36"
-                      fill="none"
-                      stroke="var(--ocean)"
-                      strokeWidth="5"
-                      strokeDasharray="226.19"
-                      strokeDashoffset={226.19 - (226.19 * architectureProgress) / 100}
-                      className="transition-all duration-700 ease-out"
-                    />
-                  </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-ocean">
-                    {architectureProgress}%
-                  </span>
-                </div>
-
-                {/* Current step */}
-                <div className="text-center w-full">
-                  <span className="eyebrow block mb-1">Diseño Arquitectónico IA</span>
-                  <p className="text-sm font-semibold text-secondary leading-snug flex items-center justify-center gap-2">
-                    <span className="relative flex h-2 w-2 flex-shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ocean opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-ocean" />
-                    </span>
-                    {architectureStep}
-                  </p>
-                  {architectureProductsTotal > 0 && (
-                    <p className="text-xs text-muted mt-1">
-                      Producto {architectureProductsCreated} de {architectureProductsTotal}
-                    </p>
-                  )}
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full bg-panel rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-ocean h-full transition-all duration-700"
-                    style={{ width: `${architectureProgress}%` }}
-                  />
-                </div>
+          <div className="arch-progress-banner animate-in fade-in duration-300">
+            <div className="arch-progress-banner__top">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-ocean animate-pulse flex-shrink-0" />
+                <span className="eyebrow">Diseño Arquitectónico IA</span>
+                <span className="relative flex h-2 w-2 ml-1 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ocean opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-ocean" />
+                </span>
+                <span className="text-sm text-secondary font-medium truncate">{architectureStep}</span>
               </div>
-
-              {/* Step log */}
-              {architectureLog.length > 0 && (
-                <div className="w-full border-t border-line px-10 py-5 flex flex-col gap-2 max-h-36 overflow-y-auto">
-                  {[...architectureLog].reverse().map((entry, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs text-muted animate-in fade-in slide-in-from-bottom-1 duration-300">
-                      <CheckCircle2 size={13} className="text-ocean flex-shrink-0 mt-0.5" />
-                      <span>{entry}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <span className="text-xs text-muted flex-shrink-0 font-semibold">{architectureProgress}%{architectureProductsTotal > 0 ? ` · ${architectureProductsCreated}/${architectureProductsTotal} productos` : ''}</span>
             </div>
+            <div className="arch-progress-banner__bar">
+              <div className="arch-progress-banner__fill" style={{ width: `${architectureProgress}%` }} />
+            </div>
+            {architectureLog.length > 0 && (
+              <div className="arch-progress-banner__log">
+                {[...architectureLog].slice(-3).reverse().map((entry, i) => (
+                  <span key={i} className="flex items-center gap-1 text-xs text-muted">
+                    <CheckCircle2 size={11} className="text-ocean flex-shrink-0" />
+                    {entry}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
