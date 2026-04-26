@@ -13267,14 +13267,32 @@ export function CourseWorkspacePage({
 
                     <div className="field field--full">
                       <span>Esquema de Evaluación</span>
-                      <div className="mt-2 flex flex-col gap-1">
-                        {Array.isArray(currentCourse.metadata.evaluation) && currentCourse.metadata.evaluation.length > 0
-                          ? currentCourse.metadata.evaluation.map((item: any, idx: number) => (
-                              <p key={idx} className="text-sm">• {typeof item === 'string' ? item : item.porcentaje ? `${item.nombre} (${item.porcentaje})` : item.nombre}</p>
-                            ))
-                          : <p className="text-muted text-sm">Sin información de evaluación.</p>
-                        }
-                      </div>
+                      {Array.isArray(currentCourse.metadata.evaluation) && currentCourse.metadata.evaluation.length > 0 ? (
+                        <table className="mt-3 w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b border-line">
+                              <th className="text-left text-xs text-muted font-medium uppercase tracking-wide pb-2 pr-4">Ítem</th>
+                              <th className="text-right text-xs text-muted font-medium uppercase tracking-wide pb-2 w-24">Porcentaje</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {currentCourse.metadata.evaluation.map((item: any, idx: number) => {
+                              const raw = typeof item === 'string' ? item : item.porcentaje ? `${item.nombre} (${item.porcentaje})` : item.nombre;
+                              const match = raw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+                              const nombre = match ? match[1].trim() : raw;
+                              const porcentaje = match ? match[2].trim() : '';
+                              return (
+                                <tr key={idx} className="border-b border-line/50 last:border-0">
+                                  <td className="py-2 pr-4 font-medium text-ink">{nombre}</td>
+                                  <td className="py-2 text-right font-mono text-muted">{porcentaje || '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="text-muted text-sm mt-2">Sin información de evaluación.</p>
+                      )}
                     </div>
 
                     {Array.isArray(currentCourse.metadata.units) && currentCourse.metadata.units.length > 0 && (
