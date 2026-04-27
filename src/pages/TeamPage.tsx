@@ -445,10 +445,6 @@ export function TeamPage({
   );
   const logoFileInputRef = useRef<HTMLInputElement | null>(null);
   const faviconFileInputRef = useRef<HTMLInputElement | null>(null);
-  const guidelinesFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isExtractingGuidelines, setIsExtractingGuidelines] = useState(false);
-  const [extractionStep, setExtractionStep] = useState('');
-  const [extractionProgress, setExtractionProgress] = useState(0);
   const [showGuidelineDuplicates, setShowGuidelineDuplicates] = useState(false);
   const [duplicatePairs, setDuplicatePairs] = useState<[number, number][]>([]);
   const [isDetectingDuplicates, setIsDetectingDuplicates] = useState(false);
@@ -1909,151 +1905,6 @@ export function TeamPage({
     }
   }
 
-  async function handleGuidelinesExtract(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file || !structureDraft) {
-      return;
-    }
-
-    setIsExtractingGuidelines(true);
-    setExtractionProgress(5);
-    setExtractionStep('Iniciando carga...');
-    setSettingsError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const responseUpload = await fetch('/api/uploads', {
-        method: 'POST',
-        credentials: 'same-origin',
-        body: formData,
-      });
-
-      const uploadPayload = (await responseUpload.json()) as UploadResponse | { error?: string };
-
-      if (!responseUpload.ok) {
-        throw new Error((uploadPayload as { error?: string }).error ?? 'Error al subir documento.');
-      }
-
-      const { key } = uploadPayload as UploadResponse;
-      setExtractionStep('Documento en la nube. Solicitando análisis IA...');
-      setExtractionProgress(30);
-
-      const responseAI = await fetch('/api/extract-guidelines', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key }),
-      });
-
-      if (!responseAI.ok) {
-        throw new Error('Error al conectar con la IA de extracción.');
-      }
-
-      const reader = responseAI.body?.getReader();
-      const decoder = new TextDecoder();
-      let streamBuffer = '';
-
-      if (!reader) throw new Error('No fue posible abrir el canal de la IA.');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        streamBuffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-
-        const chunks = streamBuffer.split('\n\n');
-        streamBuffer = chunks.pop() ?? '';
-
-        for (const chunk of chunks) {
-          if (!chunk.trim() || !chunk.startsWith('data: ')) continue;
-
-          try {
-            const payload = JSON.parse(chunk.replace('data: ', '').trim());
-
-            if (payload.progress) setExtractionProgress(payload.progress);
-            if (payload.step) setExtractionStep(payload.step);
-
-            if (payload.complete && payload.data) {
-              const extracted = payload.data as GuidelinesStructured;
-              setGuidelinesDraft(extracted);
-
-              // Auto-save the structured guidelines
-              if (editingStructureId) {
-                try {
-                  await fetch(`/api/institution-guidelines-structured?institutionId=${editingStructureId}`, {
-                    method: 'PUT',
-                    credentials: 'same-origin',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ structured: extracted }),
-                  });
-                } catch (e) { /* non-fatal */ }
-              }
-
-              const productCount = extracted.productos?.length ?? 0;
-              void showAlert({
-                tone: 'success',
-                title: 'Lineamientos extraídos',
-                message: `Se identificaron ${productCount} tipos de producto con sus características, organizados en secciones.`,
-              });
-            }
-
-            if (payload.error) throw new Error(payload.error);
-          } catch (e) {
-            console.error('Extraction event parse error:', e);
-          }
-        }
-
-        if (done) {
-          if (streamBuffer.trim().startsWith('data: ')) {
-            try {
-              const payload = JSON.parse(streamBuffer.replace('data: ', '').trim());
-
-              if (payload.progress) setExtractionProgress(payload.progress);
-              if (payload.step) setExtractionStep(payload.step);
-
-              if (payload.complete && payload.data) {
-                const extracted = payload.data as GuidelinesStructured;
-                setGuidelinesDraft(extracted);
-
-                if (editingStructureId) {
-                  try {
-                    await fetch(`/api/institution-guidelines-structured?institutionId=${editingStructureId}`, {
-                      method: 'PUT',
-                      credentials: 'same-origin',
-                      headers: { 'content-type': 'application/json' },
-                      body: JSON.stringify({ structured: extracted }),
-                    });
-                  } catch (e) { /* non-fatal */ }
-                }
-
-                const productCount = extracted.productos?.length ?? 0;
-                void showAlert({
-                  tone: 'success',
-                  title: 'Lineamientos extraídos',
-                  message: `Se identificaron ${productCount} tipos de producto con sus características, organizados en secciones.`,
-                });
-              }
-
-              if (payload.error) throw new Error(payload.error);
-            } catch (e) {
-              console.error('Extraction final event parse error:', e);
-            }
-          }
-          break;
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falla crítica en la extracción IA.';
-      setSettingsError(message);
-      void showAlert({ tone: 'error', title: 'Error de extracción', message });
-    } finally {
-      setIsExtractingGuidelines(false);
-      setExtractionStep('');
-      setExtractionProgress(0);
-      if (guidelinesFileInputRef.current) guidelinesFileInputRef.current.value = '';
-    }
-  }
-
   async function handleSaveIntegration() {
     if (!integrationDraft) {
       return;
@@ -3380,25 +3231,6 @@ export function TeamPage({
             </div>
           </div>
 
-          {/* Extract button */}
-          <div className="action-row" style={{ marginTop: 0 }}>
-            <button
-              type="button"
-              className="filter-chip filter-chip--active"
-              onClick={() => guidelinesFileInputRef.current?.click()}
-              disabled={isExtractingGuidelines}
-            >
-              {isExtractingGuidelines ? (
-                <RefreshCcw size={14} className="animate-spin" />
-              ) : (
-                <div className="flex items-center gap-1">
-                  <FileUp size={14} />
-                  <Sparkles size={14} />
-                </div>
-              )}
-              <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
-            </button>
-          </div>
         </div>
       );
     }
@@ -3604,22 +3436,6 @@ export function TeamPage({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    className="filter-chip filter-chip--active"
-                    onClick={() => guidelinesFileInputRef.current?.click()}
-                    disabled={isExtractingGuidelines}
-                  >
-                    {isExtractingGuidelines ? (
-                      <RefreshCcw size={14} className="animate-spin" />
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <FileUp size={14} />
-                        <Sparkles size={14} />
-                      </div>
-                    )}
-                    <span>{isExtractingGuidelines ? 'Extrayendo...' : 'Extraer de documento (IA)'}</span>
-                  </button>
                 </>
               )}
             </div>
@@ -6301,14 +6117,6 @@ export function TeamPage({
       {activeTab === 'audit' ? renderAuditTab() : null}
 
       <input
-        ref={guidelinesFileInputRef}
-        type="file"
-        className="hidden"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
-        onChange={handleGuidelinesExtract}
-      />
-
-      <input
         ref={institutionDocsFileInputRef}
         type="file"
         className="hidden"
@@ -6316,41 +6124,6 @@ export function TeamPage({
         onChange={handleInstitutionDocUpload}
       />
 
-      {isExtractingGuidelines && (
-        <div className="system-overlay animate-in fade-in duration-300">
-           <div className="extraction-status-card surface shadow-2xl p-8 rounded-2xl flex flex-col items-center gap-6 max-w-sm w-full mx-auto">
-              <div className="relative">
-                <div className="w-20 h-20 rounded-full border-4 border-panel flex items-center justify-center">
-                   <Sparkles size={32} className="text-ocean animate-pulse" />
-                </div>
-                <svg className="absolute top-0 left-0 w-20 h-20 -rotate-90">
-                  <circle
-                    cx="40"
-                    cy="40"
-                    r="38"
-                    fill="none"
-                    stroke="var(--ocean)"
-                    strokeWidth="4"
-                    strokeDasharray="238.76"
-                    strokeDashoffset={238.76 - (238.76 * extractionProgress) / 100}
-                    className="transition-all duration-500 ease-out"
-                  />
-                </svg>
-              </div>
-              <div className="text-center">
-                <span className="eyebrow block mb-1">Extracción Inteligente</span>
-                <h4 className="text-lg font-bold text-secondary">{extractionStep}</h4>
-                <p className="text-xs text-muted mt-2">Analizando semántica pedagógica del documento.</p>
-              </div>
-              <div className="w-full bg-panel rounded-full h-1.5 overflow-hidden">
-                <div 
-                  className="bg-ocean h-full transition-all duration-500" 
-                  style={{ width: `${extractionProgress}%` }}
-                />
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
