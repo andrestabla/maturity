@@ -1,10 +1,12 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 // Build 2026-04-09T20:31 v0.2.1 - Force cache invalidation
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { Clock } from 'lucide-react';
 import { AppShell } from './components/AppShell.js';
 import { SystemDialogProvider } from './components/SystemDialogProvider.js';
 import { defaultBranding, defaultHomeContent } from './data/platformDefaults.js';
 import { useAppData } from './hooks/useAppData.js';
+import { useInactivityTimeout } from './hooks/useInactivityTimeout.js';
 import { useSession } from './hooks/useSession.js';
 import { useTheme } from './hooks/useTheme.js';
 import { LandingPage } from './pages/LandingPage.js';
@@ -98,6 +100,21 @@ export default function App() {
     refreshAppData,
     mutateAppData,
   } = useAppData(status === 'authenticated', session.user?.id ?? 'anonymous');
+
+  const [warnSeconds, setWarnSeconds] = useState<number | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  const handleExpire = useCallback(() => {
+    void logout();
+    setWarnSeconds(null);
+    setSessionExpired(true);
+  }, [logout]);
+
+  const { extendSession } = useInactivityTimeout({
+    enabled: status === 'authenticated',
+    onWarn: setWarnSeconds,
+    onExpire: handleExpire,
+  });
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -217,17 +234,46 @@ export default function App() {
           </section>
         </main>
       ) : !session.authenticated || !session.user ? (
-        location.pathname === '/login' ? (
-          <LoginPage
-            isLoading={false}
-            onLogin={login}
-            branding={branding}
-          />
-        ) : (
-          <LandingPage branding={branding} homeContent={homeContent} />
-        )
+        <>
+          {sessionExpired && (
+            <div className="session-expired-banner animate-in fade-in duration-300">
+              <Clock size={15} />
+              <span>Tu sesión se cerró automáticamente por inactividad. Inicia sesión nuevamente.</span>
+            </div>
+          )}
+          {location.pathname === '/login' ? (
+            <LoginPage
+              isLoading={false}
+              onLogin={login}
+              branding={branding}
+            />
+          ) : (
+            <LandingPage branding={branding} homeContent={homeContent} />
+          )}
+        </>
       ) : (
-        <AppShell
+        <>
+          {warnSeconds !== null && (
+            <div className="session-timeout-toast animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="session-timeout-toast__body">
+                <Clock size={16} className="session-timeout-toast__icon" />
+                <div>
+                  <p className="session-timeout-toast__title">Tu sesión expirará pronto</p>
+                  <p className="session-timeout-toast__msg">
+                    Cierre por inactividad en <strong>{warnSeconds}s</strong>. ¿Deseas continuar?
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cta-button cta-button--sm"
+                onClick={() => { extendSession(); setWarnSeconds(null); }}
+              >
+                Continuar sesión
+              </button>
+            </div>
+          )}
+          <AppShell
           user={session.user}
           role={session.user.role}
           onLogout={logout}
@@ -468,6 +514,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </AppShell>
+        </>
       )}
     </SystemDialogProvider>
   );
