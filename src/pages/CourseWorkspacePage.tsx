@@ -24,7 +24,6 @@ import {
   AlertCircle,
   Video,
   Mic,
-  MonitorPlay,
   ClipboardCheck,
   ChevronDown,
   Bold,
@@ -39,6 +38,9 @@ import {
   ExternalLink,
   Gamepad2,
   LayoutTemplate,
+  ChevronRight,
+  FolderOpen,
+  PenLine,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -1281,31 +1283,6 @@ function getValidationWorkflowTone(
   return 'neutral';
 }
 
-function getProductLifecycleTone(
-  product: Pick<CourseProduct, 'status' | 'stage' | 'phasePlan'>,
-): WorkflowTone {
-  const dueDate = getProductDueDate(product);
-
-  if (product.status === 'Aprobado') {
-    return 'success';
-  }
-
-  if (product.status === 'En revisión' || product.stage !== 'arquitectura') {
-    return 'warning';
-  }
-
-  if (dueDate) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (dueDate.getTime() < today.getTime()) {
-      return 'danger';
-    }
-  }
-
-  return 'neutral';
-}
-
 function splitCriteriaLines(value?: string | null) {
   return (value ?? '')
     .split(/\n+/)
@@ -2361,6 +2338,8 @@ export function CourseWorkspacePage({
   const [institutionTemplates, setInstitutionTemplates] = useState<CourseArchitectureTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [isAddingArchSection, setIsAddingArchSection] = useState(false);
+  const [newArchSectionName, setNewArchSectionName] = useState('');
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
   const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isValidationDetailModalOpen, setIsValidationDetailModalOpen] = useState(false);
@@ -6743,20 +6722,6 @@ export function CourseWorkspacePage({
     }
   }
 
-  function resolveTemplateSection(
-    sectionName: string,
-    unitSectionIndex: number,
-    courseUnitLabels: string[],
-  ): string {
-    const n = sectionName.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    if (n === 'introduccion') return 'Introducción';
-    if (n === 'cierre') return 'Cierre';
-    // Already an explicit "Unidad X" name
-    const explicitMatch = n.match(/^unidad\s*(\d+)$/);
-    if (explicitMatch) return `Unidad ${explicitMatch[1]}`;
-    // Map by position to the course's actual unit labels
-    return courseUnitLabels[unitSectionIndex] ?? `Unidad ${unitSectionIndex + 1}`;
-  }
 
   async function handleApplyTemplate(template: CourseArchitectureTemplate) {
     if (!currentCourse || isApplyingTemplate) return;
@@ -6775,26 +6740,8 @@ export function CourseWorkspacePage({
     setIsApplyingTemplate(true);
     setIsTemplatePickerOpen(false);
 
-    // Build canonical section labels: classify each template section as
-    // Introducción, Cierre, or a unit slot (mapped by position to course units).
-    const courseUnits = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
-    const courseUnitLabels = courseUnits.map((_: unknown, i: number) => `Unidad ${i + 1}`);
-
-    let unitSectionIndex = 0;
-    const sectionLabels = template.sections.map((section) => {
-      const n = section.name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (n === 'introduccion' || n === 'cierre') {
-        return resolveTemplateSection(section.name, 0, courseUnitLabels);
-      }
-      const label = resolveTemplateSection(section.name, unitSectionIndex, courseUnitLabels);
-      unitSectionIndex += 1;
-      return label;
-    });
-
     try {
-      for (let si = 0; si < template.sections.length; si++) {
-        const section = template.sections[si];
-        const canonicalSection = sectionLabels[si];
+      for (const section of template.sections) {
         for (const product of section.products) {
           await fetch('/api/course-products', {
             method: 'POST',
@@ -6811,7 +6758,7 @@ export function CourseWorkspacePage({
               body: '',
               tags: [],
               version: '1.0',
-              section: canonicalSection,
+              section: section.name,
               phasePlan: [],
               architectureSections: [],
             }),
@@ -11262,181 +11209,199 @@ export function CourseWorkspacePage({
     if (!currentCourse) return null;
 
     const products = currentCourse.products ?? [];
-    const units = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
-    const unitLabels = units.map((_, index) => `Unidad ${index + 1}`);
-    const unitTitleHints = units.map((unit) => unit?.tituloUnidad ?? '');
-    
-    const getResolvedSection = (product: CourseProduct) =>
-      resolveArchitectureSectionLabel(
-        product.section ?? '',
-        product.title,
-        product.summary,
-        unitLabels,
-        unitTitleHints,
-      );
-
-    const introProducts = products.filter((product) => getResolvedSection(product) === 'Introducción');
-    
-    const closureProducts = products.filter((product) => getResolvedSection(product) === 'Cierre');
-
-    const unitProductsMap = units.map((unit, idx) => {
-       const uNumber = idx + 1;
-       const unitLabel = `Unidad ${uNumber}`;
-       return {
-         unit,
-         products: products.filter((product) => getResolvedSection(product) === unitLabel),
-       };
-    });
 
     const institutionStructure = appData.institution.structures.find(
       (s) => s.id === currentCourse.institutionStructureId,
     );
     const guidelines = institutionStructure?.pedagogicalGuidelines || [];
 
+    // Group products by exact section name and sort canonically
+    const sectionRank = (name: string) => {
+      const n = name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (n === 'introduccion') return 0;
+      if (n === 'cierre') return 9000;
+      const um = n.match(/unidad\s*(\d+)/);
+      if (um) return 1 + Number(um[1]);
+      return 500;
+    };
+
+    const sectionMap = new Map<string, typeof products>();
+    for (const p of products) {
+      const key = p.section?.trim() || 'Sin sección';
+      if (!sectionMap.has(key)) sectionMap.set(key, []);
+      sectionMap.get(key)!.push(p);
+    }
+    const sectionGroups = Array.from(sectionMap.entries()).sort(([a], [b]) => sectionRank(a) - sectionRank(b));
+    const hasProducts = products.length > 0;
+
     return (
       <div className="architecture-viewport-full architecture-map animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <header className="architecture-header">
-          <div className="flex items-center gap-4">
-             <button 
-               type="button"
-               className="action-pill action-pill--guidelines" 
-               onClick={() => setIsGuidelinesModalOpen(true)}
-             >
-               <ClipboardCheck size={16} />
-               <span>Lineamientos Institucionales</span>
-             </button>
 
-             {canOperateArchitecture || canDeleteCourseProducts(userRole) ? (
-               <div className="h-6 w-px bg-border/40 mx-2" />
-             ) : null}
-
-             {canOperateArchitecture ? (
-               <>
-                 <button
-                   type="button"
-                   className="ghost-button"
-                   onClick={() => void openTemplatePicker()}
-                   disabled={isApplyingTemplate}
-                 >
-                   {isApplyingTemplate ? (
-                     <RefreshCcw size={16} className="animate-spin" />
-                   ) : (
-                     <LayoutTemplate size={16} />
-                   )}
-                   <span>{isApplyingTemplate ? 'Aplicando...' : 'Crear desde plantilla'}</span>
-                 </button>
-
-                 <button
-                   type="button"
-                   className="cta-button shadow-lg shadow-ocean/20"
-                   onClick={() => void handleGenerateArchitecture()}
-                   disabled={isGeneratingArchitecture}
-                 >
-                   {isGeneratingArchitecture ? (
-                     <RefreshCcw size={16} className="animate-spin" />
-                   ) : (
-                     <Sparkles size={16} />
-                   )}
-                   <span>{isGeneratingArchitecture ? 'Generando arquitectura...' : 'Propuesta IA (Lineamientos)'}</span>
-                 </button>
-               </>
-             ) : null}
-
-             {canDeleteCourseProducts(userRole) ? (
-               <button 
-                 type="button"
-                 className="ghost-button ml-auto"
-                 onClick={() => void handleClearArchitecture()}
-                 disabled={isProductSaving === 'architecture:clear'}
-               >
-                 <Trash2 size={14} />
-                 <span>
-                   {isProductSaving === 'architecture:clear'
-                     ? 'Limpiando arquitectura...'
-                     : 'Limpiar arquitectura'}
-                 </span>
+        {hasProducts && (
+          <header className="architecture-header">
+            <div className="flex items-center gap-4 flex-wrap">
+               <button type="button" className="action-pill action-pill--guidelines" onClick={() => setIsGuidelinesModalOpen(true)}>
+                 <ClipboardCheck size={16} />
+                 <span>Lineamientos Institucionales</span>
                </button>
-             ) : null}
-          </div>
-        </header>
-
-        <div className="architecture-grid architecture-grid--tripartite">
-          {/* Columna 1: Introducción */}
-          <div className="architecture-column">
-            <div className="architecture-group">
-              <div className="architecture-group__head">
-                <h4 className="flex items-center"><BookOpen size={18} className="mr-2 text-ocean" /> Introducción</h4>
-                {canOperateArchitecture ? (
-                  <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Introducción')}>
-                    <Plus size={14} />
-                  </button>
-                ) : null}
-              </div>
-              <div className="architecture-product-list">
-                 {introProducts.length > 0 ? (
-                   introProducts.map(product => renderArchitectureProductCard(product))
-                 ) : (
-                   <div className="empty-block">Sin recursos de inicio</div>
-                 )}
-              </div>
+               <div className="h-6 w-px bg-border/40 mx-1" />
+               {canOperateArchitecture && (
+                 <>
+                   <button type="button" className="ghost-button" onClick={() => void openTemplatePicker()} disabled={isApplyingTemplate}>
+                     {isApplyingTemplate ? <RefreshCcw size={16} className="animate-spin" /> : <LayoutTemplate size={16} />}
+                     <span>{isApplyingTemplate ? 'Aplicando...' : 'Cambiar plantilla'}</span>
+                   </button>
+                   <button type="button" className="ghost-button" onClick={() => void handleGenerateArchitecture()} disabled={isGeneratingArchitecture}>
+                     {isGeneratingArchitecture ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                     <span>{isGeneratingArchitecture ? 'Generando...' : 'Propuesta IA'}</span>
+                   </button>
+                 </>
+               )}
+               {canDeleteCourseProducts(userRole) && (
+                 <button type="button" className="ghost-button ml-auto" onClick={() => void handleClearArchitecture()} disabled={isProductSaving === 'architecture:clear'}>
+                   <Trash2 size={14} />
+                   <span>{isProductSaving === 'architecture:clear' ? 'Limpiando...' : 'Limpiar arquitectura'}</span>
+                 </button>
+               )}
             </div>
-          </div>
+          </header>
+        )}
 
-          {/* Columna 2: Desarrollo (Unidades Académicas) */}
-          <div className="architecture-column architecture-column--main">
-             <div className="grid grid-cols-2 gap-6">
-                {unitProductsMap.map((entry, idx) => (
-                    <div key={idx} className="architecture-group">
-                      <div className="architecture-group__head">
-                        <h4 className="flex items-center truncate">
-                          <Layers size={18} className="mr-2 text-gold shrink-0" />
-                          <span className="truncate">Unidad {idx + 1}</span>
-                        </h4>
-                        {canOperateArchitecture ? (
-                          <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct(`Unidad ${idx + 1}`)}>
-                            <Plus size={14} />
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="architecture-product-list">
-                        {entry.products.length > 0 ? (
-                          entry.products.map(product => renderArchitectureProductCard(product))
-                        ) : (
-                          <div className="empty-block">Pendiente recursos</div>
-                        )}
-                      </div>
-                    </div>
+        {isGeneratingArchitecture && (
+          <div className="arch-progress-banner animate-in fade-in duration-300">
+            <div className="arch-progress-banner__top">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-ocean animate-pulse flex-shrink-0" />
+                <span className="eyebrow">Diseño Arquitectónico IA</span>
+                <span className="relative flex h-2 w-2 ml-1 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ocean opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-ocean" />
+                </span>
+                <span className="text-sm text-secondary font-medium truncate">{architectureStep}</span>
+              </div>
+              <span className="text-xs text-muted flex-shrink-0 font-semibold">{architectureProgress}%{architectureProductsTotal > 0 ? ` · ${architectureProductsCreated}/${architectureProductsTotal} productos` : ''}</span>
+            </div>
+            <div className="arch-progress-banner__bar">
+              <div className="arch-progress-banner__fill" style={{ width: `${architectureProgress}%` }} />
+            </div>
+            {architectureLog.length > 0 && (
+              <div className="arch-progress-banner__log">
+                {[...architectureLog].slice(-3).reverse().map((entry, i) => (
+                  <span key={i} className="flex items-center gap-1 text-xs text-muted">
+                    <CheckCircle2 size={11} className="text-ocean flex-shrink-0" />
+                    {entry}
+                  </span>
                 ))}
-                {units.length === 0 && (
-                   <div className="col-span-2 empty-state-block">
-                      <Sparkles size={32} className="text-muted mb-4 opacity-40" />
-                      <p>Extrae los datos del microcurrículo para mapear el desarrollo aquí.</p>
-                   </div>
-                )}
-             </div>
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Columna 3: Cierre */}
-          <div className="architecture-column">
-            <div className="architecture-group">
-              <div className="architecture-group__head">
-                <h4 className="flex items-center"><MonitorPlay size={18} className="mr-2 text-sage" /> Cierre</h4>
-                {canOperateArchitecture ? (
-                  <button className="icon-button icon-button--mini" onClick={() => handleQuickAddProduct('Cierre')}>
-                    <Plus size={14} />
-                  </button>
-                ) : null}
+        {!hasProducts ? (
+          /* ── Blank state: 3 options ─────────────────────────────────── */
+          <div className="arch-blank-state">
+            <div className="arch-blank-state__icon"><Layers size={36} className="text-muted opacity-40" /></div>
+            <h3 className="arch-blank-state__title">Sin arquitectura definida</h3>
+            <p className="arch-blank-state__sub">Elige cómo quieres construir la estructura de productos del curso</p>
+            {canOperateArchitecture && (
+              <div className="arch-blank-options">
+                <button type="button" className="arch-blank-option" onClick={() => handleQuickAddProduct('Introducción')}>
+                  <PenLine size={22} />
+                  <strong>Manual</strong>
+                  <span>Agrega secciones y productos libremente</span>
+                </button>
+                <button type="button" className="arch-blank-option" onClick={() => void openTemplatePicker()} disabled={isApplyingTemplate}>
+                  {isApplyingTemplate ? <RefreshCcw size={22} className="animate-spin" /> : <LayoutTemplate size={22} />}
+                  <strong>Desde plantilla</strong>
+                  <span>Aplica una plantilla predefinida de la institución</span>
+                </button>
+                <button type="button" className="arch-blank-option arch-blank-option--primary" onClick={() => void handleGenerateArchitecture()} disabled={isGeneratingArchitecture}>
+                  {isGeneratingArchitecture ? <RefreshCcw size={22} className="animate-spin" /> : <Sparkles size={22} />}
+                  <strong>Propuesta IA</strong>
+                  <span>La IA diseña desde el microcurrículo y los lineamientos</span>
+                </button>
               </div>
-              <div className="architecture-product-list">
-                {closureProducts.length > 0 ? (
-                   closureProducts.map(product => renderArchitectureProductCard(product))
+            )}
+          </div>
+        ) : (
+          /* ── Taxonomy tree view ─────────────────────────────────────── */
+          <div className="arch-tree">
+            {sectionGroups.map(([sectionName, sectionProducts]) => (
+              <details key={sectionName} className="arch-tree-section" open>
+                <summary className="arch-tree-section__header">
+                  <ChevronRight size={15} className="arch-tree-chevron" />
+                  <FolderOpen size={15} className="arch-tree-section__icon" />
+                  <span className="arch-tree-section__name">{sectionName}</span>
+                  <span className="arch-tree-section__count">{sectionProducts.length} producto{sectionProducts.length !== 1 ? 's' : ''}</span>
+                  {canOperateArchitecture && (
+                    <button
+                      type="button"
+                      className="arch-tree-add-btn"
+                      onClick={(e) => { e.preventDefault(); handleQuickAddProduct(sectionName); }}
+                    >
+                      <Plus size={12} /> Agregar
+                    </button>
+                  )}
+                </summary>
+                <div className="arch-tree-section__products">
+                  {sectionProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="arch-tree-product"
+                      onClick={() => setArchitecturePreviewProductId(product.id)}
+                    >
+                      <span className="arch-tree-product__icon">{renderProductFormatIcon(product.format, 13)}</span>
+                      <span className="arch-tree-product__title">{product.title}</span>
+                      <span className="arch-tree-product__format">{product.format}</span>
+                      <span className={`arch-tree-product__status arch-tree-product__status--${(product.status ?? 'Borrador').toLowerCase().replace(/\s/g, '-')}`}>{product.status ?? 'Borrador'}</span>
+                      {canOperateArchitecture && (
+                        <div className="arch-tree-product__actions" onClick={(e) => e.stopPropagation()}>
+                          <button type="button" className="filter-chip" onClick={() => openArchitectureProductEditor(product)}>
+                            <PencilLine size={11} /> Editar
+                          </button>
+                          <button type="button" className="filter-chip filter-chip--danger" onClick={() => void handleProductDelete(product.id)}>
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+
+            {canOperateArchitecture && (
+              <div className="arch-tree-new-section">
+                {isAddingArchSection ? (
+                  <form
+                    className="arch-tree-new-section__form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const v = newArchSectionName.trim();
+                      if (v) { handleQuickAddProduct(v); setNewArchSectionName(''); }
+                      setIsAddingArchSection(false);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      placeholder="Nombre de la nueva sección..."
+                      value={newArchSectionName}
+                      onChange={(e) => setNewArchSectionName(e.target.value)}
+                    />
+                    <button type="submit" className="filter-chip">Agregar</button>
+                    <button type="button" className="filter-chip" onClick={() => { setIsAddingArchSection(false); setNewArchSectionName(''); }}>Cancelar</button>
+                  </form>
                 ) : (
-                   <div className="empty-block">Pendiente cierre</div>
+                  <button type="button" className="arch-tree-new-section__btn" onClick={() => setIsAddingArchSection(true)}>
+                    <Plus size={14} /> Nueva sección
+                  </button>
                 )}
               </div>
-            </div>
+            )}
           </div>
-        </div>
+        )}
         
         {isGuidelinesModalOpen ? (
           <SidePanel
@@ -11894,35 +11859,6 @@ export function CourseWorkspacePage({
           </SidePanel>
         )}
 
-        {isGeneratingArchitecture && (
-          <div className="arch-progress-banner animate-in fade-in duration-300">
-            <div className="arch-progress-banner__top">
-              <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-ocean animate-pulse flex-shrink-0" />
-                <span className="eyebrow">Diseño Arquitectónico IA</span>
-                <span className="relative flex h-2 w-2 ml-1 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ocean opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-ocean" />
-                </span>
-                <span className="text-sm text-secondary font-medium truncate">{architectureStep}</span>
-              </div>
-              <span className="text-xs text-muted flex-shrink-0 font-semibold">{architectureProgress}%{architectureProductsTotal > 0 ? ` · ${architectureProductsCreated}/${architectureProductsTotal} productos` : ''}</span>
-            </div>
-            <div className="arch-progress-banner__bar">
-              <div className="arch-progress-banner__fill" style={{ width: `${architectureProgress}%` }} />
-            </div>
-            {architectureLog.length > 0 && (
-              <div className="arch-progress-banner__log">
-                {[...architectureLog].slice(-3).reverse().map((entry, i) => (
-                  <span key={i} className="flex items-center gap-1 text-xs text-muted">
-                    <CheckCircle2 size={11} className="text-ocean flex-shrink-0" />
-                    {entry}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   }
@@ -11938,112 +11874,6 @@ export function CourseWorkspacePage({
     if (f.includes('lectura')) return <BookOpen size={size} className="text-ocean" />;
     if (f.includes('evaluación') || f.includes('examen')) return <Target size={size} className="text-coral" />;
     return <File size={size} className="text-muted" />;
-  }
-
-  function renderArchitectureProductCard(product: CourseProduct) {
-    const lifecycleTone = getProductLifecycleTone(product);
-    const canEdit = canEditCourseProduct(userRole, product.owner, product.stage);
-    const validationCriteria = getValidationData(product).criteria;
-    
-    return (
-      <div
-        key={product.id}
-        className={`architecture-card group animate-in fade-in transition-all duration-300 ${workflowToneClass(lifecycleTone)}`}
-        onClick={() => setArchitecturePreviewProductId(product.id)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            setArchitecturePreviewProductId(product.id);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-      >
-        <div className="architecture-card__inner">
-          <div className="architecture-card__icon">
-            {renderProductFormatIcon(product.format, 18)}
-          </div>
-          <div className="architecture-card__copy">
-            <div className="architecture-card__title-row">
-              <strong className="architecture-card__title">
-                {product.title}
-              </strong>
-              {lifecycleTone === 'success' ? <CheckCircle2 size={12} className="text-sage" /> : null}
-            </div>
-            <div className="architecture-card__meta">
-              <span className="architecture-card__format">
-                {product.format}
-              </span>
-              <div className="h-1 w-1 rounded-full bg-line" />
-              <span className={`architecture-card__status ${lifecycleTone === 'warning' ? 'is-active' : 'is-muted'}`}>
-                {product.status}
-              </span>
-              <span className={workflowToneBadgeClass(lifecycleTone)}>{workflowToneLabel(lifecycleTone)}</span>
-            </div>
-            {product.summary && (
-              <p className="architecture-card__summary">
-                {stripHtmlToText(product.summary)}
-              </p>
-            )}
-            {validationCriteria.length > 0 ? (
-              <div className="architecture-card__criteria">
-                <span className="architecture-card__criteria-label">Criterios de calidad</span>
-                <span className="architecture-card__criteria-count">{validationCriteria.length}</span>
-              </div>
-            ) : null}
-            {product.stage !== 'arquitectura' ? (
-              <div className="architecture-card__stage">
-                <span>{productStageLabel(product.stage)}</span>
-                <span>{formatDate(product.updatedAt)}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {(canEdit || canDeleteCourseProducts(userRole)) ? (
-          <div className="architecture-card__actions">
-            {canEdit ? (
-              <>
-                <button
-                  type="button"
-                  className="ghost-button ghost-button--compact"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openArchitectureProductEditor(product, 'edit');
-                  }}
-                >
-                  <PencilLine size={14} />
-                  <span>Editar</span>
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button ghost-button--compact"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openArchitectureProductEditor(product, 'move');
-                  }}
-                >
-                  <MoveRight size={14} />
-                  <span>Mover</span>
-                </button>
-              </>
-            ) : null}
-            {canDeleteCourseProducts(userRole) ? (
-              <button
-                type="button"
-                className="danger-button danger-button--ghost danger-button--compact"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleProductDelete(product.id);
-                }}
-              >
-                <Trash2 size={14} />
-                <span>Eliminar</span>
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    );
   }
 
   function renderPlanningWorkspace() {

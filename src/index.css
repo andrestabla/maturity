@@ -12043,6 +12043,239 @@ body::after {
   gap: 2px;
 }
 
+/* ── Architecture blank state ──────────────────────────────── */
+.arch-blank-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 64px 24px 80px;
+  text-align: center;
+}
+.arch-blank-state__icon {
+  margin-bottom: 4px;
+}
+.arch-blank-state__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0;
+}
+.arch-blank-state__sub {
+  font-size: 0.875rem;
+  color: var(--secondary);
+  max-width: 380px;
+  margin: 0 0 16px;
+}
+.arch-blank-options {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.arch-blank-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 28px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  cursor: pointer;
+  width: 160px;
+  color: var(--foreground);
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  text-align: center;
+}
+.arch-blank-option:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+.arch-blank-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.arch-blank-option strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.arch-blank-option span {
+  font-size: 0.75rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+.arch-blank-option--primary {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.arch-blank-option--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Architecture taxonomy tree ───────────────────────────── */
+.arch-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 24px 32px;
+}
+.arch-tree-section {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.arch-tree-section__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--panel) 60%, var(--surface));
+}
+.arch-tree-section__header::-webkit-details-marker { display: none; }
+.arch-tree-section[open] .arch-tree-chevron {
+  transform: rotate(90deg);
+}
+.arch-tree-chevron {
+  color: var(--secondary);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.arch-tree-section__icon {
+  color: var(--secondary);
+  flex-shrink: 0;
+}
+.arch-tree-section__name {
+  flex: 1;
+}
+.arch-tree-section__count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--secondary);
+  background: var(--panel);
+  padding: 2px 8px;
+  border-radius: 99px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+.arch-tree-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.arch-tree-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.arch-tree-section__products {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px 8px;
+  gap: 2px;
+}
+.arch-tree-product {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-size: 0.84rem;
+}
+.arch-tree-product:hover {
+  background: var(--panel);
+}
+.arch-tree-product__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.arch-tree-product__title {
+  flex: 1;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arch-tree-product__format {
+  font-size: 0.72rem;
+  color: var(--secondary);
+  background: var(--panel);
+  padding: 2px 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.arch-tree-product__status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.arch-tree-product__status--borrador { background: color-mix(in srgb, var(--secondary) 12%, transparent); color: var(--secondary); }
+.arch-tree-product__status--en-revisión,
+.arch-tree-product__status--en-revision { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #b45309; }
+.arch-tree-product__status--aprobado { background: color-mix(in srgb, #22c55e 12%, transparent); color: #16a34a; }
+.arch-tree-product__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.arch-tree-product:hover .arch-tree-product__actions {
+  opacity: 1;
+}
+.arch-tree-new-section {
+  margin-top: 6px;
+  padding: 4px 2px;
+}
+.arch-tree-new-section__form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.arch-tree-new-section__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1.5px dashed var(--line);
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.arch-tree-new-section__btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .extraction-status-card {
   border: 1px solid var(--line);
 }
