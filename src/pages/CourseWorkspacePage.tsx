@@ -2340,6 +2340,9 @@ export function CourseWorkspacePage({
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [isAddingArchSection, setIsAddingArchSection] = useState(false);
   const [newArchSectionName, setNewArchSectionName] = useState('');
+  const [editingArchSectionName, setEditingArchSectionName] = useState<string | null>(null);
+  const [renameArchSectionValue, setRenameArchSectionValue] = useState('');
+  const [isRenamingArchSection, setIsRenamingArchSection] = useState(false);
   const [architecturePreviewProductId, setArchitecturePreviewProductId] = useState<string | null>(null);
   const validationFragmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isValidationDetailModalOpen, setIsValidationDetailModalOpen] = useState(false);
@@ -7043,6 +7046,32 @@ export function CourseWorkspacePage({
     setIsAddProductModalOpen(true);
   }
 
+  async function handleRenameArchSection(oldName: string, newName: string) {
+    const trimmed = newName.trim();
+    if (!currentCourse || !trimmed || trimmed === oldName) {
+      setEditingArchSectionName(null);
+      return;
+    }
+    setIsRenamingArchSection(true);
+    try {
+      const productsInSection = (currentCourse.products ?? []).filter(
+        (p) => (p.section?.trim() || 'Sin sección') === oldName,
+      );
+      for (const product of productsInSection) {
+        await fetch('/api/course-products', {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseSlug: currentCourse.slug, id: product.id, section: trimmed }),
+        });
+      }
+      refreshAppData();
+    } finally {
+      setIsRenamingArchSection(false);
+      setEditingArchSectionName(null);
+    }
+  }
+
   function openArchitectureProductEditor(
     product: CourseProduct,
     mode: 'edit' | 'move' = 'edit',
@@ -11297,7 +11326,7 @@ export function CourseWorkspacePage({
           </div>
         )}
 
-        {!hasProducts ? (
+        {(!hasProducts && !isAddingArchSection) ? (
           /* ── Blank state: 3 options ─────────────────────────────────── */
           <div className="arch-blank-state">
             <div className="arch-blank-state__icon"><Layers size={36} className="text-muted opacity-40" /></div>
@@ -11305,10 +11334,10 @@ export function CourseWorkspacePage({
             <p className="arch-blank-state__sub">Elige cómo quieres construir la estructura de productos del curso</p>
             {canOperateArchitecture && (
               <div className="arch-blank-options">
-                <button type="button" className="arch-blank-option" onClick={() => handleQuickAddProduct('Introducción')}>
+                <button type="button" className="arch-blank-option" onClick={() => setIsAddingArchSection(true)}>
                   <PenLine size={22} />
                   <strong>Manual</strong>
-                  <span>Agrega secciones y productos libremente</span>
+                  <span>Crea y nombra tus secciones libremente</span>
                 </button>
                 <button type="button" className="arch-blank-option" onClick={() => void openTemplatePicker()} disabled={isApplyingTemplate}>
                   {isApplyingTemplate ? <RefreshCcw size={22} className="animate-spin" /> : <LayoutTemplate size={22} />}
@@ -11328,19 +11357,69 @@ export function CourseWorkspacePage({
           <div className="arch-tree">
             {sectionGroups.map(([sectionName, sectionProducts]) => (
               <details key={sectionName} className="arch-tree-section" open>
-                <summary className="arch-tree-section__header">
-                  <ChevronRight size={15} className="arch-tree-chevron" />
-                  <FolderOpen size={15} className="arch-tree-section__icon" />
-                  <span className="arch-tree-section__name">{sectionName}</span>
-                  <span className="arch-tree-section__count">{sectionProducts.length} producto{sectionProducts.length !== 1 ? 's' : ''}</span>
-                  {canOperateArchitecture && (
-                    <button
-                      type="button"
-                      className="arch-tree-add-btn"
-                      onClick={(e) => { e.preventDefault(); handleQuickAddProduct(sectionName); }}
+                <summary
+                  className="arch-tree-section__header"
+                  onClick={(e) => { if (editingArchSectionName === sectionName) e.preventDefault(); }}
+                >
+                  {editingArchSectionName === sectionName ? (
+                    /* ── Inline rename form ── */
+                    <form
+                      className="arch-tree-rename-form"
+                      onSubmit={(e) => { e.preventDefault(); void handleRenameArchSection(sectionName, renameArchSectionValue); }}
                     >
-                      <Plus size={12} /> Agregar
-                    </button>
+                      <FolderOpen size={15} className="arch-tree-section__icon flex-shrink-0" />
+                      <input
+                        autoFocus
+                        className="field-input"
+                        style={{ flex: 1, minWidth: 0 }}
+                        value={renameArchSectionValue}
+                        onChange={(e) => setRenameArchSectionValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <button
+                        type="submit"
+                        className="filter-chip"
+                        disabled={isRenamingArchSection}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isRenamingArchSection ? <RefreshCcw size={11} className="animate-spin" /> : null}
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        className="filter-chip"
+                        onClick={(e) => { e.stopPropagation(); setEditingArchSectionName(null); }}
+                      >
+                        Cancelar
+                      </button>
+                    </form>
+                  ) : (
+                    /* ── Normal header ── */
+                    <>
+                      <ChevronRight size={15} className="arch-tree-chevron" />
+                      <FolderOpen size={15} className="arch-tree-section__icon" />
+                      <span className="arch-tree-section__name">{sectionName}</span>
+                      <span className="arch-tree-section__count">{sectionProducts.length} producto{sectionProducts.length !== 1 ? 's' : ''}</span>
+                      {canOperateArchitecture && (
+                        <>
+                          <button
+                            type="button"
+                            className="arch-tree-rename-btn"
+                            title="Renombrar sección"
+                            onClick={(e) => { e.preventDefault(); setEditingArchSectionName(sectionName); setRenameArchSectionValue(sectionName); }}
+                          >
+                            <PencilLine size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="arch-tree-add-btn"
+                            onClick={(e) => { e.preventDefault(); handleQuickAddProduct(sectionName); }}
+                          >
+                            <Plus size={12} /> Agregar
+                          </button>
+                        </>
+                      )}
+                    </>
                   )}
                 </summary>
                 <div className="arch-tree-section__products">
@@ -11390,7 +11469,7 @@ export function CourseWorkspacePage({
                       value={newArchSectionName}
                       onChange={(e) => setNewArchSectionName(e.target.value)}
                     />
-                    <button type="submit" className="filter-chip">Agregar</button>
+                    <button type="submit" className="filter-chip">Crear sección</button>
                     <button type="button" className="filter-chip" onClick={() => { setIsAddingArchSection(false); setNewArchSectionName(''); }}>Cancelar</button>
                   </form>
                 ) : (

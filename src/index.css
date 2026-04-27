@@ -12168,6 +12168,35 @@ body::after {
   margin-right: 4px;
   flex-shrink: 0;
 }
+.arch-tree-rename-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+.arch-tree-section__header:hover .arch-tree-rename-btn {
+  opacity: 1;
+}
+.arch-tree-rename-btn:hover {
+  border-color: var(--line);
+  color: var(--foreground);
+}
+.arch-tree-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
 .arch-tree-add-btn {
   display: inline-flex;
   align-items: center;
