@@ -1475,7 +1475,16 @@ export function TeamPage({
   }
 
   function addTemplateSection() {
-    setTemplateDraft((d) => d ? { ...d, sections: [...d.sections, { name: '', products: [] }] } : d);
+    setTemplateDraft((d) => {
+      if (!d) return d;
+      // Auto-pick the next unit name that isn't already used
+      const usedNames = new Set(d.sections.map((s) => s.name));
+      let nextName = 'Unidad 1';
+      for (let n = 1; n <= 8; n++) {
+        if (!usedNames.has(`Unidad ${n}`)) { nextName = `Unidad ${n}`; break; }
+      }
+      return { ...d, sections: [...d.sections, { name: nextName, products: [] }] };
+    });
   }
 
   function removeTemplateSection(sectionIdx: number) {
@@ -4153,11 +4162,17 @@ export function TeamPage({
                     {/* Section header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <div className="field__control" style={{ flex: 1 }}>
-                        <input
+                        <select
                           value={section.name}
                           onChange={(e) => updateTemplateSectionName(sIdx, e.target.value)}
-                          placeholder="Nombre de sección (Ej. Introducción, Unidad 1)"
-                        />
+                        >
+                          {section.name === '' && <option value="">— Selecciona sección —</option>}
+                          <option value="Introducción">Introducción</option>
+                          {[1,2,3,4,5,6,7,8].map((n) => (
+                            <option key={n} value={`Unidad ${n}`}>Unidad {n}</option>
+                          ))}
+                          <option value="Cierre">Cierre</option>
+                        </select>
                       </div>
                       <button type="button" className="filter-chip" title="Duplicar sección" onClick={() => duplicateTemplateSection(sIdx)}>
                         <Copy size={13} />

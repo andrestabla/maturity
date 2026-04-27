@@ -6743,6 +6743,21 @@ export function CourseWorkspacePage({
     }
   }
 
+  function resolveTemplateSection(
+    sectionName: string,
+    unitSectionIndex: number,
+    courseUnitLabels: string[],
+  ): string {
+    const n = sectionName.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (n === 'introduccion') return 'Introducción';
+    if (n === 'cierre') return 'Cierre';
+    // Already an explicit "Unidad X" name
+    const explicitMatch = n.match(/^unidad\s*(\d+)$/);
+    if (explicitMatch) return `Unidad ${explicitMatch[1]}`;
+    // Map by position to the course's actual unit labels
+    return courseUnitLabels[unitSectionIndex] ?? `Unidad ${unitSectionIndex + 1}`;
+  }
+
   async function handleApplyTemplate(template: CourseArchitectureTemplate) {
     if (!currentCourse || isApplyingTemplate) return;
 
@@ -6750,8 +6765,8 @@ export function CourseWorkspacePage({
     if (hasProducts) {
       const confirmed = await showConfirm({
         title: 'Aplicar plantilla',
-        message: 'La arquitectura actual ya tiene productos. Aplicar la plantilla agregará los productos de la plantilla sin eliminar los existentes. ¿Continuar?',
-        confirmLabel: 'Sí, agregar',
+        message: 'La arquitectura actual ya tiene productos. Aplicar la plantilla reemplazará la arquitectura existente. ¿Continuar?',
+        confirmLabel: 'Sí, aplicar',
         tone: 'warning',
       });
       if (!confirmed) return;
@@ -6760,8 +6775,26 @@ export function CourseWorkspacePage({
     setIsApplyingTemplate(true);
     setIsTemplatePickerOpen(false);
 
+    // Build canonical section labels: classify each template section as
+    // Introducción, Cierre, or a unit slot (mapped by position to course units).
+    const courseUnits = Array.isArray(currentCourse?.metadata?.units) ? currentCourse.metadata.units : [];
+    const courseUnitLabels = courseUnits.map((_: unknown, i: number) => `Unidad ${i + 1}`);
+
+    let unitSectionIndex = 0;
+    const sectionLabels = template.sections.map((section) => {
+      const n = section.name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (n === 'introduccion' || n === 'cierre') {
+        return resolveTemplateSection(section.name, 0, courseUnitLabels);
+      }
+      const label = resolveTemplateSection(section.name, unitSectionIndex, courseUnitLabels);
+      unitSectionIndex += 1;
+      return label;
+    });
+
     try {
-      for (const section of template.sections) {
+      for (let si = 0; si < template.sections.length; si++) {
+        const section = template.sections[si];
+        const canonicalSection = sectionLabels[si];
         for (const product of section.products) {
           await fetch('/api/course-products', {
             method: 'POST',
@@ -6778,7 +6811,7 @@ export function CourseWorkspacePage({
               body: '',
               tags: [],
               version: '1.0',
-              section: section.name,
+              section: canonicalSection,
               phasePlan: [],
               architectureSections: [],
             }),
@@ -6787,7 +6820,6 @@ export function CourseWorkspacePage({
       }
       refreshAppData();
     } catch {
-      // silently refresh whatever was created
       refreshAppData();
     } finally {
       setIsApplyingTemplate(false);
