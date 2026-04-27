@@ -187,6 +187,7 @@ export interface CourseMetadata {
   priority: Priority;
   riskLevel: RiskLevel;
   route: string;
+  sectionOrder?: string[];
 }
 
 export interface CourseAuditEntry {
@@ -1019,6 +1020,7 @@ export interface CourseMetadataMutationInput {
   program?: string;
   credits?: number;
   summary?: string;
+  sectionOrder?: string[];
 }
 
 export interface TimelineItemMutationInput {

@@ -12168,6 +12168,40 @@ body::after {
   margin-right: 4px;
   flex-shrink: 0;
 }
+.arch-tree-section__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.arch-tree-section__header:hover .arch-tree-section__controls {
+  opacity: 1;
+}
+.arch-tree-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.arch-tree-ctrl-btn:hover:not(:disabled) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--foreground);
+}
+.arch-tree-ctrl-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .arch-tree-rename-btn {
   display: inline-flex;
   align-items: center;
@@ -12180,11 +12214,7 @@ body::after {
   color: var(--secondary);
   cursor: pointer;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s, border-color 0.15s, color 0.15s;
-}
-.arch-tree-section__header:hover .arch-tree-rename-btn {
-  opacity: 1;
+  transition: border-color 0.15s, color 0.15s;
 }
 .arch-tree-rename-btn:hover {
   border-color: var(--line);

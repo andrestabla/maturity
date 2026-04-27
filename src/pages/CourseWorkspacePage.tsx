@@ -41,6 +41,8 @@ import {
   ChevronRight,
   FolderOpen,
   PenLine,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -7072,6 +7074,27 @@ export function CourseWorkspacePage({
     }
   }
 
+  async function handleMoveArchSection(orderedNames: string[], sectionName: string, direction: 'up' | 'down') {
+    if (!currentCourse) return;
+    const idx = orderedNames.indexOf(sectionName);
+    if (idx === -1) return;
+    const newOrder = [...orderedNames];
+    if (direction === 'up' && idx > 0) {
+      [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    } else if (direction === 'down' && idx < newOrder.length - 1) {
+      [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    } else {
+      return;
+    }
+    await fetch(`/api/course-metadata?slug=${encodeURIComponent(currentCourse.slug)}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sectionOrder: newOrder }),
+    });
+    refreshAppData();
+  }
+
   function openArchitectureProductEditor(
     product: CourseProduct,
     mode: 'edit' | 'move' = 'edit',
@@ -11244,8 +11267,7 @@ export function CourseWorkspacePage({
     );
     const guidelines = institutionStructure?.pedagogicalGuidelines || [];
 
-    // Group products by exact section name and sort canonically
-    const sectionRank = (name: string) => {
+    const canonicalRank = (name: string) => {
       const n = name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
       if (n === 'introduccion') return 0;
       if (n === 'cierre') return 9000;
@@ -11254,13 +11276,25 @@ export function CourseWorkspacePage({
       return 500;
     };
 
+    const storedOrder: string[] = Array.isArray(currentCourse.metadata?.sectionOrder)
+      ? currentCourse.metadata.sectionOrder
+      : [];
+
     const sectionMap = new Map<string, typeof products>();
     for (const p of products) {
       const key = p.section?.trim() || 'Sin sección';
       if (!sectionMap.has(key)) sectionMap.set(key, []);
       sectionMap.get(key)!.push(p);
     }
-    const sectionGroups = Array.from(sectionMap.entries()).sort(([a], [b]) => sectionRank(a) - sectionRank(b));
+    const sectionGroups = Array.from(sectionMap.entries()).sort(([a], [b]) => {
+      const ai = storedOrder.indexOf(a);
+      const bi = storedOrder.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return canonicalRank(a) - canonicalRank(b);
+    });
+    const orderedSectionNames = sectionGroups.map(([name]) => name);
     const hasProducts = products.length > 0;
 
     return (
@@ -11401,7 +11435,25 @@ export function CourseWorkspacePage({
                       <span className="arch-tree-section__name">{sectionName}</span>
                       <span className="arch-tree-section__count">{sectionProducts.length} producto{sectionProducts.length !== 1 ? 's' : ''}</span>
                       {canOperateArchitecture && (
-                        <>
+                        <div className="arch-tree-section__controls">
+                          <button
+                            type="button"
+                            className="arch-tree-ctrl-btn"
+                            title="Mover arriba"
+                            disabled={orderedSectionNames.indexOf(sectionName) === 0}
+                            onClick={(e) => { e.preventDefault(); void handleMoveArchSection(orderedSectionNames, sectionName, 'up'); }}
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="arch-tree-ctrl-btn"
+                            title="Mover abajo"
+                            disabled={orderedSectionNames.indexOf(sectionName) === orderedSectionNames.length - 1}
+                            onClick={(e) => { e.preventDefault(); void handleMoveArchSection(orderedSectionNames, sectionName, 'down'); }}
+                          >
+                            <ArrowDown size={12} />
+                          </button>
                           <button
                             type="button"
                             className="arch-tree-rename-btn"
@@ -11417,7 +11469,7 @@ export function CourseWorkspacePage({
                           >
                             <Plus size={12} /> Agregar
                           </button>
-                        </>
+                        </div>
                       )}
                     </>
                   )}
