@@ -10980,13 +10980,14 @@ body::after {
 }
 
 .planning-gantt__table {
-  min-width: 1320px;
+  --planning-timeline-width: 560px;
+  min-width: 1560px;
 }
 
 .planning-gantt__header,
 .planning-gantt__row {
   display: grid;
-  grid-template-columns: 150px minmax(320px, 1.35fr) 120px 120px 220px minmax(360px, 1fr);
+  grid-template-columns: 150px minmax(320px, 1.35fr) 120px 120px 220px minmax(var(--planning-timeline-width), 1fr);
   gap: 12px;
   align-items: stretch;
 }
@@ -11102,18 +11103,32 @@ body::after {
 .planning-gantt__axis {
   position: relative;
   min-height: 32px;
+  min-width: var(--planning-timeline-width);
 }
 
 .planning-gantt__axis-label {
   position: absolute;
   top: 0;
+  min-width: 68px;
   transform: translateX(-50%);
   white-space: nowrap;
+  text-align: center;
+}
+
+.planning-gantt__axis-label:first-child {
+  transform: translateX(0);
+  text-align: left;
+}
+
+.planning-gantt__axis-label:last-child {
+  transform: translateX(-100%);
+  text-align: right;
 }
 
 .planning-gantt__timeline {
   position: relative;
   width: 100%;
+  min-width: var(--planning-timeline-width);
   min-height: 44px;
   border-radius: 14px;
   border: 1px solid var(--line);
