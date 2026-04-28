@@ -3554,6 +3554,9 @@ async function backfillArchitectureProductSections() {
       product.id,
       product.course_slug AS "courseSlug",
       product.title,
+      product.format,
+      product.section,
+      product.summary,
       product.body,
       product.architecture_sections AS "architectureSections",
       course.products
@@ -3565,6 +3568,9 @@ async function backfillArchitectureProductSections() {
     id: string;
     courseSlug: string;
     title: string;
+    format: string | null;
+    section: string | null;
+    summary: string | null;
     body: string;
     architectureSections: JsonValue;
     products: JsonValue;
@@ -3584,15 +3590,23 @@ async function backfillArchitectureProductSections() {
     const courseProducts = parseJson<Course['products']>(row.products ?? []);
     const jsonProduct = courseProducts.find((product) => product.id === row.id);
     const jsonSections = normalizeProductArchitectureSections(jsonProduct?.architectureSections);
+    const legacyText = splitLegacyArchitectureText({
+      title: row.title,
+      format: row.format,
+      section: row.section,
+      summary: row.summary,
+      body: row.body,
+    });
+    const fallbackInstructions = normalizeLongTextBlock(row.body) || legacyText.body;
     const nextSections =
       jsonSections && jsonSections.length > 0
         ? jsonSections
-        : normalizeLongTextBlock(row.body)
+        : fallbackInstructions
           ? [
               {
                 id: `${row.id}-instructions`,
-                title: 'Instrucciones',
-                instructions: row.body,
+                title: normalizeLongTextBlock(row.title) || 'Instrucciones',
+                instructions: fallbackInstructions,
               },
             ]
           : [];
@@ -3740,7 +3754,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 31; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 32; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -5002,6 +5016,11 @@ async function ensureSchema() {
         SET architecture_sections = COALESCE(architecture_sections, '[]'::jsonb)
       `;
 
+      await backfillArchitectureProductSections();
+    }
+
+    // Migration v32: Backfill architecture sections from existing product summaries when body is empty
+    if (currentVersion < 32) {
       await backfillArchitectureProductSections();
     }
 
