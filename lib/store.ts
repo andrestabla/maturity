@@ -134,6 +134,7 @@ interface CourseProductRow {
   tags: JsonValue;
   version: string;
   section: string | null;
+  architectureSections: JsonValue;
   phasePlan: JsonValue;
   writingData: JsonValue;
   validationData: JsonValue;
@@ -1373,6 +1374,34 @@ function normalizeProductArchitectureSections(
     }));
 }
 
+function escapeProductHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildArchitectureSectionsBody(sections?: ProductSectionTemplate[]) {
+  const normalizedSections = normalizeProductArchitectureSections(sections) ?? [];
+
+  if (normalizedSections.length === 0) {
+    return '';
+  }
+
+  return normalizedSections
+    .map((section) =>
+      [
+        '<section data-product-section="true">',
+        `<h3>${escapeProductHtml(section.title)}</h3>`,
+        normalizeLongTextBlock(section.instructions) || '<p></p>',
+        '</section>',
+      ].join(''),
+    )
+    .join('');
+}
+
 function normalizeProductPhasePlan(
   phasePlan?: ProductPhasePlan[],
 ): ProductPhasePlan[] {
@@ -1990,13 +2019,16 @@ function normalizeCourseProductTextFields(
 }
 
 function makeCourseProductRecord(input: CourseProductMutationInput): CourseProduct {
+  const architectureSections = normalizeProductArchitectureSections(input.architectureSections);
+  const architectureSectionsBody =
+    input.stage === 'arquitectura' ? buildArchitectureSectionsBody(architectureSections) : '';
   const normalizedText = normalizeCourseProductTextFields({
     stage: input.stage,
     title: input.title,
     format: input.format,
     section: input.section,
     summary: input.summary,
-    body: input.body,
+    body: architectureSectionsBody || input.body,
   }, {
     preserveExplicitRichText: true,
   });
@@ -2013,7 +2045,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     tags: (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     version: input.version?.trim?.() || '1.0',
     section: input.section?.trim() || undefined,
-    architectureSections: normalizeProductArchitectureSections(input.architectureSections),
+    architectureSections,
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
     writingData: normalizeProductWritingData(input.writingData),
     validationData: normalizeProductValidationData(input.validationData, input.stage),
@@ -3375,6 +3407,7 @@ async function backfillCourseProductsTable() {
           tags,
           version,
           section,
+          architecture_sections,
           phase_plan,
           writing_data,
           validation_data,
@@ -3394,6 +3427,7 @@ async function backfillCourseProductsTable() {
           ${JSON.stringify(product.tags ?? [])}::jsonb,
           ${product.version},
           ${product.section ?? null},
+          ${JSON.stringify(normalizeProductArchitectureSections(product.architectureSections) ?? [])}::jsonb,
           ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
           ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
           ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
@@ -3413,6 +3447,7 @@ async function backfillCourseProductsTable() {
           tags = EXCLUDED.tags,
           version = EXCLUDED.version,
           section = EXCLUDED.section,
+          architecture_sections = EXCLUDED.architecture_sections,
           phase_plan = EXCLUDED.phase_plan,
           writing_data = EXCLUDED.writing_data,
           validation_data = EXCLUDED.validation_data,
@@ -3437,6 +3472,7 @@ async function syncCourseProductsJsonSnapshot(courseSlug: string) {
       tags,
       version,
       section,
+      architecture_sections AS "architectureSections",
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
       validation_data AS "validationData",
@@ -3511,6 +3547,74 @@ async function backfillArchitectureProductTextFields() {
   }
 }
 
+async function backfillArchitectureProductSections() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      product.id,
+      product.course_slug AS "courseSlug",
+      product.title,
+      product.body,
+      product.architecture_sections AS "architectureSections",
+      course.products
+    FROM maturity_course_products product
+    INNER JOIN maturity_courses course
+      ON course.slug = product.course_slug
+    WHERE product.stage = 'arquitectura'
+  `) as Array<{
+    id: string;
+    courseSlug: string;
+    title: string;
+    body: string;
+    architectureSections: JsonValue;
+    products: JsonValue;
+  }>;
+
+  const affectedCourseSlugs = new Set<string>();
+
+  for (const row of rows) {
+    const currentSections = normalizeProductArchitectureSections(
+      parseJson<ProductSectionTemplate[]>(row.architectureSections ?? []),
+    );
+
+    if (currentSections && currentSections.length > 0) {
+      continue;
+    }
+
+    const courseProducts = parseJson<Course['products']>(row.products ?? []);
+    const jsonProduct = courseProducts.find((product) => product.id === row.id);
+    const jsonSections = normalizeProductArchitectureSections(jsonProduct?.architectureSections);
+    const nextSections =
+      jsonSections && jsonSections.length > 0
+        ? jsonSections
+        : normalizeLongTextBlock(row.body)
+          ? [
+              {
+                id: `${row.id}-instructions`,
+                title: 'Instrucciones',
+                instructions: row.body,
+              },
+            ]
+          : [];
+
+    if (nextSections.length === 0) {
+      continue;
+    }
+
+    await sql`
+      UPDATE maturity_course_products
+      SET architecture_sections = ${JSON.stringify(nextSections)}::jsonb
+      WHERE id = ${row.id}
+    `;
+
+    affectedCourseSlugs.add(row.courseSlug);
+  }
+
+  for (const courseSlug of affectedCourseSlugs) {
+    await syncCourseProductsJsonSnapshot(courseSlug);
+  }
+}
+
 async function syncCourseProductsTable(course: Course) {
   const sql = getSql();
   const nextIds = course.products.map((product) => product.id);
@@ -3543,6 +3647,7 @@ async function syncCourseProductsTable(course: Course) {
         tags,
         version,
         section,
+        architecture_sections,
         phase_plan,
         writing_data,
         validation_data,
@@ -3562,6 +3667,7 @@ async function syncCourseProductsTable(course: Course) {
         ${JSON.stringify(product.tags ?? [])}::jsonb,
         ${product.version},
         ${product.section ?? null},
+        ${JSON.stringify(normalizeProductArchitectureSections(product.architectureSections) ?? [])}::jsonb,
         ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
         ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
         ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
@@ -3581,6 +3687,7 @@ async function syncCourseProductsTable(course: Course) {
         tags = EXCLUDED.tags,
         version = EXCLUDED.version,
         section = EXCLUDED.section,
+        architecture_sections = EXCLUDED.architecture_sections,
         phase_plan = EXCLUDED.phase_plan,
         writing_data = EXCLUDED.writing_data,
         validation_data = EXCLUDED.validation_data,
@@ -3609,6 +3716,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
       tags,
       version,
       section,
+      architecture_sections AS "architectureSections",
       phase_plan AS "phasePlan",
       writing_data AS "writingData",
       validation_data AS "validationData",
@@ -3632,7 +3740,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 30; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 31; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -4040,12 +4148,18 @@ async function ensureSchema() {
         tags JSONB NOT NULL DEFAULT '[]'::jsonb,
         version TEXT NOT NULL DEFAULT '1.0',
         section TEXT,
+        architecture_sections JSONB NOT NULL DEFAULT '[]'::jsonb,
         phase_plan JSONB NOT NULL DEFAULT '[]'::jsonb,
         writing_data JSONB NOT NULL DEFAULT '{}'::jsonb,
         validation_data JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
+    `;
+
+    await sql`
+      ALTER TABLE maturity_course_products
+      ADD COLUMN IF NOT EXISTS architecture_sections JSONB NOT NULL DEFAULT '[]'::jsonb
     `;
 
     await sql`
@@ -4881,6 +4995,16 @@ async function ensureSchema() {
       )
     `;
 
+    // Migration v31: Persist architecture product section instructions as first-class data
+    if (currentVersion < 31) {
+      await sql`
+        UPDATE maturity_course_products
+        SET architecture_sections = COALESCE(architecture_sections, '[]'::jsonb)
+      `;
+
+      await backfillArchitectureProductSections();
+    }
+
     // 4. Update the stored version to avoid running this again
     await sql`
       INSERT INTO maturity_system_metadata (key, value)
@@ -5003,6 +5127,9 @@ function serializeCourseProductRow(row: CourseProductRow): CourseProduct {
     tags: parseJson<CourseProduct['tags']>(row.tags ?? []),
     version: row.version,
     section: row.section ?? undefined,
+    architectureSections: normalizeProductArchitectureSections(
+      parseJson<ProductSectionTemplate[]>(row.architectureSections ?? []),
+    ),
     phasePlan: normalizeProductPhasePlan(parseJson<ProductPhasePlan[]>(row.phasePlan ?? [])),
     writingData: normalizeProductWritingData(parseJson<ProductWritingData>(row.writingData ?? {})),
     validationData: normalizeProductValidationData(
@@ -7081,13 +7208,19 @@ export async function updateCourseProductRecord(
     const nextTitle = input.title ?? product.title;
     const nextFormat = input.format ?? product.format;
     const nextSection = input.section ?? product.section;
+    const nextArchitectureSections =
+      input.architectureSections !== undefined
+        ? normalizeProductArchitectureSections(input.architectureSections)
+        : product.architectureSections;
+    const architectureSectionsBody =
+      nextStage === 'arquitectura' ? buildArchitectureSectionsBody(nextArchitectureSections) : '';
     const normalizedText = normalizeCourseProductTextFields({
       stage: nextStage,
       title: nextTitle,
       format: nextFormat,
       section: nextSection,
       summary: input.summary ?? product.summary,
-      body: input.body ?? product.body,
+      body: architectureSectionsBody || (input.body ?? product.body),
     }, {
       preserveExplicitRichText: true,
     });
@@ -7106,10 +7239,7 @@ export async function updateCourseProductRecord(
         input.phasePlan !== undefined
           ? normalizeProductPhasePlan(input.phasePlan)
           : product.phasePlan,
-      architectureSections:
-        input.architectureSections !== undefined
-          ? normalizeProductArchitectureSections(input.architectureSections)
-          : product.architectureSections,
+      architectureSections: nextArchitectureSections,
       writingData:
         input.writingData !== undefined
           ? normalizeProductWritingData(input.writingData)

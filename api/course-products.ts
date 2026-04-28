@@ -63,6 +63,7 @@ export default async function handler(request: Request) {
       tags: payload.tags ?? [],
       version: payload.version ?? '1.0',
       section: payload.section,
+      architectureSections: payload.architectureSections,
       phasePlan: payload.phasePlan,
       writingData: payload.writingData,
       validationData: payload.validationData,

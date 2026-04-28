@@ -1975,8 +1975,30 @@ function looksLikeContentHtml(value?: string | null) {
 }
 
 function getCanonicalProductInstructionsHtml(
-  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+  product: Pick<
+    CourseProductMutationInput,
+    'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section' | 'architectureSections'
+  >,
 ) {
+  const architectureSections = (product.architectureSections ?? []).filter((section) =>
+    section.title?.trim(),
+  );
+
+  if (architectureSections.length > 0) {
+    return sanitizeRichHtml(
+      architectureSections
+        .map((section) =>
+          [
+            '<section data-product-section="true">',
+            `<h3>${escapeHtml(section.title.trim())}</h3>`,
+            sanitizeRichHtml(section.instructions ?? '').trim() || '<p></p>',
+            '</section>',
+          ].join(''),
+        )
+        .join(''),
+    );
+  }
+
   const bodyHtml = sanitizeRichHtml(product.body ?? '').trim();
 
   if (bodyHtml && looksLikeInstructionHtml(bodyHtml)) {
@@ -2005,7 +2027,10 @@ function getCanonicalProductInstructionsHtml(
 }
 
 function getFixedProductInstructionsHtml(
-  product: Pick<CourseProductMutationInput, 'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section'>,
+  product: Pick<
+    CourseProductMutationInput,
+    'title' | 'summary' | 'body' | 'writingData' | 'format' | 'section' | 'architectureSections'
+  >,
 ) {
   return getCanonicalProductInstructionsHtml(product);
 }
@@ -7111,7 +7136,7 @@ export function CourseWorkspacePage({
       stage: product.stage,
       owner: product.owner,
       status: product.status,
-      body: getFixedProductInstructionsHtml(product),
+      body: product.body,
       tags: product.tags,
       version: product.version,
       section: product.section ?? 'Introducción',
@@ -7201,6 +7226,8 @@ export function CourseWorkspacePage({
            courseSlug: currentCourse.slug,
            ...(editingArchitectureProductId ? { id: editingArchitectureProductId } : {}),
            ...newProductForm,
+           summary: sanitizeRichHtml(newProductForm.summary),
+           body: getFixedProductInstructionsHtml(newProductForm),
          })
        });
 
@@ -7279,7 +7306,10 @@ export function CourseWorkspacePage({
       const updatedProduct = await patchCourseProductOnServer(productId, {
         ...draft,
         summary: sanitizeRichHtml(draft.summary),
-        body: sanitizeRichHtml(draft.body),
+        body:
+          draft.stage === 'arquitectura'
+            ? getFixedProductInstructionsHtml(draft)
+            : sanitizeRichHtml(draft.body),
         writingData: {
           ...currentWritingData,
           sections: syncedWritingSections,
@@ -11704,10 +11734,20 @@ export function CourseWorkspacePage({
                 </div>
                 <div className="list-item">
                   <div>
-                    <strong>Instrucciones</strong>
+                    <strong>Descripción / Propósito</strong>
+                    {renderRichTextContent(
+                      architecturePreviewProduct.summary,
+                      'Este producto todavía no tiene descripción registrada.',
+                      'rich-html--panel',
+                    )}
+                  </div>
+                </div>
+                <div className="list-item">
+                  <div>
+                    <strong>Secciones del producto</strong>
                     {renderInstructionContent(
                       getFixedProductInstructionsHtml(architecturePreviewProduct),
-                      'Este producto todavía no tiene instrucciones registradas.',
+                      'Este producto todavía no tiene secciones registradas.',
                       'rich-html--panel',
                     )}
                   </div>
