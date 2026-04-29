@@ -1699,6 +1699,38 @@ function buildWritingSectionsFromTemplate(titles: string[], instructionHtml: str
   });
 }
 
+function buildWritingSectionsFromArchitecture(
+  product: Pick<CourseProductMutationInput, 'architectureSections' | 'writingData'>,
+  sourceSections: ProductWritingSection[] = product.writingData?.sections ?? [],
+) {
+  const architectureSections = product.architectureSections ?? [];
+
+  if (architectureSections.length === 0) {
+    return [];
+  }
+
+  const normalizedSourceSections = normalizeWritingSections(sourceSections);
+  const findSourceSection = (title: string, id?: string) =>
+    normalizedSourceSections.find((section) => section.id === id) ??
+    normalizedSourceSections.find(
+      (section) => slugifyWritingSectionTitle(section.title) === slugifyWritingSectionTitle(title),
+    );
+
+  return architectureSections
+    .filter((section) => section.title.trim())
+    .map((section, index) => {
+      const sourceSection = findSourceSection(section.title, section.id);
+
+      return {
+        id: section.id || `section-${index + 1}`,
+        title: section.title.trim(),
+        instructions: section.instructions?.trim?.() ?? '',
+        content: sourceSection?.content ?? '',
+        updatedAt: sourceSection?.updatedAt,
+      } satisfies ProductWritingSection;
+    });
+}
+
 function createWritingDraftTextFromSections(sections: ProductWritingSection[]) {
   return sections
     .map((section) => {
@@ -1927,6 +1959,11 @@ function getPlanningAssigneeNames(phasePlan: ProductPhasePlan[]) {
 
 function buildWritingSectionsFromProduct(product: CourseProduct): ProductWritingSection[] {
   const existingSections = product.writingData?.sections ?? [];
+  const architectureSections = buildWritingSectionsFromArchitecture(product, existingSections);
+
+  if (architectureSections.length > 0) {
+    return architectureSections;
+  }
 
   if (existingSections.length > 0) {
     return normalizeWritingSections(existingSections);
@@ -2067,7 +2104,7 @@ function parseWritingSectionsFromDraftText(draftText: string) {
 }
 
 function getWritingContentHtmlForProduct(
-  product: Pick<CourseProductMutationInput, 'body' | 'writingData' | 'format' | 'summary'>,
+  product: Pick<CourseProductMutationInput, 'body' | 'writingData' | 'format' | 'summary' | 'architectureSections'>,
 ) {
   const sections = getWritingSectionsForProduct(product);
   const sectionContentHtml = createWritingDraftTextFromSections(sections);
@@ -2090,9 +2127,18 @@ function getWritingContentHtmlForProduct(
 }
 
 function getWritingSectionsForProduct(
-  product: Pick<CourseProductMutationInput, 'body' | 'summary' | 'format' | 'writingData'>,
+  product: Pick<CourseProductMutationInput, 'body' | 'summary' | 'format' | 'writingData' | 'architectureSections'>,
 ) {
   const sections = product.writingData?.sections ?? [];
+  const architectureSections = buildWritingSectionsFromArchitecture(product, sections);
+
+  if (architectureSections.length > 0) {
+    const hydratedSections = parseWritingSectionsFromDraftText(product.writingData?.draftText ?? '');
+    return buildWritingSectionsFromArchitecture(
+      product,
+      hydratedSections.length > 0 ? hydratedSections : sections,
+    );
+  }
 
   if (sections.length > 0) {
     const normalizedSections = normalizeWritingSections(sections);
@@ -2162,16 +2208,11 @@ function syncWritingSectionsFromInstructions(
 
 function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
   const current = product.writingData;
-  return {
-    mode: current.mode ?? 'manual',
-    submittedAsset: current.submittedAsset,
-    supportAssets: current.supportAssets ?? [],
-    libraryResourceIds: current.libraryResourceIds ?? [],
-    aiPrompt: current.aiPrompt ?? '',
-    extractedText: current.extractedText ?? '',
-    draftText: current.draftText ?? '',
-    sections:
-      current.sections && current.sections.length > 0
+  const architectureSections = buildWritingSectionsFromArchitecture(product, current.sections);
+  const normalizedSections =
+    architectureSections.length > 0
+      ? architectureSections
+      : current.sections && current.sections.length > 0
         ? current.sections.map((section) => ({
             ...section,
             title: section.title.trim(),
@@ -2179,7 +2220,20 @@ function normalizeWritingDraft(product: CourseProduct): ProductWritingData {
             content: section.content?.trim() ?? '',
             updatedAt: section.updatedAt?.trim() || undefined,
           }))
-        : buildWritingSectionsFromProduct(product),
+        : buildWritingSectionsFromProduct(product);
+
+  return {
+    mode: current.mode ?? 'manual',
+    submittedAsset: current.submittedAsset,
+    supportAssets: current.supportAssets ?? [],
+    libraryResourceIds: current.libraryResourceIds ?? [],
+    aiPrompt: current.aiPrompt ?? '',
+    extractedText: current.extractedText ?? '',
+    draftText:
+      architectureSections.length > 0
+        ? createWritingDraftTextFromSections(normalizedSections)
+        : current.draftText ?? '',
+    sections: normalizedSections,
     lastSavedAt: current.lastSavedAt,
     lastGeneratedAt: current.lastGeneratedAt,
   };
@@ -3974,7 +4028,7 @@ export function CourseWorkspacePage({
   function buildProductExportPayload(
     product: Pick<
       CourseProductMutationInput,
-      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'writingData' | 'validationData'
+      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'architectureSections' | 'writingData' | 'validationData'
     >,
   ) {
     const validationData = getValidationData(product);
@@ -4004,7 +4058,7 @@ export function CourseWorkspacePage({
   async function buildDocxBlobForProduct(
     product: Pick<
       CourseProductMutationInput,
-      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'writingData' | 'validationData'
+      'title' | 'stage' | 'format' | 'owner' | 'status' | 'summary' | 'body' | 'tags' | 'version' | 'section' | 'architectureSections' | 'writingData' | 'validationData'
     >,
   ) {
     const [{ Document, Paragraph, Packer, TextRun, HeadingLevel, AlignmentType }] = await Promise.all([
@@ -7298,11 +7352,20 @@ export function CourseWorkspacePage({
         lastGeneratedAt:
           persistedProduct?.writingData?.lastGeneratedAt ?? draft.writingData?.lastGeneratedAt,
       };
-      const syncedWritingSections = syncWritingSectionsFromInstructions(
-        currentWritingData.sections,
-        draft.body,
-        draft.format,
-      );
+      const syncedWritingSections =
+        draft.architectureSections && draft.architectureSections.length > 0
+          ? buildWritingSectionsFromArchitecture(
+              {
+                ...draft,
+                writingData: currentWritingData,
+              },
+              currentWritingData.sections,
+            )
+          : syncWritingSectionsFromInstructions(
+              currentWritingData.sections,
+              draft.body,
+              draft.format,
+            );
       const updatedProduct = await patchCourseProductOnServer(productId, {
         ...draft,
         summary: sanitizeRichHtml(draft.summary),

@@ -1481,6 +1481,57 @@ function normalizeProductWritingData(writingData?: ProductWritingData): ProductW
   };
 }
 
+function buildWritingDraftTextFromSections(sections: ProductWritingSection[]) {
+  return sections
+    .map((section) => {
+      const content = section.content?.trim?.() ?? '';
+      if (!content) {
+        return '';
+      }
+
+      return `<section data-section="${escapeProductHtml(section.title)}"><h3>${escapeProductHtml(
+        section.title,
+      )}</h3>${content}</section>`;
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function syncWritingSectionsWithArchitecture(
+  writingData: ProductWritingData | undefined,
+  architectureSections?: ProductSectionTemplate[],
+): ProductWritingData {
+  const normalizedWritingData = normalizeProductWritingData(writingData);
+  const normalizedArchitectureSections = normalizeProductArchitectureSections(architectureSections) ?? [];
+
+  if (normalizedArchitectureSections.length === 0) {
+    return normalizedWritingData;
+  }
+
+  const currentSections = normalizeProductWritingSections(normalizedWritingData.sections);
+  const findCurrentSection = (architectureSection: ProductSectionTemplate) =>
+    currentSections.find((section) => section.id === architectureSection.id) ??
+    currentSections.find((section) => slugify(section.title) === slugify(architectureSection.title));
+
+  const syncedSections = normalizedArchitectureSections.map((section, index) => {
+    const currentSection = findCurrentSection(section);
+
+    return {
+      id: section.id || `section-${index + 1}`,
+      title: section.title,
+      instructions: section.instructions,
+      content: currentSection?.content ?? '',
+      updatedAt: currentSection?.updatedAt,
+    };
+  });
+
+  return {
+    ...normalizedWritingData,
+    draftText: buildWritingDraftTextFromSections(syncedSections),
+    sections: syncedSections,
+  };
+}
+
 function normalizeProductValidationChecklist(
   checklist?: ProductValidationChecklistItem[],
   stage: CourseProductStage = 'validacion',
@@ -2047,7 +2098,7 @@ function makeCourseProductRecord(input: CourseProductMutationInput): CourseProdu
     section: input.section?.trim() || undefined,
     architectureSections,
     phasePlan: normalizeProductPhasePlan(input.phasePlan),
-    writingData: normalizeProductWritingData(input.writingData),
+    writingData: syncWritingSectionsWithArchitecture(input.writingData, architectureSections),
     validationData: normalizeProductValidationData(input.validationData, input.stage),
     updatedAt: getTodayLabel(),
   };
@@ -3629,6 +3680,45 @@ async function backfillArchitectureProductSections() {
   }
 }
 
+async function backfillWritingSectionsFromArchitecture() {
+  const sql = getSql();
+  const rows = (await sql`
+    SELECT
+      product.id,
+      product.course_slug AS "courseSlug",
+      product.writing_data AS "writingData",
+      product.architecture_sections AS "architectureSections"
+    FROM maturity_course_products product
+    WHERE jsonb_array_length(product.architecture_sections) > 0
+  `) as Array<{
+    id: string;
+    courseSlug: string;
+    writingData: JsonValue;
+    architectureSections: JsonValue;
+  }>;
+
+  const affectedCourseSlugs = new Set<string>();
+
+  for (const row of rows) {
+    const nextWritingData = syncWritingSectionsWithArchitecture(
+      parseJson<ProductWritingData>(row.writingData ?? {}),
+      parseJson<ProductSectionTemplate[]>(row.architectureSections ?? []),
+    );
+
+    await sql`
+      UPDATE maturity_course_products
+      SET writing_data = ${JSON.stringify(nextWritingData)}::jsonb
+      WHERE id = ${row.id}
+    `;
+
+    affectedCourseSlugs.add(row.courseSlug);
+  }
+
+  for (const courseSlug of affectedCourseSlugs) {
+    await syncCourseProductsJsonSnapshot(courseSlug);
+  }
+}
+
 async function syncCourseProductsTable(course: Course) {
   const sql = getSql();
   const nextIds = course.products.map((product) => product.id);
@@ -3647,6 +3737,7 @@ async function syncCourseProductsTable(course: Course) {
   }
 
   for (const product of course.products) {
+    const normalizedArchitectureSections = normalizeProductArchitectureSections(product.architectureSections) ?? [];
     await sql`
       INSERT INTO maturity_course_products (
         id,
@@ -3681,9 +3772,9 @@ async function syncCourseProductsTable(course: Course) {
         ${JSON.stringify(product.tags ?? [])}::jsonb,
         ${product.version},
         ${product.section ?? null},
-        ${JSON.stringify(normalizeProductArchitectureSections(product.architectureSections) ?? [])}::jsonb,
+        ${JSON.stringify(normalizedArchitectureSections)}::jsonb,
         ${JSON.stringify(normalizeProductPhasePlan(product.phasePlan))}::jsonb,
-        ${JSON.stringify(normalizeProductWritingData(product.writingData))}::jsonb,
+        ${JSON.stringify(syncWritingSectionsWithArchitecture(product.writingData, normalizedArchitectureSections))}::jsonb,
         ${JSON.stringify(normalizeProductValidationData(product.validationData, product.stage))}::jsonb,
         ${product.updatedAt},
         ${product.updatedAt}
@@ -3754,7 +3845,7 @@ async function readCourseProductsByCourseSlugs(courseSlugs: string[]) {
 
 async function ensureSchema() {
   const sql = getSql();
-  const CURRENT_SCHEMA_VERSION = 32; // Current version of schema initialization
+  const CURRENT_SCHEMA_VERSION = 33; // Current version of schema initialization
 
   try {
     // 1. Minimum check: ensure metadata table exists
@@ -5022,6 +5113,11 @@ async function ensureSchema() {
     // Migration v32: Backfill architecture sections from existing product summaries when body is empty
     if (currentVersion < 32) {
       await backfillArchitectureProductSections();
+    }
+
+    // Migration v33: Keep writing sections faithful to architecture product sections
+    if (currentVersion < 33) {
+      await backfillWritingSectionsFromArchitecture();
     }
 
     // 4. Update the stored version to avoid running this again
@@ -7259,10 +7355,10 @@ export async function updateCourseProductRecord(
           ? normalizeProductPhasePlan(input.phasePlan)
           : product.phasePlan,
       architectureSections: nextArchitectureSections,
-      writingData:
-        input.writingData !== undefined
-          ? normalizeProductWritingData(input.writingData)
-          : product.writingData,
+      writingData: syncWritingSectionsWithArchitecture(
+        input.writingData !== undefined ? input.writingData : product.writingData,
+        nextArchitectureSections,
+      ),
       validationData:
         input.validationData !== undefined
           ? normalizeProductValidationData(input.validationData, nextStage)
@@ -8399,6 +8495,22 @@ export async function readCourseContextForAI(slug: string): Promise<string> {
   const modules = (course.modules || []).map(m => `- [Módulo: ${m.title}] Objetivos: ${m.learningGoal}`).join('\n');
   const outcomes = (course.metadata?.learningOutcomes || []).map(o => `- ${o}`).join('\n') || 'No especificados';
   const units = (course.metadata?.units || []).map(u => `- [Unidad: ${u.tituloUnidad}] Temas: ${u.tematicas.join(', ')}`).join('\n') || 'No especificadas';
+  const architecture = (course.products || [])
+    .filter((product) => product.stage === 'arquitectura')
+    .map((product) => {
+      const sections = (product.architectureSections ?? [])
+        .map((section, index) => `${index + 1}. ${section.title}: ${stripHtmlToTextBlock(section.instructions) || 'Sin instrucciones'}`)
+        .join('\n') || 'Sin secciones parametrizadas';
+
+      return [
+        `- [Producto: ${product.title}]`,
+        `  Ubicación: ${product.section ?? 'Sin sección'}`,
+        `  Formato: ${product.format}`,
+        `  Descripción: ${stripHtmlToTextBlock(product.summary) || 'Sin descripción'}`,
+        `  Secciones exactas:\n${sections}`,
+      ].join('\n');
+    })
+    .join('\n\n') || 'No hay productos de arquitectura registrados.';
 
   return `
 CURSO: ${course.title} (${course.code})
@@ -8409,6 +8521,8 @@ ESTRUCTURA DE MÓDULOS:
 ${modules}
 UNIDADES DETALLADAS:
 ${units}
+ARQUITECTURA DEL CURSO:
+${architecture}
   `.trim();
 }
 

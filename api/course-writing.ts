@@ -12,6 +12,7 @@ import {
   updateCourseProductRecord,
 } from '../lib/store.js';
 import type {
+  Course,
   CourseProduct,
   ProductWritingAsset,
   ProductWritingData,
@@ -480,6 +481,115 @@ function buildStructuredSections(product: CourseProduct): ProductWritingSection[
   return buildWritingSectionsFromTemplate(inferredTitles, instructionHtml);
 }
 
+function syncWritingSectionsWithArchitecture(
+  product: CourseProduct,
+  sourceSections: ProductWritingSection[] = product.writingData.sections,
+): ProductWritingSection[] {
+  const architectureSections = product.architectureSections ?? [];
+
+  if (architectureSections.length === 0) {
+    return sourceSections.length > 0 ? sourceSections : buildStructuredSections(product);
+  }
+
+  const findSourceSection = (title: string, id?: string) =>
+    sourceSections.find((section) => section.id === id) ??
+    sourceSections.find(
+      (section) => slugifyWritingSectionTitle(section.title) === slugifyWritingSectionTitle(title),
+    );
+
+  return architectureSections
+    .filter((section) => section.title.trim())
+    .map((section, index) => {
+      const sourceSection = findSourceSection(section.title, section.id);
+
+      return {
+        id: section.id || `section-${index + 1}`,
+        title: section.title.trim(),
+        instructions: section.instructions?.trim?.() ?? '',
+        content: sourceSection?.content ?? '',
+        updatedAt: sourceSection?.updatedAt,
+      } satisfies ProductWritingSection;
+    });
+}
+
+function syncWritingDataWithArchitecture(
+  product: CourseProduct,
+  writingData: ProductWritingData,
+): ProductWritingData {
+  const sections = syncWritingSectionsWithArchitecture(product, writingData.sections);
+
+  return {
+    ...writingData,
+    draftText: createWritingDraftTextFromSections(sections),
+    sections,
+  };
+}
+
+function buildCourseMicrocurriculumContext(course: Course) {
+  const metadata = course.metadata;
+  const units = (metadata.units ?? [])
+    .map((unit, index) => {
+      const topics = unit.tematicas?.length ? unit.tematicas.join(', ') : 'Sin temáticas registradas';
+      return `Unidad ${index + 1}: ${unit.tituloUnidad}\nTemáticas: ${topics}`;
+    })
+    .join('\n\n') || 'Sin unidades registradas';
+
+  return [
+    `Curso: ${course.title} (${course.code})`,
+    `Programa: ${course.program}`,
+    `Facultad: ${course.faculty}`,
+    `Modalidad: ${course.modality}`,
+    `Créditos: ${course.credits}`,
+    `Resumen: ${course.summary || 'Sin resumen registrado'}`,
+    '',
+    'Resultados de aprendizaje:',
+    (metadata.learningOutcomes ?? []).map((item) => `- ${item}`).join('\n') || '- No especificados',
+    '',
+    'Temas clave:',
+    (metadata.topics ?? []).map((item) => `- ${item}`).join('\n') || '- No especificados',
+    '',
+    'Unidades del microcurrículo:',
+    units,
+    '',
+    'Metodología:',
+    metadata.methodology || 'No especificada',
+    '',
+    'Evaluación:',
+    (metadata.evaluation ?? []).map((item) => `- ${item}`).join('\n') || '- No especificada',
+    '',
+    'Bibliografía base:',
+    (metadata.bibliography ?? []).map((item) => `- ${item}`).join('\n') || '- No especificada',
+  ].join('\n');
+}
+
+function buildCourseArchitectureContext(course: Course) {
+  const architectureProducts = course.products.filter((product) => product.stage === 'arquitectura');
+
+  if (architectureProducts.length === 0) {
+    return 'No hay productos de arquitectura registrados.';
+  }
+
+  return architectureProducts
+    .map((product, index) => {
+      const sections = syncWritingSectionsWithArchitecture(product)
+        .map(
+          (section, sectionIndex) =>
+            `${sectionIndex + 1}. ${section.title}: ${stripHtml(section.instructions) || 'Sin instrucciones'}`,
+        )
+        .join('\n');
+
+      return [
+        `${index + 1}. ${product.title}`,
+        `Ubicación: ${product.section ?? 'Sin sección'}`,
+        `Formato: ${product.format}`,
+        `Descripción: ${stripHtml(product.summary) || 'Sin descripción'}`,
+        'Secciones parametrizadas:',
+        sections || 'Sin secciones parametrizadas',
+      ].join('\n');
+    })
+    .join('\n\n---\n\n');
+}
+
 function mergeWritingData(
   current: ProductWritingData,
   next?: Partial<ProductWritingData>,
@@ -634,19 +744,22 @@ export default async function handler(request: Request) {
     return errorResponse(403, 'No tienes permisos para trabajar este producto en escritura.');
   }
 
-  const currentWritingData = {
+  const currentWritingData = syncWritingDataWithArchitecture(product, {
     ...product.writingData,
     sections:
       product.writingData.sections.length > 0
         ? product.writingData.sections
         : buildStructuredSections(product),
-  };
+  });
 
   if (payload.action === 'save') {
-    const writingData = mergeWritingData(currentWritingData, {
-      ...(payload.writingData ?? currentWritingData),
-      lastSavedAt: new Date().toISOString(),
-    });
+    const writingData = syncWritingDataWithArchitecture(
+      product,
+      mergeWritingData(currentWritingData, {
+        ...(payload.writingData ?? currentWritingData),
+        lastSavedAt: new Date().toISOString(),
+      }),
+    );
 
     const updated = await updateCourseProductRecord(payload.courseSlug, payload.productId, {
       writingData,
@@ -660,10 +773,7 @@ export default async function handler(request: Request) {
       return errorResponse(400, 'Se requiere un archivo válido para digitalizar.');
     }
 
-    const baseSections =
-      currentWritingData.sections.length > 0
-        ? currentWritingData.sections
-        : buildStructuredSections(product);
+    const baseSections = syncWritingSectionsWithArchitecture(product, currentWritingData.sections);
     const stagedWritingData = mergeWritingData(currentWritingData, {
       mode: 'upload',
       submittedAsset: payload.asset,
@@ -774,8 +884,18 @@ export default async function handler(request: Request) {
     await getIntegrationConfig('openai');
     const openai = new OpenAI({ apiKey });
     const sectionId = payload.sectionId?.trim() || '';
-    const sectionTitle = payload.sectionTitle?.trim() || 'Desarrollo del producto';
-    const sectionInstructions = payload.sectionInstructions?.trim() || product.body.trim();
+    const canonicalSections = syncWritingSectionsWithArchitecture(product, currentWritingData.sections);
+    const canonicalSection =
+      canonicalSections.find((section) => section.id === sectionId) ??
+      canonicalSections.find(
+        (section) =>
+          slugifyWritingSectionTitle(section.title) ===
+          slugifyWritingSectionTitle(payload.sectionTitle?.trim() || ''),
+      );
+    const sectionTitle =
+      canonicalSection?.title ?? payload.sectionTitle?.trim() ?? 'Desarrollo del producto';
+    const sectionInstructions =
+      canonicalSection?.instructions?.trim() || payload.sectionInstructions?.trim() || product.body.trim();
     const supportAssets = payload.supportAssets ?? currentWritingData.supportAssets;
     const libraryResourceIds = payload.libraryResourceIds ?? currentWritingData.libraryResourceIds;
     const aiPrompt = payload.aiPrompt?.trim() || currentWritingData.aiPrompt || '';
@@ -821,8 +941,15 @@ export default async function handler(request: Request) {
     );
 
     const existingSection =
+      canonicalSection ??
       currentWritingData.sections.find((section) => section.id === sectionId) ??
       buildStructuredSections(product).find((section) => section.id === sectionId);
+    const productSectionBlueprint = canonicalSections
+      .map(
+        (section, index) =>
+          `${index + 1}. ${section.title}: ${stripHtml(section.instructions) || 'Sin instrucciones'}`,
+      )
+      .join('\n');
 
     const promptSections = [
       `Curso: ${course.title}`,
@@ -830,8 +957,23 @@ export default async function handler(request: Request) {
       `Sección del producto: ${product.section ?? 'Introducción'}`,
       `Formato: ${product.format}`,
       '',
+      'CONTEXTO DEL MICROCURRÍCULO DEL CURSO:',
+      compactPromptText(
+        buildCourseMicrocurriculumContext(course),
+        Math.max(2400, Math.floor(aiContextChars * 0.22)),
+      ),
+      '',
+      'CONTEXTO DE LA ARQUITECTURA COMPLETA DEL CURSO:',
+      compactPromptText(
+        buildCourseArchitectureContext(course),
+        Math.max(3200, Math.floor(aiContextChars * 0.3)),
+      ),
+      '',
       'DETALLE ESTRUCTURADO DEL PRODUCTO:',
       compactPromptText(product.body.trim(), Math.max(1800, Math.floor(aiContextChars * 0.18))),
+      '',
+      'SECCIONES PARAMETRIZADAS EXACTAS PARA ESTE PRODUCTO:',
+      compactPromptText(productSectionBlueprint, Math.max(1400, Math.floor(aiContextChars * 0.13))),
       '',
       aiPrompt
         ? `PROMPT ADICIONAL DEL EXPERTO:\n${compactPromptText(aiPrompt, Math.max(1200, Math.floor(aiContextChars * 0.12)))}\n`
@@ -863,7 +1005,7 @@ export default async function handler(request: Request) {
             {
               role: 'system',
               content:
-                'Eres un asistente de escritura académica. Redactas una sección del producto respetando estrictamente las especificaciones técnicas dadas. No inventes estructura fuera de lo solicitado. Devuelve texto limpio en español, listo para edición posterior.',
+                'Eres un asistente de escritura académica. Redactas únicamente la sección solicitada respetando estrictamente las secciones parametrizadas en Arquitectura, el microcurrículo y la arquitectura completa del curso. No inventes ni renombres secciones. Devuelve texto limpio en español, listo para edición posterior.',
             },
             {
               role: 'user',
@@ -934,6 +1076,8 @@ export default async function handler(request: Request) {
     const nextSections =
       sections.some((section) => section.id === sectionId)
         ? sections
+        : (product.architectureSections ?? []).length > 0
+          ? sections
         : [
             ...sections,
             {
@@ -947,16 +1091,19 @@ export default async function handler(request: Request) {
 
     const draftText = createWritingDraftTextFromSections(nextSections);
 
-    const writingData = mergeWritingData(currentWritingData, {
-      mode: 'ai',
-      supportAssets,
-      libraryResourceIds,
-      aiPrompt,
-      sections: nextSections,
-      draftText,
-      lastGeneratedAt: new Date().toISOString(),
-      lastSavedAt: new Date().toISOString(),
-    });
+    const writingData = syncWritingDataWithArchitecture(
+      product,
+      mergeWritingData(currentWritingData, {
+        mode: 'ai',
+        supportAssets,
+        libraryResourceIds,
+        aiPrompt,
+        sections: nextSections,
+        draftText,
+        lastGeneratedAt: new Date().toISOString(),
+        lastSavedAt: new Date().toISOString(),
+      }),
+    );
 
     const updated = await updateCourseProductRecord(payload.courseSlug, payload.productId, {
       writingData,
